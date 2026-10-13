@@ -1,0 +1,4238 @@
+{
+  "testedCodeSha": null,
+  "requestSha": null,
+  "modelsRequested": {
+    "CHAT_MODEL": "openai:gpt-6-luna",
+    "JUDGEMENT_MODEL": null,
+    "NARRATION_MODEL": null,
+    "READING_MODEL": null
+  },
+  "providerModels": [
+    "plumbing-fake-not-a-model"
+  ],
+  "requestSettingsSent": [
+    {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  ],
+  "budgetUsed": {
+    "capUsd": 0.05,
+    "spentUsd": 0.010588500000000002,
+    "reservedUsd": 0,
+    "remainingUsd": 0.0394115,
+    "calls": 12,
+    "refusals": 0,
+    "open": 0,
+    "failed": 0
+  },
+  "perCall": [
+    {
+      "seq": 1,
+      "scenario": "S47",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8240,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.002289,
+      "chargedUsd": 0.000844,
+      "upstreamMs": 17
+    },
+    {
+      "seq": 2,
+      "scenario": "S47",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8949,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0024016999999999997,
+      "chargedUsd": 0.0009149000000000001,
+      "upstreamMs": 5
+    },
+    {
+      "seq": 3,
+      "scenario": "S47",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8283,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0022956000000000005,
+      "chargedUsd": 0.0008483000000000001,
+      "upstreamMs": 7
+    },
+    {
+      "seq": 4,
+      "scenario": "S47",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8425,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023175,
+      "chargedUsd": 0.0008625,
+      "upstreamMs": 7
+    },
+    {
+      "seq": 5,
+      "scenario": "S47",
+      "turn": 3,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8336,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023038000000000004,
+      "chargedUsd": 0.0008536,
+      "upstreamMs": 4
+    },
+    {
+      "seq": 6,
+      "scenario": "S47",
+      "turn": 3,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8677,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023576000000000005,
+      "chargedUsd": 0.0008877000000000001,
+      "upstreamMs": 3
+    },
+    {
+      "seq": 7,
+      "scenario": "S47",
+      "turn": 4,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8378,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023101999999999997,
+      "chargedUsd": 0.0008578,
+      "upstreamMs": 4
+    },
+    {
+      "seq": 8,
+      "scenario": "S47",
+      "turn": 4,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 9293,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0024558,
+      "chargedUsd": 0.0009493,
+      "upstreamMs": 3
+    },
+    {
+      "seq": 9,
+      "scenario": "S47",
+      "turn": 5,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8424,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023171999999999997,
+      "chargedUsd": 0.0008624,
+      "upstreamMs": 5
+    },
+    {
+      "seq": 10,
+      "scenario": "S47",
+      "turn": 5,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 9353,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.002465,
+      "chargedUsd": 0.0009553000000000001,
+      "upstreamMs": 3
+    },
+    {
+      "seq": 11,
+      "scenario": "S47",
+      "turn": 6,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8480,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023258000000000003,
+      "chargedUsd": 0.000868,
+      "upstreamMs": 4
+    },
+    {
+      "seq": 12,
+      "scenario": "S47",
+      "turn": 6,
+      "model": "gpt-6-luna",
+      "providerModel": "plumbing-fake-not-a-model",
+      "status": 200,
+      "refused": null,
+      "input": 8647,
+      "output": 40,
+      "cached": 0,
+      "reasoning": null,
+      "reservedUsd": 0.0023518000000000002,
+      "chargedUsd": 0.0008847000000000001,
+      "upstreamMs": 3
+    }
+  ],
+  "promptObserved": {
+    "systemPromptSha256": [
+      "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef"
+    ],
+    "toolSchemaSha256": [
+      "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9"
+    ],
+    "settings": [
+      {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      }
+    ]
+  },
+  "availability": null,
+  "label": "PLUMBING TEST -- local fake endpoint, NOT a model; no figure here is a model result",
+  "runId": "s47-plumbing",
+  "mode": "relay",
+  "preflight": false,
+  "keyNote": null,
+  "startedAt": "2026-10-13T14:56:13.716Z",
+  "commit": null,
+  "tree": null,
+  "dirty": false,
+  "buildId": "7Nnt7FvVcRzOYiuDKM253",
+  "model": {
+    "requested": "openai:gpt-6-luna",
+    "pricePerMillion": {
+      "input": 0.1,
+      "output": 0.5,
+      "cachedInput": 0.01
+    },
+    "settings": {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  },
+  "prompt": {
+    "version": "rag2-loop-v11",
+    "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+    "toolSchemaSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+    "tools": 10
+  },
+  "budget": {
+    "runCapUsd": 0.05,
+    "meterRunMaxUsd": 0.05,
+    "turnMaxUsd": 0.05,
+    "maxCallsPerTurn": 12,
+    "maxTokensPerTurn": 80000,
+    "maxOutputTokensPerCall": 2000,
+    "retries": 1
+  },
+  "relay": {
+    "url": "http://127.0.0.1:8787",
+    "mode": "PLUMBING TEST",
+    "log": "/home/user/relay-plumbing.jsonl"
+  },
+  "conversations": [
+    {
+      "scenario": "S47",
+      "title": "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times",
+      "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Desmond broke his leg.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 339,
+            "firstAssistantPersistedMs": 537,
+            "answerSeenMs": 685,
+            "modelMs": 67,
+            "upstreamMs": 3,
+            "relayMs": 7
+          },
+          "calls": [
+            {
+              "seq": 1,
+              "at": "2026-10-13T14:56:15.614Z",
+              "estInputTokens": 12700,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.00227,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 2,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8240,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 21,
+              "upstreamMs": 21,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-13T14:56:15.652Z",
+              "estInputTokens": 13821,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0023821000000000003,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8949,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 46,
+              "upstreamMs": 46,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 1,
+              "at": "2026-10-13T14:56:15.617Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 12890,
+              "reservedUsd": 0.002289,
+              "chargedUsd": 0.000844,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 17,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-13",
+              "usage": {
+                "input": 8240,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 1
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-13T14:56:15.653Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 14017,
+              "reservedUsd": 0.0024016999999999997,
+              "chargedUsd": 0.0009149000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 5,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-14",
+              "usage": {
+                "input": 8949,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 1
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:15Z",
+              "t": 1791903375.627,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 2,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-13",
+              "usage": {
+                "prompt_tokens": 8240,
+                "completion_tokens": 40,
+                "total_tokens": 8280,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 5
+            },
+            {
+              "at": "2026-10-13T14:56:15Z",
+              "t": 1791903375.656,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 4,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-14",
+              "usage": {
+                "prompt_tokens": 8949,
+                "completion_tokens": 40,
+                "total_tokens": 8989,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 17189,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0017589,
+            "reserved": 0.004690699999999999,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              1,
+              2
+            ],
+            "guardUsd": 0.0017589,
+            "rowsUsd": 0
+          }
+        },
+        {
+          "turn": 2,
+          "user": "He fell down the stairs.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 11,
+            "firstAssistantPersistedMs": 901,
+            "answerSeenMs": 1071,
+            "modelMs": 57,
+            "upstreamMs": 7,
+            "relayMs": 12
+          },
+          "calls": [
+            {
+              "seq": 3,
+              "at": "2026-10-13T14:56:16.704Z",
+              "estInputTokens": 12766,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0022766,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8283,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 9,
+              "upstreamMs": 9,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-13T14:56:16.719Z",
+              "estInputTokens": 12979,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0022979000000000003,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 6,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8425,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 48,
+              "upstreamMs": 48,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 3,
+              "at": "2026-10-13T14:56:16.705Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 12956,
+              "reservedUsd": 0.0022956000000000005,
+              "chargedUsd": 0.0008483000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 7,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-15",
+              "usage": {
+                "input": 8283,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 2
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-13T14:56:16.719Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13175,
+              "reservedUsd": 0.0023175,
+              "chargedUsd": 0.0008625,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 7,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-16",
+              "usage": {
+                "input": 8425,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 2
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:15Z",
+              "t": 1791903375.627,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 2,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-13",
+              "usage": {
+                "prompt_tokens": 8240,
+                "completion_tokens": 40,
+                "total_tokens": 8280,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 5
+            },
+            {
+              "at": "2026-10-13T14:56:15Z",
+              "t": 1791903375.656,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 4,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-14",
+              "usage": {
+                "prompt_tokens": 8949,
+                "completion_tokens": 40,
+                "total_tokens": 8989,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:16Z",
+              "t": 1791903376.709,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 4,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-15",
+              "usage": {
+                "prompt_tokens": 8283,
+                "completion_tokens": 40,
+                "total_tokens": 8323,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 3
+            },
+            {
+              "at": "2026-10-13T14:56:16Z",
+              "t": 1791903376.721,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 6,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-16",
+              "usage": {
+                "prompt_tokens": 8425,
+                "completion_tokens": 40,
+                "total_tokens": 8465,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 16708,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0017108000000000002,
+            "reserved": 0.0046131,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              3,
+              4
+            ],
+            "guardUsd": 0.0017108000000000002,
+            "rowsUsd": 0
+          }
+        },
+        {
+          "turn": 3,
+          "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 11,
+            "firstAssistantPersistedMs": 873,
+            "answerSeenMs": 1051,
+            "modelMs": 49,
+            "upstreamMs": 7,
+            "relayMs": 9
+          },
+          "calls": [
+            {
+              "seq": 5,
+              "at": "2026-10-13T14:56:17.756Z",
+              "estInputTokens": 12847,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0022846999999999998,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 6,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8336,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 4,
+              "upstreamMs": 4,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 6,
+              "at": "2026-10-13T14:56:17.769Z",
+              "estInputTokens": 13379,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0023379,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 8,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8677,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 45,
+              "upstreamMs": 45,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 5,
+              "at": "2026-10-13T14:56:17.757Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13038,
+              "reservedUsd": 0.0023038000000000004,
+              "chargedUsd": 0.0008536,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 4,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-17",
+              "usage": {
+                "input": 8336,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 3
+            },
+            {
+              "seq": 6,
+              "at": "2026-10-13T14:56:17.779Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13576,
+              "reservedUsd": 0.0023576000000000005,
+              "chargedUsd": 0.0008877000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 3,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-18",
+              "usage": {
+                "input": 8677,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 3
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:16Z",
+              "t": 1791903376.709,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 4,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-15",
+              "usage": {
+                "prompt_tokens": 8283,
+                "completion_tokens": 40,
+                "total_tokens": 8323,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 3
+            },
+            {
+              "at": "2026-10-13T14:56:16Z",
+              "t": 1791903376.721,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 6,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-16",
+              "usage": {
+                "prompt_tokens": 8425,
+                "completion_tokens": 40,
+                "total_tokens": 8465,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:17Z",
+              "t": 1791903377.759,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 6,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-17",
+              "usage": {
+                "prompt_tokens": 8336,
+                "completion_tokens": 40,
+                "total_tokens": 8376,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:17Z",
+              "t": 1791903377.78,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 8,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-18",
+              "usage": {
+                "prompt_tokens": 8677,
+                "completion_tokens": 40,
+                "total_tokens": 8717,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 17013,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0017413,
+            "reserved": 0.004661400000000001,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              5,
+              6
+            ],
+            "guardUsd": 0.0017413,
+            "rowsUsd": 0
+          }
+        },
+        {
+          "turn": 4,
+          "user": "Transverse fracture.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 10,
+            "firstAssistantPersistedMs": 869,
+            "answerSeenMs": 1055,
+            "modelMs": 49,
+            "upstreamMs": 6,
+            "relayMs": 9
+          },
+          "calls": [
+            {
+              "seq": 7,
+              "at": "2026-10-13T14:56:18.818Z",
+              "estInputTokens": 12911,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0022911000000000003,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 8,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8378,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 5,
+              "upstreamMs": 5,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 8,
+              "at": "2026-10-13T14:56:18.830Z",
+              "estInputTokens": 14362,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0024362,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 10,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 9293,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 44,
+              "upstreamMs": 44,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 7,
+              "at": "2026-10-13T14:56:18.819Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13102,
+              "reservedUsd": 0.0023101999999999997,
+              "chargedUsd": 0.0008578,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 4,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-19",
+              "usage": {
+                "input": 8378,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 4
+            },
+            {
+              "seq": 8,
+              "at": "2026-10-13T14:56:18.830Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 14558,
+              "reservedUsd": 0.0024558,
+              "chargedUsd": 0.0009493,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 3,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-20",
+              "usage": {
+                "input": 9293,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 4
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:17Z",
+              "t": 1791903377.759,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 6,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-17",
+              "usage": {
+                "prompt_tokens": 8336,
+                "completion_tokens": 40,
+                "total_tokens": 8376,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:17Z",
+              "t": 1791903377.78,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 8,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-18",
+              "usage": {
+                "prompt_tokens": 8677,
+                "completion_tokens": 40,
+                "total_tokens": 8717,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:18Z",
+              "t": 1791903378.821,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 8,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-19",
+              "usage": {
+                "prompt_tokens": 8378,
+                "completion_tokens": 40,
+                "total_tokens": 8418,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 3
+            },
+            {
+              "at": "2026-10-13T14:56:18Z",
+              "t": 1791903378.832,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 10,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-20",
+              "usage": {
+                "prompt_tokens": 9293,
+                "completion_tokens": 40,
+                "total_tokens": 9333,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 17671,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0018071,
+            "reserved": 0.004765999999999999,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              7,
+              8
+            ],
+            "guardUsd": 0.0018071,
+            "rowsUsd": 0
+          }
+        },
+        {
+          "turn": 5,
+          "user": "The tibia. It was a closed fracture.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 10,
+            "firstAssistantPersistedMs": 870,
+            "answerSeenMs": 1054,
+            "modelMs": 53,
+            "upstreamMs": 6,
+            "relayMs": 9
+          },
+          "calls": [
+            {
+              "seq": 9,
+              "at": "2026-10-13T14:56:19.873Z",
+              "estInputTokens": 12982,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0022982,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 10,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8424,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 5,
+              "upstreamMs": 5,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 10,
+              "at": "2026-10-13T14:56:19.887Z",
+              "estInputTokens": 14453,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0024453,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 12,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 9353,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 48,
+              "upstreamMs": 47,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 9,
+              "at": "2026-10-13T14:56:19.874Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13172,
+              "reservedUsd": 0.0023171999999999997,
+              "chargedUsd": 0.0008624,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 5,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-21",
+              "usage": {
+                "input": 8424,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 5
+            },
+            {
+              "seq": 10,
+              "at": "2026-10-13T14:56:19.891Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 14650,
+              "reservedUsd": 0.002465,
+              "chargedUsd": 0.0009553000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 3,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-22",
+              "usage": {
+                "input": 9353,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 5
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:18Z",
+              "t": 1791903378.821,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 8,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-19",
+              "usage": {
+                "prompt_tokens": 8378,
+                "completion_tokens": 40,
+                "total_tokens": 8418,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 3
+            },
+            {
+              "at": "2026-10-13T14:56:18Z",
+              "t": 1791903378.832,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 10,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-20",
+              "usage": {
+                "prompt_tokens": 9293,
+                "completion_tokens": 40,
+                "total_tokens": 9333,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:19Z",
+              "t": 1791903379.876,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 10,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-21",
+              "usage": {
+                "prompt_tokens": 8424,
+                "completion_tokens": 40,
+                "total_tokens": 8464,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:19Z",
+              "t": 1791903379.893,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 12,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-22",
+              "usage": {
+                "prompt_tokens": 9353,
+                "completion_tokens": 40,
+                "total_tokens": 9393,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 17777,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0018177000000000002,
+            "reserved": 0.0047822,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              9,
+              10
+            ],
+            "guardUsd": 0.0018177000000000002,
+            "rowsUsd": 0
+          }
+        },
+        {
+          "turn": 6,
+          "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+          "timings": {
+            "acceptedMs": 11,
+            "firstAssistantPersistedMs": 617,
+            "answerSeenMs": 791,
+            "modelMs": 50,
+            "upstreamMs": 6,
+            "relayMs": 8
+          },
+          "calls": [
+            {
+              "seq": 11,
+              "at": "2026-10-13T14:56:20.676Z",
+              "estInputTokens": 13068,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0023068000000000003,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 12,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8480,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 5,
+              "upstreamMs": 5,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 12,
+              "at": "2026-10-13T14:56:20.692Z",
+              "estInputTokens": 13322,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0023322,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 14,
+              "systemPromptSha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "toolsSha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8647,
+                "output": 40,
+                "cached": 0
+              },
+              "latencyMs": 45,
+              "upstreamMs": 45,
+              "resolvedModel": "plumbing-fake-not-a-model",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 11,
+              "at": "2026-10-13T14:56:20.682Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13258,
+              "reservedUsd": 0.0023258000000000003,
+              "chargedUsd": 0.000868,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 4,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-23",
+              "usage": {
+                "input": 8480,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 6
+            },
+            {
+              "seq": 12,
+              "at": "2026-10-13T14:56:20.693Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 13518,
+              "reservedUsd": 0.0023518000000000002,
+              "chargedUsd": 0.0008847000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "29ad5cd388151156",
+              "kind": "loop",
+              "upstreamMs": 3,
+              "status": 200,
+              "providerModel": "plumbing-fake-not-a-model",
+              "providerRequestId": "fake-24",
+              "usage": {
+                "input": 8647,
+                "output": 40,
+                "cached": 0,
+                "reasoning": null
+              },
+              "scenario": "S47",
+              "turn": 6
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-13T14:56:19Z",
+              "t": 1791903379.876,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 10,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-21",
+              "usage": {
+                "prompt_tokens": 8424,
+                "completion_tokens": 40,
+                "total_tokens": 8464,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:19Z",
+              "t": 1791903379.893,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 12,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-22",
+              "usage": {
+                "prompt_tokens": 9353,
+                "completion_tokens": 40,
+                "total_tokens": 9393,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:20Z",
+              "t": 1791903380.684,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 12,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 2,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-23",
+              "usage": {
+                "prompt_tokens": 8480,
+                "completion_tokens": 40,
+                "total_tokens": 8520,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            },
+            {
+              "at": "2026-10-13T14:56:20Z",
+              "t": 1791903380.695,
+              "mode": "PLUMBING TEST",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 14,
+              "tools": 10,
+              "tools_sha256": "3569df4ae9a84b51f9ab0000d15723c3ae821c7669b42939df6e51328f5cacb9",
+              "system_prompt_sha256": "e25007e0906ddc5b28ab5df1cbfc41d38aec064dcfeb80f39122ec6871df43ef",
+              "upstream_ms": 1,
+              "provider_model": "plumbing-fake-not-a-model",
+              "provider_request_id": "fake-24",
+              "usage": {
+                "prompt_tokens": 8647,
+                "completion_tokens": 40,
+                "total_tokens": 8687,
+                "cached_tokens": null,
+                "reasoning_tokens": null
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 2
+            }
+          ],
+          "tokens": {
+            "input": 17127,
+            "output": 80
+          },
+          "costUsd": {
+            "charged": 0.0017527,
+            "reserved": 0.0046776000000000005,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              11,
+              12
+            ],
+            "guardUsd": 0.0017527,
+            "rowsUsd": 0
+          }
+        }
+      ],
+      "totalMs": 5742,
+      "firstUsefulResponseMs": 537,
+      "tokens": {
+        "input": 103485,
+        "output": 480
+      },
+      "costUsd": 0.0105885,
+      "calls": 12,
+      "loaded": {
+        "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+        "state": {
+          "intent": "policy_question",
+          "ragLoop": {
+            "v": 1,
+            "seq": 0,
+            "turn": 6,
+            "claim": null,
+            "turns": [
+              {
+                "gate": [],
+                "turn": 1,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8240,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.000844,
+                    "latencyMs": 23
+                  },
+                  {
+                    "ok": true,
+                    "input": 8949,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0009149000000000001,
+                    "latencyMs": 46
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 17189,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 119,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Desmond broke his leg."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":3}",
+                    "evidenceIds": [
+                      "e1",
+                      "e2",
+                      "e3"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "Desmond broke his leg.",
+                "evidenceChosen": []
+              },
+              {
+                "gate": [],
+                "turn": 2,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8283,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008483000000000001,
+                    "latencyMs": 9
+                  },
+                  {
+                    "ok": true,
+                    "input": 8425,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008625,
+                    "latencyMs": 48
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 16708,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 72,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "He fell down the stairs."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":0}",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "He fell down the stairs.",
+                "evidenceChosen": []
+              },
+              {
+                "gate": [],
+                "turn": 3,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8336,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008536,
+                    "latencyMs": 5
+                  },
+                  {
+                    "ok": true,
+                    "input": 8677,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008877000000000001,
+                    "latencyMs": 55
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 17013,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 70,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Yes, confirmed with an X-ray. He was also warded for two nights."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":1}",
+                    "evidenceIds": [
+                      "e4"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "Yes, confirmed with an X-ray. He was also warded for two nights.",
+                "evidenceChosen": []
+              },
+              {
+                "gate": [],
+                "turn": 4,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8378,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008578,
+                    "latencyMs": 6
+                  },
+                  {
+                    "ok": true,
+                    "input": 9293,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0009493,
+                    "latencyMs": 44
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 17671,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 59,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Transverse fracture."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":5}",
+                    "evidenceIds": [
+                      "e4",
+                      "e1",
+                      "e5",
+                      "e6",
+                      "e7"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "Transverse fracture.",
+                "evidenceChosen": []
+              },
+              {
+                "gate": [],
+                "turn": 5,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8424,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008624,
+                    "latencyMs": 6
+                  },
+                  {
+                    "ok": true,
+                    "input": 9353,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0009553000000000001,
+                    "latencyMs": 48
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 17777,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 65,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "The tibia. It was a closed fracture."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":5}",
+                    "evidenceIds": [
+                      "e1",
+                      "e4",
+                      "e5",
+                      "e6",
+                      "e7"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "The tibia. It was a closed fracture.",
+                "evidenceChosen": []
+              },
+              {
+                "gate": [],
+                "turn": 6,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 8480,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.000868,
+                    "latencyMs": 10
+                  },
+                  {
+                    "ok": true,
+                    "input": 8647,
+                    "output": 40,
+                    "attempt": 1,
+                    "costUsd": 0.0008847000000000001,
+                    "latencyMs": 46
+                  }
+                ],
+                "limit": null,
+                "steps": 2,
+                "usage": {
+                  "input": 17127,
+                  "output": 80
+                },
+                "dropped": [],
+                "modelId": "openai:plumbing-fake-not-a-model",
+                "outcome": "final_answer",
+                "composed": [
+                  "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                ],
+                "latencyMs": 68,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026."
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":0}",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                        }
+                      ]
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
+                "evidenceChosen": []
+              }
+            ],
+            "history": [
+              {
+                "user": "Desmond broke his leg.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              },
+              {
+                "user": "He fell down the stairs.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              },
+              {
+                "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              },
+              {
+                "user": "Transverse fracture.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              },
+              {
+                "user": "The tibia. It was a closed fracture.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              },
+              {
+                "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
+                "assistant": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              }
+            ],
+            "pending": null,
+            "docNames": {
+              "7c000000-0000-4000-8000-000000000101": "Meridian Public Service Group Scheme - Certificate",
+              "7c000000-0000-4000-8000-000000000103": "Meridian Public Service Group Personal Accident - Policy Wording",
+              "7c000000-0000-4000-8000-000000000104": "FamilyShield Accident Plan",
+              "7c000000-0000-4000-8000-000000000105": "JuniorCare Accident Plan"
+            },
+            "evidence": {
+              "e1": {
+                "id": "e1",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 202,
+                    "role": "table_header",
+                    "text": "Event                                               % of Sum Insured",
+                    "start": 134,
+                    "onPage": 1
+                  }
+                ],
+                "passage": {
+                  "end": 480,
+                  "text": "Event                                               % of Sum Insured\nDeath due to Accident                               100%\nFracture of thigh bone (femur)                      10%\nFracture of lower leg (tibia or fibula)             6%\nFracture of kneecap (patella)                       4%\nFracture of arm (humerus, radius or ulna)           5%",
+                  "start": 134,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 370,
+                  "text": "Fracture of lower leg (tibia or fibula)             6%",
+                  "start": 316,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000103",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-pa-wording"
+              },
+              "e2": {
+                "id": "e2",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 684,
+                  "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+                  "start": 425,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 613,
+                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "start": 543,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-cert"
+              },
+              "e3": {
+                "id": "e3",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 424,
+                  "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+                  "start": 0,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 424,
+                  "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-cert"
+              },
+              "e4": {
+                "id": "e4",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 834,
+                  "text": "Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage shown is payable for a compound (open) fracture. Where one Accident causes more than one fracture, only the highest single amount is payable.",
+                  "start": 537,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 601,
+                  "text": "Fracture benefits are payable for a fracture confirmed by X-ray.",
+                  "start": 537,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000103",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-pa-wording"
+              },
+              "e5": {
+                "id": "e5",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 164,
+                    "role": "table_header",
+                    "text": "Benefit                                     Amount",
+                    "start": 114,
+                    "onPage": 1
+                  }
+                ],
+                "passage": {
+                  "end": 315,
+                  "text": "Benefit                                     Amount\nFracture of skull                           S$2,000\nOther fracture                              S$300\nHospital cash (per day)                     S$50",
+                  "start": 114,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 216,
+                  "text": "Fracture of skull                           S$2,000",
+                  "start": 165,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000105",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-junior"
+              },
+              "e6": {
+                "id": "e6",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 212,
+                    "role": "table_header",
+                    "text": "Benefit                                 Adult           Child",
+                    "start": 151,
+                    "onPage": 1
+                  }
+                ],
+                "passage": {
+                  "end": 339,
+                  "text": "Benefit                                 Adult           Child\nAccidental death                        S$150,000       S$50,000\nFracture (per fracture, any bone)       S$800           S$400",
+                  "start": 151,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 339,
+                  "text": "Fracture (per fracture, any bone)       S$800           S$400",
+                  "start": 278,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000104",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-family"
+              },
+              "e7": {
+                "id": "e7",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 202,
+                    "role": "table_header",
+                    "text": "Event                                               % of Sum Insured",
+                    "start": 134,
+                    "onPage": 1
+                  }
+                ],
+                "passage": {
+                  "end": 535,
+                  "text": "Other fracture not listed above                     1%",
+                  "start": 481,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 535,
+                  "text": "Other fracture not listed above                     1%",
+                  "start": 481,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000103",
+                "subjectId": null,
+                "documentHash": "sha256:scenario-pa-wording"
+              }
+            },
+            "speakerId": "7c000000-0000-4000-8000-000000000001",
+            "subjectId": null,
+            "recentSubjectIds": []
+          },
+          "subjects": {}
+        },
+        "turns": [
+          {
+            "index": 0,
+            "user": "Desmond broke his leg.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 1,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:15.724Z",
+            "assistantAt": "2026-10-13T14:56:15.724Z",
+            "trace": {
+              "gate": [],
+              "turn": 1,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8240,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.000844,
+                  "latencyMs": 23
+                },
+                {
+                  "ok": true,
+                  "input": 8949,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0009149000000000001,
+                  "latencyMs": 46
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 17189,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 119,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Desmond broke his leg."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":3}",
+                  "evidenceIds": [
+                    "e1",
+                    "e2",
+                    "e3"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "Desmond broke his leg.",
+              "evidenceChosen": []
+            }
+          },
+          {
+            "index": 1,
+            "user": "He fell down the stairs.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 2,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:16.779Z",
+            "assistantAt": "2026-10-13T14:56:16.779Z",
+            "trace": {
+              "gate": [],
+              "turn": 2,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8283,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008483000000000001,
+                  "latencyMs": 9
+                },
+                {
+                  "ok": true,
+                  "input": 8425,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008625,
+                  "latencyMs": 48
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 16708,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 72,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "He fell down the stairs."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":0}",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "He fell down the stairs.",
+              "evidenceChosen": []
+            }
+          },
+          {
+            "index": 2,
+            "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 3,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:17.828Z",
+            "assistantAt": "2026-10-13T14:56:17.828Z",
+            "trace": {
+              "gate": [],
+              "turn": 3,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8336,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008536,
+                  "latencyMs": 5
+                },
+                {
+                  "ok": true,
+                  "input": 8677,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008877000000000001,
+                  "latencyMs": 55
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 17013,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 70,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Yes, confirmed with an X-ray. He was also warded for two nights."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":1}",
+                  "evidenceIds": [
+                    "e4"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "Yes, confirmed with an X-ray. He was also warded for two nights.",
+              "evidenceChosen": []
+            }
+          },
+          {
+            "index": 3,
+            "user": "Transverse fracture.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 4,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:18.879Z",
+            "assistantAt": "2026-10-13T14:56:18.879Z",
+            "trace": {
+              "gate": [],
+              "turn": 4,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8378,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008578,
+                  "latencyMs": 6
+                },
+                {
+                  "ok": true,
+                  "input": 9293,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0009493,
+                  "latencyMs": 44
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 17671,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 59,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Transverse fracture."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":5}",
+                  "evidenceIds": [
+                    "e4",
+                    "e1",
+                    "e5",
+                    "e6",
+                    "e7"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "Transverse fracture.",
+              "evidenceChosen": []
+            }
+          },
+          {
+            "index": 4,
+            "user": "The tibia. It was a closed fracture.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 5,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:19.939Z",
+            "assistantAt": "2026-10-13T14:56:19.939Z",
+            "trace": {
+              "gate": [],
+              "turn": 5,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8424,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008624,
+                  "latencyMs": 6
+                },
+                {
+                  "ok": true,
+                  "input": 9353,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0009553000000000001,
+                  "latencyMs": 48
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 17777,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 65,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "The tibia. It was a closed fracture."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":5}",
+                  "evidenceIds": [
+                    "e1",
+                    "e4",
+                    "e5",
+                    "e6",
+                    "e7"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "The tibia. It was a closed fracture.",
+              "evidenceChosen": []
+            }
+          },
+          {
+            "index": 5,
+            "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
+            "answer": {
+              "mode": "answer",
+              "details": [],
+              "summary": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+              "citations": [],
+              "nextSteps": [],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "d52ca635-4e34-44e5-a48e-0e3675bb2536",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 6,
+              "potentialPayoutTotals": []
+            },
+            "content": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+            "questions": [],
+            "userAt": "2026-10-13T14:56:20.745Z",
+            "assistantAt": "2026-10-13T14:56:20.745Z",
+            "trace": {
+              "gate": [],
+              "turn": 6,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 8480,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.000868,
+                  "latencyMs": 10
+                },
+                {
+                  "ok": true,
+                  "input": 8647,
+                  "output": 40,
+                  "attempt": 1,
+                  "costUsd": 0.0008847000000000001,
+                  "latencyMs": 46
+                }
+              ],
+              "limit": null,
+              "steps": 2,
+              "usage": {
+                "input": 17127,
+                "output": 80
+              },
+              "dropped": [],
+              "modelId": "openai:plumbing-fake-not-a-model",
+              "outcome": "final_answer",
+              "composed": [
+                "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+              ],
+              "latencyMs": 68,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026."
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":0}",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                      }
+                    ]
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
+              "evidenceChosen": []
+            }
+          }
+        ]
+      },
+      "verdict": {
+        "scenario": "S47",
+        "verdict": "INCOMPLETE",
+        "failureStage": null,
+        "incomplete": "graded by scenario-check.ts",
+        "checks": []
+      },
+      "saved": {
+        "subjectId": null,
+        "speakerId": "7c000000-0000-4000-8000-000000000001",
+        "pending": null,
+        "claim": null,
+        "traces": [
+          {
+            "turn": 1,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 17189,
+              "output": 80
+            },
+            "latencyMs": 119,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "Desmond broke his leg."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":3}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 2,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 16708,
+              "output": 80
+            },
+            "latencyMs": 72,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "He fell down the stairs."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":0}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 3,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 17013,
+              "output": 80
+            },
+            "latencyMs": 70,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "Yes, confirmed with an X-ray. He was also warded for two nights."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":1}",
+                "evidenceIds": [
+                  "e4"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 4,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 17671,
+              "output": 80
+            },
+            "latencyMs": 59,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "Transverse fracture."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":5}",
+                "evidenceIds": [
+                  "e4",
+                  "e1",
+                  "e5",
+                  "e6",
+                  "e7"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 5,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 17777,
+              "output": 80
+            },
+            "latencyMs": 65,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "The tibia. It was a closed fracture."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":5}",
+                "evidenceIds": [
+                  "e1",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 6,
+            "modelId": "openai:plumbing-fake-not-a-model",
+            "outcome": "final_answer",
+            "steps": 2,
+            "usage": {
+              "input": 17127,
+              "output": 80
+            },
+            "latencyMs": 68,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "query": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026."
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":0}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          }
+        ],
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 202,
+                "role": "table_header",
+                "text": "Event                                               % of Sum Insured",
+                "start": 134,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 480,
+              "text": "Event                                               % of Sum Insured\nDeath due to Accident                               100%\nFracture of thigh bone (femur)                      10%\nFracture of lower leg (tibia or fibula)             6%\nFracture of kneecap (patella)                       4%\nFracture of arm (humerus, radius or ulna)           5%",
+              "start": 134,
+              "onPage": 1
+            },
+            "support": {
+              "end": 370,
+              "text": "Fracture of lower leg (tibia or fibula)             6%",
+              "start": 316,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-pa-wording"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 684,
+              "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+              "start": 425,
+              "onPage": 1
+            },
+            "support": {
+              "end": 613,
+              "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "start": 543,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 424,
+              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 424,
+              "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "start": 354,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-cert"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 834,
+              "text": "Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage shown is payable for a compound (open) fracture. Where one Accident causes more than one fracture, only the highest single amount is payable.",
+              "start": 537,
+              "onPage": 1
+            },
+            "support": {
+              "end": 601,
+              "text": "Fracture benefits are payable for a fracture confirmed by X-ray.",
+              "start": 537,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-pa-wording"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 164,
+                "role": "table_header",
+                "text": "Benefit                                     Amount",
+                "start": 114,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 315,
+              "text": "Benefit                                     Amount\nFracture of skull                           S$2,000\nOther fracture                              S$300\nHospital cash (per day)                     S$50",
+              "start": 114,
+              "onPage": 1
+            },
+            "support": {
+              "end": 216,
+              "text": "Fracture of skull                           S$2,000",
+              "start": 165,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000105",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-junior"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 212,
+                "role": "table_header",
+                "text": "Benefit                                 Adult           Child",
+                "start": 151,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 339,
+              "text": "Benefit                                 Adult           Child\nAccidental death                        S$150,000       S$50,000\nFracture (per fracture, any bone)       S$800           S$400",
+              "start": 151,
+              "onPage": 1
+            },
+            "support": {
+              "end": 339,
+              "text": "Fracture (per fracture, any bone)       S$800           S$400",
+              "start": 278,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000104",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-family"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 202,
+                "role": "table_header",
+                "text": "Event                                               % of Sum Insured",
+                "start": 134,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 535,
+              "text": "Other fracture not listed above                     1%",
+              "start": 481,
+              "onPage": 1
+            },
+            "support": {
+              "end": 535,
+              "text": "Other fracture not listed above                     1%",
+              "start": 481,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:scenario-pa-wording"
+          }
+        },
+        "answers": [
+          {
+            "turn": 1,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 2,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 3,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 4,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 5,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 6,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-13T14:56:20.927Z",
+  "promptMatchesSource": true,
+  "httpCalls": [
+    {
+      "seq": 1,
+      "at": "2026-10-13T14:56:15.617Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 12890,
+      "reservedUsd": 0.002289,
+      "chargedUsd": 0.000844,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 17,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-13",
+      "usage": {
+        "input": 8240,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 1
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-13T14:56:15.653Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 14017,
+      "reservedUsd": 0.0024016999999999997,
+      "chargedUsd": 0.0009149000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 5,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-14",
+      "usage": {
+        "input": 8949,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 1
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-13T14:56:16.705Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 12956,
+      "reservedUsd": 0.0022956000000000005,
+      "chargedUsd": 0.0008483000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 7,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-15",
+      "usage": {
+        "input": 8283,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 2
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-13T14:56:16.719Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13175,
+      "reservedUsd": 0.0023175,
+      "chargedUsd": 0.0008625,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 7,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-16",
+      "usage": {
+        "input": 8425,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 2
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-13T14:56:17.757Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13038,
+      "reservedUsd": 0.0023038000000000004,
+      "chargedUsd": 0.0008536,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 4,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-17",
+      "usage": {
+        "input": 8336,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 3
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-13T14:56:17.779Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13576,
+      "reservedUsd": 0.0023576000000000005,
+      "chargedUsd": 0.0008877000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 3,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-18",
+      "usage": {
+        "input": 8677,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 3
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-13T14:56:18.819Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13102,
+      "reservedUsd": 0.0023101999999999997,
+      "chargedUsd": 0.0008578,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 4,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-19",
+      "usage": {
+        "input": 8378,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 4
+    },
+    {
+      "seq": 8,
+      "at": "2026-10-13T14:56:18.830Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 14558,
+      "reservedUsd": 0.0024558,
+      "chargedUsd": 0.0009493,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 3,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-20",
+      "usage": {
+        "input": 9293,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 4
+    },
+    {
+      "seq": 9,
+      "at": "2026-10-13T14:56:19.874Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13172,
+      "reservedUsd": 0.0023171999999999997,
+      "chargedUsd": 0.0008624,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 5,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-21",
+      "usage": {
+        "input": 8424,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 5
+    },
+    {
+      "seq": 10,
+      "at": "2026-10-13T14:56:19.891Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 14650,
+      "reservedUsd": 0.002465,
+      "chargedUsd": 0.0009553000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 3,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-22",
+      "usage": {
+        "input": 9353,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 5
+    },
+    {
+      "seq": 11,
+      "at": "2026-10-13T14:56:20.682Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13258,
+      "reservedUsd": 0.0023258000000000003,
+      "chargedUsd": 0.000868,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 4,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-23",
+      "usage": {
+        "input": 8480,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 6
+    },
+    {
+      "seq": 12,
+      "at": "2026-10-13T14:56:20.693Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 13518,
+      "reservedUsd": 0.0023518000000000002,
+      "chargedUsd": 0.0008847000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "29ad5cd388151156",
+      "kind": "loop",
+      "upstreamMs": 3,
+      "status": 200,
+      "providerModel": "plumbing-fake-not-a-model",
+      "providerRequestId": "fake-24",
+      "usage": {
+        "input": 8647,
+        "output": 40,
+        "cached": 0,
+        "reasoning": null
+      },
+      "scenario": "S47",
+      "turn": 6
+    }
+  ]
+}
