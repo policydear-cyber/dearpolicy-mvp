@@ -73,6 +73,8 @@ export type TraceTurn = {
   /** The evidence the visible answer rests on (ids into RagLoopState.evidence). */
   evidenceChosen: string[];
   outcome: "final_answer" | "ask_user" | "budget_exhausted" | "limit_reached" | "timeout" | "error";
+  /** V1.2: what the model's reply left unaddressed after its one repair (the reply was completed by the grounded fallback). */
+  incomplete?: string[];
   /** Every model call this turn (attempts, including failed and retried ones), as metered (usage-meter.ts). */
   calls?: { attempt: number; ok: boolean; input: number; output: number; costUsd: number | null; latencyMs: number; error?: string; retry?: boolean }[];
   /** Which limit stopped the turn, when one did. */

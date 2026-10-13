@@ -78,6 +78,8 @@ export function sayBack(words: string): string | null {
   if (!w) return null;
   if (/^(?:i|i['’]m|i['’]ve|we|we['’]re|my|our|me|us)\b/i.test(w)) return `You told me: “${w}”.`;
   if (/^(?:The|A|An|He|She|They|It|This|That|There|Her|His|Their|Both|Yes|No)\b/.test(w)) w = w[0].toLowerCase() + w.slice(1);
+  // V1.2: a bare phrase ("Transverse fracture") is quoted, not run into the sentence.
+  else if (/^[A-Z]/.test(w) && !/\b(?:is|was|were|are|had|has|have|broke|fell|got|went|did)\b/i.test(w)) return `You told me: “${w}”.`;
   return `You told me ${w}.`;
 }
 
@@ -394,7 +396,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
     const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
     const inlineResult = inline.ids.find((id) => /^r\d/.test(id) && (ctx.tools.results.has(id) || calcOutcomes(ctx.tools).has(id))) ?? null;
-    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : inlineResult;
+    const oneOf = Array.isArray(s.result_ids) && (s.result_ids as unknown[]).length === 1 && typeof (s.result_ids as unknown[])[0] === "string" ? (s.result_ids as string[])[0] : null;
+    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : oneOf ?? inlineResult;
     curEstimate = !!resultId;
     const leak = internalIdsIn(text);
     if (leak.length) { drop(text, `shows an internal id (${leak.slice(0, 3).join(", ")})`); continue; }
@@ -424,6 +427,26 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // something its evidence contradicts.
     const absentDate = dateAbsenceClaim(text) ? printedDateIn([...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), ...values.map((v) => JSON.stringify(v))].join("\n")) : null;
     if (absentDate) { drop(text, `${DATE_ABSENCE_REASON} -- its cited evidence prints “${absentDate}”`); continue; }
+    // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
+    // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
+    // own; the sentence is kept only if every one of them is.
+    const resultIds = Array.isArray(s.result_ids) ? [...new Set((s.result_ids as unknown[]).filter((x): x is string => typeof x === "string" && !!x))] : [];
+    if (resultIds.length >= 2) {
+      const calcs = resultIds.map((id) => calcOutcomes(ctx.tools).get(id) ?? null);
+      if (calcs.some((c) => !c || (c.kind !== "conditional_illustration" && c.kind !== "indicative_estimate"))) { drop(text, "a comparison cites a calculation that is not a resolved illustration or estimate made in this conversation"); continue; }
+      const tmp: Composed = { ...out, sentences: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [] };
+      ONCE.set(tmp, onceFor(out));
+      let t = text; const why: string[] = [];
+      for (const c of calcs) { composeCalcSentence(t, c!, evIds, values.map((v) => v!.operand), subjectId, ctx, tmp, (_x, reason) => { why.push(reason); }); if (why.length) break; t = tmp.sentences.at(-1)!.text; }
+      if (why.length) { drop(text, why[0]); continue; }
+      const parts = sentencesOf(t);
+      for (const r of tmp.calculations) { const fig = moneyFiguresIn(t).find((f) => same(f.value, r.result.value) && f.currency === r.currency); r.sentence = (fig && parts.find((x) => x.includes(fig.raw))) ?? t; }
+      const ids = [...new Set(tmp.sentences.flatMap((x) => x.evidenceIds))];
+      out.calculations.push(...tmp.calculations); out.calcs.push(...tmp.calcs);
+      out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
+      out.sentences.push({ text: t, evidenceIds: ids, estimate: tmp.sentences.some((x) => x.estimate), factKeys: [...new Set(tmp.sentences.flatMap((x) => x.factKeys))], kind: tmp.sentences[0].kind });
+      continue;
+    }
     const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
     if (calc) { composeCalcSentence(text, calc, evIds, values.map((v) => v!.operand), subjectId, ctx, out, drop); continue; }
     const result = resultId ? ctx.tools.results.get(resultId) ?? null : null;

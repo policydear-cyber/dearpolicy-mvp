@@ -55,8 +55,8 @@ const paLookups = (who: string, rows: RowKey[]) => [
   call("search_passages", { query: "Accident Hospital Income complete period of 24 hours confinement", subject_id: who }),
   call("search_passages", { query: "Sum Insured amount shown in the Certificate of Group Insurance", subject_id: who }),
 ];
-const certSentence = (v: ScriptView, who: string, name: string) => S(`${name}'s Certificate of Group Insurance lists a Group Personal Accident sum insured of ${who === D ? "S$300,000" : "S$200,000"} as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person.`, { value_ids: ids(vid(v, "CERT", /Personal Accident/, who)), evidence_ids: ids(hit(v, /Sum Insured is the amount shown/)), subject_id: who });
-const rowsSentence = (v: ScriptView, who: string, rows: RowKey[]) => S(`The Group Personal Accident Schedule of Compensation lists ${rows.map((r) => `${ROWS[r].says.replace(/^a fracture of /, "")} at ${({ femur: "10%", lower: "6%", patella: "4%" } as const)[r]}`).join(", ")} of the Sum Insured, payable for a fracture confirmed by X-ray.`, { value_ids: ids(...rows.map((r) => vid(v, "PA_WORD", ROWS[r].re, who))), evidence_ids: ids(hit(v, /confirmed by X-ray/)), subject_id: who });
+const certSentence = (v: ScriptView, who: string, name: string) => S(`Certificate amount: ${name}'s Certificate of Group Insurance lists a Group Personal Accident sum insured of ${who === D ? "S$300,000" : "S$200,000"} as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount.`, { value_ids: ids(vid(v, "CERT", /Personal Accident/, who)), evidence_ids: ids(hit(v, /Sum Insured is the amount shown/)), subject_id: who });
+const rowsSentence = (v: ScriptView, who: string, rows: RowKey[]) => S(`Printed percentages: the Group Personal Accident Schedule of Compensation lists ${rows.map((r) => `${ROWS[r].says.replace(/^a fracture of /, "")} at ${({ femur: "10%", lower: "6%", patella: "4%" } as const)[r]}`).join(", ")} of the Sum Insured, payable for a fracture confirmed by X-ray.`, { value_ids: ids(...rows.map((r) => vid(v, "PA_WORD", ROWS[r].re, who))), evidence_ids: ids(hit(v, /confirmed by X-ray/)), subject_id: who });
 const noteSentence = (v: ScriptView, who: string) => S("For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.", { evidence_ids: ids(hit(v, /simple \(closed\)/)), subject_id: who });
 const hospitalSentence = (v: ScriptView, who: string) => S("The wording's Accident Hospital Income pays S$100 for each complete period of 24 hours of continuous confinement in hospital as an in-patient, up to 90 days per Accident.", { evidence_ids: ids(hit(v, /Accident Hospital Income/)), subject_id: who });
 const nightsSentence = (v: ScriptView, who: string, nights: string) => S(`You told me he was warded for ${nights}; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods.`, { evidence_ids: ids(hit(v, /Accident Hospital Income/)), subject_id: who });
@@ -68,9 +68,19 @@ const lumpCalls = (v: ScriptView, who: string, rows: RowKey[], words: string, si
     ...(simple ? [call("calculate", { ...base, condition: `${ROWS[r].says}, simple (closed)`, proportion: { page: 1, quote: NOTE_QUOTE, percent: 50, applies_when: "a simple (closed) fracture" } })] : []),
   ];
 });
-const lumpSentences = (v: ScriptView, who: string) => v.turn.filter((o) => o.name === "calculate" && o.ok && o.args.calculator === "lump_sum" && o.result.data.kind === "conditional_illustration")
-  .map((o) => S(`If it is ${/simple/.test(String(o.args.condition)) ? "a simple (closed)" : "a compound (open)"} ${String(o.args.condition).replace(/^a /, "").replace(/, (compound \(open\)|simple \(closed\))$/, "")}, an indicative illustration is ${money(Number(o.result.data.amount))}.`, { result_id: o.result.data.calc_id, subject_id: who }));
-const synthesis = (open: string) => S(`These are illustrations from the printed schedule, not approved amounts; what is still open is ${open}.`);
+/** One line per row that could apply, comparing its alternatives (compound / simple), each figure the calculator's own result. */
+const lumpSentences = (v: ScriptView, who: string) => {
+  const done = v.turn.filter((o) => o.name === "calculate" && o.ok && o.args.calculator === "lump_sum" && o.result.data.kind === "conditional_illustration");
+  const rows = [...new Set(done.map((o) => String(o.args.benefit)))];
+  return rows.map((row) => {
+    const of = done.filter((o) => o.args.benefit === row);
+    const open = of.find((o) => !/simple/.test(String(o.args.condition))), closed = of.find((o) => /simple/.test(String(o.args.condition)));
+    const what = String(of[0].args.condition).replace(/^a fracture of /, "").replace(/, (compound \(open\)|simple \(closed\))$/, "");
+    const alts = [open && `${money(Number(open.result.data.amount))} if compound (open)`, closed && `${money(Number(closed.result.data.amount))} if simple (closed)`].filter(Boolean).join(", or ");
+    return S(`If it is ${what}: ${alts} -- an illustration only.`, { result_ids: of.map((o) => o.result.data.calc_id), subject_id: who });
+  });
+};
+const synthesis = (v: ScriptView, who: string, open: string) => S(`Not yet established: ${open}; the amounts above are illustrations worked from the printed schedule, not approved amounts.`, { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/), hit(v, /simple \(closed\)/)), subject_id: who });
 const lumpRefused = (v: ScriptView) => v.turn.filter((o) => o.name === "calculate" && !o.ok).map((o) => String(o.result.error ?? ""));
 const boneQ = (v: ScriptView, who: string, name: string, statements: unknown[]) => call("ask_user", { kind: "fact", subject_id: who, fact_key: "bone_fractured", question: `Which bone in ${name}'s leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?`, because_evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/), hit(v, /confirmed by X-ray/)), statements });
 /** ask_user, retried once without the statements the composer refused (as a model does when told what was not shown). */
@@ -97,7 +107,7 @@ const CAPABLE_REPORTED: ScriptTurn[] = [
   { user: "X-ray", steps: [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "xray_confirmed", value: "yes", words: "Yes, confirmed with an X-ray" }, { key: "nights_in_hospital", value: "2", words: "He was also warded for two nights" }] }), ...paLookups(D, LEG)],
     (v) => lumpCalls(v, D, LEG, "Desmond broke his leg", true),
-    (v) => [boneQ(v, D, "Desmond", [certSentence(v, D, "Desmond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights"), synthesis("which bone was broken, whether the fracture is simple (closed) or compound (open), and the admission and discharge times")])],
+    (v) => [boneQ(v, D, "Desmond", [certSentence(v, D, "Desmond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights"), synthesis(v, D, "which bone was broken, whether the fracture is simple (closed) or compound (open), and the admission and discharge times")])],
     askRetry,
   ] },
   { user: "Transverse", steps: [
@@ -227,7 +237,7 @@ const CONVS: Conv[] = [
       { user: "Desmond broke his leg.", question: /how/i },
       { user: "He fell down the stairs.", question: /X-ray/i },
       { user: "Yes, confirmed with an X-ray. He was also warded for two nights.", question: /simple|closed/i },
-      { user: "Transverse fracture.", include: [/transverse/i], exclude: [/\b1%|Other fracture/i] },
+      { user: "Transverse fracture.", include: [/transverse/i, "S$100", /complete period of 24 hours/i, /haven't yet read Desmond's own sum insured/i], exclude: [/\b1%|Other fracture/i, "S$200"], question: /simple|closed/i, cites: ["PA_WORD:2"] },
     ],
     whole: { maxRepeats: [[/your own account/i, 1], [/include the doctor|claim form/i, 1]] } },
   { id: "R3", title: "reported conversation, minimal model that follows the repair", script: RESPONSIVE_REPORTED,
@@ -256,6 +266,9 @@ function grade(t: Expect, a: ChatAnswer): string[] {
   for (const s of t.include ?? []) if (!lit(s).test(text)) p.push(`missing ${String(s)}`);
   for (const s of t.exclude ?? []) if (lit(s).test(text)) p.push(`must not include ${String(s)}`);
   for (const r of NEVER) if (r.test(text)) p.push(`shows ${text.match(r)![0]}`);
+  // A reply made only of say-back ("You told me ...") with no question is an echo, never a completed turn.
+  const substantive = [a.summary, ...a.details].join(" ").split(/(?<=[.!?”])\s+/).filter((x) => x.trim() && !/^\s*you (?:told me|said)\b/i.test(x));
+  if (!substantive.length && !(a.questions ?? []).length) p.push("the reply only echoes what the household said");
   const q = a.questions ?? [];
   if (t.question === null && q.length) p.push(`asked a question it should not: ${q[0].text}`);
   if (t.question && (q.length !== 1 || !t.question.test(q[0].text))) p.push(`expected one question like ${t.question}, got ${q.map((x) => x.text).join(" | ") || "none"}`);
@@ -398,13 +411,17 @@ async function main() {
     assert.ok(!(r1.out[2]?.answer as any)?.calculations?.some((x: any) => /Hospital Income/i.test(x.benefit)), "a hospital figure was given for 'two nights' without times");
   });
 
-  await check("CONTROL repair: the minimal model's one repair names every new fact and the certificate link", () => {
+  await check("CONTROL repair attempts (separate from what is shown): each turn's one repair names the unaddressed stay and the certificate link, and the fallback is marked incomplete", () => {
     const r2 = played.get("R2")!;
-    const t4 = r2.out[3]?.trace;
-    const repair = String(t4?.toolCalls?.find((x: any) => x.name === "final_answer" && !x.ok)?.error ?? "");
-    assert.ok(repair, "no repair was made");
-    assert.match(repair, /warded for two nights|nights_in_hospital/i, "the repair does not name the hospital stay: " + repair);
-    assert.match(repair, /certificate|sum insured/i, "the repair does not ask for the certificate amount behind the percentage: " + repair);
+    const repairs = r2.out.map((o) => (o.trace?.toolCalls ?? []).filter((x: any) => (x.name === "final_answer" || x.name === "ask_user") && !x.ok).map((x: any) => String(x.error ?? "")).join(" | "));
+    assert.ok(repairs.every((x, i) => i === 0 || x), "a turn after the first had no repair: " + JSON.stringify(repairs.map((x) => x.slice(0, 80))));
+    assert.match(repairs[2], /warded for two nights/i, "turn 3's repair does not name the hospital stay: " + repairs[2]);
+    assert.ok(repairs.some((x) => /sum insured/i.test(x)), "no repair asks for the certificate amount behind the percentage");
+    assert.ok(repairs.filter(Boolean).every((x) => !/try again|retry/i.test(x)), "a repair invites unlimited retries");
+    const steps = r2.out.map((o) => o.trace?.steps ?? 0);
+    assert.ok(steps.every((n) => n <= 4), "a fallback turn used more model steps than one repair allows: " + steps.join(","));
+    assert.ok(r2.out[3]?.trace?.incomplete?.length, "the completed-by-fallback turn is not marked incomplete in its trace");
+    assert.equal(r2.out[3]?.trace?.outcome, "ask_user", "the fallback turn was saved as a completed final answer");
   });
 
   await check("CONTROL category: a detail the schedule does not use is not mapped to its catch-all row", () => {

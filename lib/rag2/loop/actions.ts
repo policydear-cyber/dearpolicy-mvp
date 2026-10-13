@@ -33,6 +33,7 @@ const SENTENCE: JsonSchema = { type: "object", properties: {
   evidence_ids: ids("Evidence ids (e1, e2...) the sentence rests on."),
   value_ids: ids("Value ids (v1...) from select_table_value whose figures the sentence states."),
   result_id: str("A result id (r1...) from compute whose result the sentence states."),
+  result_ids: ids("Instead of result_id, for one sentence comparing alternatives: two or more calculate result ids of the same person whose amounts the sentence states (e.g. the open and closed illustrations of one row)."),
   benefit: str("The benefit / row the sentence's figure is printed for, as the document words it (when citing a passage rather than a table value)."),
   subject_id: str("Who this sentence is about, if not the answer's subject."),
 }, required: ["text"], additionalProperties: false };

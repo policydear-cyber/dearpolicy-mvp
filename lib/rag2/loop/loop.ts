@@ -17,7 +17,7 @@ import { loadDocs, loadPages } from "../store";
 import { calcOutcomes } from "../calc/tool";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
-import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
+import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
@@ -45,7 +45,9 @@ export type LoopReply =
   | { kind: "ask"; pending: LoopPending; preface: string | null;
       /** Round 6 (A3): what the turn says before its question (the preface and statements), composed and checked like
        * a final_answer (null when it says nothing). The question itself is presented once, as the question card. */
-      composed?: Composed | null }
+      composed?: Composed | null;
+      /** V1.2: figure-free lines said after the statements (what is still unresolved), from the grounded fallback. */
+      trailing?: string[] }
   | { kind: "fallback"; text: string };
 export type LoopCorrection = { key: string; from: unknown; to: unknown; withdrawn: string[];
   /** Agent F: the facts the withdrawn estimates were worked out from (said back without their figures). */
@@ -376,6 +378,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** V1.2: what a claim turn's reply leaves out of what the household just told it -- a hospital stay or a bill they
    * reported that no sentence addresses, and a percentage of the sum insured stated (or just asked about) without the
    * person's own sum insured. Lines for the turn's one repair; empty when nothing is missing. */
+  /** V1.2: the text states one of the person's own printed amounts read this conversation (a sum insured). */
+  const statesOwnAmount = (text: string, subject: string) => moneyFiguresIn(text).some((f) => [...ctx.values.values()].some((v) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && Math.abs(f.value * 100 - v.operand.cents) < 1));
   const completionLines = (texts: string[], question: string | null, subject: string | null | undefined, extraEvidence: string[] = []): string[] => {
     if (!subject) return [];
     const now = recordedNow.filter((r) => r.subject === subject);
@@ -395,7 +399,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       lines.push(`the household also told you \"${f.words}\" (${f.key}) and the reply does not address it: look up the benefit it bears on (search_passages${kind === "stay" ? ", e.g. hospital income / hospital cash" : ", e.g. medical expenses"}) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (${kind === "stay" ? "e.g. the admission and discharge dates and times; nights are not payable days" : "e.g. the bill amount"})`);
     }
     const ctxText = [said, ...extraEvidence.map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
-    if (/%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText) && !moneyFiguresIn(said).length) {
+    if (/%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText) && !statesOwnAmount(said, subject)) {
       const who = input.people.find((p) => p.id === subject)?.name ?? "the person";
       lines.push(`the benefit is a percentage of the Sum Insured but no amount is given: read ${who}'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover`);
     }
@@ -771,6 +775,81 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return composed;
   };
 
+  /** V1.2: the model had the turn's one repair (or nudge) and its reply still leaves the household's facts
+   * unaddressed -- a bare say-back, a hospital stay or bill nobody looked at, a percentage with no amount. The reply is
+   * completed from what this conversation has ALREADY verified (statements established earlier, passages and table
+   * values the tools returned), each composed and checked like any sentence; what was never looked up is named as
+   * such (never invented); and the grounded question is asked. No extra model call, no retry. */
+  const groundedFallback = (r: LoopReply | null): LoopReply | null => {
+    if (!r || (r.kind !== "final" && r.kind !== "ask") || !(gateRepaired || finalRepaired || completionNudged)) return r;
+    const c0 = r.composed ?? null;
+    const subject = (c0?.subjectId ?? (r.kind === "ask" && r.pending.kind === "fact" ? r.pending.subjectId : null) ?? state.claim?.subjectId ?? state.subjectId) || null;
+    if (!subject || !recordedNow.some((x) => x.subject === subject)) return r;
+    const texts = (c0?.sentences ?? []).map((x) => x.text);
+    const question = r.kind === "ask" ? r.pending.question : null;
+    const missing = completionLines(texts, question, subject, pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []);
+    const bare = r.kind === "final" && !(c0?.sentences ?? []).some((x) => x.evidenceIds.length);
+    // The household's reply to the yes / no question just asked, when it visibly answers neither way (no yes / no, and
+    // no word of the question beyond the fact asked about): that question is still open.
+    const replyWords = [...new Set(recordedNow.filter((x) => x.subject === subject).map((x) => x.words.trim()))].join(" ");
+    const unsettled = r.kind === "final" && !state.pending && pendingBefore?.kind === "fact" && /^\s*(?:was|is|did|does|has|have|were|are|can|could)\b/i.test(pendingBefore.question)
+      && !/\b(?:yes|yeah|yep|no|nope|not|n['’]t|none|neither)\b/i.test(replyWords)
+      && !contentWords(replyWords).some((w) => contentWords(pendingBefore.question).includes(w) && !contentWords(pendingBefore.factKey.replace(/_/g, " ")).includes(w));
+    if (!missing.length && !bare && !unsettled) return r;
+    trace.incomplete = [...(bare ? ["the reply only said back what the household told it"] : []), ...(unsettled ? ["the household's reply did not visibly answer the question asked"] : []), ...missing.map((m) => m.split(":")[0])];
+    const who = input.people.find((p) => p.id === subject)?.name ?? "";
+    const short = /\(([^)]+)\)\s*$/.exec(who)?.[1] ?? who.split(/\s+/)[0] ?? "they";
+    const live = (id: string) => !!state.evidence[id] && !stale.has(id);
+    const sentences: Record<string, unknown>[] = [];
+    const notes: string[] = [];
+    const sayBacks = r.kind === "final" && !texts.some((t) => /^\s*you (?:told me|said)\b/i.test(t)) ? recordedNow.filter((x) => x.subject === subject).map((x) => sayBack(x.words)).filter((x): x is string => !!x) : [];
+    sentences.push(...[...new Set(sayBacks)].map((text) => ({ text })));
+    // What the conversation already established for this person (cited, bound), newest last.
+    const est = (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text)).slice(-3);
+    sentences.push(...est.map((e) => ({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), subject_id: subject })));
+    const saidNow = [...texts, ...est.map((e) => e.text)].join(" ");
+    // The person's own printed amounts read this conversation (a certificate's sum insured) that nothing says yet.
+    const amounts = [...ctx.values.entries()].filter(([, v]) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && live(evidenceIdOf(state, v.operand.evidence)) && !moneyFiguresIn(saidNow).some((f) => Math.abs(f.value * 100 - v.operand.cents!) < 1));
+    const ctxText = [saidNow, question ?? "", ...(pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []).map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
+    const percentOfSum = /%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText);
+    if (percentOfSum && !statesOwnAmount(saidNow, subject)) {
+      const pick = amounts.find(([, v]) => /sum (?:insured|assured)|personal accident|accident/i.test(`${v.operand.benefit} ${v.selected.benefit ?? ""}`)) ?? null;
+      if (pick) {
+        const [valueId, v] = pick; const e = v.operand.evidence;
+        const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
+        const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
+        sentences.push({ text: `${product} lists ${short}'s ${v.operand.benefit} as ${(e.table?.cell?.text ?? "").replace(/\s+/g, " ").trim() || `${v.operand.currency} ${(v.operand.cents! / 100).toLocaleString("en-SG")}`}${asOf}; the schedule's percentages are of that sum insured.`, value_ids: [valueId], subject_id: subject });
+      } else notes.push(`I haven't yet read ${short}'s own sum insured, which the schedule's percentages apply to, so no amount can be shown yet.`);
+    }
+    // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
+    const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
+    for (const m of missing) {
+      const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
+      if (!kind) continue;
+      const words = /told you "([^"]+)"/.exec(m)?.[1] ?? "";
+      let found: { id: string; line: string; product: string } | null = null;
+      for (const [id, e] of Object.entries(state.evidence)) {
+        if (!live(id) || (e.subjectId && e.subjectId !== subject)) continue;
+        const line = e.passage.text.split(/\n+/).map((l) => l.trim()).find((l) => ADDR[kind].test(l) && moneyFiguresIn(l).length && /^[A-Za-z][A-Za-z ()'’/-]{2,60}:\s/.test(l));
+        if (line) { found = { id, line: line.length > 260 ? line.slice(0, line.indexOf(".", 120) + 1 || 260) : line, product: policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "your policy" }; break; }
+      }
+      if (found) sentences.push({ text: `For the stay you mentioned, the ${found.product} says: “${found.line.replace(/[.\s]+$/, "")}”.`, evidence_ids: [found.id], subject_id: subject });
+      else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
+    }
+    const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
+    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n)) } : (composed ?? c0);
+    // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
+    // reply to the question just asked does not visibly answer it -- that question again.
+    if (r.kind === "ask") return { ...r, composed: merged, trailing: [...(r.trailing ?? []), ...notes] };
+    let ask: Extract<LoopPending, { kind: "fact" }> | null = state.pending?.kind === "fact" ? state.pending : (merged ? followUpFor(merged) : null);
+    if (!ask && unsettled && pendingBefore?.kind === "fact") {
+      ask = { ...pendingBefore, turn: state.turn };
+      notes.push(`I couldn't tell from your reply (“${replyWords.trim()}”) whether that answers my last question, so I'm asking it again.`);
+    }
+    if (ask) return { kind: "ask", pending: ask, preface: null, composed: merged, trailing: notes };
+    if (merged) merged.notes = [...merged.notes, ...notes];
+    return merged ? { kind: "final", composed: merged } : r;
+  };
   for (let step = 0; !reply; step++) {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
@@ -842,7 +921,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   state.seq = ctx.seq;
 
   let reasked: LoopPending | null = null;
-  const done = (reply ?? beforeRepair) as LoopReply | null;
+  const done = groundedFallback((reply ?? beforeRepair) as LoopReply | null);
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

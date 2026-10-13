@@ -206,7 +206,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     // A turn that says nothing before its question leads with one short line (what the output guard would supply) --
     // never the question itself, which its card shows.
     const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : "I need one more detail first.";
-    answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said].join(" ") || lead;
+    answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(reply.trailing ?? [])].join(" ") || lead;
     answer.questions = [q];
     if (p.kind === "person") answer.personCandidates = p.options.map((o) => ({ id: o.id, label: o.label }));
     if (c) {
