@@ -186,6 +186,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // Agent F (D6): evidence remembered from earlier turns is re-checked every turn: a document deleted, replaced by a
   // newer version, or not this household's supplies nothing any more (the composer refuses sentences citing it).
   const { stale, policyNames, docFacts } = await revalidateEvidence(input.accountId, state);
+  // V1.1 (grounded negatives): the full stored text of every readable document of this household, so a sentence that
+  // says something is NOT in a document (or in the library) is checked against the whole document, never a passage.
+  const libraryText = await loadLibraryText(input.accountId).catch(() => undefined);
   // Round 7: table values issued in earlier turns stay citable (value ids are unique across the conversation) while
   // their document is still current; a benefit already stated, cited and bound stays available to explain again.
   for (const [id, v] of Object.entries(state.values ?? {})) {
@@ -347,7 +350,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -948,6 +951,12 @@ export function personNames(label: string): string[] {
  * document was deleted, replaced by a newer version (or its file changed since it was read), or is not one of this
  * household's readable documents. Also returns the readable documents' product names (for statement checks).
  */
+/** Every readable document's stored pages, joined in page order (household-scoped; readable documents only). */
+export async function loadLibraryText(accountId: string): Promise<Map<string, string>> {
+  const docs = await loadDocs(accountId);
+  const pages = await loadPages(accountId, docs.map((d) => d.id));
+  return new Map(docs.map((d) => [d.id, pages.filter((p) => p.policyId === d.id).sort((a, b) => a.page - b.page).map((p) => p.text).join("\n")]));
+}
 export async function revalidateEvidence(accountId: string, state: RagLoopState): Promise<{ stale: Map<string, string>; policyNames: Map<string, string>; docFacts: Map<string, string> }> {
   const stale = new Map<string, string>();
   const docs = await loadDocs(accountId).catch(() => null);

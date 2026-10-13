@@ -1050,6 +1050,9 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner, doc, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, null, ctx);
   return col ? `${o.label}: ${col}` : null;
 }
+/** V1.1: the one day-count convention an illustration may assume when the wording states none -- always as its stated
+ * assumption, never as a term of the policy. */
+const DAY_ASSUMED_24H = "assuming each complete 24 hours in hospital counts as one day";
 const DURATION_WORDS = /\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a few)\s+(?:full\s+|whole\s+)?(?:days?|nights?|weeks?|hours?)\b/i;
 const STATES_ASSUMPTION = /\bif you mean\b|\bassum(?:e|es|ed|ing|ption)\b|\bsuppos(?:e|ing)\b|\bhypothetical\w*\b|\bfor (?:that|this|such an?) (?:assumed|hypothetical)\b/i;
 const MONTH_WORDS: [RegExp, number][] = ["jan(?:uary)?", "feb(?:ruary)?", "mar(?:ch)?", "apr(?:il)?", "may", "june?", "july?", "aug(?:ust)?", "sep(?:t(?:ember)?)?", "oct(?:ober)?", "nov(?:ember)?", "dec(?:ember)?"].map((w, i) => [new RegExp("\\b" + w + "\\b", "i"), i + 1]);
@@ -1120,7 +1123,7 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
         const n = numsOf(len)[0];
         const adm = r.operands.find((x) => x.role === "admission"), dis = r.operands.find((x) => x.role === "discharge");
         const span = adm && dis ? (Date.parse(String(dis.value)) - Date.parse(String(adm.value))) / 3_600_000 : NaN;
-        const lengthOnly = r.conditions.some((c) => c.kind === "day_count_rule" && (c.basis as string) === "assumption") && /\bdays?\b/i.test(len) && n > 0 && span === n * 24
+        const lengthOnly = r.conditions.some((c) => c.kind === "day_count_rule" && c.status === "unresolved" && !c.passage) && norm(r.assumption ?? "").includes(norm(DAY_ASSUMED_24H)) && /\bdays?\b/i.test(len) && n > 0 && span === n * 24
           && !MONTH_WORDS.some(([re]) => re.test(o.attribution)) && !/\b(?:19|20)\d{2}\b|\d{4}-\d{2}-\d{2}/.test(o.attribution);
         const p = lengthOnly ? null : assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`;
       }
@@ -1159,10 +1162,7 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       if (!(span >= hours)) return `the minimum stay is not met: ${c.text}`;
     } else if (c.basis === "assumption") {
       // Integration (r6): only earlier use of a capped allowance, only in an estimate that states the assumption.
-      // V1.1: or, in a what-if illustration, the day-count rule the wording does not state -- assumed and said in the
-      // sentence itself.
-      const statedDayRule = r.kind === "conditional_illustration" && c.kind === "day_count_rule" && norm(sentence).includes(norm(c.text));
-      if (!statedDayRule && (r.kind !== "indicative_estimate" || !/_prior_use$/.test(c.id) || !r.assumption?.trim())) return `a condition is settled by an assumption the estimate does not state: ${c.text}`;
+      if (r.kind !== "indicative_estimate" || !/_prior_use$/.test(c.id) || !r.assumption?.trim()) return `a condition is settled by an assumption the estimate does not state: ${c.text}`;
     } else if (c.basis === "absent") {
       if (c.status !== "not_applicable") return `a condition the document does not print is marked established: ${c.text}`;
     } else return `a condition has no basis: ${c.text}`;
@@ -1171,7 +1171,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     if (st.op === "day_count") {
       // V1.1: a what-if on wording that states no rule may assume complete 24-hour days -- stated in the sentence (checked
       // with the conditions above), never anything else, and never with day exceptions.
-      const assumedRule = !!ruleCond && r.kind === "conditional_illustration" && ruleCond.status === "established" && (ruleCond.basis as string) === "assumption" && st.rule === "completed_24h" && !(st.edges ?? []).length && norm(sentence).includes(norm(ruleCond.text));
+      // V1.1: wording that states no rule leaves the rule UNRESOLVED on the record; an illustration may still count
+      // complete 24-hour days when its stated assumption (in the record and in the sentence itself) says so.
+      const assumedRule = !!ruleCond && r.kind === "conditional_illustration" && ruleCond.status === "unresolved" && !ruleCond.passage && st.rule === "completed_24h" && !(st.edges ?? []).length && norm(r.assumption ?? "").includes(norm(DAY_ASSUMED_24H)) && norm(sentence).includes(norm(DAY_ASSUMED_24H));
       if (assumedRule) continue;
       if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
       const said = dayRuleFromWording(ruleCond.passage.text);

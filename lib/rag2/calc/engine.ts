@@ -134,8 +134,10 @@ export function hospitalCash(a: {
   const illustrating = a.whatIf || [a.admission, a.discharge].some((h) => h?.kind === "assumption");
   if (t.dayRule) conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `Days are counted as the wording states: “${t.dayRule.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.dayRule.evidence) });
   else if (illustrating && !t.dayRuleConflict.length) {
+    // The policy's day-count rule stays UNRESOLVED on the record (never an established term of the policy): the
+    // illustration's own stated assumption carries the convention, and the requirement names who can settle it.
     dayAssumption = `assuming each complete 24 hours in hospital counts as one day (the stored ${product} wording does not say how hospital days are counted; only the insurer can confirm it)`;
-    conds.push({ id: "c_day_rule", kind: "day_count_rule", text: dayAssumption, status: "established", basis: "assumption" as CalcCondition["basis"] });
+    conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `the stored ${product} wording does not say how hospital days are counted`, status: "unresolved", basis: "none", needs: `how ${product} counts hospital days (the stored wording does not say; only the insurer can confirm it)` });
   } else {
     const why = t.dayRuleConflict.length ? `the document states two different ways of counting hospital days (pages ${[...new Set(t.dayRuleConflict.map((e) => e.passage.onPage))].join(", ")})` : `the stored ${product} wording does not say how hospital days are counted`;
     conds.push({ id: "c_day_rule", kind: "day_count_rule", text: why, status: "unresolved", basis: "none", needs: `how ${product} counts hospital days (${why}; only the insurer can confirm it)` });
@@ -267,7 +269,7 @@ export function hospitalCash(a: {
   const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : !rowCap && t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
-  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id))));
+  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id) && !(dayAssumption && c.id === "c_day_rule"))));
   if (unresolvedNow) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
 
   // Payable days under the wording's rule, then the hospital-cash calculator.
@@ -348,7 +350,7 @@ export function hospitalCash(a: {
   const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : available.length ? available.join(" and ") : null;
   const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };
   const lines = [`payable days under “${t.dayRule?.words ?? "each complete 24 hours (assumed)"}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
-  return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });
+  return finish({ ...base, kind, conditions: conds, requirements: dayAssumption ? [conds.find((c) => c.id === "c_day_rule")!.needs!] : [], amount: cents / 100, currency: r.currency, record, steps: lines });
 }
 
 /** An item-code cell of a table row ("B", "12", "4.2", "(a)", "iii."): never the benefit's label. */

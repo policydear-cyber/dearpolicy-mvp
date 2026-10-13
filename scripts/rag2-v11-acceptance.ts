@@ -8,6 +8,13 @@
  * version, citations (document + page), whether exactly one question is asked when it should be (and none when it
  * should not), and clean presentation (no ids, verifier wording or raw row labels).
  *
+ * Evidence class: PLUMBING / CONTROL evidence. A scripted stand-in plays the tool calls, so this proves the route,
+ * the evidence contract, composition, the save-time gate and the saved state -- not that the real model chooses
+ * those tools or words. Real-model behaviour is measured separately (scripts/rag2-live, budgeted, ledger-capped).
+ *
+ * The sealed set (acceptance-sealed.json) was opened once at freeze (a4b7e57, 3/6 conversations) and then USED to
+ * drive fixes: it is no longer a holdout. A new holdout must be authored before it can measure generalisation again.
+ *
  * RELEASE_TRANSCRIPT=1 prints every visible conversation.
  */
 import assert from "node:assert/strict";
@@ -470,6 +477,13 @@ export function gradeTurn(t: Turn, a: ChatAnswer, docKey: (id: string) => string
   const text = visible(a);
   const problems: string[] = [];
   for (const s of t.must_include ?? []) if (!has(text, s)) problems.push(`missing “${s}”`);
+  // Correctness invariant (every turn): a policy term the wording does not print -- e.g. how hospital days are
+  // counted -- is never recorded as an established term; an assumed convention stays the illustration's stated
+  // assumption and the condition stays unresolved (only the insurer can settle it).
+  for (const r of ((a as any).calculations ?? []) as any[]) for (const c of (r.conditions ?? []) as any[]) {
+    if (c.kind === "day_count_rule" && c.status === "established" && c.basis !== "document") problems.push(`a day-count rule the wording does not print is recorded as established (${c.basis})`);
+    if (c.kind === "day_count_rule" && c.status === "unresolved" && r.kind !== "conditional_illustration") problems.push("an amount other than a conditional illustration rests on an unresolved day-count rule");
+  }
   for (const alts of t.must_include_any ?? []) if (!alts.some((s) => has(text, s))) problems.push(`missing one of ${JSON.stringify(alts)}`);
   for (const s of t.must_not_include ?? []) if (has(text, s)) problems.push(`must not include “${s}”`);
   const cited = new Set((a.citations ?? []).map((c) => `${docKey(c.policyId)}:${c.pageStart}`));
@@ -514,10 +528,33 @@ async function main() {
     transcripts.push(lines.join("\n"));
     await check(`${conv.id} ${conv.title}`, () => { assert.deepEqual(failures, []); });
   }
+  // Controls (every run): a FALSE negative is never shown -- each is checked against the full stored text of the
+  // documents it names (or the whole library), not a retrieved passage. Paired with a true negative that is kept.
+  await check("CONTROL false negatives are refused against the full stored library; true ones are kept", async () => {
+    const falseOnes = [
+      "The Harbourline Group Hospital Cash schedule does not state an annual limit.",
+      "Bea is not named on the Harbourline Group Hospital Cash schedule.",
+      "The Harbourline Civil Service Group Personal Accident policy wording is not in your uploaded documents.",
+      "None of your uploaded documents mentions competitive racing.",
+    ];
+    const trueOnes = ["Cai is not named on the Harbourline Group Hospital Cash schedule.", "None of your uploaded documents mentions dental treatment."];
+    installLoopModel(new ScriptedLoopModel([{ steps: [
+      () => [call("read_page", { policy_id: doc("HC").id, page: 1 })],
+      () => [call("final_answer", { sentences: [...falseOnes, ...trueOnes].map((t) => S(t)) })],
+    ] }]));
+    try {
+      const answer = await h.send("what does the hospital cash schedule leave out?", {});
+      const saved = await h.savedAnswer(answer.conversationId!);
+      const shown = visible(saved.answer);
+      for (const f of falseOnes) assert.ok(!shown.includes(f), "a false negative was shown: " + f);
+      for (const t of trueOnes) assert.ok(shown.includes(t), "a true negative was left out: " + t);
+      assert.ok(!DIAGNOSTIC.test(shown), "verifier text shown: " + shown);
+    } finally { installLoopModel(null); }
+  });
   if (process.env.RELEASE_TRANSCRIPT) console.log("\n" + transcripts.join("\n\n"));
   const failed = results.filter((r) => !r.ok);
   console.log(`\nturns graded ${turnsPassed}/${turnsGraded} passed`);
-  console.log(`v1.1 acceptance ${results.length - failed.length}/${results.length} conversations passed`);
+  console.log(`v1.1 acceptance ${results.length - failed.length}/${results.length} conversations and controls passed`);
   process.exit(failed.length ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
