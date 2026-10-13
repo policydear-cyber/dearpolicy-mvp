@@ -13,7 +13,8 @@
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
-import { loadDocs, loadPages } from "../store";
+import { loadDocs, loadPages, policyFamily } from "../store";
+import type { PolicyCoverage } from "../policies";
 import { calcOutcomes } from "../calc/tool";
 import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
@@ -24,7 +25,7 @@ import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -397,7 +398,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const substantiveDrops = new Set<string>();
   // (Calling it a payout is a substantive misstatement of what the figure is, not wording: never restored.)
   const WORDING_DROP = /^an illustration must state its what-if|^shows an internal id/;
+  /** V1.2: printed money figures a composed reply of this turn bound to its source, per person (cents). */
+  const boundAmounts = new Map<string, Set<number>>();
   const noteDrops = (sentencesIn: Record<string, unknown>[], c: Composed) => {
+    for (const b of c.figureBindings) if (b.subjectId && typeof b.value === "number") { const m = boundAmounts.get(b.subjectId) ?? new Set<number>(); m.add(Math.round(b.value * 100)); boundAmounts.set(b.subjectId, m); }
     for (const d of c.dropped) {
       // Wording only when the sentence itself presents the figure as conditional ("the conditional illustration is ...")
       // and merely lacks the canonical "if"; a figure stated as fact ("his stay comes to S$330") is not restated.
@@ -412,7 +416,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * reported that no sentence addresses, and a percentage of the sum insured stated (or just asked about) without the
    * person's own sum insured. Lines for the turn's one repair; empty when nothing is missing. */
   /** V1.2: the text states one of the person's own printed amounts read this conversation (a sum insured). */
-  const statesOwnAmount = (text: string, subject: string) => moneyFiguresIn(text).some((f) => [...ctx.values.values()].some((v) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && Math.abs(f.value * 100 - v.operand.cents) < 1));
+  const statesOwnAmount = (text: string, subject: string) => moneyFiguresIn(text).some((f) => boundAmounts.get(subject)?.has(Math.round(f.value * 100)) || [...ctx.values.values()].some((v) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && Math.abs(f.value * 100 - v.operand.cents) < 1));
   const completionLines = (texts: string[], question: string | null, subject: string | null | undefined, extraEvidence: string[] = []): string[] => {
     if (!subject) return [];
     const now = recordedNow.filter((r) => r.subject === subject);
@@ -827,7 +831,49 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * completed from what this conversation has ALREADY verified (statements established earlier, passages and table
    * values the tools returned), each composed and checked like any sentence; what was never looked up is named as
    * such (never invented); and the grounded question is asked. No extra model call, no retry. */
-  const groundedFallback = (r: LoopReply | null): LoopReply | null => {
+  /** V1.2: the ONE bounded lookup the grounded fallback may make when a reply states a percentage of the Sum Insured
+   * without the person's own amount (an unresolved evidence requirement, whatever the benefit): the same tools the
+   * model has -- policies_for, then select_table_value on the documents of the SAME policy as the wording that prints
+   * the percentage (at most 3), each value kept only if it is printed under that wording's own product. Household,
+   * lifecycle, person, version and date checks are the tools' own (and the composer's and the gate's after them). Never
+   * a model call. One match: that value. Several: ambiguous (never the first). None: unavailable, with why. */
+  const lookupSumInsured = async (subject: string): Promise<{ kind: "one"; valueId: string } | { kind: "many"; names: string[]; evidenceIds: string[] } | { kind: "none"; why: string } | null> => {
+    const cited = [...new Set([...trace.toolCalls.flatMap((t) => t.evidenceIds ?? []), ...(pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : [])])];
+    // The document printing the percentages: a passage cited this turn that says so (with its table header / context),
+    // or a percentage value read this turn for this person.
+    const PCT_OF_SUM = /%\s*of (?:the )?sum (?:insured|assured)|percentage shown/i;
+    const fromEvidence = cited.map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e && !stale.has(e.id) && (PCT_OF_SUM.test(evidenceTextOf(e)) || PCT_OF_SUM.test(e.table?.columnHeader ?? ""))).map((e) => e.policyId);
+    const fromValues = [...ctx.values.values()].filter((v) => v.subjectId === subject && v.operand.valueKind === "percent" && !stale.has(evidenceIdOf(state, v.operand.evidence)) && (PCT_OF_SUM.test(evidenceTextOf(v.operand.evidence)) || PCT_OF_SUM.test(v.operand.evidence.table?.columnHeader ?? ""))).map((v) => v.operand.evidence.policyId);
+    const wordingIds = [...new Set([...fromEvidence, ...fromValues])];
+    if (wordingIds.length !== 1) return wordingIds.length ? { kind: "none", why: "more than one policy document prints the percentages, so it is not clear whose sum insured they apply to" } : null;
+    const docs = await loadDocs(input.accountId).catch(() => null);
+    const wording = docs?.find((d) => d.id === wordingIds[0]);
+    if (!docs || !wording) return null;
+    const env2 = loopToolEnv(env);
+    const pf = await runTool(ctx, "policies_for", { subject_id: subject }, env2);
+    const pfIds: string[] = []; resultForModel(pf as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "policies_for", pfIds, new Set());
+    record("policies_for", { subject_id: subject, by: "grounded fallback (sum insured)" }, pf.ok, pfIds, pf.ok ? undefined : pf.error);
+    if (!pf.ok) return { kind: "none", why: "the list of documents that insure them could not be read" };
+    const family = new Set(policyFamily(docs, wording).map((d) => d.id));
+    const candidates = ((pf.data as { covering?: PolicyCoverage[] }).covering ?? []).filter((c) => c.policyId !== wording.id && family.has(c.policyId)).slice(0, 3);
+    const productWords = (t: string) => (t.toLowerCase().replace(/\([^)]*\)/g, " ").match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "the", "and", "for", "sum", "assured", "insured", "benefit", "amount", "cover", "wording", "schedule", "certificate", "plan", "scheme", "public", "service"].includes(w));
+    const own = new Set(productWords(`${wording.productName ?? ""} ${wording.policyType ?? ""}`));
+    const found: { valueId: string; policyId: string; evidenceId: string }[] = [];
+    for (const c of candidates) {
+      const args = { policy_id: c.policyId, benefit: wording.policyType || wording.productName || "sum insured", subject_id: subject, want: "amount" };
+      const r = await runTool(ctx, "select_table_value", args, env2);
+      const ids2: string[] = []; resultForModel(r as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "select_table_value", ids2, new Set());
+      const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; benefit?: string; rowLabel?: string } | null;
+      record("select_table_value", { ...args, by: "grounded fallback (sum insured)" }, r.ok, ids2, r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, valueId: d.valueId, row: d.rowLabel }) : undefined);
+      const under = productWords(String(d?.benefit ?? d?.rowLabel ?? ""));
+      if (d?.status === "ok" && d.valueKind === "money" && d.valueId && under.length && under.every((w) => own.has(w))) found.push({ valueId: d.valueId, policyId: c.policyId, evidenceId: ids2[0] ?? "" });
+    }
+    if (found.length === 1) return { kind: "one", valueId: found[0].valueId };
+    if (found.length > 1) return { kind: "many", names: found.map((f) => policyNames.get(f.policyId) ?? state.docNames?.[f.policyId] ?? "a document"), evidenceIds: found.map((f) => f.evidenceId).filter(Boolean) };
+    return { kind: "none", why: candidates.length ? `the ${candidates.map((c) => c.productName ?? "document").join(" and ")} that insure them under this policy do not print an amount for them under ${wording.productName ?? "this product"}` : `none of their readable documents of this policy lists a sum insured under ${wording.productName ?? "this product"}` };
+  };
+  let lookupAsk: Extract<LoopPending, { kind: "fact" }> | null = null;
+  const groundedFallback = async (r: LoopReply | null): Promise<LoopReply | null> => {
     if (!r || (r.kind !== "final" && r.kind !== "ask") || !(gateRepaired || finalRepaired || completionNudged)) return r;
     const c0 = r.composed ?? null;
     const subject = (c0?.subjectId ?? (r.kind === "ask" && r.pending.kind === "fact" ? r.pending.subjectId : null) ?? state.claim?.subjectId ?? state.subjectId) || null;
@@ -870,7 +916,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Only a lost calculation to restore: nothing else is added (what the reply said stands as it is).
     const onlyCalcs = !missing.length && !bare && !unsettled;
     // What the conversation already established for this person (cited, bound), newest last.
-    const est = onlyCalcs ? [] : (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text)).slice(-3);
+    // Only what bears on what is missing (the sum insured; a hospital stay), or everything when the reply only said back;
+    // one statement per figure, never a figure the reply already states.
+    const wantSum = missing.some((m) => /sum insured/i.test(m)), wantStay = missing.some((m) => /hospital/i.test(m));
+    const figs = new Set(moneyFiguresIn(texts.join(" ")).map((f) => Math.round(f.value * 100)));
+    const est = onlyCalcs ? [] : (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text))
+      .filter((e) => bare || unsettled || (wantSum && /sum (?:insured|assured)/i.test(e.text)) || (wantStay && /hospital|confine/i.test(e.text)))
+      .filter((e) => { const f = moneyFiguresIn(e.text).map((x) => Math.round(x.value * 100)); if (f.length && f.every((x) => figs.has(x))) return false; f.forEach((x) => figs.add(x)); return true; }).slice(-3);
     sentences.push(...est.map((e) => ({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), subject_id: subject })));
     const saidNow = [...texts, ...est.map((e) => e.text)].join(" ");
     // The person's own printed amounts read this conversation (a certificate's sum insured) that nothing says yet.
@@ -884,7 +936,20 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
         const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
         sentences.push({ text: `${product} lists ${short}'s ${v.operand.benefit} as ${(e.table?.cell?.text ?? "").replace(/\s+/g, " ").trim() || `${v.operand.currency} ${(v.operand.cents! / 100).toLocaleString("en-SG")}`}${asOf}; the schedule's percentages are of that sum insured.`, value_ids: [valueId], subject_id: subject });
-      } else notes.push(`I haven't yet read ${short}'s own sum insured, which the schedule's percentages apply to, so no amount can be shown yet.`);
+      } else {
+        // The certificate amount was not read: the one bounded lookup, instead of saying it was not read.
+        const look = await lookupSumInsured(subject);
+        if (look?.kind === "one") {
+          const v = ctx.values.get(look.valueId)!; const e = v.operand.evidence;
+          const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
+          const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
+          sentences.push({ text: `${product} lists ${short}'s ${v.operand.benefit} sum insured as ${(e.table?.cell?.text ?? "").replace(/\s+/g, " ").trim() || `${v.operand.currency} ${(v.operand.cents! / 100).toLocaleString("en-SG")}`}${asOf} (the amount on that date, not confirmation of current cover); the schedule's percentages are of that sum insured.`, value_ids: [look.valueId], subject_id: subject });
+        } else if (look?.kind === "many") {
+          notes.push(`${short} is listed with a sum insured for this product on more than one current document (${look.names.join(" and ")}), so I haven't picked one for the percentages.`);
+          if (r.kind === "final" && look.evidenceIds.length) lookupAsk = { kind: "fact", question: `Which of these is ${short}'s current certificate: ${look.names.join(" or ")}?`, factKey: "current_certificate", subjectId: subject, why: "the percentages are of the sum insured on the current certificate", evidenceIds: look.evidenceIds, turn: state.turn };
+        } else if (look?.kind === "none") notes.push(`I couldn't find ${short}'s own sum insured for this: ${look.why}, so no amount can be worked out from the percentages.`);
+        else notes.push(`I couldn't tell which document's sum insured the schedule's percentages apply to, so no amount is shown.`);
+      }
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
@@ -906,7 +971,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.
     if (r.kind === "ask") return { ...r, composed: merged, trailing: [...(r.trailing ?? []), ...notes] };
-    let ask: Extract<LoopPending, { kind: "fact" }> | null = state.pending?.kind === "fact" ? state.pending : (merged ? followUpFor(merged) : null);
+    let ask: Extract<LoopPending, { kind: "fact" }> | null = state.pending?.kind === "fact" ? state.pending : lookupAsk ?? (merged ? followUpFor(merged) : null);
     if (!ask && unsettled && pendingBefore?.kind === "fact") {
       ask = { ...pendingBefore, turn: state.turn };
       notes.push(`I couldn't tell from your reply (“${replyWords.trim()}”) whether that answers my last question, so I'm asking it again.`);
@@ -986,7 +1051,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   state.seq = ctx.seq;
 
   let reasked: LoopPending | null = null;
-  const done = groundedFallback((reply ?? beforeRepair) as LoopReply | null);
+  const done = await groundedFallback((reply ?? beforeRepair) as LoopReply | null);
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

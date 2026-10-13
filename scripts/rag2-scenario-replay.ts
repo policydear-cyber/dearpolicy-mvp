@@ -17,13 +17,14 @@ import type { ScriptTurn } from "@/lib/rag2/loop/scripted-model";
 
 const HOUSEHOLD = HH as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
-const RUN = process.env.REPLAY_RUN ?? (() => { const base = "docs/rag-migration/live"; const d = fs.readdirSync(base).filter((x) => x.startsWith("RUN-s47-live-1-")).sort()[0]; return path.join(base, d); })();
-const run = JSON.parse(fs.readFileSync(path.join(RUN, "run.json"), "utf8"));
-const conv = run.conversations.find((c: any) => c.scenario === "S47");
-const relay = fs.readFileSync(path.join(RUN, "relay.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l: any) => l.status === 200);
+const runDir = (prefix: string) => { const base = "docs/rag-migration/live"; const d = fs.readdirSync(base).filter((x) => x.startsWith(prefix)).sort()[0]; return path.join(base, d); };
+const RUN = process.env.REPLAY_RUN ?? runDir("RUN-s47-live-1-");
 
 /** The recorded model calls of each turn: the trace's tool calls, grouped by the relay's per-call tool-call names. */
-export function recordedTurns(): { user: string; steps: { name: string; arguments: Record<string, unknown> }[][] }[] {
+export function recordedTurns(dir = RUN): { user: string; steps: { name: string; arguments: Record<string, unknown> }[][] }[] {
+  const run = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8"));
+  const conv = run.conversations.find((c: any) => c.scenario === "S47");
+  const relay = fs.readFileSync(path.join(dir, "relay.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l: any) => l.status === 200);
   const out: { user: string; steps: { name: string; arguments: Record<string, unknown> }[][] }[] = [];
   let r = 0;
   for (const t of conv.loaded.turns) {
@@ -60,7 +61,7 @@ async function main() {
     c = { id: a.conversationId, rev: a.conversationRevision };
     const s = await h.savedAnswer(c.id!);
     saved.push({ answer: s.answer, state: s.state, trace: s.state.ragLoop?.turns.at(-1) });
-    console.log(`\nUSER: ${t.user}\nAPP:  ${visible(s.answer).replace(/\n/g, "\n      ")}\n      gate=${JSON.stringify(saved.at(-1)!.trace?.gate ?? [])} calcs=${JSON.stringify(((s.answer as any).calculations ?? []).map((r: any) => [r.benefit, r.result?.value]))}`);
+    console.log(`\nUSER: ${t.user}\nAPP:  ${visible(s.answer).replace(/\n/g, "\n      ")}\n      incomplete=${JSON.stringify(saved.at(-1)!.trace?.incomplete ?? [])} gate=${JSON.stringify(saved.at(-1)!.trace?.gate ?? [])} calcs=${JSON.stringify(((s.answer as any).calculations ?? []).map((r: any) => [r.benefit, r.result?.value]))}`);
   }
   installLoopModel(null);
   if (process.env.REPLAY_ONLY) process.exit(0);
@@ -106,8 +107,23 @@ async function main() {
   await check("turn 6 (unchanged): the S$100 hospital estimate is still shown and saved", () => {
     assert.match(visible(saved[5].answer), /S\$100(?![\d,]*\d)/); assert.ok(((saved[5].answer as any).calculations ?? []).some((r: any) => r.result?.value === 100));
   });
+  // The second actual-model run (s47-live-2): its turn 1 named the percentages without reading the certificate.
+  if (!process.env.REPLAY_RUN) {
+    const t2 = recordedTurns(runDir("RUN-s47-live-2-"));
+    installLoopModel(new ScriptedLoopModel(t2.map((t) => ({ user: t.user, steps: t.steps.map((st) => () => st) }))));
+    const a = await h.send(t2[0].user, {}); const s1 = await h.savedAnswer(a.conversationId!);
+    installLoopModel(null);
+    const v1 = visible(s1.answer);
+    console.log(`\ns47-live-2 turn 1 replayed:\nAPP:  ${v1.replace(/\n/g, "\n      ")}`);
+    await check("s47-live-2 turn 1: the omitted certificate lookup is completed by the one bounded lookup (dated amount, own product and person)", () => {
+      assert.match(v1, /S\$300,000(?![\d,]*\d)[^.]*1 July 2025/, v1); assert.ok(!/haven['’]t yet read/i.test(v1), v1);
+      const look = (s1.state.ragLoop.turns.at(-1).toolCalls as any[]).filter((x) => /grounded fallback/.test(String(x.args?.by ?? "")));
+      assert.ok(look.length >= 2 && look.length <= 4, JSON.stringify(look.map((x) => x.name)));
+      assert.deepEqual(s1.state.ragLoop.turns.at(-1).gate ?? [], []);
+    });
+  }
   const failed = results.filter((r) => !r.ok);
-  console.log(`\nreplay of s47-live-1 ${results.length - failed.length}/${results.length} passed`);
+  console.log(`\nreplay of s47-live-1 and s47-live-2 ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

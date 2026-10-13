@@ -237,7 +237,7 @@ const CONVS: Conv[] = [
       { user: "Desmond broke his leg.", question: /how/i },
       { user: "He fell down the stairs.", question: /X-ray/i },
       { user: "Yes, confirmed with an X-ray. He was also warded for two nights.", question: /simple|closed/i },
-      { user: "Transverse fracture.", include: [/transverse/i, "S$100", /complete period of 24 hours/i, /haven't yet read Desmond's own sum insured/i], exclude: [/\b1%|Other fracture/i, "S$200"], question: /simple|closed/i, cites: ["PA_WORD:2"] },
+      { user: "Transverse fracture.", include: [/transverse/i, "S$100", /complete period of 24 hours/i, "S$300,000", CERT_DATE], exclude: [/\b1%|Other fracture/i, "S$200", /haven['’]t yet read/i], question: /simple|closed/i, cites: ["PA_WORD:2", "CERT:1"] },
     ],
     whole: { maxRepeats: [[/your own account/i, 1], [/include the doctor|claim form/i, 1]] } },
   { id: "R3", title: "reported conversation, minimal model that follows the repair", script: RESPONSIVE_REPORTED,
@@ -417,6 +417,48 @@ async function main() {
     assert.ok(t[0].trace?.incomplete?.some((x: string) => /stated from its own record/.test(x)), "the restored turn is not marked in its trace");
     // Several resolved calculations and none attempted: nothing is chosen for the household.
     assert.ok(!((t[1].answer as any).calculations ?? []).length, "an unattempted calculation was chosen among several: " + visible(t[1].answer));
+  });
+
+  // The one bounded lookup the grounded fallback makes when a reply gives a percentage of the Sum Insured with no amount.
+  const pctOnly = (who: string, name: string, words: string, injury: string) => {
+    const reply = (v: ScriptView) => [call("final_answer", { subject_id: who, sentences: [S(`The Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured for ${name}.`, { value_ids: ids(vid(v, "PA_WORD", /tibia/, who)), subject_id: who })] })];
+    return { steps: [() => [call("resolve_person", { mention: name })], () => [call("note_facts", { subject_id: who, facts: [{ key: "injury", value: injury, words }] }), sel("PA_WORD", ROWS.lower.label, who, "percent")], reply, reply] } as ScriptTurn;
+  };
+  const byFallback = (t: any) => (t.trace?.toolCalls ?? []).filter((x: any) => /grounded fallback/.test(String(x.args?.by ?? "")));
+  await check("CONTROL lookup: one valid certificate -- its dated Personal Accident row for THIS person (never Term Life, the superseded or another household's)", async () => {
+    const [d] = await run([pctOnly(D, "Desmond", "Desmond broke his leg", "broke his leg")], ["Desmond broke his leg."]);
+    const v = visible(d.answer);
+    assert.match(v, /S\$300,000(?![\d,]*\d)[^.]*1 July 2025/, v);
+    for (const f of ["S$500,000", "S$250,000", "S$800,000", "S$200,000"]) assert.ok(!lit(f).test(v), f + " shown: " + v);
+    assert.ok(!/haven['’]t yet read/i.test(v), v);
+    assert.ok(byFallback(d).length >= 2 && byFallback(d).length <= 4, "the lookup is not bounded: " + JSON.stringify(byFallback(d).map((x: any) => x.name)));
+    assert.deepEqual(d.trace?.gate ?? [], []);
+    const b = (d.answer.figureBindings ?? []).find((x: any) => x.value === 300000);
+    assert.ok(b && /personal accident/i.test(b.benefit) && b.subjectId === D && docKey(b.policyId) === "CERT", JSON.stringify(b));
+    const [g] = await run([pctOnly(G, "Grace", "Grace broke her leg", "broke her leg")], ["Grace broke her leg."]);
+    const vg = visible(g.answer);
+    assert.match(vg, /S\$200,000(?![\d,]*\d)/, "Grace's own row: " + vg); assert.ok(!lit("S$300,000").test(vg), "Desmond's amount for Grace: " + vg);
+  });
+  await check("CONTROL lookup: two current certificates printing the product for the person -- ambiguous, never the first; one grounded question", async () => {
+    const c = HH.doc("CERT"); const dupId = "7c000000-0000-4000-8000-000000000199";
+    await h.db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,file_hash,effective_date,document_date) VALUES($1,$2,$3,$4,'Meridian Public Service Group Scheme - Certificate (reissued)',$5,$6,$7,'schedule',true,'ready','cert-b.pdf','cert-b.pdf','scan_clean','active','sha256:scenario-cert-b','2025-07-01','2025-07-01')`, [dupId, HH.ACCOUNT, c.owner, c.insurer, c.policyNumber, c.groupPolicyNumber, c.policyType]);
+    for (const m of c.members) await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'test',1)", [dupId, m.id, HH.ACCOUNT]);
+    await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [HH.ACCOUNT, dupId, String(c.pages[1]).replace(/S\$300,000/, "S$350,000")]);
+    try {
+      const [d] = await run([pctOnly(D, "Desmond", "Desmond broke his leg", "broke his leg")], ["Desmond broke his leg."]);
+      const v = visible(d.answer);
+      assert.ok(!lit("S$300,000").test(v) && !lit("S$350,000").test(v), "an amount was picked: " + v);
+      assert.match(v, /more than one current document/i, v);
+      assert.equal((d.answer.questions ?? []).length, 1); assert.match(d.answer.questions![0].text, /current certificate/i);
+    } finally {
+      for (const t of ["policy_pages", "policy_members"]) await h.db.query(`DELETE FROM ${t} WHERE policy_id=$1`, [dupId]);
+      await h.db.query("DELETE FROM policies WHERE id=$1", [dupId]);
+    }
+  });
+  await check("CONTROL lookup: not made for an ordinary question that needs no certificate amount", async () => {
+    const [d] = await run([{ steps: [() => [call("resolve_person", { mention: "Desmond" })], () => [sel("PA_WORD", ROWS.patella.label, D, "percent")], (v) => [call("final_answer", { subject_id: D, sentences: [S("The Schedule of Compensation lists a fracture of the kneecap (patella) at 4% of the Sum Insured.", { value_ids: ids(vid(v, "PA_WORD", /patella/, D)), subject_id: D })] })]] }], ["What percentage does the schedule list for a kneecap fracture?"]);
+    assert.equal(byFallback(d).length, 0, "a lookup was made for an ordinary question");
+    assert.match(visible(d.answer), /4%/); assert.ok(!/sum insured as S\$/i.test(visible(d.answer)));
   });
 
   await check("CONTROL hospital days: two nights under a complete-24-hours rule is not two payable days", () => {

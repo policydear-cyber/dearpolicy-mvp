@@ -205,7 +205,11 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     const said = c ? [...c.sentences.map((s) => s.text), ...(c.notes ?? []).filter((n) => ASK_NOTES.has(n))] : [];
     // A turn that says nothing before its question leads with one short line (what the output guard would supply) --
     // never the question itself, which its card shows.
-    const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : "I need one more detail first.";
+    // V1.2: a fact question asked with nothing before it says briefly why the detail changes the answer -- the clause it
+    // turns on, in the wording's own words (figure-free; a clause printing an amount is described, not quoted).
+    const why = p.kind === "fact" ? String(p.why ?? "").split(/;\s*/)[0].replace(/\s*\(page \d+\)\s*$/, "").replace(/\s+/g, " ").trim() : "";
+    const whyText = why && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why.length > 160 ? why.slice(0, why.lastIndexOf(" ", 157)) + " …" : why}”` : "it changes which of the policy's benefits or amounts applies";
+    const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : `I'm asking because ${whyText}.`;
     answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(reply.trailing ?? [])].join(" ") || lead;
     answer.questions = [q];
     if (p.kind === "person") answer.personCandidates = p.options.map((o) => ({ id: o.id, label: o.label }));
