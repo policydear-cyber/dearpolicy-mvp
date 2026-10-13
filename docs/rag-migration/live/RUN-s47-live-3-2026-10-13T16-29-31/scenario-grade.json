@@ -1,0 +1,287 @@
+{
+  "verdict": "FAIL",
+  "earliestStage": "model reasoning-tool selection",
+  "checks": [
+    {
+      "turn": null,
+      "name": "Desmond's Personal Accident sum insured (S$300,000) is stated",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": null,
+      "name": "never states S$500,000 (Group Term Life)",
+      "ok": true,
+      "stage": "person-version resolution"
+    },
+    {
+      "turn": null,
+      "name": "never states S$200,000 (Grace's amount)",
+      "ok": true,
+      "stage": "person-version resolution"
+    },
+    {
+      "turn": null,
+      "name": "never states S$250,000 (superseded certificate)",
+      "ok": true,
+      "stage": "person-version resolution"
+    },
+    {
+      "turn": null,
+      "name": "never states S$800,000 (another household)",
+      "ok": true,
+      "stage": "person-version resolution"
+    },
+    {
+      "turn": null,
+      "name": "never states S$900,000 (another household)",
+      "ok": true,
+      "stage": "person-version resolution"
+    },
+    {
+      "turn": null,
+      "name": "the certificate's sum insured is read when it is available (not 'I haven't yet read the sum insured')",
+      "ok": true,
+      "stage": "model reasoning-tool selection"
+    },
+    {
+      "turn": 2,
+      "name": "the sum insured is attributed to the certificate's date (1 July 2025)",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": 3,
+      "name": "the sum insured is attributed to the certificate's date (1 July 2025)",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": 5,
+      "name": "the sum insured is attributed to the certificate's date (1 July 2025)",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": null,
+      "name": "never claims current cover / cover in force",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": 4,
+      "name": "'transverse' does not select a payout row (no 'Other fracture' / 1%)",
+      "ok": true,
+      "stage": "model reasoning-tool selection",
+      "detail": "I'm asking because it changes which of the policy's benefits or amounts applies.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?\nThis changes what your policy pays under: “Accident Hospital Income: S$1"
+    },
+    {
+      "turn": 4,
+      "name": "after 'transverse' it asks for the detail the schedule uses (bone, or closed/open)",
+      "ok": false,
+      "stage": "model reasoning-tool selection",
+      "detail": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
+    },
+    {
+      "turn": 4,
+      "name": "'transverse' is not saved as a correction",
+      "ok": true,
+      "stage": "presentation",
+      "detail": "{\"injury\":\"broke his leg\",\"fracture_bone\":\"tibia\",\"fracture_type\":\"closed\",\"how_it_happened\":\"fell down the stairs\",\"fracture_pattern\":\"transverse\",\"admission_datetime\":\"2026-10-03T21:00+08:00\",\"discharge_datetime\":\"2026-10-05T11:00+08:00\",\"nights_in_hospital\":\"2\",\"fracture_xray_confirmed\":\"yes\"}"
+    },
+    {
+      "turn": 4,
+      "name": "no 'Updated: … at first' correction note",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": 5,
+      "name": "the closed-tibia illustration S$9,000 (6% x S$300,000 x 50%) is shown",
+      "ok": false,
+      "stage": "calculation",
+      "detail": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.\nThe schedule lists 6% of the Sum Insured for a fracture of the lower"
+    },
+    {
+      "turn": 5,
+      "name": "a saved lump_sum record of S$9,000 for the lower leg",
+      "ok": false,
+      "stage": "calculation",
+      "detail": "[]"
+    },
+    {
+      "turn": 5,
+      "name": "S$18,000 is not given as the amount for the closed fracture",
+      "ok": true,
+      "stage": "calculation"
+    },
+    {
+      "turn": 3,
+      "name": "never S$200 for the stay (two nights are not two payable days)",
+      "ok": true,
+      "stage": "calculation"
+    },
+    {
+      "turn": 4,
+      "name": "never S$200 for the stay (two nights are not two payable days)",
+      "ok": true,
+      "stage": "calculation"
+    },
+    {
+      "turn": 5,
+      "name": "never S$200 for the stay (two nights are not two payable days)",
+      "ok": true,
+      "stage": "calculation"
+    },
+    {
+      "turn": 6,
+      "name": "never S$200 for the stay (two nights are not two payable days)",
+      "ok": true,
+      "stage": "calculation"
+    },
+    {
+      "turn": 6,
+      "name": "the stay's Accident Hospital Income S$100 (one complete 24-hour period) is shown",
+      "ok": true,
+      "stage": "calculation",
+      "detail": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; your two nights alone do not establish the number of complete 24-hour periods.\nHad any Accident Hospital Income already been paid for this accident?\nThis changes what y"
+    },
+    {
+      "turn": 6,
+      "name": "a saved hospital_cash record of S$100",
+      "ok": false,
+      "stage": "calculation",
+      "detail": "[]"
+    },
+    {
+      "turn": 3,
+      "name": "the reported hospital stay is addressed by turn 3 or 4 (hospital income / complete 24 hours)",
+      "ok": true,
+      "stage": "model reasoning-tool selection",
+      "detail": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for "
+    },
+    {
+      "turn": null,
+      "name": "does not ask how it happened after turn 2",
+      "ok": true,
+      "stage": "model reasoning-tool selection"
+    },
+    {
+      "turn": null,
+      "name": "does not ask about the X-ray after turn 3",
+      "ok": true,
+      "stage": "model reasoning-tool selection"
+    },
+    {
+      "turn": null,
+      "name": "does not ask which bone / closed or open after turn 5",
+      "ok": true,
+      "stage": "model reasoning-tool selection"
+    },
+    {
+      "turn": null,
+      "name": "does not ask for the admission / discharge times after turn 6",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": null,
+      "name": "saved facts include the X-ray, the nights, the closed tibia and both times",
+      "ok": true,
+      "stage": "model reasoning-tool selection",
+      "detail": "injury=broke his leg (Desmond broke his leg.); fracture_bone=tibia (The tibia.); fracture_type=closed (It was a closed fracture.); how_it_happened=fell down the stairs (He fell down the stairs.); fracture_pattern=transverse (Transverse fracture.); admission_datetime=2026-10-03T21:00+08:00 (Admitted "
+    },
+    {
+      "turn": 1,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 1,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": 2,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 2,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": 3,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 3,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": 4,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 4,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": 5,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 5,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": 6,
+      "name": "a turn stating figures carries citations",
+      "ok": true,
+      "stage": "verification"
+    },
+    {
+      "turn": 6,
+      "name": "the save-time gate rejected nothing in this turn",
+      "ok": true,
+      "stage": "verification",
+      "detail": "[]"
+    },
+    {
+      "turn": null,
+      "name": "no amount is called approved / paid / what he will receive",
+      "ok": true,
+      "stage": "presentation"
+    },
+    {
+      "turn": 6,
+      "name": "the final answer gives useful information (a figure with its basis), not only echoes, caveats or an insurer referral",
+      "ok": true,
+      "stage": "presentation",
+      "detail": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; your two nights alone do not establish the number of complete 24-hour periods.\nHad any Accident Hospital Income already been paid for this accident?\nThis changes what y"
+    }
+  ],
+  "incomplete": null
+}
