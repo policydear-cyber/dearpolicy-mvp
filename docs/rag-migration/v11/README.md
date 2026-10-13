@@ -13,3 +13,4 @@ Transcripts: `baseline-09acbbe-scripted.txt` (before), `visible-final-scripted.t
 `sealed-final-scripted.txt` (after).
 
 Executed checks for the tested source `5f5314f` (memory diagnosis, full suite list, typecheck, build, browser journey, baseline failures, what was not run): `CHECKS-5f5314f.md`.
+Executed checks for `9e30348` (Node 22, baseline-failure diagnosis, real-model readiness): `CHECKS-9e30348.md`.
