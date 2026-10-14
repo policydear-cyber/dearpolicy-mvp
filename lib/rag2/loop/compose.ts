@@ -15,7 +15,7 @@ import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
-import { printedPeriodsOf } from "@/lib/chat/assertions";
+import { benefitWords, namesBenefit, printedPeriodsOf } from "@/lib/chat/assertions";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import { parseTables } from "../tables";
 import type { ComputeOk, TableValueOperand } from "../compute";
@@ -149,6 +149,87 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): 
     if (cells.length >= 2 && !/\d/.test(l)) return null;
   }
   return null;
+}
+/** V1.3: a label as the household reads it -- the policy number and other parenthetical detail of a heading left out. */
+const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
+/** A line's own label ("Daily Hospital Income: S$150 for ...") or, failing that, the heading it is printed under on its
+ * stored page (a certificate roster's product heading). */
+function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">): string | null {
+  const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
+  if (own) return own;
+  // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
+  const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
+  if (first && first !== line.trim() && !/\d/.test(first) && benefitWords(first).size > 0) return first;
+  return rosterHeading({ policyId, passage: { text: line, start: 0, end: line.length, onPage: 0 }, page: { start: 0, end: 0 }, documentHash: null } as EvidenceRef, ctx);
+}
+/** Every label a document prints: its headings and its "Label:" lines. */
+function documentLabels(text: string): string[] {
+  const out = new Set<string>();
+  for (const raw of text.split(/\n/)) {
+    const l = raw.trim(); if (!l) continue;
+    const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim();
+    if (own) { out.add(tidyLabel(own)); continue; }
+    const cells = l.split(/\t+| {3,}/).filter(Boolean);
+    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
+  }
+  return [...out].filter((x) => benefitWords(x).size > 0);
+}
+/** The clause names its own label, not merely a word it shares with the competing one ("Group" in "Group Term Life" /
+ * "Group Personal Accident"): the label verbatim, or a word of it the competing label does not have. */
+const ownNamed = (clause: string, own: string, other: string) => {
+  if (clause.toLowerCase().includes(own.toLowerCase())) return true;
+  const theirs = benefitWords(other), have = benefitWords(clause);
+  return [...benefitWords(own)].some((w) => !theirs.has(w) && have.has(w));
+};
+const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
+/**
+ * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
+ * "Label:" or the heading it is printed under) -- never by the model reproducing that label word for word. The
+ * clause stating the figure must name that benefit (one distinctive word, as the save-time gate requires) and must not
+ * name another benefit the same document prints more closely ("your Personal Accident cover is S$400,000" when
+ * S$400,000 is printed under Group Term Life is refused). Several lines printing the figure under different labels: the
+ * one the clause names; none or a tie: not bound.
+ */
+function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText">): { label: string } | { conflict: string } | null {
+  const all = withoutInstructions(evidenceTextOf(ref)).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
+  // The amount as printed: in the currency the sentence states it in, never another one.
+  const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && m.currency === currency));
+  if (all.length && !lines.length) return { conflict: `printed in another currency than the sentence states` };
+  // A row printing several amounts (one per column, person or tier) is bound by its column, not by its label.
+  if (lines.some((l) => moneyFiguresIn(l).length > 1)) return null;
+  const labels = [...new Set(lines.map((l) => lineLabel(ref.policyId, l, ctx)).filter((x): x is string => !!x).map(tidyLabel).filter((x) => benefitWords(x).size > 0))];
+  if (!labels.length) return null;
+  const named = labels.filter((l) => namesBenefit(clause, l));
+  const pick = labels.length === 1 ? labels[0] : named.length === 1 ? named[0] : null;
+  if (!pick) return null;
+  const others = documentLabels(ctx.libraryText?.get(ref.policyId) ?? evidenceTextOf(ref)).filter((o) => o.toLowerCase() !== pick.toLowerCase() && !labels.some((l) => l.toLowerCase() === o.toLowerCase()));
+  const better = others.filter((o) => wordScore(clause, o) > wordScore(clause, pick)).sort((a, b) => wordScore(clause, b) - wordScore(clause, a))[0];
+  if (!namesBenefit(clause, pick)) return better ? { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` } : null;
+  if (better) return { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` };
+  return { label: pick };
+}
+/** V1.3: a sentence whose figure could not be verified, cut into parts that can each be checked on their own: its
+ * clauses at "; ", or -- for one clause -- the part before the comma-delimited phrase stating that figure (the
+ * document, insurer, person and date facts). Null when no self-standing part remains. */
+function verifiableParts(text: string, failedRaw: string | null): string[] | null {
+  const tidy = (x: string) => { const t = x.trim().replace(/[,;:\s]+$/, ""); return t ? t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : ""; };
+  const enough = (x: string) => (x.match(/[A-Za-z]{2,}/g) ?? []).length >= 4;
+  if (/;\s+/.test(text)) {
+    const raw = text.split(/;\s+/);
+    const at = failedRaw ? raw.findIndex((x) => x.includes(failedRaw)) : -1;
+    // A later clause pointing back at the unsupported figure ("... that this is the current amount") is not kept alone.
+    const BACK = /\b(?:this|that|it|these|those)\s+(?:is|was|are|were|amount|figure|sum|cover)\b/i;
+    const parts = raw.filter((x, k) => !(at >= 0 && k > at && BACK.test(x))).map(tidy).filter(enough);
+    return parts.length >= 2 || (parts.length === 1 && at >= 0 && !parts[0].includes(failedRaw!)) ? parts : null;
+  }
+  if (!failedRaw) return null;
+  const segs = text.split(/,\s+/);
+  const at = segs.findIndex((x) => x.includes(failedRaw));
+  if (at <= 0) return null;
+  const head = tidy(segs.slice(0, at).join(", "));
+  // A head that is the reason given for the dropped figure ("Nothing on file amends it, so ... is S$80") is not kept alone.
+  if (/^(?:so|and so|therefore|thus|hence|which means|meaning|because|as)\b/i.test(segs[at].trim())) return null;
+  return enough(head) && !/\b(?:if|unless|when|provided|subject to)\b/i.test(segs.slice(at).join(" ")) ? [head] : null;
 }
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
 function lineCarries(text: string, words: string[]): boolean {
@@ -399,8 +480,11 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     drops.push({ at: cur, cat, sentence, estimate: curEstimate || /\bestimat\w*\b/i.test(sentence), need, note: cat === "stale" ? householdNote ?? null : null });
   };
   const conditioned: { at: number; words: string[] }[] = [];
+  // V1.3: figures refused because the sentence put them under another benefit the same document prints (Term Life
+  // stated as Personal Accident): the document and its product headings are still stated, without the figure.
+  const productMiss: { policyId: string; evidenceId: string; labels: string[]; wanted: string | null }[] = [];
   const people = peopleFromLabels(ctx.names ?? []);
-  const sentencesIn = args.sentences ?? [];
+  const sentencesIn = [...(args.sentences ?? [])];
   for (let i = 0; i < sentencesIn.length; i++) {
     for (const x of out.sentences) x.at ??= cur;
     cur = i;
@@ -536,14 +620,34 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       covered = new Set([fig]);
     }
     const figs = moneyFiguresIn(text);
-    let failed: string | null = null;
+    let failed: string | null = null, failedRaw: string | null = null, conflictWhy: string | null = null;
     figs.forEach((f, i) => {
       if (failed || covered.has(i)) return;
       const sentence = partOf(f.raw);
+      conflictWhy = null;
       // A printed table value the sentence (or its computation) cites.
       const ops: TableValueOperand[] = [...values.map((v) => v!.operand), ...(result ? [...ctx.tools.values.values()].map((v) => v.operand).filter((o) => result.evidence.some((e) => evidenceKey(e) === evidenceKey(o.evidence))) : [])];
       const op = ops.find((o) => o.valueKind === "money" && o.cents != null && same(o.cents / 100, f.value) && o.currency === f.currency);
       let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: explicitSubject ?? op.evidence.subjectId ?? subjectId }, wordedBenefit(op.benefit, evidenceTextOf(op.evidence), op.evidence.table?.cell?.text), f.value, f.currency) : null;
+      // V1.3: a table value's own benefit decides what it is; the clause stating it must not attribute it to another
+      // benefit the same document prints ("your Personal Accident cover is S$400,000" for the Term Life row).
+      if (b && op) {
+        // The sentence's own benefit field is part of what it states the figure for.
+        const clause = `${sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence} ${typeof s.benefit === "string" ? s.benefit : ""}`;
+        const own = tidyLabel(op.benefit);
+        const better = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
+        if (better) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, better], wanted: better }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence states it for “${better}”`; return; }
+        // A figure bound by the composer from its printed identity (not a value the model selected by benefit), in a
+        // document printing several benefits (a roster's product headings): the clause must say which one the figure is
+        // -- one of its own label's words that the document's other labels do not share. Unnamed, it is not stated.
+        const others = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").filter((o) => o.toLowerCase() !== own.toLowerCase());
+        const otherWords = new Set(others.flatMap((o) => [...benefitWords(o)]));
+        const distinct = [...benefitWords(own)].filter((w) => !otherWords.has(w));
+        const competing = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)));
+        const have = benefitWords(clause);
+        const byIdentity = valIds.some((id) => /^vb\d/.test(id) && ctx.tools.values.get(id)?.operand === op);
+        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, ...others.filter((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)))], wanted: null }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
+      }
       // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
       // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
       // beside the selected cell (an endorsement's earlier "Existing" amount) is found.
@@ -558,7 +662,28 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         const roster = ref.table?.layout === "person_row";
         const heading = roster ? rosterHeading(ref, ctx) : null;
         if (roster && !heading) continue;
-        const benefit = heading ?? ((ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text));
+        let benefit = heading ?? ((ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text));
+        // V1.3: not named word for word -- bound by the source's own label of the line printing it, when the clause
+        // stating the figure names that benefit and no other benefit of the document more closely.
+        if (!benefit && !roster && !ref.table?.rowLabel) {
+          const clause = sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence;
+          const idl = identityLabel(ref, f.value, f.currency, `${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, ctx);
+          if (idl && "label" in idl) {
+            // A roster line names the person it is for: the figure is that person's, never another member's.
+            const who = explicitSubject ?? ref.subjectId ?? subjectId;
+            const namesOf = (id: string | null | undefined) => (ctx.people ?? []).find((p) => p.id === id)?.names ?? [];
+            const printing = withoutInstructions(evidenceTextOf(ref)).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, f.value)));
+            const nameIn = (l: string, names: string[]) => names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l));
+            const other = (ctx.people ?? []).find((p) => p.id !== who && printing.every((l) => nameIn(l, p.names)));
+            if (other && !printing.some((l) => nameIn(l, namesOf(who)))) { conflictWhy = `${f.raw} is printed on ${other.names[0]}'s row, not for this person`; continue; }
+            benefit = idl.label;
+          }
+          else if (idl && "conflict" in idl) {
+            const m = /printed under “(.+?)”, but the sentence states it for “(.+?)”/.exec(idl.conflict);
+            if (m) productMiss.push({ policyId: ref.policyId, evidenceId: evidenceIdOf(ctx.state, ref), labels: [m[1], m[2]], wanted: m[2] });
+            conflictWhy = `${f.raw} is ${idl.conflict}`; continue;
+          }
+        }
         const policyText = withoutInstructions(evidenceTextOf(ref));
         const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
         // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
@@ -574,13 +699,32 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       if (moneyFiguresIn(ctx.userText).some((u) => same(u.value, f.value) && u.currency === f.currency)) return;
       // V1.2: say precisely why: printed in a cited passage but not under the benefit the sentence names, or not printed.
       const printedThere = refsForFigure.some((ref) => numbersIn(withoutInstructions(evidenceTextOf(ref))).some((n) => same(n, f.value)));
-      failed = printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`;
+      failedRaw = f.raw;
+      failed = conflictWhy ?? (printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`);
     });
-    if (failed) { drop(text, failed); continue; }
+    if (failed) {
+      // V1.3: the parts of the sentence that can stand on their own are checked on their own (once); only the part
+      // whose figure is unsupported is left out, never the supported document, person and date facts with it.
+      const parts = !(s as { _part?: boolean })._part ? verifiableParts(text, failedRaw) : null;
+      if (parts) { out.dropped.push({ sentence: text, reason: failed }); sentencesIn.splice(i + 1, 0, ...parts.map((p) => ({ ...s, text: p, _part: true }))); continue; }
+      drop(text, failed); continue;
+    }
     out.figureBindings.push(...bindings); out.computations.push(...records);
     const ids = [...new Set([...evIds, ...refs.map((r) => evidenceIdOf(ctx.state, r))])];
     out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
     out.sentences.push({ text, evidenceIds: ids, estimate: result?.kind === "indicative_estimate", factKeys, ...(valIds.length ? { valueIds: valIds } : {}), ...(typeof s.benefit === "string" && s.benefit.trim() ? { benefit: s.benefit.trim() } : {}), ...(conditioned.some((c) => c.at === i) ? { condition: conditioned.find((c) => c.at === i)!.words.join(" ") } : {}) });
+  }
+  for (const miss of productMiss.filter((m, k, a) => a.findIndex((x) => x.policyId === m.policyId && x.wanted === m.wanted) === k)) {
+    const title = (t: string) => (/[a-z]/.test(t) ? t : t.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())).replace(/\s*\(.*$/, "").trim();
+    const docName = ctx.policyNames?.get(miss.policyId) ?? ctx.state.docNames?.[miss.policyId] ?? null;
+    const labels = [...new Set(miss.labels.map(title))].filter(Boolean);
+    if (!docName || labels.length < 2) continue;
+    const wanted = miss.wanted ? title(miss.wanted) : null;
+    if (out.sentences.some((x) => (wanted && x.text.toLowerCase().includes(wanted.toLowerCase()) && moneyFiguresIn(x.text).length) || x.text.toLowerCase().includes(docName.toLowerCase()))) continue;
+    const list = labels.length === 2 ? `${labels[0]} and ${labels[1]}` : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+    const text = `The ${docName} lists separate ${list} amounts; I couldn’t confirm ${wanted ? `the ${wanted} amount` : "which of them applies"} for this answer.`;
+    out.sentences.push({ text, evidenceIds: [miss.evidenceId], estimate: false, factKeys: [] });
+    if (!out.evidenceIds.includes(miss.evidenceId)) out.evidenceIds.push(miss.evidenceId);
   }
   for (const x of out.sentences) x.at ??= cur;
   cur = -1;

@@ -262,6 +262,10 @@ jobs:
         run: npm run rag2:scenario-test
       - name: "V1.2 replay of the first actual-model run (recorded model output, no model call): the turn-5 illustration and its record, certificate binding, controls"
         run: npm run rag2:scenario-replay-test
+      - name: rag2 stress-test structures (inventory, percentage base, waiting period)
+        run: npm run rag2:stress-test
+      - name: rag2 report-layout structures (fixed-limit vs sum-insured percentages, repair unavailable)
+        run: npm run rag2:stress-report-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

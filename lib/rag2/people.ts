@@ -221,6 +221,8 @@ export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: 
     if (spelt.length > 1) return { status: "ambiguous", options: spelt, question: `Which do you mean — ${listOf(spelt)}?`, reason: `“${mention}” is close to more than one household member's name` };
   }
   if (byName.length > 1) return { status: "ambiguous", options: byName, question: `Which do you mean — ${listOf(byName)}?`, reason: "more than one household member has that name" };
+  // V1.3: "my cover", "my personal accident policy": what is possessed is a thing, not a person -- the speaker is meant.
+  if (speaker && !byName.length && /^my\s/i.test(mention) && /\b(?:cover|coverage|policy|policies|plan|plans|insurance|benefits?|claims?|certificates?|documents?|sum (?:insured|assured))$/i.test(mention)) return { status: "ok", person: speaker, via: "self" };
   return { status: "unknown", reason: `nobody in the household is called “${mention}”`, question: `I can't find “${mention}” in your household. Who do you mean?` };
 }
 

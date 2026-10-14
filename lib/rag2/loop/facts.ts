@@ -84,6 +84,15 @@ export function checkFact(f: { key: string; value: string; words: string }, user
   // Agent F: a date / date-time normalised by the model (2026-10-02 21:30) is stated when the words give the same
   // day, month (year, when they give one) and -- when the value has one -- the same clock time.
   const dt = isoParts(value);
+  // V1.3: a date that does not exist (31 September, 30 February) or a clock time that does not (24:30) is not a
+  // fact: it is refused with that reason, so the household is asked for the real one -- never stored or rolled over.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(value);
+  if (iso) {
+    const [y, mo, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+    const real = mo >= 1 && mo <= 12 && d >= 1 && d <= new Date(Date.UTC(y, mo, 0)).getUTCDate();
+    if (!real) return { ok: false, error: `${key}: ${iso[0].slice(0, 10)} is not a calendar date (the household wrote "${words}"): do not record it -- tell them and ask for the date` };
+    if (iso[4] != null && (Number(iso[4]) > 23 || Number(iso[5]) > 59)) return { ok: false, error: `${key}: ${iso[4]}:${iso[5]} is not a time of day: do not record it -- ask for the time` };
+  }
   if (dt) return { ok: true, basis: dateTimeStated(dt, said) ? "stated" : "paraphrased", source };
   const vNums = numbersIn(value);
   if (vNums.length) {
@@ -203,4 +212,20 @@ export function knownFactFor(key: string, facts: Record<string, FactLike2>): { k
     if (adm && dis) return { key: `${adm.key}+${dis.key}`, fact: { value: `${String(adm.fact.value)} to ${String(dis.fact.value)}`, words: `${adm.fact.words}; ${dis.fact.words}` } };
   }
   return null;
+}
+
+/** V1.3: two recorded values that say the same thing -- the same text, the same number, or the same date-time where one
+ * only adds the time-zone representation of the other ("2026-10-02T09:00" and "2026-10-02T09:00+08:00", or the
+ * same instant written with different offsets). Not a change of the fact. */
+export function sameFactValue(a: unknown, b: unknown): boolean {
+  const x = String(a ?? "").trim(), y = String(b ?? "").trim();
+  if (x === y) return true;
+  const DT = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:?\d{2})?$/;
+  const p = DT.exec(x), q = DT.exec(y);
+  if (p && q) {
+    if (p[4] && q[4]) return Date.parse(x) === Date.parse(y);
+    return p[1] === q[1] && p[2] === q[2] && (p[3] ?? "00") === (q[3] ?? "00");
+  }
+  const nx = Number(x.replace(/,/g, "")), ny = Number(y.replace(/,/g, ""));
+  return x !== "" && y !== "" && Number.isFinite(nx) && Number.isFinite(ny) && nx === ny;
 }

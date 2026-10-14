@@ -30,6 +30,8 @@ export type FxDoc = {
   key: string; id: string; owner: string; members: { id: string; tier?: string | null }[]; insurer: string; product: string; policyNumber: string | null; groupPolicyNumber?: string | null;
   policyType: string; role: string; personal: boolean; hash: string; effective?: string | null; expiry?: string | null; documentDate?: string | null;
   lifecycle?: string; quarantine?: string; superseded?: boolean; account?: string; pages: Record<number, string>;
+  /** processing_status (default 'ready') and processing_error: an upload that could not be read. */
+  processing?: string; processingError?: string | null; filename?: string;
 };
 
 const PA_P1 = [

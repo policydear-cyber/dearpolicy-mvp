@@ -9,40 +9,15 @@
  * Evidence class: REPLAY of recorded model output (not a new model result) + scripted CONTROLS.
  */
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";
 import * as HH from "./fixtures/rag2-scenario/household";
 import type { ScriptCall, ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
+import { recordedTurns, replayScript, runDir } from "./fixtures/rag2-live-replay";
 
 const HOUSEHOLD = HH as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
-const runDir = (prefix: string) => { const base = "docs/rag-migration/live"; const d = fs.readdirSync(base).filter((x) => x.startsWith(prefix)).sort()[0]; return path.join(base, d); };
 const RUNS = process.env.SKIP_REPLAY ? [] : process.env.REPLAY_RUN ? [process.env.REPLAY_RUN] : ["RUN-s47-live-1-", "RUN-s47-live-2-", "RUN-s47-live-3-"].map(runDir);
-
-/** The recorded model calls of each turn: the trace's tool calls (not the ones the product made itself, marked `by`),
- * grouped by the relay's per-call tool-call names. */
-export function recordedTurns(dir: string): { user: string; steps: { name: string; arguments: Record<string, unknown> }[][] }[] {
-  const run = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8"));
-  const conv = run.conversations.find((c: any) => c.scenario === "S47");
-  const relay = fs.readFileSync(path.join(dir, "relay.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l: any) => l.status === 200);
-  const out: { user: string; steps: { name: string; arguments: Record<string, unknown> }[][] }[] = [];
-  let r = 0;
-  for (const t of conv.loaded.turns) {
-    const calls: any[] = (t.trace?.toolCalls ?? []).filter((x: any) => x.name !== "model" && !x.args?.by);
-    const steps: { name: string; arguments: Record<string, unknown> }[][] = [];
-    let i = 0;
-    while (i < calls.length) {
-      const names: string[] = relay[r++]?.tool_calls ?? [];
-      if (!names.length) throw new Error(`relay log has no model call for turn ${t.index + 1} call ${i + 1}`);
-      const step = names.map((n) => { const c = calls[i++]; if (!c || c.name !== n) throw new Error(`turn ${t.index + 1}: relay says ${n}, trace says ${c?.name}`); return { name: c.name, arguments: c.args }; });
-      steps.push(step);
-    }
-    out.push({ user: t.user, steps });
-  }
-  return out;
-}
 
 const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? []).map((q) => "[Q] " + q.text), ...(a.nextSteps ?? []).map((n) => "[next] " + n)].join("\n");
 const results: { name: string; ok: boolean }[] = [];
@@ -87,7 +62,7 @@ async function main() {
     const name = /RUN-(s47-live-\d)/.exec(dir)?.[1] ?? dir;
     const turns = recordedTurns(dir);
     console.log(`\n==== replay of ${name}`);
-    const saved = await converse(h, turns.map((t) => ({ user: t.user, steps: t.steps.map((s) => () => s as ScriptCall[]) })), turns.map((t) => t.user));
+    const saved = await converse(h, replayScript(turns), turns.map((t) => t.user));
     replays.push({ name, turns, saved });
     if (process.env.REPLAY_ONLY) continue;
     await check(`${name}: every turn is answered (no model error, no save-time gate rejection)`, () => {

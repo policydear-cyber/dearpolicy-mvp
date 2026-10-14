@@ -139,4 +139,6 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:v11-test",
   "rag2:scenario-test",
   "rag2:scenario-replay-test",
+  "rag2:stress-test",
+  "rag2:stress-report-test",
 ];

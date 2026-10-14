@@ -11,6 +11,7 @@ import type { EvidenceRef } from "./evidence";
 import { ragToolsEnabled } from "./flag";
 import { resolvePerson, type ConversationContext } from "./people";
 import { policiesFor } from "./policies";
+import { householdDocuments } from "./inventory";
 import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
 // --- Agent K: calculation tool (separate block; coordinator merges) ---
@@ -87,6 +88,12 @@ export const RAG_TOOLS: ToolDef[] = [
       if (r.status === "ok" && r.via !== "self") { ctx.conversation.recentSubjectIds = [r.person.id, ...(ctx.conversation.recentSubjectIds ?? []).filter((x) => x !== r.person.id)].slice(0, 5); ctx.conversation.lastSubjectId = r.person.id; }
       return ok(r, []);
     },
+  },
+  {
+    name: "household_documents",
+    description: "List every document the household has uploaded, grouped by person: insurer, product and role (a personal policy document, reference wording such as a group policy wording, or linked but not confirmed), documents linked to nobody, and files that could not be read (and why). Use it for questions about what policies or documents the family has. It states no amounts.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    handler: async (ctx) => { const r = await householdDocuments(ctx.accountId); return ok(r, [...r.people.flatMap((p) => p.documents), ...r.unlinked].map((d) => d.evidence).filter((e): e is EvidenceRef => !!e)); },
   },
   {
     name: "policies_for",

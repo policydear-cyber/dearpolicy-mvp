@@ -586,6 +586,13 @@ function sentenceWords(text: string): Set<string> {
 /** Does `sentence` name the benefit `benefit` (one of its distinctive words; a label of generic words only -- "Sum
  * assured" -- is named by itself or by "cover")? */
 export function namesBenefit(sentence: string, benefit: string): boolean {
+  // V1.3: a parenthetical qualifier of a label ("Basic sum assured (death or terminal illness)", "GROUP TERM LIFE
+  // (POLICY NO. ...)") is detail, not the benefit's name: a sentence naming the label without it names the benefit.
+  const bare = benefit.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  if (bare && bare !== benefit.trim() && namesBenefitExact(sentence, bare)) return true;
+  return namesBenefitExact(sentence, benefit);
+}
+function namesBenefitExact(sentence: string, benefit: string): boolean {
   const label = benefitWords(benefit);
   if (!label.size) {
     if (/\bsum (?:assured|insured)\b|\bcover\b/i.test(benefit)) return /\bsum (?:assured|insured)\b|\bcover(?:ed|age)?\b/i.test(sentence);
@@ -612,6 +619,17 @@ export function benefitRowProblem(amount: number, benefit: string, passage: stri
     return b.length >= 3 && withAmount.some((r) => normalPassage(r).includes(b)) ? null : "the cited passage does not print the amount on the row of the benefit it is stated for";
   }
   const scored = rows.map((r) => ({ r, n: overlap(label, sentenceWords(r)), has: amountAppears(amount, r) }));
+  // V1.3: a row that names no benefit of its own (a certificate roster's person row: masked ID, name, amount, date) is
+  // read under the heading printed above it -- the product heading it belongs to -- as a reader of the page does.
+  for (let j = 0; j < scored.length; j++) {
+    if (scored[j].n > 0 || !scored[j].has) continue;
+    for (let k = j - 1; k >= 0; k--) {
+      const r = scored[k].r;
+      if (/\d[\d,]*(?:\.\d+)?/.test(r.replace(/\b(?:no|policy|group)\b\.?\s*[A-Z0-9-]+/gi, "")) && rowCells(r).length >= 2) continue; // another data row
+      if (rowCells(r).length <= 1 && !/[$€£¥]\s?\d/.test(r) && r.length <= 80 && !/[.:]$/.test(r)) { scored[j] = { ...scored[j], n: scored[k].n }; }
+      break;
+    }
+  }
   const best = Math.max(0, ...scored.map((x) => x.n));
   if (best === 0) return "the cited passage does not name the benefit the figure is stated for";
   return scored.some((x) => x.n === best && x.has) ? null : "the amount belongs to a different row of the passage than the benefit it is stated for";
