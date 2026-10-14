@@ -216,6 +216,9 @@ const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)
 /** Tools that establish what a person's policies say: never run for a person until who is meant is settled. */
 const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_passages"]);
 
+/** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
+export const INVENTORY_QUESTION = /\b(?:what|which|list|show)\b[^?.!]*\b(?:polic(?:y|ies)|documents?|uploads?|files?|plans?)\b[^?.!]*\b(?:have|has|got|hold|holds|on file|uploaded)\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have)\b/i;
+
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
@@ -1311,6 +1314,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * document are kept and the inventory is stated from the lookup (no amount is added). */
   const withInventory = (r: LoopReply | null): LoopReply | null => {
     if (!inventoryNow || !r || r.kind !== "final" || !r.composed) return r;
+    // V1.4: only an inventory QUESTION ("what policies does my family have?") is answered as an inventory. A model that
+    // looks the documents up while answering something else (a death claim) keeps its own verified, bound answer: the
+    // inventory rule removes every sentence with a figure and every binding, so applying it to any turn that called
+    // household_documents silently dropped verified amounts (s50-live-1 turn 1).
+    if (!INVENTORY_QUESTION.test(input.message)) return r;
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();

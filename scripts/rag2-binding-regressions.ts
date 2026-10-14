@@ -312,6 +312,25 @@ async function main() {
     for (const r of swapped) assert.ok(r.length, JSON.stringify(swapped));
   });
 
+  // s50-live-1 turn 1: the model looked the household's documents up (household_documents) while answering the death
+  // question; the inventory rule then replaced the answer, silently removing the verified amounts and their bindings.
+  const twoFigures = (v: ScriptView) => [
+    { text: "Darren’s certificate lists Group Term Life sum assured of S$1,000,000 and Group Personal Accident sum assured of S$600,000, each as of 6 October 2022; these dated figures do not confirm cover on the date of death.", value_ids: [vidOf(v, D, /Term Life/), vidOf(v, D, /^Group Personal Accident$/)].filter(Boolean), subject_id: D },
+    { text: "The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.", evidence_ids: evOf(v, D, /Accidental Death/), subject_id: D },
+  ];
+  const lookedUp = { user: DEATH, steps: [() => [call("resolve_person", { mention: "Darren" })], () => [call("household_documents", {})], () => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: twoFigures(v) })]] };
+  const lookedRows = await run([lookedUp as any]);
+  const lookedCells = await withCert(HH.certLayout("cells"), () => run([lookedUp as any]));
+  const { INVENTORY_QUESTION } = await import("@/lib/rag2/loop/loop");
+  await check("INVENTORY looking the documents up while answering another question keeps the verified amounts (rows and one cell per line); only an inventory question is answered as an inventory", () => {
+    for (const [what, x] of [["rows", lookedRows[0]], ["cells", lookedCells[0]]] as const) {
+      assert.match(x.v, /Group Term Life sum assured of S\$1,000,000 and Group Personal Accident sum assured of S\$600,000/, `${what}: ${x.v}`);
+      assert.equal((x.answer.figureBindings ?? []).length, 2, what); assert.ok(!/Lumen General/.test(x.v), what); assert.deepEqual(x.q, ["On what date did the accident happen?"], what);
+    }
+    for (const q of ["What policies does my family have?", "Which documents do we have for Michelle?", "List the policies on file", "What plans does Darren have?"]) assert.ok(INVENTORY_QUESTION.test(q), q);
+    for (const q of [DEATH, "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?", "What documents do I need to submit for the claim?"]) assert.ok(!INVENTORY_QUESTION.test(q), q);
+  });
+
   if (process.env.BINDING_TRANSCRIPT_FILE) {
     const T = (title: string, user: string, x: { v: string; q?: string[] }) => `### ${title}\nUSER: ${user}\nAPP:  ${x.v.replace(/\n/g, "\n      ")}${x.q?.length ? "\n      [Q] " + x.q.join(" | ") : ""}`;
     (await import("node:fs")).writeFileSync(process.env.BINDING_TRANSCRIPT_FILE, [
