@@ -201,7 +201,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     calc_id: out.calcId, kind: out.kind, purpose, amount: out.amount, currency: out.currency,
     printed: out.printed.map((p) => ({ label: p.label, value: p.value, unit: p.unit, currency: p.currency, value_id: p.valueId ?? null })),
     requirements: out.requirements, conditions: out.conditions.map((c) => ({ id: c.id, kind: c.kind, status: c.status, text: c.text, ...(c.needs ? { needs: c.needs } : {}) })),
-    steps: out.steps, unresolved_text: out.kind === "unresolved" || out.kind === "not_payable" ? out.unresolvedText : null, reason: out.reason ?? null, evidence_requirements: out.evidenceRequirements,
+    steps: out.steps, unresolved_text: out.kind === "unresolved" || out.kind === "not_payable" ? out.unresolvedText : null, reason: out.reason ?? null, suggested_evidence: out.evidenceRequirements.length ? { items: out.evidenceRequirements, note: "general suggestions to confirm with the insurer, not requirements printed in the policy" } : null,
     ...((out as CalcOutcome & { notes?: string[] }).notes?.length ? { notes: (out as CalcOutcome & { notes?: string[] }).notes } : {}),
     missing,
   } };

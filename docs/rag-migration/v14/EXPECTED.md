@@ -75,3 +75,27 @@ Swapped bindings (another person's row, another product's amount) must fail the 
 S50 (`RAG2_LIVE_HOUSEHOLD=binding-cells`, certificate one cell per line):
 1. "Darren died in a car accident in Japan, what can I do?" Expect TL S$1,000,000 and PA S$600,000, each bound to Darren; the 365-day condition; one question for the accident date or the date of death.
 2. "The accident happened on 3 October 2026 and he died on 5 October 2026." Neither date is asked again. Any 365-day conclusion says "within" the window. No payment is promised.
+
+## s50-live-2 (written 14 Oct 2026 before the run; graded by binding grader version 4)
+
+This is the same household as s50-live-1: the binding household with the certificate one cell per line (`RAG2_LIVE_HOUSEHOLD=binding-cells`). It is the same two-turn conversation, S50:
+1. "Darren died in a car accident in Japan, what can I do?"
+2. "The accident happened on 3 October 2026 and he died on 5 October 2026."
+
+It runs once, capped at US$0.01, and is not rerun.
+
+Every version-3 check still applies, including:
+- Darren's TL S$1,000,000 and PA S$600,000 are each bound to their own product and to Darren (separately sourced);
+- the unrelated insurer is not suggested;
+- the 365-day condition is given;
+- turn 1 has one question, for the missing accident date or death date;
+- no 365-day conclusion before both dates are known;
+- no repeated date question after both are given;
+- amounts are judged by identity.
+
+Version 4 adds, on both turns:
+- **No inventory** replaces or pads the answer (no document-list lines).
+- **No injury or illness wording** in the death answer: diagnosis, medical assessment, specialist, doctor's report, test or scan results, X-ray, medical decision.
+- **No invented paperwork:** paperwork (medical records, police report, claim form, translations, …) appears only where Darren's own documents print it (the death certificate), or in a line labelled as a suggestion to confirm with the insurer, or in a line that only asks the insurer what or whether something is needed.
+
+Turn 2 is graded on the same checks. A pass needs every check.

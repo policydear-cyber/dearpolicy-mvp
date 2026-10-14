@@ -149,7 +149,7 @@ async function main() {
   });
   const [P4] = await run([deathTurn("Darren died in a car accident in Japan on 3 October 2026, what can I do?")]);
   await check("N8 a next step may be a practical suggestion, never an invented requirement: \"You must submit the original death certificate within 30 days\" is not shown", () => {
-    assert.match(P4.v, /\[next\] Keep a copy of the death certificate/); assert.ok(!/must submit/i.test(P4.v + P2.v), P4.v);
+    assert.match(P4.v, /\[next\] Suggestion, not stated in your documents \(confirm with the insurer\): Keep a copy of the death certificate and the police report from Japan\./, "the police report is not in the documents: the step is labelled as a suggestion"); assert.ok(!/must submit/i.test(P4.v + P2.v), P4.v);
     assert.match(P4.v, /\[next\] Contact Meridian Life Ltd and ask which claim forms and supporting documents are required/, "asking the insurer what is required is a suggestion");
   });
   await check("P4 the accident date given in the message: no question about it", () => { assert.deepEqual(P4.q, []); assert.match(P4.v, /S\$1,000,000/); });
@@ -322,13 +322,85 @@ async function main() {
   const lookedRows = await run([lookedUp as any]);
   const lookedCells = await withCert(HH.certLayout("cells"), () => run([lookedUp as any]));
   const { INVENTORY_QUESTION } = await import("@/lib/rag2/loop/loop");
-  await check("INVENTORY looking the documents up while answering another question keeps the verified amounts (rows and one cell per line); only an inventory question is answered as an inventory", () => {
+  const INV_Q = "What policies does my family have?";
+  const inventoryTurn = { user: INV_Q, steps: [() => [call("household_documents", {})], () => [call("final_answer", { sentences: [{ text: "Here are the documents on file for your household." }] })]] };
+  const MIXED = "Darren died in a car accident in Japan. What can I do, and which documents do we have for him?";
+  const mixedTurn = { user: MIXED, steps: [() => [call("resolve_person", { mention: "Darren" })], () => [call("household_documents", {})], () => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: twoFigures(v) })]] };
+  const BACK = "The accident happened on 3 October 2026 and he died on 5 October 2026.";
+  const backTurn = { user: BACK, steps: [() => [call("note_facts", { subject_id: D, facts: [{ key: "accident_date", value: "2026-10-03", words: "The accident happened on 3 October 2026" }, { key: "death_date", value: "2026-10-05", words: "he died on 5 October 2026" }] })], () => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: twoFigures(v) })]] };
+  const invOnly = await run([inventoryTurn as any]);
+  const invThenDeath = await withCert(HH.certLayout("cells"), () => run([inventoryTurn as any, lookedUp as any]));
+  const mixedThenBack = await withCert(HH.certLayout("cells"), () => run([mixedTurn as any, backTurn as any]));
+  const AMOUNTS = /Group Term Life sum assured of S\$1,000,000 and Group Personal Accident sum assured of S\$600,000/;
+  const INVENTORY_LINES = /Not linked to anyone in the household/;
+  const boundBoth = (x: any) => { const fb = (x.answer.figureBindings ?? []) as any[]; return fb.some((b) => b.value === 1000000 && /Term Life/.test(b.benefit) && b.subjectId === D) && fb.some((b) => b.value === 600000 && /Personal Accident/.test(b.benefit) && b.subjectId === D); };
+  await check("INVENTORY (1) a death question that looks the documents up keeps its verified amounts, saved and bound (rows and one cell per line); no inventory, no unrelated insurer", () => {
     for (const [what, x] of [["rows", lookedRows[0]], ["cells", lookedCells[0]]] as const) {
-      assert.match(x.v, /Group Term Life sum assured of S\$1,000,000 and Group Personal Accident sum assured of S\$600,000/, `${what}: ${x.v}`);
-      assert.equal((x.answer.figureBindings ?? []).length, 2, what); assert.ok(!/Lumen General/.test(x.v), what); assert.deepEqual(x.q, ["On what date did the accident happen?"], what);
+      assert.match(x.v, AMOUNTS, `${what}: ${x.v}`); assert.ok(boundBoth(x), what); assert.ok(!INVENTORY_LINES.test(x.v) && !/Lumen General/.test(x.v), `${what}: ${x.v}`); assert.deepEqual(x.q, ["On what date did the accident happen?"], what);
     }
-    for (const q of ["What policies does my family have?", "Which documents do we have for Michelle?", "List the policies on file", "What plans does Darren have?"]) assert.ok(INVENTORY_QUESTION.test(q), q);
-    for (const q of [DEATH, "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?", "What documents do I need to submit for the claim?"]) assert.ok(!INVENTORY_QUESTION.test(q), q);
+  });
+  await check("INVENTORY (2) a genuine inventory request is answered as the inventory: every document by person, the unlinked pet documents as linked to nobody, no amounts", () => {
+    const x = invOnly[0];
+    assert.match(x.v, INVENTORY_LINES, x.v); assert.match(x.v, /PUBLIC SERVICE GROUP INSURANCE SCHEME/, x.v); assert.ok(!/S\$\d/.test(x.v), x.v); assert.ok(!/(?:contact|notify|claim with)[^.]*Lumen General/i.test(x.v), x.v);
+  });
+  await check("INVENTORY (3) an inventory question, then a death question: the second answer is the claim answer with its amounts, not an inventory", () => {
+    assert.match(invThenDeath[0].v, INVENTORY_LINES, invThenDeath[0].v);
+    const x = invThenDeath[1];
+    assert.match(x.v, AMOUNTS, x.v); assert.ok(boundBoth(x)); assert.ok(!INVENTORY_LINES.test(x.v) && !/Lumen General/.test(x.v), x.v); assert.deepEqual(x.q, ["On what date did the accident happen?"]);
+  });
+  await check("INVENTORY (4) a death question with an inventory side question keeps the claim's verified amounts AND lists the documents; returning to the claim answers the claim, without the inventory or a date question", () => {
+    const [m, b] = mixedThenBack;
+    assert.match(m.v, AMOUNTS, m.v); assert.ok(boundBoth(m), JSON.stringify(m.answer.figureBindings)); assert.match(m.v, INVENTORY_LINES, m.v);
+    assert.ok(!/(?:contact|notify|claim with|ask)[^.]*Lumen General/i.test(m.v), m.v);
+    assert.match(b.v, AMOUNTS, b.v); assert.ok(boundBoth(b)); assert.ok(!INVENTORY_LINES.test(b.v) && !/Lumen General/.test(b.v), b.v); assert.deepEqual(b.q, []);
+  });
+  await check("INVENTORY only an inventory question is answered as an inventory (classification)", () => {
+    for (const q of [INV_Q, MIXED, "Which documents do we have for Michelle?", "List the policies on file", "What plans does Darren have?"]) assert.ok(INVENTORY_QUESTION.test(q), q);
+    for (const q of [DEATH, "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?", "What documents do I need to submit for the claim?", BACK]) assert.ok(!INVENTORY_QUESTION.test(q), q);
+  });
+
+  // ---------------------------------------------------------------- V1.4: death wording and paperwork
+  const gpaId = HH.doc("GPA_SUM").id;
+  const calcTurn = { user: BACK, steps: [
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "accident_date", value: "2026-10-03", words: "The accident happened on 3 October 2026" }, { key: "death_date", value: "2026-10-05", words: "he died on 5 October 2026" }] })], 
+    () => [call("person_benefits", { subject_id: D })],
+    (v: ScriptView) => [call("calculate", { calculator: "lump_sum", benefit: "Accidental Death", purpose: "claim", condition: "death as a result of an Accident within 365 days of that Accident", policy_id: gpaId, subject_id: D, assumption_words: BACK, sum_insured_value_id: vidOf(v, D, /^Group Personal Accident$/) })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [
+      ...twoFigures(v),
+      { text: "The Group Personal Accident summary identifies a specialist’s diagnosis report and medical records as relevant evidence for this claim.", evidence_ids: evOf(v, D, /Accidental Death/), subject_id: D },
+    ], next_steps: [
+      "Notify Meridian Life Ltd about the death within 6 months, with the death certificate.",
+      "Notify Meridian Life Ltd about the death and ask for the claim requirements; provide the death certificate and relevant medical records.",
+      "Ask Meridian Life Ltd whether it needs a police report from Japan.",
+    ] })],
+  ] };
+  const [, deathCalc] = await withCert(HH.certLayout("cells"), () => run([lookedUp as any, calcTurn as any]));
+  const calcCall = (deathCalc.trace.toolCalls ?? []).find((x: any) => x.name === "calculate");
+  await check("DEATH WORDING a death benefit's explanation comes from the benefit and its printed condition: no diagnosis, medical assessment or specialist report; no suggested evidence from the calculator", () => {
+    assert.ok(calcCall?.ok, JSON.stringify(calcCall));
+    assert.ok(!/diagnos|medical assessment|specialist/i.test(deathCalc.v), deathCalc.v);
+    assert.match(deathCalc.v, AMOUNTS, deathCalc.v); assert.deepEqual(deathCalc.q, []);
+  });
+  await check("PAPERWORK a sentence presenting paperwork the documents do not print as needed is not stated; next steps naming it are labelled as suggestions to confirm with the insurer; documented paperwork and asking the insurer stay as they are", () => {
+    assert.ok((deathCalc.trace.dropped ?? []).some((d: any) => /paperwork/.test(d.reason) && /medical records|diagnosis report/.test(d.sentence ?? d.text ?? "")), JSON.stringify(deathCalc.trace.dropped));
+    assert.match(deathCalc.v, /\[next\] Notify Meridian Life Ltd about the death within 6 months, with the death certificate\./, deathCalc.v);
+    assert.match(deathCalc.v, /\[next\] Suggestion, not stated in your documents \(confirm with the insurer\): Notify Meridian Life Ltd about the death and ask for the claim requirements; provide the death certificate and relevant medical records\./, deathCalc.v);
+    assert.match(deathCalc.v, /\[next\] Ask Meridian Life Ltd whether it needs a police report from Japan\./, deathCalc.v);
+  });
+  const { benefitEvent } = await import("@/lib/rag2/calc/engine");
+  const { labelUnsupportedPaperwork, unsupportedPaperworkClaim } = await import("@/lib/rag2/loop/compose");
+  await check("EVENT KINDS a death benefit is a death; injury and illness benefits keep their medical wording", () => {
+    assert.equal(benefitEvent("Accidental Death", "death as a result of an Accident within 365 days of that Accident"), "death");
+    assert.equal(benefitEvent("Death Benefit", "the Sum Assured is payable on the death of the Insured Person"), "death");
+    assert.equal(benefitEvent("Simple Fracture", "a closed fracture of the leg caused by an Accident"), "injury");
+    assert.equal(benefitEvent("Accidental Death and Dismemberment", "loss of a limb within 365 days of the Accident"), "injury");
+    assert.equal(benefitEvent("Critical Illness", "diagnosis of a covered critical illness"), "illness");
+    const src = "notify meridian life ltd of a death within 6 months, with the death certificate.";
+    assert.equal(labelUnsupportedPaperwork("Keep the death certificate.", src), "Keep the death certificate.");
+    assert.match(labelUnsupportedPaperwork("Keep the police report and translations.", src), /^Suggestion, not stated in your documents/);
+    assert.equal(unsupportedPaperworkClaim("You must provide the death certificate.", src), null);
+    assert.ok(unsupportedPaperworkClaim("You must provide the medical records.", src));
+    assert.equal(unsupportedPaperworkClaim("The documents do not state which medical records are needed.", src), null);
   });
 
   if (process.env.BINDING_TRANSCRIPT_FILE) {
@@ -337,6 +409,9 @@ async function main() {
       T("figure stated without its product (the reported structure)", DEATH, B), T("two products in one sentence", DEATH, Dd), T("Term Life stated as PA (negative)", DEATH, W1),
       T("unrelated insurer in the advice (negative)", DEATH, I1), T("death after an accident, the model asking nothing", DEATH, P2), T("accident date already given", "Darren died in a car accident in Japan on 3 October 2026, what can I do?", P4),
       T("Michelle: certificate vs endorsement", "What is Michelle's personal accident cover?", P5[0]), T("correction back to Darren", "Sorry, I meant Darren", P5[1]),
+      T("inventory request", INV_Q, invOnly[0]), T("death question that looks the documents up (cells)", DEATH, lookedCells[0]),
+      T("death question with an inventory side question (cells)", MIXED, mixedThenBack[0]), T("back to the claim, both dates", BACK, mixedThenBack[1]),
+      T("both dates, Accidental Death calculation, paperwork in sentences and next steps (cells)", BACK, deathCalc),
       T("certificate one cell per line", DEATH, cellsDeath[0]), T("certificate one cell per line, page break and repeated heading", DEATH, breakDeath[0]),
     ].join("\n\n") + "\n");
   }

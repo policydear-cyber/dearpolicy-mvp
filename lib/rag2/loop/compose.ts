@@ -66,8 +66,10 @@ export const INCOMPLETE_NOTE = "This may not be everything your documents say ab
  * decision, a payment or an entitlement. */
 export const REPORTED_MEDICAL_NOTE = "What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.";
 export const REPORTED_NOTE = "What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.";
-export const REPORTED_MEDICAL_STEP = "When you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
-export const REPORTED_STEP = "When you make the claim, include the documents that show the policy’s condition is met, with the insurer’s claim form.";
+export const SUGGESTION_PREFIX = "Suggestion, not stated in your documents (confirm with the insurer): ";
+/** V1.4: DearPolicy's own practical steps name paperwork no document prints, so they are labelled as suggestions. */
+export const REPORTED_MEDICAL_STEP = SUGGESTION_PREFIX + "when you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
+export const REPORTED_STEP = SUGGESTION_PREFIX + "send the documents that show the policy’s condition is met with the insurer’s claim form.";
 const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certif\w*|medical report)\b/i;
 export function reportedFactFollowUp(conditionTexts: string[]): { note: string; step: string } {
   const medical = conditionTexts.some((t) => MEDICAL_CONDITION.test(t));
@@ -87,6 +89,40 @@ export function sayBack(words: string): string | null {
 /** Internal markers (trace / categorisation only; never shown to the household). */
 export const UNSUPPORTED_NOTE = "unsupported";
 export const STEP_NOTE = "step";
+
+/** V1.4: documents and records a household might gather for a claim. */
+export const PAPERWORK = /\b(?:death certificates?|medical (?:records?|reports?|certificates?|bills?)|hospital (?:records?|reports?|bills?)|police (?:reports?|records?)|accident reports?|post-?mortem(?: reports?)?|autopsy(?: reports?)?|coroner['’]?s? (?:reports?|findings)|claim forms?|receipts?|invoices?|discharge summar(?:y|ies)|translations?|certified(?: true)? copies|(?:identity|identification) (?:cards?|documents?)|passports?|birth certificates?|marriage certificates?|letters? of administration|grants? of probate|probate|bank (?:statements?|details)|specialist['’]?s? (?:reports?|diagnosis)|diagnosis reports?|x-?ray reports?|scan reports?|(?:transport|travel|flight) records?|repatriation (?:records?|documents?))\b/gi;
+const SUGGESTION_LABEL = /^(?:suggestion|you could|you may (?:also )?want to|it may help to|consider)\b/i;
+const ASKS_INSURER = /\b(?:ask|check (?:with|whether)|find out|confirm with|enquire|inquire)\b[^.;]*\b(?:what|which|whether|if)\b/i;
+/** The text of the documents a next step's paperwork could be required by: the policies the answer cites and the
+ * person's own linked documents. Empty when no document text is loaded (nothing then counts as supported). */
+export function paperworkSourceText(ctx: Pick<Ctx, "libraryText" | "benefits">, subjectId: string | null, relevant: Set<string>): string {
+  const ids = [...new Set([...relevant, ...(subjectId ? (ctx.benefits?.policiesByMember.get(subjectId) ?? []).map((p) => p.policyId) : [])])];
+  return ids.map((id) => ctx.libraryText?.get(id) ?? "").join("\n").toLowerCase();
+}
+const REQUIRED_FRAME = /\b(?:require[sd]?|requirements?|must|need(?:s|ed)?|submit(?:ted)?|provide[sd]?|attach(?:ed)?|supporting documents?|relevant evidence|as evidence|identif(?:y|ies) [^.;]*evidence)\b/i;
+const PAPERWORK_NOT_STATED = /\b(?:do(?:es)? not (?:state|list|say|explain|name)|not stated|ask (?:the insurer|[A-Z][\w ]*?) (?:what|which|whether))\b/i;
+/** A sentence presenting paperwork as needed or required (\"provide the medical records\", \"a specialist's report is
+ * relevant evidence\") that neither its cited passages nor the person's documents print. */
+export function unsupportedPaperworkClaim(text: string, sourceText: string): string | null {
+  if (!REQUIRED_FRAME.test(text) || PAPERWORK_NOT_STATED.test(text)) return null;
+  const norm = (w: string) => w.toLowerCase().replace(/[’']/g, "'").replace(/s\b/g, "");
+  const src = norm(sourceText);
+  const missing = [...new Set([...text.matchAll(PAPERWORK)].map((m) => m[0]))].filter((w) => !src.includes(norm(w)));
+  return missing.length ? `presents paperwork as needed (${missing.join(", ")}) that the documents do not state; a general suggestion belongs in the next steps, labelled as one` : null;
+}
+/** A next step naming paperwork its documents do not print is labelled as a suggestion to confirm with the insurer
+ * (never presented as a policy requirement). A step that only asks the insurer what is needed, or is already worded as
+ * a suggestion, is left as it is; paperwork the documents print is not a suggestion. */
+export function labelUnsupportedPaperwork(step: string, sourceText: string): string {
+  const named = [...step.matchAll(PAPERWORK)].map((m) => m[0].toLowerCase());
+  if (!named.length || SUGGESTION_LABEL.test(step.trim())) return step;
+  const norm = (w: string) => w.replace(/[’']/g, "'").replace(/s\b/g, "");
+  const unsupported = named.filter((w) => !sourceText.replace(/[’']/g, "'").replace(/s\b/g, "").includes(norm(w)));
+  if (!unsupported.length) return step;
+  if (ASKS_INSURER.test(step) && unsupported.every((w) => new RegExp(`\\b(?:ask|check|find out|confirm|enquire|inquire)\\b[^.;]*${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(step))) return step;
+  return `${SUGGESTION_PREFIX}${step.trim()}`;
+}
 export const UNRESOLVED_NOTE = "unresolved";
 export const MISSING_FACT_NOTE = "missing_fact";
 /** True when two texts share a content word (stemmed). */
@@ -590,6 +626,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D1): a sentence resting on an instruction inside a document (not policy wording) is never stated.
     const injected = evIds.filter((id) => instructionLines(ctx.state.evidence[id].passage.text).length && !withoutInstructions(ctx.state.evidence[id].passage.text).split(/\n+/).some((l) => sharesWords(l, text)));
     if (injected.length) { drop(text, "cites text inside a document that is an instruction, not policy wording", INSTRUCTION_NOTE); continue; }
+    // V1.4: paperwork stated as needed / required / relevant evidence is stated only where the documents print it.
+    const paper = unsupportedPaperworkClaim(text, [...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), paperworkSourceText(ctx, subjectId, relevantPolicies)].join("\n").toLowerCase());
+    if (paper) { drop(text, paper); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
     // V1.1 (evidence contract): a value's amendment relationship (the schedule row an endorsement amends, an
@@ -831,6 +870,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // it, in a sentence -- a next step cannot, so a mandatory checklist is never invented there.
     // (Asking the insurer what is required -- "ask which documents are required" -- is a suggestion, not a requirement.)
     if (/\b(?:must|mandatory|required|requirement|have to|has to|need to (?:submit|provide|send|produce|file|furnish)|are needed|is needed)\b/i.test(t) && !/\b(?:ask|check|find out|confirm|enquire|inquire)\b[^.;]*\b(?:what|which|whether|if)\b/i.test(t)) { drop(t, "a next step states a requirement; what a document requires is stated with its citation", STEP_NOTE); continue; }
+    // V1.4: paperwork a next step names (medical records, a police report, translations ...) is a policy requirement only
+    // when the person's documents print it. Otherwise the step is DearPolicy's general suggestion and says so.
+    stepText = labelUnsupportedPaperwork(stepText, paperworkSourceText(ctx, out.subjectId, relevantPolicies));
     out.nextSteps.push(stepText);
   }
   settleAnswer(out, drops, conditioned, ctx);

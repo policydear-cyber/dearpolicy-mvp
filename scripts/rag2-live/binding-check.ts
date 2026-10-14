@@ -27,6 +27,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { DOCS as BINDING_DOCS, M as BINDING_M } from "../fixtures/rag2-binding/household";
 
 const DARREN = "7f000000-0000-4000-8000-000000000001";
 const CURRENT_CERT = "7f000000-0000-4000-8000-000000000101";
@@ -191,14 +192,62 @@ export function gradeBindingV3(convs: any[]): { verdict: "PASS" | "FAIL" | "INCO
   return { verdict: incomplete ? "INCOMPLETE" : failed.length ? "FAIL" : "PASS", checks, incomplete };
 }
 
+/**
+ * Version 4 (14 Oct 2026, 18:36 round; written BEFORE s50-live-2, from docs/rag-migration/v14/EXPECTED.md "s50-live-2").
+ * Version 3's checks, plus, on every turn of S50:
+ *  - no inventory replaces the answer (no document-list lines);
+ *  - no injury / illness wording in a death answer (diagnosis, medical assessment, specialist, doctor's report, scans);
+ *  - no paperwork presented as needed unless Darren's documents print it, or the line is labelled as a suggestion to
+ *    confirm with the insurer, or it only asks the insurer what is needed.
+ * Paperwork is judged against the text of Darren's own linked documents in the fixture (not the code under test).
+ */
+const INVENTORY_LINE = /Not linked to anyone in the household|\((?:[^()]*), (?:a personal policy document|reference wording for the scheme)/i;
+const INJURY_WORDING = /\bdiagnos\w*|\bmedical assessment|\bspecialist|\bdoctor['’]s report|\b(?:test|scan) results|\bx-?ray|\bmedical decision/i;
+const PAPER = /\b(?:death certificates?|medical (?:records?|reports?|certificates?|bills?)|hospital (?:records?|reports?|bills?)|police (?:reports?|records?)|accident reports?|post-?mortem(?: reports?)?|autopsy(?: reports?)?|coroner['’]?s? reports?|claim forms?|receipts?|invoices?|discharge summar(?:y|ies)|translations?|certified (?:true )?copies|passports?|birth certificates?|marriage certificates?|letters? of administration|probate|bank statements?|(?:transport|travel|flight) records?)\b/gi;
+export function darrenDocumentText(): string {
+  const id = BINDING_M.darren.id;
+  return BINDING_DOCS.filter((d) => !d.account && d.members.some((m) => m.id === id) && !(d as { superseded?: boolean }).superseded).flatMap((d) => Object.values(d.pages)).join("\n").toLowerCase();
+}
+export function inventedPaperwork(visible: string, docText = darrenDocumentText()): string[] {
+  const out: string[] = [];
+  const norm = (w: string) => w.toLowerCase().replace(/[’']/g, "'").replace(/s\b/g, "");
+  const src = norm(docText);
+  for (const line of visible.split(/\n|(?<=[.;?!])\s+(?=[A-Z])/)) {
+    if (/^\s*(?:\[next\]\s*)?suggestion\b/i.test(line)) continue;
+    for (const m of line.matchAll(PAPER)) {
+      if (src.includes(norm(m[0]))) continue;
+      if (new RegExp(`\\b(?:ask|check|find out|confirm|enquire|inquire)\\b[^.;]*\\b(?:what|which|whether|if)\\b[^.;]*${m[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(line)) continue;
+      if (/\b(?:do(?:es)? not (?:state|list|say|name))\b/i.test(line)) continue;
+      out.push(`${m[0]} in "${line.slice(0, 160)}"`);
+    }
+  }
+  return out;
+}
+export function gradeBindingV4(convs: any[]): ReturnType<typeof gradeBindingV3> {
+  const base = gradeBindingV3(convs.filter((c) => c.scenario === "S50"));
+  const checks = [...base.checks];
+  for (const c of convs.filter((x) => x.scenario === "S50")) {
+    for (const [i, t] of ((c?.loaded?.turns ?? []) as any[]).entries()) {
+      const v = [String(t.visible ?? ""), ...((t.questions ?? []) as string[])].join("\n");
+      const add = (name: string, ok: boolean, kind: Check["kind"], detail: string) => checks.push({ conv: "S50", turn: i + 1, name, ok, kind, ...(!ok ? { detail: detail.slice(0, 500) } : {}) });
+      add("no inventory replaces or pads the answer (no document-list lines)", !INVENTORY_LINE.test(v), "usefulness", v);
+      add("no injury / illness wording in the death answer (diagnosis, medical assessment, specialist, doctor's report, scans)", !INJURY_WORDING.test(v), "correctness", (v.match(INJURY_WORDING) ?? [""])[0] + " :: " + v);
+      const inv = inventedPaperwork(v);
+      add("no paperwork presented as needed unless Darren's documents print it or it is labelled as a suggestion to confirm with the insurer", !inv.length, "correctness", inv.join("; "));
+    }
+  }
+  const failed = checks.filter((x) => !x.ok);
+  return { verdict: base.incomplete ? "INCOMPLETE" : failed.length ? "FAIL" : "PASS", checks, incomplete: base.incomplete };
+}
+
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("binding-check.ts")) {
   const dir = process.argv[2];
   if (!dir) { console.error("usage: binding-check.ts <RUN directory>"); process.exit(2); }
   const run = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8"));
-  // Version 3 by default (writes binding-grade-v3.*); --v2 / --v1 reproduce the earlier grades.
-  const version: 1 | 2 | 3 = process.argv.includes("--v1") ? 1 : process.argv.includes("--v2") ? 2 : 3;
+  // Version 4 by default (writes binding-grade-v4.*); --v3 / --v2 / --v1 reproduce the earlier grades.
+  const version: 1 | 2 | 3 | 4 = process.argv.includes("--v1") ? 1 : process.argv.includes("--v2") ? 2 : process.argv.includes("--v3") ? 3 : 4;
   const suffix = version === 1 ? "" : `-v${version}`;
-  const g = version === 3 ? gradeBindingV3(run.conversations ?? []) : gradeBinding(run.conversations ?? [], version);
+  const g = version === 4 ? gradeBindingV4(run.conversations ?? []) : version === 3 ? gradeBindingV3(run.conversations ?? []) : gradeBinding(run.conversations ?? [], version);
   fs.writeFileSync(path.join(dir, `binding-grade${suffix}.json`), JSON.stringify(g, null, 2));
   const md = [`# Binding actual-model grade (grader version ${version}): ${g.verdict}`, g.incomplete ? `\nIncomplete: ${g.incomplete}` : "", "", "| conversation | turn | check | kind | result | detail |", "|---|---|---|---|---|---|",
     ...g.checks.map((c) => `| ${c.conv} | ${c.turn ?? "all"} | ${c.name} | ${c.kind} | ${c.ok ? "pass" : "**FAIL**"} | ${(c.detail ?? "").replace(/\|/g, "/").replace(/\n/g, " ")} |`)].join("\n");

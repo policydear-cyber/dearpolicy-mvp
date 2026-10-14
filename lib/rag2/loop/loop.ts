@@ -1324,10 +1324,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
     const named = (d: InventoryDoc) => said.includes(d.name.toLowerCase()) || said.includes(d.filename.toLowerCase());
     if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
-    const keep = r.composed.sentences.filter((x) => !moneyFiguresIn(x.text).length && !docs.some((d) => x.text.toLowerCase().includes(d.name.toLowerCase())) && !inv.people.some((p) => new RegExp(`\\b${p.short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(x.text)));
+    // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
+    // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
+    const bindingsOf = (text: string) => r.composed.figureBindings.filter((b) => !!b.sentence && (text.includes(b.sentence) || b.sentence.includes(text)));
+    const boundFigures = (x: { text: string; estimate?: boolean }) => !x.estimate && moneyFiguresIn(x.text).length > 0 && bindingsOf(x.text).length >= moneyFiguresIn(x.text).length;
+    const keep = r.composed.sentences.filter((x) => boundFigures(x) || (!moneyFiguresIn(x.text).length && !docs.some((d) => x.text.toLowerCase().includes(d.name.toLowerCase())) && !inv.people.some((p) => new RegExp(`\\b${p.short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(x.text))));
+    const keptBindings = keep.filter(boundFigures).flatMap((x) => bindingsOf(x.text));
     const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
     trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
-    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: [], computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
   /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's

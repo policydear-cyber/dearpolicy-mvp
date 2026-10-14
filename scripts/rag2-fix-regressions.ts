@@ -120,7 +120,7 @@ async function main() {
       assert.match(t.v, /KidSafe fracture benefit is S\$600 per fracture/);
     });
     await check("F2b D3: a sum of printed limits is never shown as an amount anyone gets or can claim", () => { assert.doesNotMatch(t.v, /1,800/, info(t)); assert.ok(t.trace.dropped.some((d: any) => /sum of printed limits|payout/.test(d.reason))); });
-    await check("F2c D2: payout wording is refused in next steps; the neutral step stays", () => { assert.doesNotMatch(t.v, /owes you/i, info(t)); assert.ok(t.a.nextSteps.includes("Keep the X-ray report.")); });
+    await check("F2c D2: payout wording is refused in next steps; the neutral step stays", () => { assert.doesNotMatch(t.v, /owes you/i, info(t)); assert.ok(t.a.nextSteps.some((x: string) => x === "Keep the X-ray report." || x === "Suggestion, not stated in your documents (confirm with the insurer): Keep the X-ray report."), JSON.stringify(t.a.nextSteps)); });
     await check("F2d D24: what was left out is said specifically (payout / decision), not as one generic note", () => { assert.match(t.v, /paid, owed or claimable/, info(t)); assert.match(t.v, /decision on the claim/); });
   }
   { const r = await converse(ACCOUNT_N, [{ steps: [

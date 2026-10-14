@@ -8,7 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
-import { TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2, dateAsked, days365Conclusions, gradeBindingV3, unidentifiedAmounts, wrongIdentity } from "./binding-check";
+import { blobSha, checkProvenance } from "./provenance";
+import os from "node:os";
+import { gradeBindingV4, inventedPaperwork, TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2, dateAsked, days365Conclusions, gradeBindingV3, unidentifiedAmounts, wrongIdentity } from "./binding-check";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
 import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 
@@ -273,6 +275,71 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
     assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"], fbs: [fb(600000, "Group Term Life"), fb(1000000, "Group Personal Accident")] }, { user: U2, visible: base, questions: [] }])).some((n) => /identity/.test(n)));
     assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base, questions: ["When did Darren die?"] }])).some((n) => /neither is asked/.test(n)));
     assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base + " His death was outside the 365-day window.", questions: [] }])).some((n) => /agrees with the dates/.test(n)));
+  });
+}
+
+// V1.4: a run refuses to start when the SHA it would record is not the checked-out code (s50-live-1 recorded a stale
+// SHA). Temporary trees; no model call.
+{
+  const SHA = "a".repeat(40), OTHER = "b".repeat(40);
+  const tree = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "prov-"));
+    fs.mkdirSync(path.join(d, "lib")); fs.mkdirSync(path.join(d, "scripts")); fs.mkdirSync(path.join(d, ".next"));
+    fs.writeFileSync(path.join(d, "lib/a.ts"), "export const a = 1;\n"); fs.writeFileSync(path.join(d, "scripts/b.ts"), "b\n");
+    const t = Date.now() / 1000; fs.utimesSync(path.join(d, "lib/a.ts"), t - 100, t - 100); fs.utimesSync(path.join(d, "scripts/b.ts"), t - 100, t - 100);
+    fs.writeFileSync(path.join(d, ".next/BUILD_ID"), "x");
+    const manifest = { sha: SHA, files: { "lib/a.ts": blobSha(fs.readFileSync(path.join(d, "lib/a.ts"))), "scripts/b.ts": blobSha(fs.readFileSync(path.join(d, "scripts/b.ts"))) } };
+    return { d, manifest };
+  };
+  const noGit = () => null;
+  t("C47 provenance: the recorded SHA's tree and a newer build start the run; every mismatch refuses", () => {
+    const { d, manifest } = tree();
+    const ok = checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit });
+    assert.ok(ok.ok, JSON.stringify(ok));
+    const no = (r: ReturnType<typeof checkProvenance>, re: RegExp) => { assert.equal(r.ok, false); assert.match((r as { reason: string }).reason, re); };
+    no(checkProvenance({ recordedSha: null, cwd: d, manifest, git: noGit }), /no full 40-character/);
+    no(checkProvenance({ recordedSha: OTHER, cwd: d, manifest, git: noGit }), /manifest is for/);
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest: null, git: noGit }), /no tree manifest/);
+    fs.writeFileSync(path.join(d, "lib/extra.ts"), "x\n");
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit }), /not in that commit.*lib\/extra\.ts/);
+    fs.rmSync(path.join(d, "lib/extra.ts"));
+    fs.writeFileSync(path.join(d, "lib/a.ts"), "export const a = 2;\n");
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit }), /1 file\(s\) differ \(lib\/a\.ts\)/);
+    const { d: d2, manifest: m2 } = tree();
+    fs.utimesSync(path.join(d2, "lib/a.ts"), Date.now() / 1000 + 50, Date.now() / 1000 + 50);
+    no(checkProvenance({ recordedSha: SHA, cwd: d2, manifest: m2, git: noGit }), /build is older/);
+  });
+  t("C48 provenance (git checkout): HEAD must be the recorded SHA, or a request commit on it changing only run-request.json; a dirty tree refuses", () => {
+    const { d } = tree();
+    const g = (map: Record<string, string>) => (c: string) => map[c] ?? null;
+    const base = { "git ls-files": "lib/a.ts\nscripts/b.ts", "git status --porcelain --untracked-files=no": "" };
+    assert.ok(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": SHA }) }).ok);
+    assert.ok(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": SHA, [`git diff --name-only ${SHA} HEAD`]: "scripts/rag2-live/run-request.json" }) }).ok);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": SHA, [`git diff --name-only ${SHA} HEAD`]: "scripts/rag2-live/run-request.json\nlib/a.ts" }) }).ok, false);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": "c".repeat(40) }) }).ok, false);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": SHA, "git status --porcelain --untracked-files=no": " M lib/a.ts" }) }).ok, false);
+  });
+}
+
+// V1.4 binding grader version 4 (written before s50-live-2): inventory padding, injury wording in a death answer and
+// invented paperwork, with independent controls.
+{
+  t("C49 grader v4: paperwork only where Darren's documents print it, or labelled as a suggestion, or asked of the insurer", () => {
+    assert.deepEqual(inventedPaperwork("Notify Meridian Life Ltd of a death within 6 months, with the death certificate."), []);
+    assert.equal(inventedPaperwork("Provide the death certificate and relevant medical records.").length, 1);
+    assert.equal(inventedPaperwork("[next] Keep the police report from Japan.").length, 1);
+    assert.deepEqual(inventedPaperwork("[next] Suggestion, not stated in your documents (confirm with the insurer): keep the police report from Japan."), []);
+    assert.deepEqual(inventedPaperwork("[next] Ask Meridian Life Ltd whether it needs a police report from Japan."), []);
+    assert.deepEqual(inventedPaperwork("The documents do not state which medical records are needed."), []);
+  });
+  const mk4 = (v1: string, v2: string, q1: string[] = ["On what date did the accident happen?"]) => [{ scenario: "S50", turns: [{ user: "Darren died in a car accident in Japan, what can I do?" }, { user: "The accident happened on 3 October 2026 and he died on 5 October 2026." }], loaded: { turns: [v1, v2].map((v, i) => ({ visible: v, questions: i ? [] : q1, answer: { figureBindings: [{ value: 1000000, benefit: "Group Term Life", subjectId: "7f000000-0000-4000-8000-000000000001", rowPerson: "Tan Kai Ming, Darren", policyId: "7f000000-0000-4000-8000-000000000101" }, { value: 600000, benefit: "Group Personal Accident", subjectId: "7f000000-0000-4000-8000-000000000001", rowPerson: "Tan Kai Ming, Darren", policyId: "7f000000-0000-4000-8000-000000000101" }] }, trace: { outcome: "final_answer", toolCalls: [] } })) } }];
+  const good = "Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022. The PA summary pays Accidental Death if death occurs within 365 days of the Accident.";
+  const bad4 = (c: any[]) => gradeBindingV4(c).checks.filter((x) => !x.ok).map((x) => x.name);
+  t("C50 grader v4: a correct conversation passes; inventory padding, injury wording and invented paperwork each FAIL", () => {
+    assert.deepEqual(bad4(mk4(good, good)), []);
+    assert.ok(bad4(mk4(good + "\nNot linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General).", good)).some((n) => /inventory/.test(n)));
+    assert.ok(bad4(mk4(good, good + " Whether Darren's death meets the definition must be confirmed through the insurer's medical assessment.")).some((n) => /injury/.test(n)));
+    assert.ok(bad4(mk4(good, good + "\n[next] Provide the death certificate and relevant medical records.")).some((n) => /paperwork/.test(n)));
   });
 }
 

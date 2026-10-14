@@ -60,3 +60,5 @@ The inventory conversations (stress C1, browser R1) still pass.
 - **s49-live-2** (`4e35f58`): PASS, 0 of 31 failed. Version 2's two failures were the date-of-death question and the S$300,000 false positive. Both are corrected generally by version 3.
   - This regrade is post hoc: version 3 was written after seeing s49-live-2.
   - The version-2 FAIL remains the pre-registered result.
+
+Correction: the run's own `run.json` / `report.md` SHA is corrected in `RUN-s50-live-1-2026-10-14T09-49-27/PROVENANCE-CORRECTION.md` (originals unchanged).

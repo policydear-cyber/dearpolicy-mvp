@@ -70,6 +70,14 @@ async function main() {
   const runId = arg("run-id");
   if (runId != null && !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
   const safety = liveSafetyChecks(process.env);
+  // V1.4: the SHA a run records must be the checked-out code (s50-live-1 recorded a stale one). Refuse before any call.
+  {
+    const { checkProvenance } = await import("./provenance");
+    const mf = process.env.RAG2_LIVE_TREE_MANIFEST;
+    const prov = checkProvenance({ recordedSha: process.env.RAG2_LIVE_TESTED_SHA ?? null, manifest: mf && fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, "utf8")) : null });
+    if (!prov.ok) throw new Error(`provenance: ${prov.reason}; refusing to start`);
+    console.log(`provenance: the recorded SHA is the checked-out code (${prov.via}, ${prov.checked} files)`);
+  }
   const port = Number(arg("port", "3310"));
   const relayUrl = arg("relay", "http://127.0.0.1:8787")!;
   type RelayHealth = { mode: string; log: string; allowed_models: string[] };
@@ -105,7 +113,7 @@ async function main() {
   const availability = arg("availability-status") != null ? { status: arg("availability-status")!, id: arg("availability-id") ?? null } : null;
   const shaEnv = (k: string) => (process.env[k] && /^[0-9a-f]{7,40}$/.test(process.env[k]!) ? process.env[k]! : null);
   const meta = {
-    testedCodeSha: shaEnv("RAG2_LIVE_TESTED_SHA") ?? git("git rev-parse HEAD"),
+    testedCodeSha: shaEnv("RAG2_LIVE_TESTED_SHA"),
     requestSha: shaEnv("RAG2_LIVE_REQUEST_SHA"),
     modelsRequested: Object.fromEntries((["CHAT_MODEL", "JUDGEMENT_MODEL", "NARRATION_MODEL", "READING_MODEL"] as const).map((k) => [k, process.env[k] ?? null])),
     availability,

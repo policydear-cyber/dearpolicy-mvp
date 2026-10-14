@@ -102,7 +102,7 @@ export async function syncCalcClaimRecord(args: { accountId: string; conversatio
   const priorPacket = prior ? await packetOf(args.accountId, prior.id) : null;
   const recorded = await recordClaim({ accountId: args.accountId, familyMemberId: subject, existingId: prior?.id ?? args.existingId ?? null, facts, eventSummary: eventWords.slice(0, 120), items, citations: [],
     knownFacts: Object.entries(args.state.claim!.facts).map(([k, f]) => `${k.replace(/_/g, " ")}: ${String(f.value)}`), missingFacts: missing,
-    complete: !missing.length, nextSteps: [...new Set(calcs.flatMap((c) => c.evidenceRequirements))].map((d) => "Attach: " + d), conversationId: args.conversationId, claimCategory: null,
+    complete: !missing.length, nextSteps: [...new Set(calcs.flatMap((c) => c.evidenceRequirements))].map((d) => "Suggestion, not stated in the policy (confirm with the insurer): gather " + d), conversationId: args.conversationId, claimCategory: null,
     claimedAmount: claimedAmountOf(args.state.claim) });
   // Withdrawn items of the earlier record stay on it, marked (never silently replaced by the new ones).
   const kept = (priorPacket?.assessments ?? []).filter((a) => a.withdrawn && !items.some((i) => i.calculationId && i.calculationId === a.id));
