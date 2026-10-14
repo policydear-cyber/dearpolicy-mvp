@@ -1,0 +1,36 @@
+### figure stated without its product (the reported structure)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists S$1,000,000 (Group Term Life) as of 6 October 2022.
+
+### two products in one sentence
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Tan Kai Ming, Darren's Group Term Life death benefit is S$1,000,000 and his Group Personal Accident sum insured is S$600,000, as of 6 October 2022.
+
+### Term Life stated as PA (negative)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  The PUBLIC SERVICE GROUP INSURANCE SCHEME lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm the Group Personal Accident amount for this answer.
+
+### unrelated insurer in the advice (negative)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's Group Term Life sum assured is S$1,000,000 as of 6 October 2022. Contact Meridian Life Ltd to report the death.
+
+### death after an accident, the model asking nothing
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?
+
+### accident date already given
+USER: Darren died in a car accident in Japan on 3 October 2026, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022.
+      The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.
+      The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
+      The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [next] Keep a copy of the death certificate and the police report from Japan.
+
+### Michelle: certificate vs endorsement
+USER: What is Michelle's personal accident cover?
+APP:  Michelle's certificate lists her Group Personal Accident sum insured as S$300,000 as of 6 October 2022, and Endorsement No. 3 amends her Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; which of the two applies now is not established from the documents.
+
+### correction back to Darren
+USER: Sorry, I meant Darren
+APP:  Darren's certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.

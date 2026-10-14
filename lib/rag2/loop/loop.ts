@@ -950,7 +950,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         // certificate roster under a product heading) in the documents the sentence cites, matched by amount and
         // currency. Exactly one benefit: bound to it; none, or several with that amount: not bound here.
         const cited = new Set((s.evidence_ids as string[]).map((id) => (state.evidence[id] && !stale.has(id) ? state.evidence[id].policyId : null)).filter((x): x is string => !!x));
-        const rows = (benefitView?.byMember.get(who)?.benefits ?? []).filter((b) => b.applicability === "person_row" && cited.has(b.policy.id) && b.printed.kind === "money" && Math.abs(b.printed.amount - f.value) < 0.005 && b.printed.currency === f.currency);
+        const rows = (benefitView?.byMember.get(who)?.benefits ?? []).filter((b) => b.applicability === "person_row" && !b.conflicts?.length && cited.has(b.policy.id) && b.printed.kind === "money" && Math.abs(b.printed.amount - f.value) < 0.005 && b.printed.currency === f.currency);
         const labels = [...new Set(rows.map((b) => `${b.policy.id}|${b.benefit.label}`))];
         for (const one of labels.length === 1 ? [rows[0]] : []) {
           const e = { policyId: one.policy.id };
@@ -1314,8 +1314,42 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: [], computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
+  /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's
+   * own linked documents (lib/rag2/benefits.ts) whose printed condition counts a time window from an event ("within 365
+   * days of that Accident"), relevant to what the household reported (its words share the event and the benefit), and
+   * the event's date not given: the household is asked for that date, citing the condition. Chosen from the documents'
+   * own requirements -- never a scripted question; nothing is asked when no printed condition needs a missing fact. */
+  const conditionQuestion = (r: LoopReply | null): LoopReply | null => {
+    if (!r || r.kind !== "final" || state.pending || !benefitView) return r;
+    const subject = r.composed.subjectId ?? state.claim?.subjectId ?? state.subjectId ?? null;
+    if (!subject) return r;
+    const STEM_SYN: [RegExp, string][] = [[/^(?:die|dies|died|dying|death|deaths|dead|deceased|killed|fatal|fatally)$/, "death"], [/^(?:accident|accidents|accidental|accidentally|crash|crashed|collision)$/, "accident"], [/^(?:injury|injuries|injured|injure)$/, "injury"], [/^(?:diagnosis|diagnosed)$/, "diagnosis"]];
+    const GEN = new Set(["insured", "person", "result", "within", "days", "day", "benefit", "payable", "sum", "that", "this", "with", "from", "will", "shall", "pay", "policy", "the", "and", "for", "group", "public", "service"]);
+    const stems = (t: string) => new Set((t.toLowerCase().replace(/\bpass(?:ed|es)? away\b/g, "died").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !GEN.has(w)).map((w) => STEM_SYN.find(([re]) => re.test(w))?.[1] ?? w.replace(/(?:ies|es|s|ed|ing|al|ly)$/, "").slice(0, 6)));
+    const said = stems(userTexts.join(" "));
+    const DATE_GIVEN = /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{4})?\b|\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b(?:yesterday|today|last (?:night|week|month))\b/i;
+    const WINDOW = /within\s+(\d+)\s+(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(accident|injury|onset|diagnosis|event)/i;
+    for (const b of benefitView.byMember.get(subject)?.benefits ?? []) {
+      const cond = b.conditions.find((c) => WINDOW.test(c));
+      if (!cond) continue;
+      const anchor = WINDOW.exec(cond)![3].toLowerCase();
+      const own = stems(`${b.benefit.label} ${cond}`);
+      const shared = [...own].filter((w) => said.has(w));
+      const anchorStem = STEM_SYN.find(([re]) => re.test(anchor))?.[1] ?? anchor;
+      if (!shared.includes(anchorStem) || shared.length < 2) continue;
+      const known = Object.keys(state.claim?.facts ?? {}).some((k) => new RegExp(`${anchorStem}.*(?:date|time)|(?:date|time).*${anchorStem}|event_date|incident_date`, "i").test(k)) || userTexts.some((u) => DATE_GIVEN.test(u));
+      if (known) return r;
+      const id = evidenceIdOf(state, b.source.evidence, "person_benefits");
+      const doc = b.policy.product ?? "your document";
+      const clause = (/\b(?:if|provided|when)\b.*$/i.exec(cond)?.[0] ?? cond).replace(/[.\s]+$/, "");
+      const pending: Extract<LoopPending, { kind: "fact" }> = { kind: "fact", question: `On what date did the ${anchor} happen?`, factKey: `${anchorStem}_date`, subjectId: subject, why: `${doc} pays its ${b.benefit.label} only ${clause}`, evidenceIds: [id], turn: state.turn };
+      (trace.adjusted ??= []).push(`asked the date a printed condition counts from (${b.benefit.label}: "${cond}")`);
+      return { kind: "ask", pending, preface: null, composed: r.composed };
+    }
+    return r;
+  };
   let reasked: LoopPending | null = null;
-  const done = withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null));
+  const done = conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null)));
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

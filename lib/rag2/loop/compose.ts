@@ -734,7 +734,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // stating the figure names that benefit and no other benefit of the document more closely.
         if (!benefit && !roster && !ref.table?.rowLabel) {
           const clause = sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence;
-          const idl = identityLabel(ref, f.value, f.currency, `${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, ctx);
+          // V1.4: the shared view's own record of this person's amount on this line (an endorsement amending their
+          // benefit) names the benefit -- when the clause names that benefit too.
+          const who0 = explicitSubject ?? ref.subjectId ?? subjectId;
+          const viewed = (ctx.benefits?.byMember.get(who0 ?? "")?.benefits ?? []).find((x) => x.policy.id === ref.policyId && (x.applicability === "amendment" || x.applicability === "person_row") && x.printed.kind === "money" && same(x.printed.amount, f.value) && x.printed.currency === f.currency && evidenceTextOf(ref).includes(x.source.passage.trim()));
+          if (viewed && namesBenefit(`${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, viewed.benefit.label)) benefit = viewed.benefit.label;
+          const idl = benefit ? null : identityLabel(ref, f.value, f.currency, `${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, ctx);
           if (idl && "label" in idl) {
             // A roster line names the person it is for: the figure is that person's, never another member's.
             const who = explicitSubject ?? ref.subjectId ?? subjectId;
@@ -814,6 +819,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);
     if (bad) { drop(t, bad, STEP_NOTE); continue; }
+    // V1.4: a next step is a practical suggestion; a REQUIREMENT ("you must submit ...") cites the document that states
+    // it, in a sentence -- a next step cannot, so a mandatory checklist is never invented there.
+    if (/\b(?:must|mandatory|required|requirement|have to|has to|need to (?:submit|provide|send|produce|file|furnish)|are needed|is needed)\b/i.test(t)) { drop(t, "a next step states a requirement; what a document requires is stated with its citation", STEP_NOTE); continue; }
     out.nextSteps.push(stepText);
   }
   settleAnswer(out, drops, conditioned, ctx);

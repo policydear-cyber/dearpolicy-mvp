@@ -18,7 +18,7 @@
  * document's product headings and its own benefit rows / "Label: value" lines.
  */
 import { evidenceAt, type EvidenceRef } from "./evidence";
-import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow, type MemberRow } from "./store";
+import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
 import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf } from "./tables";
 
 export type PrintedValue =
@@ -33,7 +33,7 @@ export type PersonBenefit = {
   householdId: string;
   /** The member the value is printed for (person_row), or the member the shared wording is linked to. */
   memberId: string;
-  applicability: "person_row" | "shared_wording";
+  applicability: "person_row" | "shared_wording" | "amendment";
   policy: { id: string; product: string | null; insurer: string | null; policyNumber: string | null; groupPolicyNumber: string | null; documentRole: string | null; personalProof: boolean;
     version: { documentHash: string | null; documentDate: string | null; effectiveDate: string | null } };
   benefit: { label: string; source: "product_heading" | "table_row" | "label_line" };
@@ -41,6 +41,9 @@ export type PersonBenefit = {
   asOf: string | null;
   conditions: string[];
   source: { page: number; passage: string; row: { label: string; column: string | null } | null; evidence: EvidenceRef };
+  /** Other documented amounts for the same person and benefit in the same policy (a certificate row and an endorsement
+   * amending it): which applies is NOT decided here (amendment precedence is never guessed). */
+  conflicts?: { key: string; policyId: string; amount: number; currency: string; page: number; effective: string | null }[];
 };
 export type PersonBenefitView = { householdId: string; member: { id: string; name: string }; benefits: PersonBenefit[]; unresolved: string[] };
 
@@ -146,6 +149,38 @@ export async function personBenefits(accountId: string, memberId: string, preloa
       const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: r.lineStart, end: r.lineEnd, subjectId: memberId });
       push({ key: `${d.id}:${r.page}:${r.lineStart}`, applicability: "shared_wording", benefit: { label: r.label, source: "table_row" }, printed, asOf: null, conditions: [],
         source: { page: r.page, passage: evidence.passage.text, row: { label: r.label, column: vals[0].c.header || null }, evidence } });
+    }
+  }
+  // 5. An amendment of this person's documented amount (an endorsement line naming the person, a product heading of
+  // the same policy, and one amount), and the conflict it makes with the certificate row: both are kept, neither wins.
+  const heads = (policyId: string) => { const d = docs.find((x) => x.id === policyId); const fam = d ? new Set(policyFamily(docs, d).map((x) => x.id)) : new Set([policyId]); return [...new Set(out.filter((b) => b.applicability === "person_row" && fam.has(b.policy.id)).map((b) => b.benefit.label))]; };
+  for (const d of mine) {
+    if (!/endorse|amend|alteration/i.test(`${d.documentRole ?? ""} ${d.productName ?? ""}`)) continue;
+    const labels = heads(d.id);
+    for (const p of pages.filter((x) => x.policyId === d.id)) {
+      let at = 0;
+      for (const line of p.text.split("\n")) {
+        const start = at; at += line.length + 1;
+        const money = line.match(/(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d[\d,]*(?:\.\d+)?/gi) ?? [];
+        if (money.length !== 1 || memberNamedIn(line, household) !== memberId) continue;
+        const named = labels.filter((l) => line.toLowerCase().includes(l.toLowerCase()));
+        if (named.length !== 1) continue;
+        const v = parseCell(money[0]);
+        if (v.kind !== "money") continue;
+        const eff = /\b(?:with effect from|w\.?e\.?f\.?|effective(?: from)?)\s+(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})/i.exec(line);
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end: start + line.length, subjectId: memberId });
+        out.push({ key: `${d.id}:${p.page}:${start}`, householdId: accountId, memberId, applicability: "amendment",
+          policy: { id: d.id, product: d.productName, insurer: d.insurer, policyNumber: d.policyNumber, groupPolicyNumber: d.groupPolicyNumber, documentRole: d.documentRole, personalProof: d.personalCoverageConfirmed, version: { documentHash: d.fileHash, documentDate: d.documentDate, effectiveDate: d.effectiveDate } },
+          benefit: { label: named[0], source: "product_heading" }, printed: { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period },
+          asOf: eff ? cellDate(eff[1]) : d.effectiveDate, conditions: [line.trim()], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
+      }
+    }
+  }
+  for (const a of out.filter((b) => b.applicability === "amendment")) {
+    for (const b of out.filter((x) => x.applicability === "person_row" && x.benefit.label === a.benefit.label && x.printed.kind === "money" && a.printed.kind === "money" && (x.printed.amount !== a.printed.amount || x.printed.currency !== a.printed.currency))) {
+      const ref = (x: PersonBenefit) => ({ key: x.key, policyId: x.policy.id, amount: (x.printed as { amount: number }).amount, currency: (x.printed as { currency: string }).currency, page: x.source.page, effective: x.asOf });
+      (b.conflicts ??= []).push(ref(a)); (a.conflicts ??= []).push(ref(b));
+      unresolved.push(`${a.benefit.label}: ${b.policy.product ?? "the certificate"} prints ${(b.printed as { currency: string }).currency} ${(b.printed as { amount: number }).amount.toLocaleString("en-SG")}${b.asOf ? ` as of ${b.asOf}` : ""}, and ${a.policy.product ?? "an endorsement"} prints ${(a.printed as { currency: string }).currency} ${(a.printed as { amount: number }).amount.toLocaleString("en-SG")}${a.asOf ? ` with effect from ${a.asOf}` : ""}; which applies now is not established from the documents`);
     }
   }
   return { householdId: accountId, member: { id: memberId, name: member.displayName }, benefits: out, unresolved };

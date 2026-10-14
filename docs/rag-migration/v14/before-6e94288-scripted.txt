@@ -1,0 +1,27 @@
+Before: main 6e94288 (the PR #48 merge), on scripts/fixtures/rag2-binding/household.ts as first written. At that point each
+product heading had its own policy number; the shared number, the endorsement and the old certificate were added later.
+Scripted model moves (plumbing evidence, not model output). The same final_answer was sent in each case, after
+resolve_person -> policies_for + search_passages.
+
+### Variant B: a figure stated without its product (the reported structure)
+USER: Darren died in a car accident in Japan, what can I do?
+MODEL SENTENCE: Darren's certificate lists S$1,000,000 as of 6 October 2022.
+APP:  The PUBLIC SERVICE GROUP INSURANCE SCHEME lists separate Group Term Life and October 2022 amounts; I couldn’t confirm the October 2022 amount for this answer.
+      [dropped] S$1,000,000 is printed under “Group Term Life”, but the sentence states it for “October 2022”
+
+### Variant A: the person's full printed name in the sentence
+MODEL SENTENCE: Tan Kai Ming, Darren is covered for S$1,000,000 on the Public Service Group Insurance Scheme certificate as of 6 October 2022.
+APP:  The PUBLIC SERVICE GROUP INSURANCE SCHEME lists separate Group Term Life, Meridian Life Ltd, Group Insurance Department, October 2022, Tan Kai Ming, Darren, Blk 000 Example Avenue 1 #00-00, Singapore 000000, Group Personal Accident, Group Living Care and Group Living Care Plus amounts; I couldn’t confirm which of them applies for this answer.
+
+### Variant D: two products in one sentence
+MODEL SENTENCE: Tan Kai Ming, Darren's Group Term Life death benefit is S$1,000,000 and his Group Personal Accident sum insured is S$600,000, as of 6 October 2022.
+APP:  I couldn’t confirm an answer to that from your documents.
+      [dropped] S$600,000 is printed in none of the evidence the sentence cites
+
+### The unrelated insurer
+MODEL SENTENCE (cited): Contact Meridian Life Ltd and Lumen General to report the death and start the claims.
+On main no rule tests an insurer against the person's documents. The sentence is kept whenever it cites evidence; in the
+variants above it was dropped only because it cited none.
+
+### Question
+On main, none of the variants asks a question. No calculation ran and no tool reported a missing fact.

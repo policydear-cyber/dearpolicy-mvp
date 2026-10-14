@@ -188,6 +188,7 @@
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",
     "e2e:rag2-conversation": "playwright test -c e2e/support/playwright.rag2.config.ts",
     "e2e:rag2-stress-report": "playwright test -c e2e/support/playwright.rag2-report.config.ts",
+    "e2e:rag2-binding": "playwright test -c e2e/support/playwright.rag2-binding.config.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",

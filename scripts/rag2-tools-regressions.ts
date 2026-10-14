@@ -528,9 +528,9 @@ async function main() {
   const ON = { DEARPOLICY_RAG_TOOLS: "1", NODE_ENV: "test" } as unknown as NodeJS.ProcessEnv;
   await check("R1 registry: every tool has a name, description and object schema; no tool takes an account id", () => {
     const names = R.RAG_TOOLS.map((t) => t.name);
-    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "policies_for", "select_table_value", "compute", "calculate"]);
+    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "person_benefits", "policies_for", "select_table_value", "compute", "calculate"]);
     for (const t of R.RAG_TOOLS) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 20); assert.ok(!JSON.stringify(t.parameters).includes("account")); }
-    assert.equal(R.toolSpecs().length, 8);
+    assert.equal(R.toolSpecs().length, 9);
   });
   await check("R2 a conversation through the registry: person -> value -> compute, all with evidence", async () => {
     const ctx = R.createToolContext({ accountId: ACCOUNT, speakerId: M.darren.id, asOf: ASOF });

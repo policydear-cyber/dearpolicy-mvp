@@ -92,9 +92,30 @@ Whether a death report should trigger a question, for example the accident and d
    - Otherwise the sentence is left out.
 4. **One-cell-per-line rosters** (the name alone on a line, the amount on a later line) are listed as `unresolved`, not bound. The save-time check verifies a person's figure on one printed row only, and that check was not weakened.
 
+## Added after the full brief arrived
+
+5. **Retrieval through the view.** A new tool, `person_benefits`, gives the model one person's documented benefits grouped by document.
+   - Each document's role is shown: personal proof, reference wording or amendment.
+   - Each benefit comes with its printed value, date, conditions and page, plus `value_id`s for the person's own amounts.
+   - Conflicts and unresolved points are included.
+   - Prompt `rag2-loop-v14` tells the model to use it for "what is X covered for" and for questions after an event.
+6. **Amendments are never decided.** An endorsement that names a person and a product heading of the same policy is recorded as an `amendment`. If it prints a different amount from the certificate row, both are kept, the conflict is listed, and neither is bound as the person's amount.
+7. **A shared policy number never merges products.** Benefits are told apart by their printed headings, never by policy number.
+8. **One grounded question from the documents' own conditions.** When the reply ends with no question, DearPolicy asks one question if all of the following hold:
+   - a benefit on the person's linked documents has a printed time-window condition ("within 365 days of that Accident");
+   - what the household reported shares that condition's event and benefit;
+   - the event's date has not been given.
+
+   The question asks for that date and cites the condition. Nothing about the scenario is hard-coded, and nothing is asked when no printed condition needs a missing fact.
+9. **Next steps are suggestions, not requirements.** A next step that states a requirement ("you must submit …") is left out. A document's requirement can only be stated in a sentence that cites it.
+
+## Migration and reprocessing
+
+- **No schema change and no migration.** The view reads the existing `policies`, `policy_members` and `policy_pages` and parses them on demand.
+- **No reprocessing of existing documents.**
+- If a stored certificate's text layer has one cell per line, its amounts stay listed as unresolved until the save-time person-row check is extended.
+
 ## Not done here
 
 - The live trace was not read, so the real certificate's text layer (one row per line, or one cell per line) is not known.
-- If the real certificate is stored one cell per line, its amounts remain unresolved. Supporting that layout would need the save-time person-row check extended, which was not done here.
-- Follow-up question behaviour for a death report (see above).
-- The remainder of the brief was not received; the message ended at "A person's name must".
+- Support for one-cell-per-line rosters in the save-time check has not been built.

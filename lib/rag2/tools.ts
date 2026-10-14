@@ -11,6 +11,7 @@ import type { EvidenceRef } from "./evidence";
 import { ragToolsEnabled } from "./flag";
 import { resolvePerson, type ConversationContext } from "./people";
 import { policiesFor } from "./policies";
+import { personBenefits, type PersonBenefit } from "./benefits";
 import { householdDocuments } from "./inventory";
 import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
@@ -94,6 +95,37 @@ export const RAG_TOOLS: ToolDef[] = [
     description: "List every document the household has uploaded, grouped by person: insurer, product and role (a personal policy document, reference wording such as a group policy wording, or linked but not confirmed), documents linked to nobody, and files that could not be read (and why). Use it for questions about what policies or documents the family has. It states no amounts.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
     handler: async (ctx) => { const r = await householdDocuments(ctx.accountId); return ok(r, [...r.people.flatMap((p) => p.documents), ...r.unlinked].map((d) => d.evidence).filter((e): e is EvidenceRef => !!e)); },
+  },
+  {
+    name: "person_benefits",
+    description: "One household member's DOCUMENTED benefits, read from their linked documents: each document (personal proof such as a certificate, reference wording such as a product summary, or an amendment) with each benefit it prints for them -- the product / benefit as the document names it, the printed amount or percentage (and what it is a percentage of), its date, its printed conditions, page, and a value_id for an amount printed on the person's own row. Lists conflicts (a certificate and an endorsement printing different amounts) and what is unresolved. Printed facts only: never confirmation of current cover or of a claim. Use it first for questions about what a person is covered for, or after an event (a death, an accident, an illness).",
+    parameters: { type: "object", properties: { subject_id: str("The household member.") }, required: ["subject_id"], additionalProperties: false },
+    handler: async (ctx, a) => {
+      const view = await personBenefits(ctx.accountId, String(a.subject_id));
+      if (!view.member.name) return fail("that person is not an active member of this household");
+      const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? `${b.printed.currency === "SGD" ? "S$" : b.printed.currency + " "}${b.printed.amount.toLocaleString("en-SG")}${b.printed.unit ? " " + b.printed.unit : ""}` : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
+      const byDoc = new Map<string, PersonBenefit[]>();
+      for (const b of view.benefits) byDoc.set(b.policy.id, [...(byDoc.get(b.policy.id) ?? []), b]);
+      const documents = [];
+      for (const [policyId, bs] of byDoc) {
+        const p = bs[0].policy;
+        const benefits = [];
+        for (const b of bs) {
+          let valueId: string | null = null;
+          if (b.applicability === "person_row" && b.printed.kind === "money" && !b.conflicts?.length) {
+            const r = await selectTableValue({ accountId: ctx.accountId, policyId, benefit: b.benefit.label, subject: { memberId: String(a.subject_id) }, want: "amount", asOf: ctx.asOf }).catch(() => null);
+            if (r?.status === "ok" && r.valueKind === "money" && r.cents === b.printed.cents && r.currency === b.printed.currency) {
+              valueId = "v" + ++ctx.seq;
+              ctx.values.set(valueId, { selected: r, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: r.valueKind, cents: r.cents, ppm: r.ppm, count: null, currency: r.currency, period: r.period, evidence: r.evidence } });
+            }
+          }
+          benefits.push({ benefit: b.benefit.label, printed: fmt(b), applies: b.applicability === "person_row" ? "printed on this person's own row" : b.applicability === "amendment" ? "an amendment naming this person" : "wording for every insured person (not a figure about this person alone)",
+            as_of: b.asOf, conditions: b.conditions, page: b.source.page, ...(valueId ? { value_id: valueId } : {}), ...(b.conflicts?.length ? { conflicts: b.conflicts.map((c) => `${c.currency} ${c.amount.toLocaleString("en-SG")} on page ${c.page} of another document of this policy${c.effective ? ` (${c.effective})` : ""}`) } : {}), evidence: b.source.evidence });
+        }
+        documents.push({ policy_id: policyId, product: p.product, insurer: p.insurer, role: p.personalProof ? "personal proof (lists this person)" : bs.some((b) => b.applicability === "amendment") ? "amendment" : "reference wording", benefits });
+      }
+      return ok({ person: view.member.name, documents, unresolved: view.unresolved, note: "Printed facts only. A dated amount is the document's amount on that date, not confirmation of current cover; amounts of different benefits are never added into a total unless a document says they are paid together." }, view.benefits.map((b) => b.source.evidence));
+    },
   },
   {
     name: "policies_for",

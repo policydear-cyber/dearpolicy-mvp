@@ -31,6 +31,8 @@ import { ALL } from "../../scripts/fixtures/rag2-adv/scenarios";
 import { ACCOUNT_L } from "../../scripts/fixtures/rag2-live/household";
 import { ACCOUNT as ACCOUNT_R } from "../../scripts/fixtures/rag2-stress/report-household";
 import { REPORT_SCENARIOS } from "../../scripts/fixtures/rag2-stress/report-conversations";
+import { ACCOUNT as ACCOUNT_B } from "../../scripts/fixtures/rag2-binding/household";
+import { BINDING_SCENARIOS } from "../../scripts/fixtures/rag2-binding/conversations";
 import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
 import { installFetchGuard } from "./rag2-live-fetch-guard";
@@ -56,8 +58,10 @@ process.env.DEV_AUTH_ENABLED = "1";
 // V1.3: E2E_RAG2_HOUSEHOLD=report (scripted, never live) signs in as the report-layout household
 // (scripts/fixtures/rag2-stress/report-household.ts, seeded by e2e/support/seed-rag2-stress-report.ts); its scripted
 // conversations are chosen per test by POST /__rag2stress/scenario {"id":"R1"} and read back by GET /__rag2stress/last.
-const REPORT = !LIVE && process.env.E2E_RAG2_HOUSEHOLD === "report";
-process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : ACCOUNT_L) : REPORT ? ACCOUNT_R : ACCOUNT_T;
+// V1.4: E2E_RAG2_HOUSEHOLD=binding does the same for the binding household (scripts/fixtures/rag2-binding).
+const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : null;
+const REPORT = !!SCRIPTED_HH;
+process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD === "binding" ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 
@@ -76,18 +80,18 @@ async function main() {
       return;
     }
     if (url.pathname.startsWith("/__rag2stress/")) {
-      if (!REPORT) { res.writeHead(404).end(JSON.stringify({ error: "start the server with E2E_RAG2_HOUSEHOLD=report" })); return; }
+      if (!REPORT) { res.writeHead(404).end(JSON.stringify({ error: "start the server with E2E_RAG2_HOUSEHOLD=report or binding" })); return; }
       if (url.pathname === "/__rag2stress/scenario" && req.method === "POST") {
         let body = ""; for await (const c of req) body += c;
-        const s = REPORT_SCENARIOS.find((x) => x.id === (JSON.parse(body || "{}") as { id?: string }).id);
+        const s = SCRIPTED_HH!.scenarios.find((x) => x.id === (JSON.parse(body || "{}") as { id?: string }).id);
         if (!s) { res.writeHead(404).end(JSON.stringify({ error: "unknown scenario" })); return; }
         (globalThis as Record<symbol, unknown>)[KEY] = new ScriptedLoopModel(s.turns);
         res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, id: s.id, messages: s.messages }));
         return;
       }
       if (url.pathname === "/__rag2stress/last") {
-        const m = (await pool.query("SELECT conversation_id::text AS conversation_id, content, answer_json FROM chat_messages WHERE account_id=$1 AND role='assistant' ORDER BY created_at DESC, message_order DESC LIMIT 1", [ACCOUNT_R])).rows[0];
-        const c = m ? (await pool.query("SELECT state FROM chat_conversations WHERE id=$1 AND account_id=$2", [m.conversation_id, ACCOUNT_R])).rows[0] : null;
+        const m = (await pool.query("SELECT conversation_id::text AS conversation_id, content, answer_json FROM chat_messages WHERE account_id=$1 AND role='assistant' ORDER BY created_at DESC, message_order DESC LIMIT 1", [SCRIPTED_HH!.account])).rows[0];
+        const c = m ? (await pool.query("SELECT state FROM chat_conversations WHERE id=$1 AND account_id=$2", [m.conversation_id, SCRIPTED_HH!.account])).rows[0] : null;
         res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ message: m ?? null, state: c?.state ?? null }));
         return;
       }
