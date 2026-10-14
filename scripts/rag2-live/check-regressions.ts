@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
+import { TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2 } from "./binding-check";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
 import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 
@@ -222,6 +223,15 @@ t("C31 L5 fallback prose with a placeholder ('a set amount') FAILS although S$1,
 t("C32 L5 'the effective date is not confirmed' FAILS (the endorsement prints 01 Jul 2026)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["The endorsement's effective date is not confirmed in your records."] }]))).includes("no uncertainty the expected facts contradict")));
 t("C33 L5 S$1,000,000 stated as current in a second sentence FAILS (whole answer)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["Your limit for this year is S$1,000,000."] }]))).includes("no superseded figure presented as current")));
 t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqual(wa(grade(sc("L5"), conv("L5", [endt]))), []));
+
+// V1.4: the binding grader's "Term Life presented as Personal Accident" pattern -- version 2 fixes version 1's false
+// positive, with independent controls (sentences written for this check, not taken from the run it misgraded alone).
+{
+  const wrong = ["Your Personal Accident cover is S$1,000,000.", "Darren's Group Personal Accident sum insured is S$1,000,000 as of 6 October 2022.", "Personal Accident: S$1,000,000", "S$1,000,000 under Group Personal Accident is payable.", "The certificate shows S$1,000,000 for the Personal Accident benefit.", "S$1,000,000 is his Personal Accident amount."];
+  const right = ["Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022.", "Term Life S$1,000,000; Personal Accident S$600,000.", "Group Term Life: S$1,000,000. Group Personal Accident: S$600,000.", "S$1,000,000 (Group Term Life) and the Group Personal Accident S$600,000 are separate amounts.", "His Personal Accident sum insured is S$600,000, not S$1,000,000 which is his Term Life amount."];
+  t("C40 binding grader v2: every wrong attribution of S$1,000,000 to Personal Accident is flagged", () => { for (const x of wrong) assert.ok(TERM_LIFE_AS_PA_V2.test(x), x); });
+  t("C41 binding grader v2: correct answers naming both products separately are NOT flagged (version 1 flagged the first)", () => { for (const x of right) assert.ok(!TERM_LIFE_AS_PA_V2.test(x), x); assert.ok(TERM_LIFE_AS_PA_V1.test(right[0]), "version 1's false positive is reproduced"); });
+}
 
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

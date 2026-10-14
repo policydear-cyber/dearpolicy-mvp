@@ -28,6 +28,9 @@ export type ToolContext = {
   /** Computations made in this context (result id -> result). */
   results: Map<string, ComputeOk>;
   seq: number;
+  /** V1.4: the person's own row values person_benefits already issued (policy|subject|benefit -> value id): a
+   * select_table_value for the same row reuses it instead of reading the table again. */
+  personRows?: Map<string, string>;
 };
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };
@@ -117,14 +120,17 @@ export const RAG_TOOLS: ToolDef[] = [
             if (r?.status === "ok" && r.valueKind === "money" && r.cents === b.printed.cents && r.currency === b.printed.currency) {
               valueId = "v" + ++ctx.seq;
               ctx.values.set(valueId, { selected: r, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: r.valueKind, cents: r.cents, ppm: r.ppm, count: null, currency: r.currency, period: r.period, evidence: r.evidence } });
+              (ctx.personRows ??= new Map()).set(`${policyId}|${String(a.subject_id)}|${b.benefit.label.toLowerCase()}`, valueId);
             }
           }
           benefits.push({ benefit: b.benefit.label, printed: fmt(b), applies: b.applicability === "person_row" ? "printed on this person's own row" : b.applicability === "amendment" ? "an amendment naming this person" : "wording for every insured person (not a figure about this person alone)",
-            as_of: b.asOf, conditions: b.conditions, page: b.source.page, ...(valueId ? { value_id: valueId } : {}), ...(b.conflicts?.length ? { conflicts: b.conflicts.map((c) => `${c.currency} ${c.amount.toLocaleString("en-SG")} on page ${c.page} of another document of this policy${c.effective ? ` (${c.effective})` : ""}`) } : {}), evidence: b.source.evidence });
+            as_of: b.asOf, conditions: b.conditions, page: b.source.page, ...(valueId ? { value_id: valueId } : {}), ...(b.amendedBy ? { amended: `amended to ${b.amendedBy.currency === "SGD" ? "S$" : b.amendedBy.currency + " "}${b.amendedBy.amount.toLocaleString("en-SG")} with effect from ${b.amendedBy.effective} by an endorsement of this policy (page ${b.amendedBy.page}); this row's amount is the amount before that date` } : {}),
+            ...(b.amends ? { amends: `replaces ${b.amends.currency === "SGD" ? "S$" : b.amends.currency + " "}${b.amends.amount.toLocaleString("en-SG")}${b.amends.asOf ? ` (printed as of ${b.amends.asOf})` : ""} from ${b.asOf}, as this endorsement's wording says` } : {}),
+            ...(b.conflicts?.length ? { conflicts: b.conflicts.map((c) => `${c.currency} ${c.amount.toLocaleString("en-SG")} on page ${c.page} of another document of this policy${c.effective ? ` (${c.effective})` : ""}`) } : {}), evidence: b.source.evidence });
         }
         documents.push({ policy_id: policyId, product: p.product, insurer: p.insurer, role: p.personalProof ? "personal proof (lists this person)" : bs.some((b) => b.applicability === "amendment") ? "amendment" : "reference wording", benefits });
       }
-      return ok({ person: view.member.name, documents, unresolved: view.unresolved, note: "Printed facts only. A dated amount is the document's amount on that date, not confirmation of current cover; amounts of different benefits are never added into a total unless a document says they are paid together." }, view.benefits.map((b) => b.source.evidence));
+      return ok({ person: view.member.name, documents, unresolved: view.unresolved, note: "These are this person's printed benefit lines in their linked documents: cite their value_ids / evidence directly; search_passages only for something not listed here. Printed facts only. A dated amount is the document's amount on that date, not confirmation of current cover; amounts of different benefits are never added into a total unless a document says they are paid together." }, view.benefits.map((b) => b.source.evidence));
     },
   },
   {
@@ -140,6 +146,13 @@ export const RAG_TOOLS: ToolDef[] = [
     handler: async (ctx, a) => {
       const asOf = typeof a.as_of === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.as_of) ? a.as_of : ctx.asOf;
       if (typeof a.as_of === "string" && asOf !== a.as_of) return fail("as_of must be a date written YYYY-MM-DD");
+      // V1.4: the same row person_benefits already read this turn: its value, not a second read.
+      const tidyB = String(a.benefit).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      const reused = ctx.personRows?.get(`${String(a.policy_id)}|${String(a.subject_id)}|${tidyB}`);
+      if (reused && ctx.values.has(reused) && (a.want == null || a.want === "amount" || a.want === "any") && !a.as_of && !a.tier) {
+        const v = ctx.values.get(reused)!;
+        return ok({ status: "ok", valueId: reused, value: (v.operand.cents ?? 0) / 100, currency: v.operand.currency, row: v.operand.benefit, reused: "already read by person_benefits this turn -- the same value id" }, []);
+      }
       const pick = (on: string) => selectTableValue({ accountId: ctx.accountId, policyId: String(a.policy_id), benefit: String(a.benefit), subject: { memberId: String(a.subject_id), tier: (a.tier as string) ?? null }, want: ((a.want as Want) ?? "any"), asOf: on });
       const r = await pick(asOf);
       if (r.status !== "ok") return ok(r, r.status === "ambiguous" ? r.options.flatMap((o) => (o.evidence ? [o.evidence] : [])) : r.evidence ? [r.evidence] : []);
@@ -211,7 +224,7 @@ export function validateArgs(schema: JsonSchema, value: unknown, path = "args"):
     for (const k of schema.required ?? []) if (v[k] == null) return `${path}.${k} is required`;
     for (const [k, x] of Object.entries(v)) {
       const s = schema.properties?.[k];
-      if (!s) { if (schema.additionalProperties === false) return `${path}.${k} is not a parameter of this tool`; continue; }
+      if (!s) { if (schema.additionalProperties === false) return `${path}.${k} is not a parameter of this tool (allowed here: ${Object.keys(schema.properties ?? {}).join(", ")})`; continue; }
       if (x == null) continue;
       const e = validateArgs(s, x, `${path}.${k}`); if (e) return e;
     }

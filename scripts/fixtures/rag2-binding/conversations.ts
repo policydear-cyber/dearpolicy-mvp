@@ -25,11 +25,11 @@ const B1: BindingScenario = { id: "B1", title: "death after a reported accident,
     ] })],
   ] },
 ] };
-const B2: BindingScenario = { id: "B2", title: "switching people and correcting back", messages: ["What is Michelle's personal accident cover?", "Sorry, I meant Darren"], turns: [
+const B2: BindingScenario = { id: "B2", title: "switching people (an endorsement amending Michelle's amount) and correcting back", messages: ["What is Michelle's personal accident cover?", "Sorry, I meant Darren"], turns: [
   { user: "Michelle's personal accident", steps: [
     () => [call("resolve_person", { mention: "Michelle" })],
     () => [call("person_benefits", { subject_id: MI })],
-    (v) => [call("final_answer", { subject_id: MI, sentences: [{ text: "Michelle's certificate lists her Group Personal Accident sum insured as S$300,000 as of 6 October 2022, and Endorsement No. 3 amends her Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; which of the two applies now is not established from the documents.", evidence_ids: evOf(v, MI, /^Group Personal Accident$/), subject_id: MI }] })],
+    (v) => [call("final_answer", { subject_id: MI, sentences: [{ text: "Endorsement No. 3 amends Michelle's Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; her certificate listed S$300,000 as of 6 October 2022, before that endorsement.", evidence_ids: evOf(v, MI, /^Group Personal Accident$/), subject_id: MI }] })],
   ] },
   { user: "I meant Darren", steps: [
     () => [call("resolve_person", { mention: "Darren" })],

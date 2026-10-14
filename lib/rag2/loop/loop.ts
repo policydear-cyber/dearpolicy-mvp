@@ -26,7 +26,7 @@ import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-r
 import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
-import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
+import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
@@ -633,6 +633,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     if (call.name === NOTE_FACTS.name && Array.isArray(a.facts)) a.facts = (a.facts as Record<string, unknown>[]).map((f) => ({ ...f, value: f?.value == null ? f?.value : String(f.value) }));
     const spec = [NOTE_FACTS, ASK_USER, FINAL_ANSWER].find((s) => s.name === call.name)!;
+    // V1.4: ids written as object keys instead of in their citation field are moved there (unambiguous only).
+    const moved = call.name === "note_facts" ? [] : normalizeCitationKeys(a.sentences ?? a.statements);
+    if (moved.length) (trace.adjusted ??= []).push(`${call.name}: ${moved.join("; ")}`);
     const bad = validateArgs(spec.parameters, a);
     if (bad) return { result: { ok: false, error: bad } };
     if (call.name === "note_facts") {

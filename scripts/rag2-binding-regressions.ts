@@ -179,7 +179,7 @@ async function main() {
       () => [call("resolve_person", { mention: "Michelle" })],
       () => [call("person_benefits", { subject_id: MI })],
       (v: ScriptView) => [call("final_answer", { subject_id: MI, sentences: [
-        { text: "Michelle's certificate lists her Group Personal Accident sum insured as S$300,000 as of 6 October 2022, and Endorsement No. 3 amends her Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; which of the two applies now is not established from the documents.", evidence_ids: evOf(v, MI, /^Group Personal Accident$/), subject_id: MI },
+        { text: "Endorsement No. 3 amends Michelle's Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; her certificate listed S$300,000 as of 6 October 2022, before that endorsement.", evidence_ids: evOf(v, MI, /^Group Personal Accident$/), subject_id: MI },
       ] })],
     ] },
     { user: "Sorry, I meant Darren", steps: [
@@ -188,18 +188,32 @@ async function main() {
       (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ text: "Darren's certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.", value_ids: [vidOf(v, D, /^Group Personal Accident$/)].filter(Boolean), subject_id: D }] })],
     ] },
   ]);
-  await check("P5/N7 Michelle: the certificate's and the endorsement's amounts are both shown with the conflict named; neither is bound as her current amount by figure identity; the view lists the conflict", () => {
-    assert.match(P5[0].v, /S\$300,000[^;]*S\$400,000[^;]*; which of the two applies now is not established/, JSON.stringify(P5[0].trace.dropped) + JSON.stringify(P5[0].trace.gate)); assert.ok(!/S\$600,000|S\$1,000,000/.test(P5[0].v), P5[0].v);
-    assert.ok(!(P5[0].trace.toolCalls as any[]).some((x) => /figure identity/.test(String(x.args?.by ?? ""))), "no identity binding of a conflicted amount");
-    const mv = hb.byMember.get(MI)!; void mv;
+  await check("P5 Michelle: a validly linked endorsement effective from 1 January 2024 amends her certificate's PA amount as its wording says -- S$400,000 from that date, S$300,000 the earlier dated amount; no conflict invented", () => {
+    assert.match(P5[0].v, /S\$400,000 with effect from 1 January 2024[^.]*S\$300,000 as of 6 October 2022/, JSON.stringify(P5[0].trace.dropped) + JSON.stringify(P5[0].trace.gate)); assert.ok(!/S\$600,000|S\$1,000,000|not established/.test(P5[0].v), P5[0].v);
   });
   await check("P5 correcting back to Darren: his own PA amount, never Michelle's", () => { assert.match(P5[1].v, /Darren[^.]*S\$600,000/); assert.ok(!/S\$300,000|S\$400,000/.test(P5[1].v), P5[1].v); });
   const fresh = await personBenefits(HH.ACCOUNT, MI);
-  await check("VIEW the endorsement is an amendment entry; the conflict with the certificate row is listed as unresolved and attached to both; no value_id is issued for either", () => {
+  await check("VIEW precedence from the documents: the endorsement (linked to Michelle, same policy, 'is amended to', effective 2024-01-01) amends the certificate row printed as of 2022-10-06 -- recorded both ways, no conflict", () => {
     const cert = fresh.benefits.find((b) => b.applicability === "person_row" && b.benefit.label === "Group Personal Accident")!;
     const am = fresh.benefits.find((b) => b.applicability === "amendment")!;
-    assert.equal((am.printed as any).amount, 400000); assert.equal(am.asOf, "2024-01-01"); assert.equal(cert.conflicts?.[0]?.amount, 400000); assert.equal(am.conflicts?.[0]?.amount, 300000);
-    assert.ok(fresh.unresolved.some((u) => /which applies now is not established/.test(u)), fresh.unresolved.join("\n"));
+    assert.equal((am.printed as any).amount, 400000); assert.equal(am.asOf, "2024-01-01");
+    assert.deepEqual([cert.amendedBy?.amount, cert.amendedBy?.effective, am.amends?.amount, am.amends?.asOf], [400000, "2024-01-01", 300000, "2022-10-06"]);
+    assert.ok(!cert.conflicts?.length && !am.conflicts?.length); assert.ok(!fresh.unresolved.some((u) => /not established/.test(u)), fresh.unresolved.join("\n"));
+  });
+  const endorse = HH.doc("ENDORSE"), certDoc = HH.doc("CERT");
+  const withPage = async <T,>(policyId: string, text: string, fn: () => Promise<T>) => {
+    const orig = (await h.db.query("SELECT text FROM policy_pages WHERE account_id=$1 AND policy_id=$2 AND page_number=1", [HH.ACCOUNT, policyId])).rows[0].text;
+    await h.db.query("UPDATE policy_pages SET text=$3 WHERE account_id=$1 AND policy_id=$2 AND page_number=1", [HH.ACCOUNT, policyId, text]);
+    try { return await fn(); } finally { await h.db.query("UPDATE policy_pages SET text=$3 WHERE account_id=$1 AND policy_id=$2 AND page_number=1", [HH.ACCOUNT, policyId, orig]); }
+  };
+  const noDate = await withPage(endorse.id, String(endorse.pages[1]).replace("With effect from 01/01/2024 the", "The"), () => personBenefits(HH.ACCOUNT, MI));
+  const noVerb = await withPage(endorse.id, String(endorse.pages[1]).replace("is amended to S$400,000", "is noted as S$400,000"), () => personBenefits(HH.ACCOUNT, MI));
+  const newerCert = await withPage(certDoc.id, String(certDoc.pages[1]).replace(/06\/10\/2022/g, "06/10/2025"), () => personBenefits(HH.ACCOUNT, MI));
+  await check("N7 precedence NOT established is a named conflict, never resolved: an endorsement with no effective date, one whose wording does not amend, and a certificate dated after the endorsement", () => {
+    for (const [what, v] of [["no effective date", noDate], ["no amending wording", noVerb], ["certificate newer than the endorsement", newerCert]] as const) {
+      const cert = v.benefits.find((b) => b.applicability === "person_row" && b.benefit.label === "Group Personal Accident")!;
+      assert.ok(cert.conflicts?.length && !cert.amendedBy, `${what}: ${JSON.stringify(v.benefits.filter((b) => b.applicability !== "shared_wording").map((b) => [b.applicability, b.benefit.label, (b.printed as any).amount, b.asOf, b.conditions[0], b.amendedBy, b.conflicts]))}`); assert.ok(v.unresolved.some((u) => /not established/.test(u)), `${what}: ${v.unresolved.join(" | ")}`);
+    }
   });
   await check("VIEW the shared policy number does not collapse the four products into one", () => {
     const rows = hb.byMember.get(D)!.benefits.filter((b) => b.applicability === "person_row");
@@ -213,6 +227,50 @@ async function main() {
   await check("N5/N6 a dated amount is not shown as current cover, the superseded certificate's S$800,000 and another household's S$2,000,000 are never shown", () => {
     assert.ok(!/currently covered/i.test(N5.v), N5.v); assert.ok(!/S\$800,000|S\$2,000,000/.test(N5.v), N5.v);
   });
+
+  // ---------------------------------------------------------------- V1.4 finish: uncertainty, malformed calls, reuse, insurers, layouts
+  const { checkCitedStatement } = await import("@/lib/rag2/loop/statements");
+  const sctx = { people: [{ id: D, names: ["Darren", "Tan Kai Ming"] }], policyNames: new Map([[certDoc.id, "PUBLIC SERVICE GROUP INSURANCE SCHEME"]]), subjectId: D };
+  const certEv = [{ policyId: certDoc.id, subjectId: D, text: String(certDoc.pages[1]) }];
+  await check("STATEMENT uncertainty is not a claim: \"do not establish whether Darren's cover was in force\" / \"it is unclear whether ...\" pass (they assert neither cover nor its absence)", () => {
+    for (const t of ["The uploaded documents do not establish whether Darren's cover was in force on the accident date.", "It is unclear whether Darren's cover was still in force on that date.", "The certificate does not confirm if the cover continued after 6 October 2022."]) assert.equal(checkCitedStatement(t, certEv, sctx as any), null, t);
+  });
+  await check("STATEMENT negation and affirmation stay checked: \"Darren is not covered under this scheme\" (evidence says nothing of the kind) and \"Darren's cover was in force on the accident date\" (a dated roster is no proof of it) are refused; \"Darren is insured under Group Personal Accident\" passes", () => {
+    assert.match(String(checkCitedStatement("Darren is not covered under this scheme.", certEv, sctx as any)), /not covered/);
+    assert.match(String(checkCitedStatement("Darren's cover was in force on the accident date.", certEv, sctx as any)), /in force/);
+    assert.match(String(checkCitedStatement("The documents do not establish whether the claim is valid, but Darren's cover was in force on that date.", certEv, sctx as any)), /in force/);
+    assert.equal(checkCitedStatement("Darren is insured under Group Personal Accident.", certEv, sctx as any), null);
+  });
+  const MAL = await run([{ user: "malformed", steps: [
+    () => [call("resolve_person", { mention: "Darren" })],
+    () => [call("person_benefits", { subject_id: D })],
+    (v: ScriptView) => [call("select_table_value", { policy_id: certDoc.id, benefit: "Group Term Life", subject_id: D, want: "amount" })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ text: "Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022.", [String(vidOf(v, D, /Term Life/))]: [String(vidOf(v, D, /Term Life/))], subject_id: D }, { text: "The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.", [evOf(v, D, /Accidental Death/).join(",")]: evOf(v, D, /Accidental Death/), subject_id: D }] })],
+  ] }].map((t) => ({ ...t, user: "Darren died in a car accident in Japan on 3 October 2026, what can I do?" })));
+  await check("CALLS ids written as object keys ({\"v1\": [\"v1\"]}, {\"e8\": [\"e8\"]}) are moved into their citation fields -- the answer is accepted on the first call; a select_table_value for a row person_benefits already read reuses its value id", () => {
+    const tc = MAL[0].trace.toolCalls as any[];
+    assert.ok(tc.filter((x) => x.name === "final_answer").every((x) => x.ok), JSON.stringify(tc.map((x) => [x.name, x.ok, x.error])));
+    assert.match(MAL[0].v, /S\$1,000,000 as of 6 October 2022/); assert.match(MAL[0].v, /365 days/);
+    assert.ok((MAL[0].trace.adjusted ?? []).some((a: string) => /citation fields/.test(a)), JSON.stringify(MAL[0].trace.adjusted));
+    const sel = tc.find((x) => x.name === "select_table_value"); assert.match(String(sel?.summary ?? ""), /"status":"ok"/);
+  });
+  const { validateArgs } = await import("@/lib/rag2/tools");
+  const { FINAL_ANSWER } = await import("@/lib/rag2/loop/actions");
+  await check("CALLS any other unknown key is still refused, with the allowed fields named so the model can correct it", () => {
+    assert.match(String(validateArgs(FINAL_ANSWER.parameters, { sentences: [{ text: "x", evidence: ["e1"] }] })), /sentences\[0\]\.evidence is not a parameter of this tool \(allowed here: text, evidence_ids, value_ids/);
+  });
+  const REF = await answer(h, D, (v) => [
+    { text: "The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.", evidence_ids: (() => { const o = v.find("policies_for", (o) => o.args.subject_id === D); const c = ((o?.result?.data?.covering ?? []) as any[]).find((x) => x.policyId === HH.doc("GPA_SUM").id); return ((c?.evidence ?? []) as any[]).map((e) => e.evidence_id as string); })(), subject_id: D },
+    { text: "Contact Meridian Life Ltd to report the death.", evidence_ids: [], subject_id: D },
+  ], ["Contact Meridian Life Ltd to start the claim."]);
+  await check("INSURER a linked reference booklet is not a personal policy: with only the PA product summary cited, Meridian Life is not recommended (the certificate, a personal policy, is what establishes it -- see INSURER above)", () => {
+    assert.ok(!/Contact Meridian Life/i.test(REF.v), REF.v);
+  });
+  const colsDeath = await withPage(certDoc.id, String(HH.DOCS_COLS.find((d) => d.key === "CERT")!.pages[1]), () => run([deathTurn(DEATH)]));
+  await check("LAYOUT one cell per line (the name alone on a line): no amount is bound or shown from the roster; the wording's condition is kept and the one date question is asked -- the amounts are a known limitation of this layout, reported, not guessed", () => {
+    const v = colsDeath[0].v; assert.ok(!/S\$1,000,000|S\$600,000/.test(v), v); assert.match(v, /365 days/); assert.deepEqual(colsDeath[0].q, ["On what date did the accident happen?"]);
+  });
+  await check("LAYOUT one row per line (the fixture's default): both amounts shown, each with its own product and date (P2)", () => { assert.match(P2.v, /Group Term Life sum assured as S\$1,000,000 as of 6 October 2022/); assert.match(P2.v, /Group Personal Accident sum insured as S\$600,000/); });
 
   if (process.env.BINDING_TRANSCRIPT_FILE) {
     const T = (title: string, user: string, x: { v: string; q?: string[] }) => `### ${title}\nUSER: ${user}\nAPP:  ${x.v.replace(/\n/g, "\n      ")}${x.q?.length ? "\n      [Q] " + x.q.join(" | ") : ""}`;

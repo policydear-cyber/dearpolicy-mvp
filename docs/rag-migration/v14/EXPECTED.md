@@ -27,7 +27,7 @@ Fixture: `scripts/fixtures/rag2-binding/household.ts`. It is anonymised and has 
 | P2 | "Darren died in a car accident in Japan, what can I do?" (the model uses `person_benefits`) | State Darren's Group Term Life S$1,000,000 and Group Personal Accident S$600,000 as documented amounts with their date, never as confirmed current cover. Name the documents that establish them: the certificate is personal proof; the summaries are reference wording. Give the PA summary's accidental-death condition, cited. Not add the two amounts together. Ask **one** question, about the accident date, taken from the 365-day condition. |
 | P3 | The same question where the model answers without asking anything (as in the live failure) | DearPolicy itself asks the one question about the accident date, citing the condition it comes from. The answer still shows the documented amounts. |
 | P4 | The accident date is given in the user's message | No question about the accident date. |
-| P5 | Switch to Michelle, then correct back to Darren | Each answer gives that person's own amounts. Michelle's PA shows the certificate–endorsement conflict as unresolved, and neither amount is presented as the current one. |
+| P5 | Switch to Michelle, then correct back to Darren | Each answer gives that person's own amounts. **[Revised after review, 14 Oct, per the owner's instruction on amendment precedence]** Michelle's endorsement is linked to her, belongs to the same policy, and its wording amends her PA amount with effect from 1 January 2024. It therefore amends the certificate's S$300,000 (printed as of 6 October 2022) from that date, so S$400,000 applies from then; this is not a conflict. Originally written: "shows the certificate–endorsement conflict as unresolved". |
 
 ## Negative controls (each answer must not)
 
@@ -39,7 +39,7 @@ Fixture: `scripts/fixtures/rag2-binding/household.ts`. It is anonymised and has 
 | N4 | Suggest the unrelated insurer for the claim, in a sentence or a next step. [implemented earlier] |
 | N5 | State the superseded certificate's amounts, or a dated amount as current cover ("is currently covered for"). |
 | N6 | Show another household's evidence. |
-| N7 | Silently resolve an ambiguous binding: Michelle's PA with both certificate and endorsement amounts is not bound to either by figure identity. |
+| N7 | Silently resolve an ambiguous binding. **[Revised]** Precedence counts as ambiguous only when it cannot be established from the documents: the endorsement has no effective date in its wording, its wording does not amend, the certificate is dated after it, or two amendments disagree. Those cases are named as conflicts, and neither amount is bound by figure identity. |
 | N8 | Give a next step that states a mandatory requirement ("you must submit …") the documents do not state. |
 
 ## Grading

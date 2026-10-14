@@ -40,11 +40,11 @@ test("B1 death after a reported accident: Darren's own Term Life and PA amounts 
   expect(s.state?.ragLoop?.pending?.factKey).toBe("accident_date");
 });
 
-test("B2 switching from Michelle (certificate vs endorsement conflict named) back to Darren (his own PA amount)", async ({ page, request }) => {
+test("B2 switching from Michelle (her endorsement amends the certificate amount from its effective date) back to Darren (his own PA amount)", async ({ page, request }) => {
   const [m1, m2] = await scenario(request, "B2");
   await page.goto("/chat"); await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
   const v1 = await send(page, m1);
-  expect(v1).toMatch(/S\$300,000[^;]*S\$400,000[^;]*; which of the two applies now is not established/);
+  expect(v1).toMatch(/S\$400,000 with effect from 1 January 2024[^.]*S\$300,000 as of 6 October 2022/);
   expect(v1).not.toMatch(/S\$600,000|S\$1,000,000/);
   const v2 = await send(page, m2);
   expect(v2).toMatch(/Darren[^.]*S\$600,000/);

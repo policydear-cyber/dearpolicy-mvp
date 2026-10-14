@@ -190,7 +190,7 @@ const ACT_WITH_INSURER = /\b(?:contact|call|phone|email|write to|notify|inform|t
 /** V1.4: why a statement may not name an insurer for this person (null when it may): the insurer is one of the
  * household's, but none of the person's linked documents is from it. Matched on the insurer's distinctive words
  * ("Lumen General" in "Lumen General Insurance Ltd"), never on generic ones (Life, General, Insurance, Ltd). */
-export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, step = false): string | null {
+export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, step = false, relevant?: Set<string> | null): string | null {
   const hb = ctx.benefits;
   if (!hb || !subjectId) return null;
   // Only ADVICE to act through an insurer (contact / claim / notify ...): a statement of fact about a document ("Cai
@@ -199,7 +199,9 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
   const GENERIC = new Set(["life", "general", "insurance", "assurance", "ltd", "limited", "pte", "berhad", "bhd", "company", "co", "the", "singapore", "group", "of"]);
   const key = (n: string) => (n.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => !GENERIC.has(w));
   const lower = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
-  const mine = (hb.policiesByMember.get(subjectId) ?? []).map((p) => key(p.insurer ?? "").join(" ")).filter(Boolean);
+  // V1.4: only an insurer of a PERSONAL policy document of this person (never a reference booklet linked to them, never
+  // a document linked to nobody) -- and, when the answer's relevant documents are known, one this answer relies on.
+  const mine = (hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => key(p.insurer ?? "").join(" ")).filter(Boolean);
   for (const ins of hb.insurers) {
     const k = key(ins);
     if (!k.length || !lower.includes(` ${k.join(" ")} `)) continue;
@@ -210,13 +212,13 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
 /** V1.4: the statement with an insurer the person has no document from taken out of a list of insurers ("contact
  * Meridian Life and Lumen General" -> "contact Meridian Life"), when what remains still names one of the person's own
  * insurers; null when it cannot be (the sentence is then left out). */
-export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">): string | null {
+export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, relevant?: Set<string> | null): string | null {
   const hb = ctx.benefits;
   if (!hb || !subjectId) return null;
-  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).map((p) => (p.insurer ?? "").trim()).filter(Boolean));
+  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => (p.insurer ?? "").trim()).filter(Boolean));
   let t = text;
   for (const ins of hb.insurers) {
-    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true)) continue;
+    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true, relevant)) continue;
     const esc = ins.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+(?:Ltd|Limited|Pte\.? Ltd|Insurance)\.?$/i, "");
     const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
     const before = t;
@@ -224,8 +226,8 @@ export function withoutOtherInsurers(text: string, subjectId: string | null, ctx
     if (t === before) return null;
   }
   t = t.replace(/\s{2,}/g, " ").trim();
-  if (insurerNotFor(t, subjectId, ctx, true)) return null;
-  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
+  if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
+  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true, relevant) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
 }
 /** V1.4: the benefits a document prints -- its product headings and benefit labels, from the shared benefit view.
  * Never a household member's name, an address, a date or a letter line. (Without the view: the document's own label
@@ -541,6 +543,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   // V1.3: figures refused because the sentence put them under another benefit the same document prints (Term Life
   // stated as Personal Accident): the document and its product headings are still stated, without the figure.
   const productMiss: { policyId: string; evidenceId: string; labels: string[]; wanted: string | null }[] = [];
+  // V1.4: the documents this answer relies on (what any of its sentences cites): an insurer is recommended only for a
+  // personal policy of the person among them -- relevant to this person AND this scenario.
+  const relevantPolicies = new Set<string>(args.sentences.flatMap((x) => [
+    ...(((x?.evidence_ids as string[]) ?? []).map((id) => ctx.state.evidence[id]?.policyId)),
+    ...(((x?.value_ids as string[]) ?? []).map((id) => ctx.tools.values.get(id)?.operand.evidence.policyId)),
+  ]).filter((x): x is string => !!x));
   const people = peopleFromLabels(ctx.names ?? []);
   const sentencesIn = [...(args.sentences ?? [])];
   for (let i = 0; i < sentencesIn.length; i++) {
@@ -570,8 +578,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
     // V1.4: an insurer is named for a person only when one of that person's linked documents is from it -- never an
     // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
-    const wrongInsurer = insurerNotFor(text, subjectId, ctx);
-    if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
+    const wrongInsurer = insurerNotFor(text, subjectId, ctx, false, relevantPolicies);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx, relevantPolicies); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
     // household's current, active version -- with or without a figure in the sentence.
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));
@@ -813,8 +821,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (!t) continue;
     if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
     let stepText = t;
-    const wrongInsurer = insurerNotFor(stepText, out.subjectId, ctx, true);
-    if (wrongInsurer) { const kept = withoutOtherInsurers(stepText, out.subjectId, ctx); if (!kept) { drop(stepText, wrongInsurer, STEP_NOTE); continue; } stepText = kept; }
+    const wrongInsurer = insurerNotFor(stepText, out.subjectId, ctx, true, relevantPolicies);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(stepText, out.subjectId, ctx, relevantPolicies); if (!kept) { drop(stepText, wrongInsurer, STEP_NOTE); continue; } stepText = kept; }
     if (internalIdsIn(t).length) { drop(t, "a next step may not show an internal id", STEP_NOTE); continue; }
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);

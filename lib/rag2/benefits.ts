@@ -44,6 +44,10 @@ export type PersonBenefit = {
   /** Other documented amounts for the same person and benefit in the same policy (a certificate row and an endorsement
    * amending it): which applies is NOT decided here (amendment precedence is never guessed). */
   conflicts?: { key: string; policyId: string; amount: number; currency: string; page: number; effective: string | null }[];
+  /** V1.4: precedence established from the documents' own wording and dates -- this row is amended by an endorsement
+   * from its effective date (amendedBy), or this endorsement amends that row (amends). */
+  amendedBy?: { key: string; policyId: string; amount: number; currency: string; page: number; effective: string };
+  amends?: { key: string; policyId: string; amount: number; currency: string; page: number; asOf: string | null };
 };
 export type PersonBenefitView = { householdId: string; member: { id: string; name: string }; benefits: PersonBenefit[]; unresolved: string[] };
 
@@ -176,9 +180,22 @@ export async function personBenefits(accountId: string, memberId: string, preloa
       }
     }
   }
-  for (const a of out.filter((b) => b.applicability === "amendment")) {
+  // Precedence: an endorsement linked to this person, of the same policy, whose own wording AMENDS the benefit ("is
+  // amended to", "is revised to") with an effective date, amends a certificate row printed as of an EARLIER date --
+  // from that effective date, as its wording says. Only when that cannot be established (no effective date, no
+  // amending wording, the certificate dated after the endorsement, or two amendments disagreeing) is it a conflict.
+  const AMENDING = /\b(?:is|are|was|were|shall be|will be)\s+(?:hereby\s+)?(?:amended|revised|changed|increased|decreased|reduced)\s+(?:to|from)\b/i;
+  const amendments = out.filter((b) => b.applicability === "amendment");
+  for (const a of amendments) {
     for (const b of out.filter((x) => x.applicability === "person_row" && x.benefit.label === a.benefit.label && x.printed.kind === "money" && a.printed.kind === "money" && (x.printed.amount !== a.printed.amount || x.printed.currency !== a.printed.currency))) {
       const ref = (x: PersonBenefit) => ({ key: x.key, policyId: x.policy.id, amount: (x.printed as { amount: number }).amount, currency: (x.printed as { currency: string }).currency, page: x.source.page, effective: x.asOf });
+      const rival = amendments.some((o) => o !== a && o.benefit.label === a.benefit.label && o.asOf === a.asOf && (o.printed as { amount: number }).amount !== (a.printed as { amount: number }).amount);
+      const datedInWording = /\b(?:with effect from|w\.?e\.?f\.?|effective(?: from)?)\s+\d/i.test(a.conditions[0] ?? "");
+      if (a.asOf && datedInWording && AMENDING.test(a.conditions[0] ?? "") && (!b.asOf || b.asOf < a.asOf) && !rival) {
+        b.amendedBy = { ...ref(a), effective: a.asOf };
+        a.amends = { key: b.key, policyId: b.policy.id, amount: (b.printed as { amount: number }).amount, currency: (b.printed as { currency: string }).currency, page: b.source.page, asOf: b.asOf };
+        continue;
+      }
       (b.conflicts ??= []).push(ref(a)); (a.conflicts ??= []).push(ref(b));
       unresolved.push(`${a.benefit.label}: ${b.policy.product ?? "the certificate"} prints ${(b.printed as { currency: string }).currency} ${(b.printed as { amount: number }).amount.toLocaleString("en-SG")}${b.asOf ? ` as of ${b.asOf}` : ""}, and ${a.policy.product ?? "an endorsement"} prints ${(a.printed as { currency: string }).currency} ${(a.printed as { amount: number }).amount.toLocaleString("en-SG")}${a.asOf ? ` with effect from ${a.asOf}` : ""}; which applies now is not established from the documents`);
     }
@@ -194,14 +211,14 @@ export type HouseholdBenefits = {
   /** The readable documents each member is linked to (an insured link; or their own personal policy document with no
    * links), with their insurer -- never a document linked to nobody: which insurers a
    * statement about that member may name. */
-  policiesByMember: Map<string, { policyId: string; insurer: string | null; product: string | null }[]>;
+  policiesByMember: Map<string, { policyId: string; insurer: string | null; product: string | null; personal: boolean }[]>;
   /** Every insurer named on the household's readable documents. */
   insurers: string[];
 };
 export async function householdBenefits(accountId: string): Promise<HouseholdBenefits> {
   const [members, docs] = await Promise.all([loadMembers(accountId), loadDocs(accountId)]);
   const links = docs.length ? await loadLinks(accountId, docs.map((d) => d.id)) : [];
-  const policiesByMember = new Map(members.map((m) => [m.id, docs.filter((d) => links.some((l) => l.policyId === d.id && l.memberId === m.id) || (d.ownerId === m.id && d.personalCoverageConfirmed && links.every((l) => l.policyId !== d.id))).map((d) => ({ policyId: d.id, insurer: d.insurer, product: d.productName }))]));
+  const policiesByMember = new Map(members.map((m) => [m.id, docs.filter((d) => links.some((l) => l.policyId === d.id && l.memberId === m.id) || (d.ownerId === m.id && d.personalCoverageConfirmed && links.every((l) => l.policyId !== d.id))).map((d) => ({ policyId: d.id, insurer: d.insurer, product: d.productName, personal: d.personalCoverageConfirmed }))]));
   const insurers = [...new Set(docs.map((d) => (d.insurer ?? "").trim()).filter((x) => x.length >= 3))];
   const byMember = new Map<string, PersonBenefitView>();
   for (const m of members) byMember.set(m.id, await personBenefits(accountId, m.id, { docs, members }));

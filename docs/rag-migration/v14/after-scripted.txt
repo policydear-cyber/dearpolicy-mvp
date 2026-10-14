@@ -30,7 +30,7 @@ APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 
 
 ### Michelle: certificate vs endorsement
 USER: What is Michelle's personal accident cover?
-APP:  Michelle's certificate lists her Group Personal Accident sum insured as S$300,000 as of 6 October 2022, and Endorsement No. 3 amends her Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; which of the two applies now is not established from the documents.
+APP:  Endorsement No. 3 amends Michelle's Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; her certificate listed S$300,000 as of 6 October 2022, before that endorsement.
 
 ### correction back to Darren
 USER: Sorry, I meant Darren
