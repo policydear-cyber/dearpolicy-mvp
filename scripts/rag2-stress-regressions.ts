@@ -199,6 +199,39 @@ async function main() {
     await check(`${conv.id} ${conv.title}`, () => assert.deepEqual(turns.map((t, i) => t.failures.map((f) => `turn ${i + 1}: ${f}`)).flat(), []));
   }
   if (process.env.STRESS_TRANSCRIPT) console.log("\n" + transcript.join("\n\n"));
+  // The first actual-model sample on these structures (s48-live-1), replayed without any model call: its recorded
+  // tool calls, with this run's evidence / value ids.
+  const { recordedTurns, replayScript, runDir } = await import("./fixtures/rag2-live-replay");
+  const dir = (() => { try { return runDir("RUN-s48-live-1-"); } catch { return null; } })();
+  if (dir) {
+    const turns = recordedTurns(dir, "S48");
+    const { installLoopModel } = await import("@/lib/rag2/loop/model");
+    const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
+    installLoopModel(new ScriptedLoopModel(replayScript(turns)));
+    let c: { id?: string; rev?: number } = {};
+    const out: { answer: ChatAnswer; state: any }[] = [];
+    for (const t of turns) { const a = await h.send(t.user, c); c = { id: a.conversationId, rev: a.conversationRevision }; const s2 = await h.savedAnswer(c.id!); out.push({ answer: s2.answer, state: s2.state }); }
+    installLoopModel(null);
+    transcript.push("### s48-live-1 replayed (recorded model output, no model call)", ...out.map((o, i) => `USER: ${turns[i].user}\nAPP:  ${visible(o.answer).replace(/\n/g, "\n      ")}\n      calcs=${JSON.stringify(((o.answer as any).calculations ?? []).map((r: any) => [r.calculator, r.result?.value]))}`));
+    if (process.env.STRESS_TRANSCRIPT) console.log("\n" + transcript.slice(-out.length - 1).join("\n\n"));
+    const V = (i: number) => visible(out[i].answer);
+    await check("s48-live-1 replay: inventory, PA amount and the waiting period still hold; no save-time gate rejection", () => {
+      assert.match(V(0), /Ivan:[\s\S]*Lena:[\s\S]*Noah:[\s\S]*Not linked/); assert.ok(!/S\$\d/.test(V(0)));
+      assert.match(V(1), /S\$200,000/); assert.match(V(4), /11th day/); assert.ok(!((out[4].answer as any).calculations ?? []).some((r: any) => r.result?.value != null));
+      for (const [i, o] of out.entries()) assert.deepEqual(o.state.ragLoop.turns.at(-1).gate ?? [], [], `turn ${i + 1}`);
+    });
+    await check("s48-live-1 replay turn 3: the model's own correction (\"S$200,000, not S$400,000\") is shown -- the household's figure is denied, not presented as cover", () => {
+      assert.match(V(2), /S\$200,000/); assert.match(V(2), /not S\$400,000/); assert.match(V(2), /^No\b|\bNo\b/);
+    });
+    await check("s48-live-1 replay turn 4: the leg row the model quoted as a share is read as the row's percentage of the S$5,000 Simple Fracture limit -- S$2,500, conditional, saved", () => {
+      const r = ((out[3].answer as any).calculations ?? []).find((x: any) => x.calculator === "lump_sum");
+      assert.ok(r, V(3)); assert.equal(r.result.value, 2500); assert.ok(r.operands.some((o: any) => o.id === "benefit_limit" && o.value === 5000));
+      assert.match(V(3), /S\$2,500/); assert.ok(!/S\$100,000|S\$10,000/.test(V(3)), V(3));
+    });
+    await check("s48-live-1 replay turn 6 (unchanged by design): an unknown name is said to match nobody linked to the account, with no figure -- the household's member list is not offered (the same reply is used for another household's member, whose name must not prompt a choice)", () => {
+      assert.match(V(5), /couldn['’]t identify “Bob”/); assert.ok(!/S\$\d/.test(V(5)));
+    });
+  }
   if (process.env.STRESS_TRANSCRIPT_FILE) (await import("node:fs")).writeFileSync(process.env.STRESS_TRANSCRIPT_FILE, transcript.join("\n\n") + "\n");
   await controls(h);
   const failed = results.filter((r) => !r.ok);
@@ -228,6 +261,15 @@ async function controls(h: Harness) {
     assert.match(JSON.stringify(a.data.notes ?? []), /not the sum insured/);
     const ctx2 = fresh(); const b2 = await lump(ctx2, { percent_value_id: await val(ctx2, "GPA_WORD", "Leg (tibia or fibula)", "percent") });
     assert.ok(b2.ok, b2.error); assert.equal(b2.data.amount, 2500);
+  });
+  await check("CONTROL percentage applied once: a table row quoted as a \"share\" is the row's percentage -- never applied twice (not S$1,250); another row's percentage quoted as a share is refused", async () => {
+    const row = { page: 1, quote: "Leg (tibia or fibula)", percent: 50, applies_when: "a simple fracture" };
+    const ctx = fresh(); const leg = await val(ctx, "GPA_WORD", "Leg (tibia or fibula)", "percent");
+    const a = await lump(ctx, { percent_value_id: leg, proportion: { ...row, quote: String(doc("GPA_WORD").pages[1]).split("\n").find((l) => l.startsWith("Leg (tibia")) } });
+    assert.ok(a.ok, a.error); assert.equal(a.data.amount, 2500);
+    const ctx2 = fresh(); const thigh = await val(ctx2, "GPA_WORD", "Thigh (femur)", "percent");
+    const b = await lump(ctx2, { percent_value_id: thigh, proportion: { ...row, quote: String(doc("GPA_WORD").pages[1]).split("\n").find((l) => l.startsWith("Leg (tibia")) } });
+    assert.ok(!b.ok && /not a share/.test(b.error), JSON.stringify(b).slice(0, 300));
   });
   await check("CONTROL percentage base: a percentage of the Sum Insured (Schedule of Compensation) uses the person's own sum insured -- never the Simple Fracture limit -- and without it is not worked out", async () => {
     const ctx = fresh();

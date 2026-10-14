@@ -77,7 +77,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
   const value = (key: string, want?: TableValueOperand["valueKind"]): DocValue | string | null => {
     const id = a[key]; if (id == null) return null;
     const v = ctx.values.get(String(id));
-    if (!v) return `${key}: unknown value id ${String(id)} (values must come from select_table_value in this conversation)`;
+    if (!v) return `${key}: unknown value id ${String(id)} (values must come from select_table_value in this conversation${key === "percent_value_id" ? "; or leave percent_value_id out and name the table row in benefit -- the server reads the percentage printed for it" : ""})`;
     if (v.subjectId !== subjectId) return `${key}: ${String(id)} was read for another person`;
     if (!ofPolicy(v.operand.evidence)) return `${key}: ${String(id)} is from another policy than ${doc.productName ?? "the one calculated for"}`;
     if (want && v.operand.valueKind !== want) return `${key}: ${String(id)} is a printed ${v.operand.valueKind}, not a ${want}`;
@@ -143,6 +143,19 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     // V1.2: no percentage passed -- the percentage this document prints for the benefit named, for this person, read
     // by the server with the select_table_value rules (one row, this person's column; anything ambiguous is not used).
     if (!pct) pct = await printedPercent(ctx, policyId, subjectId, benefit);
+    // V1.3: a "share" quoted from a table row printed under a "% of ..." header is that row's percentage, not a share of
+    // another percentage -- it is never applied twice.
+    let shareIsPercent = false;
+    if (a.proportion) {
+      const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>);
+      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim());
+      if (typeof v !== "string" && tableRow && await percentBaseOf(ctx, v)) {
+        if (pct && pct.operand.ppm !== v.operand.ppm) return fail("proportion: the quoted line is a row of the percentage table (a percentage of the benefit's base), not a share of another percentage -- pass that row as the percentage only");
+        if (!pct) pct = v;
+        shareIsPercent = true;
+      }
+    }
+    if (!pct && typeof a.condition === "string" && a.condition.trim()) pct = await printedPercent(ctx, policyId, subjectId, a.condition);
     // V1.3: what the percentage is OF is read from its own wording (the table header / the sentence above it), never
     // assumed to be the certificate's general sum insured. A fixed benefit limit or sub-limit is read from the same
     // document by the server; a sum insured passed for a percentage of a benefit limit is not used.
@@ -166,7 +179,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
       if (pctBase?.kind === "sum_insured" && /\blimit\b/i.test(sum.operand.benefit) && !/sum (?:insured|assured)/i.test(sum.operand.benefit)) return fail(`lump_sum: the percentage is of the Sum Insured (“${pctBase.words}”), not of ${sum.operand.benefit}`);
     }
     let share: DocValue | null = null;
-    if (a.proportion) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
+    if (a.proportion && !shareIsPercent) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
     out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
       base: pctBase && pctBase.kind !== "sum_insured" && pctBase.kind !== "referenced_amount" ? { kind: pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
     if (!("refused" in out) && baseNote) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote];

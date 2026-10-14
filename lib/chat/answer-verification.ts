@@ -860,6 +860,9 @@ function userProblem(f: StatedFigure, sentence: string, ctx: Ctx): string {
     if (ctx.userFigures.some((u) => same(u.value, f.value)) || ctx.userNumbers.some((n) => same(n, f.value))) return "the figure is the household’s own, but not in the currency they gave";
     return "the figure has no citation of its own";
   }
+  // V1.3: the household's figure stated only to deny it ("... is S$200,000, not S$400,000") is their figure corrected,
+  // never presented as cover.
+  if (f.raw && new RegExp(`(?:\\bnot|n['’]t|\\brather than|\\binstead of)\\s+(?:the\\s+|your\\s+)?${f.raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d,]*\\d)`, "i").test(sentence)) return "";
   if (!ATTRIBUTION.test(sentence)) return "a figure from the household’s message is stated without saying it is theirs";
   if (USER_FORBIDDEN.test(sentence)) return "a figure from the household’s message cannot state cover, a limit, a payable amount, a premium or a total";
   return "";
