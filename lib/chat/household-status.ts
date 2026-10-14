@@ -13,6 +13,8 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
 
 export type PersonDocument = { id: string; name: string; filename: string; role: string | null; policyType: string | null; confirmed: boolean; tier: string | null;
+  /** V1.3: the insurer recorded for the document (null when none). */
+  insurer?: string | null;
   status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null;
   /** Round 10: why an unreadable upload could not be read, for the advice that fits it. */
   reason?: "photo" | "incomplete" | "unopenable" | "scan" };
@@ -20,9 +22,9 @@ export type PersonDocument = { id: string; name: string; filename: string; role:
 export async function documentsByPerson(accountId: string, people: ClaimPerson[]): Promise<Map<string, PersonDocument[]>> {
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
   if (!people.length) return out;
-  const r = await query<{ id: string; product_name: string | null; original_filename: string; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
+  const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
     processing_status: string; processing_error: string | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null }>(
-    `SELECT p.id::text AS id,p.product_name,p.original_filename,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,
+    `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,
             pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
@@ -33,7 +35,7 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
       : "processing";
     const error = row.processing_error ?? "";
     const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
-    out.get(row.family_member_id)?.push({ id: row.id, name: row.product_name ?? prettifyFilename(row.original_filename), filename: row.original_filename, role: row.document_role,
+    out.get(row.family_member_id)?.push({ id: row.id, name: row.product_name?.trim() || prettifyFilename(row.original_filename), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
   }
   return out;

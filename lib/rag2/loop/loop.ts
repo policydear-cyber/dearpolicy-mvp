@@ -16,16 +16,17 @@ import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../ev
 import { loadDocs, loadPages, policyFamily } from "../store";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
+import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
-import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
+import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom, sameFactValue } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -116,7 +117,9 @@ export function canonicalCalcSentence(k: CalcOutcome): string {
     return `Indicative estimate: from the admission and discharge you gave${hh.length === 2 ? ` (“${hh[0].replace(/[.\s]+$/, "")}”; “${hh[1].replace(/[.\s]+$/, "")}”)` : ""}, ${counted}${k.benefit} works out at ${amt}${assumes ? `, ${assumes}` : ""}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
   }
   if (k.kind === "indicative_estimate") return `Indicative estimate: based on what you told me${words ? ` (“${words}”)` : ""}, ${k.benefit} works out at ${amt}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
-  const what = `“${k.benefit}”${pcts[0] != null ? ` (${pcts[0]}% of the Sum Insured)` : ""}${caseText ? ` applies as ${caseText[1]} (${caseText[2]}% of that percentage)` : " applies"}`;
+  const limitOp = k.record?.operands.find((o) => o.id === "benefit_limit");
+  const baseText = limitOp ? `the ${limitOp.label} of ${limitOp.currency === "SGD" ? "S$" : (limitOp.currency ?? "") + " "}${Number(limitOp.value).toLocaleString("en-SG")}` : "the Sum Insured";
+  const what = `“${k.benefit}”${pcts[0] != null ? ` (${pcts[0]}% of ${baseText})` : ""}${caseText ? ` applies as ${caseText[1]} (${caseText[2]}% of that percentage)` : " applies"}`;
   return `If ${what}${words ? `, on what you told me (“${words}”)` : said ? ", on the facts you reported" : ""}, the indicative illustration is ${amt}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
 }
 
@@ -428,6 +431,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let completionNudged = false;
   /** V1.2: the one refusal of a question that addresses the person typing about someone else's injury. */
   let secondPersonWarned = false;
+  /** V1.3: the household's document inventory, when the household_documents tool ran this turn. */
+  let inventoryNow: Inventory | null = null;
+  /** V1.3: facts refused this turn because the date or time does not exist: asking for them again is the next step. */
+  const invalidNow = new Set<string>();
   /** V1.2: calculations completed this turn from an earlier unresolved one, once the household gave its missing facts. */
   const completedCalcs: CalcOutcome[] = [];
   /** V1.2: what a claim turn's reply leaves out of what the household just told it -- a hospital stay or a bill they
@@ -648,7 +655,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
             if (answers(state.pending)) state.pending = null;
             if (answers(state.parkedPending)) state.parkedPending = null;
             refused.push({ key, error: chk.error + ` (their words "${words}" were recorded as how_it_happened)` });
-          } else refused.push({ key, error: chk.error });
+          } else { refused.push({ key, error: chk.error }); if (/is not a (?:calendar date|time of day)/.test(chk.error)) invalidNow.add(key); }
           continue;
         }
         const value = f.currency ? `${String(f.value)} ${f.currency.toUpperCase()}` : String(f.value);
@@ -662,6 +669,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         // new information, not a correction: it is kept beside the first report under its own key, and nothing worked
         // out from that report is withdrawn. A value is corrected only when the household says so ("actually",
         // "sorry", "not ...", "I meant") or when a count, amount, date or yes/no changes.
+        // V1.3: the same value again in another representation (the same date-time with its time zone added) is not a
+        // change: the more precise representation is kept, nothing is withdrawn and no correction is shown.
+        if (old && String(old.value) !== value && sameFactValue(old.value, value)) {
+          if (value.length > String(old.value).length) claim.facts[oldKey!] = { ...old, value };
+          recorded.push(oldKey!); recordedNow.push({ key: oldKey!, words: entry.words, subject });
+          const answersSame = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subject) === subject && p.factKey === oldKey;
+          if (answersSame(state.pending)) state.pending = null;
+          continue;
+        }
         if (old && String(old.value) !== value && !isCorrection(String(old.value), value, input.message, String(f.words ?? ""))) {
           let detailKey = `${key}_detail`;
           for (let n = 2; claim.facts[detailKey] && String(claim.facts[detailKey].value) !== value; n++) detailKey = `${key}_detail_${n}`;
@@ -754,7 +770,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       // A question for the TIME is not answered by a date alone ("admitted on Saturday" -> "what time on Saturday?").
       const wantsTime = /time/i.test(key) || /\bwhat time\b/i.test(question);
       const said = statedInMessage(key, input.message);
-      if (said && (!wantsTime || CLOCK_TIME.test(said))) return { result: { ok: false, error: `the household's message already gives ${key} ("${said}"): record it with note_facts instead of asking` } };
+      if (said && !invalidNow.has(key) && (!wantsTime || CLOCK_TIME.test(said))) return { result: { ok: false, error: `the household's message already gives ${key} ("${said}"): record it with note_facts instead of asking` } };
       // The calculation's own missing inputs drive the next question: ask exactly those, one at a time, in order.
       const stillNeeded = (subject ? calcMissing.get(subject) ?? [] : []).filter((m) => !(claim && knownFactFor(m.key, claim.facts)));
       const sameFact = (a: string, b: string) => a === b || (!factConcept(a).concept.startsWith("key:") && factConcept(a).concept === factConcept(b).concept);
@@ -879,6 +895,41 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     if (changed) call.arguments = a;
     return null;
+  };
+  /** V1.3: a figure a sentence states from a cited roster passage (a certificate's person row under a product
+   * heading), with no table value for it, is resolved through the existing select_table_value for that person and the
+   * heading the figure is printed under -- the tool's own person, version and date checks -- so the figure is bound to
+   * its verified identity instead of to the model's wording of the benefit. At most four lookups a reply. */
+  const bindCitedFigures = async (call: ToolCall) => {
+    const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
+    if (!Array.isArray(list) || !libraryText) return;
+    const env2 = loopToolEnv(env);
+    let lookups = 0;
+    for (const s of list) {
+      const figs = moneyFiguresIn(String(s?.text ?? ""));
+      if (!figs.length || !Array.isArray(s.evidence_ids)) continue;
+      const who = typeof s.subject_id === "string" && householdIds.has(s.subject_id) ? s.subject_id : typeof call.arguments.subject_id === "string" && householdIds.has(call.arguments.subject_id) ? call.arguments.subject_id : state.subjectId;
+      if (!who) continue;
+      const bound = new Set(((s.value_ids as string[]) ?? []).map((id) => ctx.values.get(id)?.operand.cents).filter((x): x is number => x != null));
+      for (const f of figs) {
+        if (bound.has(Math.round(f.value * 100)) || lookups >= 4) continue;
+        for (const id of s.evidence_ids as string[]) {
+          const e = state.evidence[id];
+          if (!e || stale.has(id) || e.table?.layout === "person_row") continue;
+          const line = e.passage.text.split(/\n/).find((l) => numbersIn(l).some((x) => Math.abs(x - f.value) < 0.005));
+          const heading = line ? rosterHeading({ ...e, passage: { ...e.passage, text: line } }, { libraryText }) : null;
+          if (!heading) continue;
+          lookups++;
+          const args = { policy_id: e.policyId, benefit: heading.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim(), subject_id: who, want: "amount" };
+          const r = await runTool(ctx, "select_table_value", args, env2);
+          const got: string[] = []; resultForModel(r as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "select_table_value", got, new Set());
+          const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
+          record("select_table_value", { ...args, by: "composition (figure identity)" }, r.ok, got, r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, valueId: d.valueId, value: d.value }) : undefined);
+          if (d?.status === "ok" && d.valueKind === "money" && d.valueId && Math.abs(Number(d.value) - f.value) < 0.005 && d.currency === f.currency) { s.value_ids = [...((s.value_ids as string[]) ?? []), d.valueId]; bound.add(Math.round(f.value * 100)); break; }
+        }
+      }
+    }
+    state.seq = ctx.seq;
   };
   /** A tool call refused by the loop before it runs (null: run it). */
   const preflight = (call: ToolCall): string | null => {
@@ -1113,6 +1164,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const call of out.toolCalls) {
       if (reply) { messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: "the turn already ended" }) }); continue; }
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
+        if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
         let r = action(call);
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
@@ -1143,6 +1195,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         else if (kind === "indicative_estimate" || kind === "conditional_illustration") { if (state.openCalcs) delete state.openCalcs[openKey]; }
       }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
+      if (res.ok && call.name === "household_documents") inventoryNow = res.data as Inventory;
       if (call.name === "resolve_person") lastMention = String(call.arguments.mention ?? "");
       if (res.ok && call.name === "resolve_person") {
         const r = res.data as { status: string; person?: { id: string }; via?: string; options?: { id: string; relationLabel?: string }[] };
@@ -1203,8 +1256,25 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     state.seq = ctx.seq;
   }
+  /** V1.3: an inventory answer lists every document the structured lookup returned, grouped by person, with its
+   * insurer, product and role and whether it could be read -- from that lookup, never from what a sentence managed
+   * to keep. A reply that already names every document stands; otherwise its figure-free sentences that name no
+   * document are kept and the inventory is stated from the lookup (no amount is added). */
+  const withInventory = (r: LoopReply | null): LoopReply | null => {
+    if (!inventoryNow || !r || r.kind !== "final" || !r.composed) return r;
+    const inv = inventoryNow;
+    const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
+    const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
+    const named = (d: InventoryDoc) => said.includes(d.name.toLowerCase()) || said.includes(d.filename.toLowerCase());
+    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
+    const keep = r.composed.sentences.filter((x) => !moneyFiguresIn(x.text).length && !docs.some((d) => x.text.toLowerCase().includes(d.name.toLowerCase())) && !inv.people.some((p) => new RegExp(`\\b${p.short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(x.text)));
+    const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
+    trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
+    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: [], computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    return { ...r, composed };
+  };
   let reasked: LoopPending | null = null;
-  const done = await groundedFallback((reply ?? beforeRepair) as LoopReply | null);
+  const done = withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null));
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

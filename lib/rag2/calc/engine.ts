@@ -269,6 +269,8 @@ export function hospitalCash(a: {
   const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : !rowCap && t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
+  // V1.3: a stay that cannot reach the day the benefit starts from is decided before the day-count rule is needed.
+  if (!unreal && !a.ongoing) { const early = waitingNotReached({ subjectId: a.subjectId, who: a.who, benefit: a.benefit, terms: t, admission: a.admission ?? null, discharge: a.discharge ?? null }); if (early) return early; }
   const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id) && !(dayAssumption && c.id === "c_day_rule"))));
   if (unresolvedNow) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
 
@@ -479,7 +481,38 @@ export function billReimbursement(a: {
 }
 
 // ------------------------------------------------------------------------------------------------------ lump sums
-export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null; proportion?: DocValue | null; proportionWhen?: string | null }): CalcOutcome | Refusal {
+/**
+ * V1.3: a condition decided before any pricing -- the wording pays only FROM a stated day of confinement ("payable
+ * from the 11th day"), and the reported stay cannot reach that day under ANY way of counting days (even counting the
+ * day of admission and the day of discharge as whole days). The benefit does not apply to the stay as reported; no
+ * rate, day-count rule or amount is needed, and no amount (not even zero) is stated. Null when it could reach it,
+ * or the dates are not real dates.
+ */
+export function waitingNotReached(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; admission: HouseholdInput | null; discharge: HouseholdInput | null }): CalcOutcome | null {
+  const t = a.terms, w = t.waitingDays;
+  if (!w || w.value <= 0 || !a.admission || !a.discharge) return null;
+  const adm = String(a.admission.value), dis = String(a.discharge.value);
+  const day = (v: string) => (ISO_DT.test(v) ? !isoInstantProblem(v) : ISO_D.test(v) && isCalendarDate(v)) ? v.slice(0, 10) : null;
+  const d0 = day(adm), d1 = day(dis);
+  if (!d0 || !d1) return null;
+  const calendarDays = Math.round((Date.parse(d1 + "T00:00:00Z") - Date.parse(d0 + "T00:00:00Z")) / 86_400_000) + 1;
+  if (calendarDays < 1 || calendarDays > w.value) return null;
+  const hours = ISO_DT.test(adm) && ISO_DT.test(dis) ? Math.round((Date.parse(dis) - Date.parse(adm)) / 3_600_000) : null;
+  const product = t.productName ?? "this policy";
+  // The clause of the wording that sets the start day, quoted on its own (never the rate printed beside it).
+  const clause = w.evidence.passage.text.split(/,\s+|;\s+/).find((c) => c.toLowerCase().includes(String(w.words ?? "").toLowerCase().slice(0, 12)) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(c))?.trim().replace(/[.;,\s]+$/, "") ?? String(w.words ?? "").trim();
+  const start = w.value + 1, nth = start % 10 === 1 && start !== 11 ? "st" : start % 10 === 2 && start !== 12 ? "nd" : start % 10 === 3 && start !== 13 ? "rd" : "th";
+  const nice = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const reason = `the stay you reported (${hours != null ? `${hours} hours, ` : ""}from ${nice(d0)} to ${nice(d1)}: at most ${calendarDays} day${calendarDays === 1 ? "" : "s"} even counting the days of admission and discharge) does not reach the ${start}${nth} day of confinement that the benefit is payable from (“${clause}”), if this provision applies to the stay`;
+  const conds: CalcCondition[] = [{ id: "c_waiting", kind: "waiting_period", text: `No benefit before the ${start}${nth} day of confinement: “${clause}”`, status: "established", basis: "document", passage: passageOf(w.evidence) }];
+  const out = finish({ kind: "not_payable", calculator: "hospital_cash", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed: [], conditions: conds, requirements: [], amount: null, currency: null, record: null, steps: [], reason, evidence: [w.evidence], evidenceRequirements: [], who: a.who, product });
+  return "refused" in out ? null : out;
+}
+
+export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null; proportion?: DocValue | null; proportionWhen?: string | null;
+  /** V1.3: what the printed percentage is OF, as its own wording states it: the general sum insured (default) or a
+   * fixed benefit limit / sub-limit printed in the wording. The base operand is recorded under that identity. */
+  base?: { kind: "sum_insured" | "benefit_limit" | "sublimit" | "referenced_amount"; label: string } | null }): CalcOutcome | Refusal {
   const t = a.terms, product = t.productName ?? "this policy";
   const s = a.sumInsured.operand;
   if (s.valueKind !== "money" || s.cents == null || !s.currency) return { refused: "the sum insured must be a printed amount" };
@@ -500,11 +533,13 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   // what-if, or for an event the household reported, with their own words as the stated assumption.
   if (!a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
   const ops: CalcOperand[] = [];
-  const sum = docOperand("sum_insured", "sum_insured", a.sumInsured, a.subjectId), pct = docOperand("percent", "percent", a.percent, a.subjectId);
+  const baseId = a.base && a.base.kind !== "sum_insured" ? "benefit_limit" : "sum_insured";
+  const sum = docOperand(baseId, baseId === "sum_insured" ? "sum_insured" : "limit", a.sumInsured, a.subjectId), pct = docOperand("percent", "percent", a.percent, a.subjectId);
   if (typeof sum === "string") return { refused: sum }; if (typeof pct === "string") return { refused: pct };
+  if (a.base && a.base.kind !== "sum_insured") sum.label = a.base.label;
   ops.push(sum, pct);
   const part = Number(divHalfUp(BigInt(s.cents) * BigInt(a.percent.operand.ppm!), 1_000_000n));
-  const steps: CalcStep[] = [{ id: "s_part", op: "percent_of", inputs: ["sum_insured", "percent"], out: part }];
+  const steps: CalcStep[] = [{ id: "s_part", op: "percent_of", inputs: [baseId, "percent"], out: part }];
   let out = part, last = "s_part";
   if (a.proportion) {
     const sh = docOperand("share", "percent", a.proportion, a.subjectId); if (typeof sh === "string") return { refused: sh }; ops.push(sh);

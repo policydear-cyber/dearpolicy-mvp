@@ -1,0 +1,89 @@
+### C1 household inventory
+
+USER: What policies does my family have?
+APP:  Here are the documents on file for your household.
+      cites= calcs=[] dropped=[]
+      refused=[["household_documents","unknown tool household_documents"]]
+      FAILURES: missing /Ivan/ | missing /Arbor Civil Service Group Scheme - Certificate/ | missing /Lena/ | missing /SecureLife Term Plan/ | missing /Harbourline Life/ | missing /Policy Wording/ | missing /reference/i | missing /Annual Travel Plan/ | missing /not linked|isn['’]t linked|no one|nobody/i | missing /lena-hospital-plan\.pdf/ | missing /password/i | missing /IMG_2231\.jpg/ | missing /Noah/
+
+### C1b household inventory, the model lists policies per person and adds figures
+
+USER: What policies does my family have?
+APP:  Lena is also on the Arbor Civil Service Group Scheme certificate, and has her own Harbourline Life SecureLife Term Plan.
+      Noah has no policy documents on file.
+      cites=ROSTER:1,ROSTER:1 calcs=[] dropped=["S$400,000 is printed in the cited passage, but the sentence does not name the benefit as t"]
+      refused=[["final_answer","the save-time check would not show this sentence: \"Ivan is insured under the Arbor Civil Service Group Scheme "],["model","script turn 1 has no step 3"]]
+      FAILURES: missing /Ivan/
+
+### C2 direct Personal Accident amount
+
+USER: How much is my personal accident cover?
+APP:  I couldn’t confirm an answer to that from your documents.
+      cites= calcs=[] dropped=["S$200,000 is printed in the cited passage, but the sentence does not name the benefit as t"]
+      refused=[["final_answer","the save-time check would not show this sentence: \"Your Personal Accident cover on the Arbor Civil Service Gro"],["model","script turn 1 has no step 4"]]
+      FAILURES: missing /S\$200,000/ | missing /1 April 2026|01\/04\/2026/ | no citation ROSTER:1
+
+### C3 correction from one person to another
+
+USER: What is Lena's life cover?
+APP:  I haven’t stated the amount for Basic sum assured (death or terminal illness) in SecureLife Term Plan (page 1), because I couldn’t confirm it against the document.
+      I haven’t stated the amount for Group Term Life in Arbor Civil Service Group Scheme - Certificate (page 1), because I couldn’t confirm it against the document.
+      cites=LENA_TERM:1,ROSTER:1 calcs=[] dropped=[]
+      refused=[["final_answer","the save-time check would not show this sentence: \"Lena's SecureLife Term Plan lists a basic sum assured of S$"],["model","script turn 1 has no step 4"]]
+      FAILURES: missing /S\$250,000/ | missing /S\$150,000/ | save-time gate: [{"where":"summary","figure":"S$250,000","reason":"the sentence does not name the benefit the figure is printed for"}]
+
+USER: Sorry, I meant Ivan, not Lena.
+APP:  Ivan's Group Term Life cover on the Arbor certificate is S$400,000 as of 1 April 2026.
+      cites=ROSTER:1 calcs=[] dropped=[]
+      refused=[]
+
+### C4 the household gives a wrong amount and gets the documented one
+
+USER: My personal accident cover is S$400,000, right?
+APP:  I couldn’t confirm an answer to that from your documents.
+      cites= calcs=[] dropped=["S$200,000 is printed in the cited passage, but the sentence does not name the benefit as t"]
+      refused=[["final_answer","the save-time check would not show this sentence: \"Not quite: the Arbor certificate lists your Personal Accide"],["model","script turn 1 has no step 4"]]
+      FAILURES: missing /S\$200,000/ | missing /Personal Accident/ | missing /S\$400,000[^.]*Term Life|Term Life[^.]*S\$400,000/
+
+### C5 Simple Fracture percentage of its fixed benefit limit (not of the Sum Insured), Other Fracture not used
+
+USER: I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it. How much can I claim?
+APP:  If the Simple Fracture benefit applies to your simple tibia fracture, the indicative illustration is S$100,000; it is not an approved payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
+      The Other Fracture provision is for a compound fracture or a bone not listed under Simple Fracture.
+      cites=ROSTER:1,GPA_WORD:1,GPA_WORD:2,GPA_WORD:1 calcs=[["lump_sum",100000]] dropped=[]
+      refused=[]
+      FAILURES: missing /S\$2,500/ | shows forbidden /S\$100,000|S\$10,000|S\$5,000 (?:is|will)/ | saved lump_sum is 100000, expected 2500
+
+### C6 an invalid date, then a valid correction (and the same time given again with its zone is not a correction)
+
+USER: I was in hospital after a fall. I was admitted on 31 September 2026 at 9am and discharged on 2 October 2026 at 9am.
+APP:  I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+      cites= calcs=[] dropped=[]
+      refused=[["ask_user","ask exactly one question, ending with a question mark"],["model","script turn 1 has no step 4"]]
+      FAILURES: missing /31 September/ | does not ask /admitted|admission/i
+
+USER: Sorry, I meant 30 September 2026 at 9am.
+APP:  Updated: admission datetime is now 2026-09-30T09:00+08:00 (you said 2026-09-31T09:00 at first). Updated: discharge datetime is now 2026-10-02T09:00+08:00 (you said 2026-10-02T09:00 at first).
+      Daily Hospital Income is payable from the 11th day of continuous confinement, so your stay from 30 September to 2 October does not reach it.
+      To work out Ivan’s daily hospital income under Arbor Civil Service Group Personal Accident - Policy Wording, I still need how Arbor Civil Service Group Personal Accident - Policy Wording counts hospital days, which the stored wording does not state (only the insurer can confirm it).
+      [Q] Can you tell me that?
+      cites=GPA_WORD:2 calcs=[] dropped=[]
+      refused=[["final_answer","calculate still needs c_cap_prior_use from the household (how many days of daily hospital income Ivan has alre"],["model","script turn 2 has no step 4"]]
+      FAILURES: fact discharge_datetime has 1 earlier values (expected 0)
+
+### C7 waiting period: a 48-hour stay and a benefit from the 11th day, with the rate not bound
+
+USER: I was hospitalised for 48 hours after a road accident: admitted 5 October 2026 at 10am, discharged 7 October 2026 at 10am. What does the Daily Hospital Income pay?
+APP:  The Daily Hospital Income benefit is payable from the 11th day of continuous confinement.
+      cites=GPA_WORD:2 calcs=[] dropped=["not supported by its evidence: it says something is not covered / not included, but its ev"]
+      refused=[["calculate","rate_passage: the quote is not on that page"]]
+      FAILURES: missing /48[- ]hour|2 days|two days/i | missing /does not reach|doesn['’]t reach/i
+
+### C8 unknown household member
+
+USER: What cover does Bob have?
+APP:  I need to know who this is about first.
+      [Q] I can't find “Bob” in your household. Who do you mean?
+      cites= calcs=[] dropped=[]
+      refused=[]
+      FAILURES: missing /Ivan/ | missing /Lena/ | missing /Noah/
