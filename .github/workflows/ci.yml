@@ -266,6 +266,8 @@ jobs:
         run: npm run rag2:stress-test
       - name: rag2 report-layout structures (fixed-limit vs sum-insured percentages, repair unavailable)
         run: npm run rag2:stress-report-test
+      - name: rag2 person / product / benefit binding (a member's name is never a product; insurers only for the person's own documents)
+        run: npm run rag2:binding-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

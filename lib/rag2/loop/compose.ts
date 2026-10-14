@@ -16,6 +16,7 @@ import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { benefitWords, namesBenefit, printedPeriodsOf } from "@/lib/chat/assertions";
+import type { HouseholdBenefits } from "../benefits";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import { parseTables } from "../tables";
 import type { ComputeOk, TableValueOperand } from "../compute";
@@ -134,7 +135,7 @@ const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule",
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
 /** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
  * document (the save-time gate reads the same heading the same way). Null when none is printed. */
-export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): string | null {
+export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const text = ctx.libraryText?.get(ref.policyId) ?? null;
   if (!text) return null;
   const sq = (x: string) => x.replace(/\s+/g, " ").trim();
@@ -145,6 +146,8 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): 
     const l = lines[i].trim();
     if (!l) continue;
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
+    // V1.4: a line naming a household member (a name printed on its own line) is never a product heading.
+    if (cells.length === 1 && (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)))) continue;
     if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
     if (cells.length >= 2 && !/\d/.test(l)) return null;
   }
@@ -154,12 +157,14 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): 
 const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
 /** A line's own label ("Daily Hospital Income: S$150 for ...") or, failing that, the heading it is printed under on its
  * stored page (a certificate roster's product heading). */
-function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">): string | null {
+function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
   if (own) return own;
   // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
   const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
-  if (first && first !== line.trim() && !/\d/.test(first) && benefitWords(first).size > 0) return first;
+  // V1.4: never a cell naming a household member (a roster row's name cell).
+  const isPerson = (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(first)));
+  if (first && first !== line.trim() && !/\d/.test(first) && !isPerson && benefitWords(first).size > 0) return first;
   return rosterHeading({ policyId, passage: { text: line, start: 0, end: line.length, onPage: 0 }, page: { start: 0, end: 0 }, documentHash: null } as EvidenceRef, ctx);
 }
 /** Every label a document prints: its headings and its "Label:" lines. */
@@ -181,6 +186,57 @@ const ownNamed = (clause: string, own: string, other: string) => {
   const theirs = benefitWords(other), have = benefitWords(clause);
   return [...benefitWords(own)].some((w) => !theirs.has(w) && have.has(w));
 };
+const ACT_WITH_INSURER = /\b(?:contact|call|phone|email|write to|notify|inform|tell|reach out|approach|claim (?:from|with)|make (?:a|the) claims?|submit|file|lodge|start (?:a|the) claims?|send)\b/i;
+/** V1.4: why a statement may not name an insurer for this person (null when it may): the insurer is one of the
+ * household's, but none of the person's linked documents is from it. Matched on the insurer's distinctive words
+ * ("Lumen General" in "Lumen General Insurance Ltd"), never on generic ones (Life, General, Insurance, Ltd). */
+export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, step = false): string | null {
+  const hb = ctx.benefits;
+  if (!hb || !subjectId) return null;
+  // Only ADVICE to act through an insurer (contact / claim / notify ...): a statement of fact about a document ("Cai
+  // is not insured under ...") may name its insurer.
+  if (!step && !ACT_WITH_INSURER.test(text)) return null;
+  const GENERIC = new Set(["life", "general", "insurance", "assurance", "ltd", "limited", "pte", "berhad", "bhd", "company", "co", "the", "singapore", "group", "of"]);
+  const key = (n: string) => (n.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => !GENERIC.has(w));
+  const lower = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const mine = (hb.policiesByMember.get(subjectId) ?? []).map((p) => key(p.insurer ?? "").join(" ")).filter(Boolean);
+  for (const ins of hb.insurers) {
+    const k = key(ins);
+    if (!k.length || !lower.includes(` ${k.join(" ")} `)) continue;
+    if (!mine.includes(k.join(" "))) return `names ${ins}, but none of this person's documents is from ${ins}`;
+  }
+  return null;
+}
+/** V1.4: the statement with an insurer the person has no document from taken out of a list of insurers ("contact
+ * Meridian Life and Lumen General" -> "contact Meridian Life"), when what remains still names one of the person's own
+ * insurers; null when it cannot be (the sentence is then left out). */
+export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">): string | null {
+  const hb = ctx.benefits;
+  if (!hb || !subjectId) return null;
+  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).map((p) => (p.insurer ?? "").trim()).filter(Boolean));
+  let t = text;
+  for (const ins of hb.insurers) {
+    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true)) continue;
+    const esc = ins.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+(?:Ltd|Limited|Pte\.? Ltd|Insurance)\.?$/i, "");
+    const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
+    const before = t;
+    t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
+    if (t === before) return null;
+  }
+  t = t.replace(/\s{2,}/g, " ").trim();
+  if (insurerNotFor(t, subjectId, ctx, true)) return null;
+  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
+}
+/** V1.4: the benefits a document prints -- its product headings and benefit labels, from the shared benefit view.
+ * Never a household member's name, an address, a date or a letter line. (Without the view: the document's own label
+ * lines, less any naming a household member or printing a digit.) */
+function labelsOf(ctx: Pick<Ctx, "benefits" | "libraryText" | "people">, policyId: string, fallbackText?: string): string[] {
+  const known = ctx.benefits?.labelsByPolicy.get(policyId);
+  if (known) return known;
+  const people = ctx.people ?? [];
+  const namesPerson = (l: string) => people.some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)));
+  return documentLabels(ctx.libraryText?.get(policyId) ?? fallbackText ?? "").filter((l) => !namesPerson(l) && !/\d/.test(l));
+}
 const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
 /**
  * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
@@ -190,7 +246,7 @@ const wordScore = (clause: string, label: string) => { const have = new Set(cont
  * S$400,000 is printed under Group Term Life is refused). Several lines printing the figure under different labels: the
  * one the clause names; none or a tie: not bound.
  */
-function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText">): { label: string } | { conflict: string } | null {
+function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText" | "benefits" | "people">): { label: string } | { conflict: string } | null {
   const all = withoutInstructions(evidenceTextOf(ref)).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
   // The amount as printed: in the currency the sentence states it in, never another one.
   const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && m.currency === currency));
@@ -202,7 +258,7 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   const named = labels.filter((l) => namesBenefit(clause, l));
   const pick = labels.length === 1 ? labels[0] : named.length === 1 ? named[0] : null;
   if (!pick) return null;
-  const others = documentLabels(ctx.libraryText?.get(ref.policyId) ?? evidenceTextOf(ref)).filter((o) => o.toLowerCase() !== pick.toLowerCase() && !labels.some((l) => l.toLowerCase() === o.toLowerCase()));
+  const others = labelsOf(ctx, ref.policyId, evidenceTextOf(ref)).filter((o) => o.toLowerCase() !== pick.toLowerCase() && !labels.some((l) => l.toLowerCase() === o.toLowerCase()));
   const better = others.filter((o) => wordScore(clause, o) > wordScore(clause, pick)).sort((a, b) => wordScore(clause, b) - wordScore(clause, a))[0];
   if (!namesBenefit(clause, pick)) return better ? { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` } : null;
   if (better) return { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` };
@@ -326,6 +382,8 @@ type Ctx = {
   docFacts?: Map<string, string>;
   /** V1.1: every readable document's full stored text (all pages), loaded when the answer states an absence. */
   libraryText?: Map<string, string>;
+  /** V1.4: each member's documented benefits and each document's benefit identities (lib/rag2/benefits.ts). */
+  benefits?: HouseholdBenefits | null;
 };
 
 const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
@@ -510,6 +568,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const explicitSubject = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : null;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
+    // V1.4: an insurer is named for a person only when one of that person's linked documents is from it -- never an
+    // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
+    const wrongInsurer = insurerNotFor(text, subjectId, ctx);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
     // household's current, active version -- with or without a figure in the sentence.
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));
@@ -621,6 +683,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     }
     const figs = moneyFiguresIn(text);
     let failed: string | null = null, failedRaw: string | null = null, conflictWhy: string | null = null;
+    const annotations: { raw: string; label: string }[] = [];
     figs.forEach((f, i) => {
       if (failed || covered.has(i)) return;
       const sentence = partOf(f.raw);
@@ -635,18 +698,22 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // The sentence's own benefit field is part of what it states the figure for.
         const clause = `${sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence} ${typeof s.benefit === "string" ? s.benefit : ""}`;
         const own = tidyLabel(op.benefit);
-        const better = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
+        const better = labelsOf(ctx, op.evidence.policyId).find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
         if (better) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, better], wanted: better }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence states it for “${better}”`; return; }
         // A figure bound by the composer from its printed identity (not a value the model selected by benefit), in a
         // document printing several benefits (a roster's product headings): the clause must say which one the figure is
         // -- one of its own label's words that the document's other labels do not share. Unnamed, it is not stated.
-        const others = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").filter((o) => o.toLowerCase() !== own.toLowerCase());
+        const others = labelsOf(ctx, op.evidence.policyId).filter((o) => o.toLowerCase() !== own.toLowerCase());
         const otherWords = new Set(others.flatMap((o) => [...benefitWords(o)]));
         const distinct = [...benefitWords(own)].filter((w) => !otherWords.has(w));
         const competing = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)));
         const have = benefitWords(clause);
         const byIdentity = valIds.some((id) => /^vb\d/.test(id) && ctx.tools.values.get(id)?.operand === op);
-        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, ...others.filter((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)))], wanted: null }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
+        // V1.4: a clause naming NO other benefit of the document ("Darren is covered for S$1,000,000 on the
+        // certificate"): the figure is stated with the product it is printed under, named by the source's identity.
+        const namesOther = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w) && have.has(w)));
+        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w)) && !namesOther) annotations.push({ raw: f.raw, label: own });
+        else if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, ...others.filter((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)))], wanted: null }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
       }
       // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
       // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
@@ -702,6 +769,14 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       failedRaw = f.raw;
       failed = conflictWhy ?? (printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`);
     });
+    if (!failed && annotations.length) {
+      for (const a of annotations) {
+        const named = `${a.raw} (${a.label})`;
+        if (text.includes(named)) continue;
+        text = text.replace(a.raw, named);
+        for (const b of bindings) if (b.sentence.includes(a.raw) && !b.sentence.includes(named)) b.sentence = b.sentence.replace(a.raw, named);
+      }
+    }
     if (failed) {
       // V1.3: the parts of the sentence that can stand on their own are checked on their own (once); only the part
       // whose figure is unsupported is left out, never the supported document, person and date facts with it.
@@ -732,11 +807,14 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const t = stripInternalIds(String(step ?? "")).text;
     if (!t) continue;
     if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
+    let stepText = t;
+    const wrongInsurer = insurerNotFor(stepText, out.subjectId, ctx, true);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(stepText, out.subjectId, ctx); if (!kept) { drop(stepText, wrongInsurer, STEP_NOTE); continue; } stepText = kept; }
     if (internalIdsIn(t).length) { drop(t, "a next step may not show an internal id", STEP_NOTE); continue; }
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);
     if (bad) { drop(t, bad, STEP_NOTE); continue; }
-    out.nextSteps.push(t);
+    out.nextSteps.push(stepText);
   }
   settleAnswer(out, drops, conditioned, ctx);
   return out;

@@ -182,6 +182,7 @@
     "rag2:scenario-replay-test": "node --import tsx scripts/rag2-scenario-replay.ts",
     "rag2:stress-test": "node --import tsx scripts/rag2-stress-regressions.ts",
     "rag2:stress-report-test": "node --import tsx scripts/rag2-stress-report-regressions.ts",
+    "rag2:binding-test": "node --import tsx scripts/rag2-binding-regressions.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
     "ingest:live-check": "node --import tsx scripts/ingest-live/check.ts",
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",

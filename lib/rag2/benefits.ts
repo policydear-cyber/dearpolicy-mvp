@@ -1,0 +1,183 @@
+/**
+ * V1.4: ONE shared, read-only view of each household member's DOCUMENTED benefits, with explicit identities -- the
+ * person, the document (policy / product / version / date), the benefit (the product heading or benefit label the
+ * document itself prints), the printed value (amount, currency, unit, percentage and what it is a percentage of), its
+ * printed conditions and its exact source (page, passage, table row / column). Built from what the system already
+ * stores and parses (policies + policy_members + policy_pages, lib/rag2/tables.ts parseTables / rosterOf); nothing is
+ * written and no table is created per person.
+ *
+ * It records PRINTED facts only: never whether the person is eligible, never what a claim would pay. Two kinds of
+ * entry are kept apart:
+ *   applicability "person_row"      the document prints the value on this person's own row (a certificate roster
+ *                                   under a product heading) -- the person's own documented amount;
+ *   applicability "shared_wording"  a wording / summary linked to the person prints a benefit for every insured person
+ *                                   (a rate, a limit, a percentage) -- not a figure about this person alone.
+ * What cannot be bound to a benefit by the document's own structure is listed under `unresolved`, never guessed.
+ *
+ * A household member's name, an address, a date or a salutation is NEVER a benefit label: labels come only from the
+ * document's product headings and its own benefit rows / "Label: value" lines.
+ */
+import { evidenceAt, type EvidenceRef } from "./evidence";
+import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow, type MemberRow } from "./store";
+import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf } from "./tables";
+
+export type PrintedValue =
+  | { kind: "money"; amount: number; cents: number; currency: string; unit: string | null; period: string | null }
+  | { kind: "percent"; percent: number; ppm: number; of: string | null }
+  /** A benefit the wording defines as another printed amount ("Death Benefit: the Sum Assured shown in the
+   * Certificate"): no figure of its own. */
+  | { kind: "reference"; of: string };
+export type PersonBenefit = {
+  /** Stable identity: document, page and the offsets of the printing line(s). */
+  key: string;
+  householdId: string;
+  /** The member the value is printed for (person_row), or the member the shared wording is linked to. */
+  memberId: string;
+  applicability: "person_row" | "shared_wording";
+  policy: { id: string; product: string | null; insurer: string | null; policyNumber: string | null; groupPolicyNumber: string | null; documentRole: string | null; personalProof: boolean;
+    version: { documentHash: string | null; documentDate: string | null; effectiveDate: string | null } };
+  benefit: { label: string; source: "product_heading" | "table_row" | "label_line" };
+  printed: PrintedValue;
+  asOf: string | null;
+  conditions: string[];
+  source: { page: number; passage: string; row: { label: string; column: string | null } | null; evidence: EvidenceRef };
+};
+export type PersonBenefitView = { householdId: string; member: { id: string; name: string }; benefits: PersonBenefit[]; unresolved: string[] };
+
+const MONEY_ONLY = /^(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d[\d,]*(?:\.\d+)?$/i;
+const HAS_MONEY = /(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d/i;
+const CONDITION = /\b(?:if|unless|within|provided|subject to|from the \d+\w* day|payable (?:only|from|after|on)|after|up to|per (?:accident|policy year|day))\b/i;
+const namesOf = (m: MemberRow) => [...new Set([m.displayName, m.preferredName ?? "", m.displayName.split(/\s+/)[0] ?? ""].map((x) => x.trim()).filter((x) => x.length >= 2))];
+/** A printed product heading: one cell, no amount, no member's name, and either a "(POLICY NO." marker or upper case. */
+function isProductHeading(line: string, household: { id: string; names: string[] }[]): boolean {
+  const l = line.trim();
+  if (!l || l.length > 90 || HAS_MONEY.test(l) || /\S(?:\t+| {3,})\S/.test(l) || /[.:,;]$/.test(l)) return false;
+  if (memberNamedIn(l, household)) return false;
+  if (/\(\s*(?:group\s+)?policy\s*no/i.test(l)) return !/\bpage\s+\d+\s+of\s+\d+/i.test(l);
+  const bare = l.replace(/\([^)]*\)/g, " ");
+  return bare === bare.toUpperCase() && /[A-Z]{3,}\s+[A-Z]{3,}/.test(bare) && !/\d/.test(bare) && !/^(?:CERTIFICATE|DEAR|SCHEDULE OF)\b/.test(bare);
+}
+/** A "Label: value" line's own label (commas allowed), when the label is not a person, a date or an address. */
+function labelLine(line: string, household: { id: string; names: string[] }[]): { label: string; value: string } | null {
+  const m = /^\s*([A-Za-z][A-Za-z ()'’/&,-]{2,80}?)\s*:\s*(.+)$/.exec(line);
+  if (!m || memberNamedIn(m[1], household)) return null;
+  return { label: m[1].trim(), value: m[2].trim() };
+}
+
+export async function personBenefits(accountId: string, memberId: string, preloaded?: { docs?: DocRow[]; members?: MemberRow[] }): Promise<PersonBenefitView> {
+  const members = preloaded?.members ?? await loadMembers(accountId);
+  const member = members.find((m) => m.id === memberId);
+  if (!member) return { householdId: accountId, member: { id: memberId, name: "" }, benefits: [], unresolved: ["not an active member of this household"] };
+  const household = members.map((m) => ({ id: m.id, names: namesOf(m) }));
+  const docs = preloaded?.docs ?? await loadDocs(accountId);
+  const links = await loadLinks(accountId, docs.map((d) => d.id));
+  const mine = docs.filter((d) => d.ownerId === memberId || links.some((l) => l.policyId === d.id && l.memberId === memberId));
+  const pages = mine.length ? await loadPages(accountId, mine.map((d) => d.id)) : [];
+  const out: PersonBenefit[] = [], unresolved: string[] = [];
+  for (const d of mine) {
+    const policy: PersonBenefit["policy"] = { id: d.id, product: d.productName, insurer: d.insurer, policyNumber: d.policyNumber, groupPolicyNumber: d.groupPolicyNumber, documentRole: d.documentRole, personalProof: d.personalCoverageConfirmed,
+      version: { documentHash: d.fileHash, documentDate: d.documentDate, effectiveDate: d.effectiveDate } };
+    const dp = pages.filter((p) => p.policyId === d.id);
+    const seen = new Set<string>();
+    const push = (b: Omit<PersonBenefit, "householdId" | "memberId" | "policy">) => { if (seen.has(b.key)) return; seen.add(b.key); out.push({ householdId: accountId, memberId, policy, ...b }); };
+    // 1. The person's own rows: a roster table (one insured person per row under product headings).
+    const tables = parseTables(d.id, dp.map((p) => ({ page: p.page, text: p.text })));
+    const rosterRows = new Set<unknown>();
+    for (const t of tables) {
+      const ro = rosterOf(t, memberId, household);
+      if (!ro) continue;
+      for (const r of ro.mine) {
+        rosterRows.add(r);
+        const cells = t.columns.map((c) => ({ c, x: r.cells[c.index] })).filter((y) => y.x && HAS_MONEY.test(y.x.text));
+        const pageText = dp.find((p) => p.page === r.page)?.text ?? "";
+        const name = ro.nameCell.get(r)!;
+        if (!r.section || !isProductHeading(r.section, household)) { unresolved.push(`${d.productName ?? "a document"} page ${r.page}: ${member.displayName}'s row is not printed under a product heading, so which benefit it is cannot be told from the document`); continue; }
+        if (cells.length !== 1) { unresolved.push(`${d.productName ?? "a document"} page ${r.page}: ${member.displayName}'s row under “${headingLabel(r.section)}” prints ${cells.length} amounts`); continue; }
+        const v = parseCell(cells[0].x!.text, cells[0].c.currency, r.section);
+        if (v.kind !== "money") continue;
+        const asOf = t.columns.map((c) => r.cells[c.index]).map((x) => (x ? cellDate(x.text) : null)).find((x) => !!x) ?? null;
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: r.lineStart, end: r.lineEnd, subjectId: memberId,
+          table: { tableId: t.tableId, rowLabel: headingLabel(r.section), columnHeader: cells[0].c.header, columnLeaf: cells[0].c.leaf, appliesTo: cells[0].c.appliesTo, cell: { text: cells[0].x!.text, start: cells[0].x!.start, end: cells[0].x!.end },
+            row: { cells: t.columns.flatMap((c) => { const x = r.cells[c.index]; return x ? [{ header: c.header, text: x.text, start: x.start, end: x.end }] : []; }) },
+            layout: "person_row", rowPerson: { memberId, text: name.text, start: name.start, end: name.end }, asOf } });
+        push({ key: `${d.id}:${r.page}:${r.lineStart}`, applicability: "person_row", benefit: { label: headingLabel(r.section), source: "product_heading" },
+          printed: { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period }, asOf, conditions: asOf ? [`printed as of ${asOf}: the document's amount on that date, not confirmation of cover on a later date`] : [],
+          source: { page: r.page, passage: evidence.passage.text, row: { label: name.text, column: cells[0].c.header || null }, evidence } });
+      }
+    }
+    for (const p of dp) {
+      const lines = p.text.split("\n");
+      let at = 0, heading: string | null = null;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i], start = at; at += line.length + 1;
+        if (isProductHeading(line, household)) { heading = line.trim(); continue; }
+        // 2. A roster stored one cell per line (the name alone on a line, its amount on a following line): listed as
+        // UNRESOLVED -- the save-time check verifies a person's figure on one printed row only, so it is not bound.
+        if (heading && memberNamedIn(line, household) === memberId && !HAS_MONEY.test(line)) {
+          const next = lines.slice(i + 1, i + 4).map((x) => x.trim());
+          const k = next.findIndex((x) => MONEY_ONLY.test(x));
+          if (k >= 0 && !next.slice(0, k).some((x) => memberNamedIn(x, household))) unresolved.push(`${d.productName ?? "a document"} page ${p.page}: under “${headingLabel(heading)}” ${member.displayName}'s name and ${next[k]} are printed on separate lines; not bound as their figure`);
+          continue;
+        }
+        // 3. Shared wording: "Label: S$150 per day ..." / "Label: 100% of the Sum Insured ...".
+        const ll = labelLine(line, household);
+        if (!ll) continue;
+        const v = parseCell(ll.value, null, ll.label);
+        const pct = /^(\d+(?:\.\d+)?)\s*%(?:\s+of\s+(?:the\s+)?([^.;,]{3,80}))?/i.exec(ll.value);
+        const ref = /^the\s+(sum\s+(?:assured|insured))\b/i.exec(ll.value);
+        const cut = (x: string) => x.split(/\s+(?:if|when|for|unless|within|provided|shown|payable|as)\b/i)[0].trim();
+        const printed: PrintedValue | null = v.kind === "money" ? { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period }
+          : pct ? { kind: "percent", percent: Number(pct[1]), ppm: Math.round(Number(pct[1]) * 10000), of: pct[2] ? cut(pct[2]) : null }
+          : ref ? { kind: "reference", of: ref[1].replace(/\s+/g, " ") } : null;
+        if (!printed) continue;
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end: start + line.length, subjectId: memberId });
+        push({ key: `${d.id}:${p.page}:${start}`, applicability: "shared_wording", benefit: { label: ll.label, source: "label_line" }, printed, asOf: null,
+          conditions: CONDITION.test(ll.value) ? [line.trim()] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
+      }
+    }
+    // 4. Shared wording tables: a benefit row printing one amount or percentage (not a person's row).
+    for (const t of tables) for (const r of t.rows) {
+      if (rosterRows.has(r) || !r.label || memberNamedIn(r.label, household) || /\d/.test(r.label.replace(/\([^)]*\)/g, ""))) continue;
+      const vals = t.columns.map((c) => ({ c, x: r.cells[c.index] })).filter((y) => y.x && y.x !== r.labelCell && y.x.text !== r.label).map((y) => ({ ...y, v: parseCell(y.x!.text, y.c.currency, r.label) })).filter((y) => y.v.kind === "money" || y.v.kind === "percent");
+      if (vals.length !== 1) continue;
+      const pageText = dp.find((p) => p.page === r.page)?.text ?? "";
+      const v = vals[0].v, of = /%\s+of\s+(?:the\s+)?([^)\n]{3,60})/i.exec(vals[0].c.header)?.[1]?.trim() ?? null;
+      const printed: PrintedValue = v.kind === "money" ? { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period } : { kind: "percent", percent: (v as { percent: number }).percent, ppm: (v as { ppm: number }).ppm, of };
+      const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: r.lineStart, end: r.lineEnd, subjectId: memberId });
+      push({ key: `${d.id}:${r.page}:${r.lineStart}`, applicability: "shared_wording", benefit: { label: r.label, source: "table_row" }, printed, asOf: null, conditions: [],
+        source: { page: r.page, passage: evidence.passage.text, row: { label: r.label, column: vals[0].c.header || null }, evidence } });
+    }
+  }
+  return { householdId: accountId, member: { id: memberId, name: member.displayName }, benefits: out, unresolved };
+}
+
+/** Every member's view, and the benefit identities each document prints (its product headings and benefit labels --
+ * never a member's name, an address or a date): what composition compares a figure's benefit against. */
+export type HouseholdBenefits = {
+  byMember: Map<string, PersonBenefitView>;
+  labelsByPolicy: Map<string, string[]>;
+  /** The readable documents each member is linked to (an insured link; or their own personal policy document with no
+   * links), with their insurer -- never a document linked to nobody: which insurers a
+   * statement about that member may name. */
+  policiesByMember: Map<string, { policyId: string; insurer: string | null; product: string | null }[]>;
+  /** Every insurer named on the household's readable documents. */
+  insurers: string[];
+};
+export async function householdBenefits(accountId: string): Promise<HouseholdBenefits> {
+  const [members, docs] = await Promise.all([loadMembers(accountId), loadDocs(accountId)]);
+  const links = docs.length ? await loadLinks(accountId, docs.map((d) => d.id)) : [];
+  const policiesByMember = new Map(members.map((m) => [m.id, docs.filter((d) => links.some((l) => l.policyId === d.id && l.memberId === m.id) || (d.ownerId === m.id && d.personalCoverageConfirmed && links.every((l) => l.policyId !== d.id))).map((d) => ({ policyId: d.id, insurer: d.insurer, product: d.productName }))]));
+  const insurers = [...new Set(docs.map((d) => (d.insurer ?? "").trim()).filter((x) => x.length >= 3))];
+  const byMember = new Map<string, PersonBenefitView>();
+  for (const m of members) byMember.set(m.id, await personBenefits(accountId, m.id, { docs, members }));
+  const household = members.map((m) => ({ id: m.id, names: namesOf(m) }));
+  const labelsByPolicy = new Map<string, string[]>();
+  const pages = docs.length ? await loadPages(accountId, docs.map((d) => d.id)) : [];
+  for (const d of docs) {
+    const set = new Set<string>();
+    for (const v of byMember.values()) for (const b of v.benefits) if (b.policy.id === d.id) set.add(b.benefit.label);
+    for (const p of pages.filter((x) => x.policyId === d.id)) for (const line of p.text.split("\n")) if (isProductHeading(line, household)) set.add(headingLabel(line.trim()));
+    labelsByPolicy.set(d.id, [...set]);
+  }
+  return { byMember, labelsByPolicy, policiesByMember, insurers };
+}

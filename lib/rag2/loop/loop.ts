@@ -14,6 +14,7 @@ import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verificat
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
+import { householdBenefits } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
@@ -233,6 +234,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // V1.1 (grounded negatives): the full stored text of every readable document of this household, so a sentence that
   // says something is NOT in a document (or in the library) is checked against the whole document, never a passage.
   const libraryText = await loadLibraryText(input.accountId).catch(() => undefined);
+  // V1.4: each member's documented benefits with explicit identities (lib/rag2/benefits.ts): which product / benefit a
+  // printed figure is, and which insurers a statement about a member may name.
+  const benefitView = await householdBenefits(input.accountId).catch(() => null);
   // Round 7: table values issued in earlier turns stay citable (value ids are unique across the conversation) while
   // their document is still current; a benefit already stated, cited and bound stays available to explain again.
   for (const [id, v] of Object.entries(state.values ?? {})) {
@@ -397,7 +401,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -937,15 +941,20 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const bound = new Set(((s.value_ids as string[]) ?? []).map((id) => ctx.values.get(id)?.operand.cents).filter((x): x is number => x != null));
       for (const f of figs) {
         if (bound.has(Math.round(f.value * 100)) || lookups >= 4) continue;
-        for (const id of s.evidence_ids as string[]) {
-          const e = state.evidence[id];
-          if (!e || stale.has(id) || e.table?.layout === "person_row") continue;
-          const line = e.passage.text.split(/\n/).find((l) => numbersIn(l).some((x) => Math.abs(x - f.value) < 0.005));
-          // Only a roster line: one that names this person (their own row), under a product heading.
-          const names = personNames(input.people.find((p) => p.id === who)?.name ?? "").filter((n) => n.length >= 3);
-          const ownRow = !!line && names.some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(line));
-          const heading = line && ownRow ? rosterHeading({ ...e, passage: { ...e.passage, text: line } }, { libraryText }) : null;
-          if (!heading) continue;
+        // The household's own figure said back as NOT the documented one ("S$200,000, not S$400,000") is theirs, not a
+        // documented figure of this sentence: never bound here (the save-time check attributes it).
+        const said = String(s.text ?? "");
+        const at = said.indexOf(f.raw);
+        if (at >= 0 && /\b(?:not|n['’]t|rather than|instead of|than)\s*$/i.test(said.slice(Math.max(0, at - 16), at).trim() + " ") && userTexts.some((u) => moneyFiguresIn(u).some((m) => Math.abs(m.value - f.value) < 0.005))) continue;
+        // V1.4: the figure's identity comes from the shared benefit view -- this person's OWN documented rows (a
+        // certificate roster under a product heading) in the documents the sentence cites, matched by amount and
+        // currency. Exactly one benefit: bound to it; none, or several with that amount: not bound here.
+        const cited = new Set((s.evidence_ids as string[]).map((id) => (state.evidence[id] && !stale.has(id) ? state.evidence[id].policyId : null)).filter((x): x is string => !!x));
+        const rows = (benefitView?.byMember.get(who)?.benefits ?? []).filter((b) => b.applicability === "person_row" && cited.has(b.policy.id) && b.printed.kind === "money" && Math.abs(b.printed.amount - f.value) < 0.005 && b.printed.currency === f.currency);
+        const labels = [...new Set(rows.map((b) => `${b.policy.id}|${b.benefit.label}`))];
+        for (const one of labels.length === 1 ? [rows[0]] : []) {
+          const e = { policyId: one.policy.id };
+          const heading = one.benefit.label;
           lookups++;
           const args = { policy_id: e.policyId, benefit: heading.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim(), subject_id: who, want: "amount" };
           // The value is kept under the composer's own key (never the model-visible v1, v2 ... sequence, which is left
