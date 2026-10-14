@@ -431,6 +431,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let completionNudged = false;
   /** V1.2: the one refusal of a question that addresses the person typing about someone else's injury. */
   let secondPersonWarned = false;
+  let bindSeq = 0;
   /** V1.3: the household's document inventory, when the household_documents tool ran this turn. */
   let inventoryNow: Inventory | null = null;
   /** V1.3: facts refused this turn because the date or time does not exist: asking for them again is the next step. */
@@ -917,19 +918,26 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const e = state.evidence[id];
           if (!e || stale.has(id) || e.table?.layout === "person_row") continue;
           const line = e.passage.text.split(/\n/).find((l) => numbersIn(l).some((x) => Math.abs(x - f.value) < 0.005));
-          const heading = line ? rosterHeading({ ...e, passage: { ...e.passage, text: line } }, { libraryText }) : null;
+          // Only a roster line: one that names this person (their own row), under a product heading.
+          const names = personNames(input.people.find((p) => p.id === who)?.name ?? "").filter((n) => n.length >= 3);
+          const ownRow = !!line && names.some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(line));
+          const heading = line && ownRow ? rosterHeading({ ...e, passage: { ...e.passage, text: line } }, { libraryText }) : null;
           if (!heading) continue;
           lookups++;
           const args = { policy_id: e.policyId, benefit: heading.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim(), subject_id: who, want: "amount" };
+          // The value is kept under the composer's own key (never the model-visible v1, v2 ... sequence, which is left
+          // exactly as it was), so this lookup changes no id the model sees.
+          const seqBefore = ctx.seq;
           const r = await runTool(ctx, "select_table_value", args, env2);
-          const got: string[] = []; resultForModel(r as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "select_table_value", got, new Set());
           const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
-          record("select_table_value", { ...args, by: "composition (figure identity)" }, r.ok, got, r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, valueId: d.valueId, value: d.value }) : undefined);
-          if (d?.status === "ok" && d.valueKind === "money" && d.valueId && Math.abs(Number(d.value) - f.value) < 0.005 && d.currency === f.currency) { s.value_ids = [...((s.value_ids as string[]) ?? []), d.valueId]; bound.add(Math.round(f.value * 100)); break; }
+          let key: string | null = null;
+          if (d?.valueId && ctx.values.has(d.valueId)) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, ctx.values.get(d.valueId)!); ctx.values.delete(d.valueId); }
+          ctx.seq = seqBefore;
+          record("select_table_value", { ...args, by: "composition (figure identity)" }, r.ok, [], r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, value: d.value, key }) : undefined);
+          if (key && d?.status === "ok" && d.valueKind === "money" && Math.abs(Number(d.value) - f.value) < 0.005 && d.currency === f.currency) { s.value_ids = [...((s.value_ids as string[]) ?? []), key]; bound.add(Math.round(f.value * 100)); break; }
         }
       }
     }
-    state.seq = ctx.seq;
   };
   /** A tool call refused by the loop before it runs (null: run it). */
   const preflight = (call: ToolCall): string | null => {

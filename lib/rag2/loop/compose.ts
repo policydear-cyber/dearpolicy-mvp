@@ -157,6 +157,9 @@ const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " 
 function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">): string | null {
   const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
   if (own) return own;
+  // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
+  const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
+  if (first && first !== line.trim() && !/\d/.test(first) && benefitWords(first).size > 0) return first;
   return rosterHeading({ policyId, passage: { text: line, start: 0, end: line.length, onPage: 0 }, page: { start: 0, end: 0 }, documentHash: null } as EvidenceRef, ctx);
 }
 /** Every label a document prints: its headings and its "Label:" lines. */
@@ -185,6 +188,8 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   // The amount as printed: in the currency the sentence states it in, never another one.
   const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && m.currency === currency));
   if (all.length && !lines.length) return { conflict: `printed in another currency than the sentence states` };
+  // A row printing several amounts (one per column, person or tier) is bound by its column, not by its label.
+  if (lines.some((l) => moneyFiguresIn(l).length > 1)) return null;
   const labels = [...new Set(lines.map((l) => lineLabel(ref.policyId, l, ctx)).filter((x): x is string => !!x).map(tidyLabel).filter((x) => benefitWords(x).size > 0))];
   if (!labels.length) return null;
   const named = labels.filter((l) => namesBenefit(clause, l));
@@ -667,7 +672,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // V1.3: the parts of the sentence that can stand on their own are checked on their own (once); only the part
       // whose figure is unsupported is left out, never the supported document, person and date facts with it.
       const parts = !(s as { _part?: boolean })._part ? verifiableParts(text, failedRaw) : null;
-      if (parts) { out.dropped.push({ sentence: text, reason: failed + " -- its other parts were checked on their own" }); sentencesIn.splice(i + 1, 0, ...parts.map((p) => ({ ...s, text: p, _part: true }))); continue; }
+      if (parts) { out.dropped.push({ sentence: text, reason: failed }); sentencesIn.splice(i + 1, 0, ...parts.map((p) => ({ ...s, text: p, _part: true }))); continue; }
       drop(text, failed); continue;
     }
     out.figureBindings.push(...bindings); out.computations.push(...records);

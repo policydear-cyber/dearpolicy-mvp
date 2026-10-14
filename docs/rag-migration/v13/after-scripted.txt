@@ -1,0 +1,88 @@
+### C1 household inventory
+
+USER: What policies does my family have?
+APP:  Here are the documents on file for your household.
+      Ivan: Arbor Civil Service Group Scheme - Certificate (Arbor Assurance, a personal policy document); Arbor Civil Service Group Personal Accident - Policy Wording (Arbor Assurance, reference wording for the scheme, not a personal policy document); IMG_2231.jpg could not be read (the photo is too blurred, dark or faint to read).
+      Lena: Arbor Civil Service Group Scheme - Certificate (Arbor Assurance, a personal policy document); Arbor Civil Service Group Personal Accident - Policy Wording (Arbor Assurance, reference wording for the scheme, not a personal policy document); SecureLife Term Plan (Harbourline Life, a personal policy document); lena-hospital-plan.pdf could not be read (it is password protected and was uploaded without its password).
+      Noah: no documents on file.
+      Not linked to anyone in the household: Annual Travel Plan (Bluewave General) -- link it to a person so it can be used for them.
+      cites=ROSTER:1,GPA_WORD:1,LENA_TERM:1,TRAVEL:1 calcs=[] dropped=[]
+      refused=[]
+
+### C1b household inventory, the model lists policies per person and adds figures
+
+USER: What policies does my family have?
+APP:  Ivan is insured under the Arbor Civil Service Group Scheme certificate from Arbor Assurance.
+      Lena is also on the Arbor Civil Service Group Scheme certificate, and has her own Harbourline Life SecureLife Term Plan.
+      Noah has no policy documents on file.
+      cites=ROSTER:1,ROSTER:1,ROSTER:1 calcs=[] dropped=["S$250,000 is printed in none of the evidence the sentence cites"]
+      refused=[["final_answer","the save-time check would not show this sentence: \"Ivan is insured under the Arbor Civil Service Group Scheme "],["model","script turn 1 has no step 3"]]
+
+### C2 direct Personal Accident amount
+
+USER: How much is my personal accident cover?
+APP:  Your Personal Accident cover on the Arbor Civil Service Group Scheme certificate is S$200,000 as of 1 April 2026.
+      cites=ROSTER:1 calcs=[] dropped=[]
+      refused=[]
+
+### C3 correction from one person to another
+
+USER: What is Lena's life cover?
+APP:  Lena's SecureLife Term Plan lists a basic sum assured of S$250,000; the Arbor certificate lists her Term Life cover at S$150,000 as of 1 April 2026.
+      cites=LENA_TERM:1,ROSTER:1 calcs=[] dropped=[]
+      refused=[]
+
+USER: Sorry, I meant Ivan, not Lena.
+APP:  Ivan's Group Term Life cover on the Arbor certificate is S$400,000 as of 1 April 2026.
+      cites=ROSTER:1 calcs=[] dropped=[]
+      refused=[]
+
+### C4 the household gives a wrong amount and gets the documented one
+
+USER: My personal accident cover is S$400,000, right?
+APP:  Not quite: the Arbor certificate lists your Personal Accident sum assured as S$200,000 as of 1 April 2026; the S$400,000 is your Term Life sum assured.
+      cites=ROSTER:1,ROSTER:1 calcs=[] dropped=[]
+      refused=[]
+
+### C5 Simple Fracture percentage of its fixed benefit limit (not of the Sum Insured), Other Fracture not used
+
+USER: I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it. How much can I claim?
+APP:  If the Simple Fracture benefit applies to your simple tibia fracture, the indicative illustration is S$2,500; it is not an approved payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
+      The Other Fracture provision is for a compound fracture or a bone not listed under Simple Fracture.
+      cites=GPA_WORD:1,GPA_WORD:1,GPA_WORD:2,GPA_WORD:1 calcs=[["lump_sum",2500]] dropped=[]
+      refused=[]
+
+### C6 an invalid date, then a valid correction (and the same time given again with its zone is not a correction)
+
+USER: I was in hospital after a fall. I was admitted on 31 September 2026 at 9am and discharged on 2 October 2026 at 9am.
+APP:  I'm asking because it changes which of the policy's benefits or amounts applies.
+      [Q] 31 September isn't a calendar date, so on what date were you admitted?
+      cites=GPA_WORD:2 calcs=[] dropped=[]
+      refused=[]
+
+USER: Sorry, I meant 30 September 2026 at 9am.
+APP:  You told me: “I meant 30 September 2026 at 9am”.
+      You told me discharged on 2 October 2026 at 9am.
+      Daily Hospital Income is payable from the 11th day of continuous confinement, so your stay from 30 September to 2 October does not reach it.
+      Arbor Civil Service Group Personal Accident - Policy Wording daily hospital income does not apply to these facts: the stay you reported (48 hours, from 30 September 2026 to 2 October 2026: at most 3 days even counting the days of admission and discharge) does not reach the 11th day of confinement that the benefit is payable from (“payable from the 11th day of continuous confinement”), if this provision applies to the stay.
+      What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.
+      [next] When you make the claim, include the documents that show the policy’s condition is met, with the insurer’s claim form.
+      cites=GPA_WORD:2 calcs=[] dropped=[]
+      refused=[]
+
+### C7 waiting period: a 48-hour stay and a benefit from the 11th day, with the rate not bound
+
+USER: I was hospitalised for 48 hours after a road accident: admitted 5 October 2026 at 10am, discharged 7 October 2026 at 10am. What does the Daily Hospital Income pay?
+APP:  The Daily Hospital Income benefit is payable from the 11th day of continuous confinement.
+      Your 48-hour stay does not reach the 11th day, so this benefit does not pay for it.
+      Arbor Civil Service Group Personal Accident - Policy Wording daily hospital income does not apply to these facts: the stay you reported (48 hours, from 5 October 2026 to 7 October 2026: at most 3 days even counting the days of admission and discharge) does not reach the 11th day of confinement that the benefit is payable from (“payable from the 11th day of continuous confinement”), if this provision applies to the stay.
+      cites=GPA_WORD:2 calcs=[] dropped=[]
+      refused=[]
+
+### C8 unknown household member
+
+USER: What cover does Bob have?
+APP:  I need to know who this is about first.
+      [Q] I can't find “Bob” in your household. Who do you mean? [options: Ivan Tan Wei Ming (Ivan) | Lena Goh Mei Ling (Lena) | Noah Tan Jun Kai (Noah)]
+      cites= calcs=[] dropped=[]
+      refused=[]

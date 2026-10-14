@@ -122,7 +122,7 @@ async function main() {
     const offenders: string[] = [];
     for (const f of files) {
       const rel = path.relative(path.resolve("."), f);
-      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/")) continue;
+      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/") || rel.startsWith("scripts/fixtures/rag2-stress/")) continue;
       const text = await readFile(f, "utf8").catch(() => "");
       // Prompt 2: the one flagged hook -- lib/chat/workflow.ts imports only the loop's flag, and loads the loop's hook
       // only behind ragLoopEnabled() (DEARPOLICY_RAG_LOOP, default off).
@@ -528,9 +528,9 @@ async function main() {
   const ON = { DEARPOLICY_RAG_TOOLS: "1", NODE_ENV: "test" } as unknown as NodeJS.ProcessEnv;
   await check("R1 registry: every tool has a name, description and object schema; no tool takes an account id", () => {
     const names = R.RAG_TOOLS.map((t) => t.name);
-    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "policies_for", "select_table_value", "compute", "calculate"]);
+    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "policies_for", "select_table_value", "compute", "calculate"]);
     for (const t of R.RAG_TOOLS) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 20); assert.ok(!JSON.stringify(t.parameters).includes("account")); }
-    assert.equal(R.toolSpecs().length, 7);
+    assert.equal(R.toolSpecs().length, 8);
   });
   await check("R2 a conversation through the registry: person -> value -> compute, all with evidence", async () => {
     const ctx = R.createToolContext({ accountId: ACCOUNT, speakerId: M.darren.id, asOf: ASOF });
