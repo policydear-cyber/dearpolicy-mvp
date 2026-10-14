@@ -309,7 +309,7 @@ export function hospitalCash(a: {
         const n = hc.payableDays;
         capTerm.priorUse = "assumed_available";
         assumeAvailable(cond, n >= Number(capOp.value) ? `assuming none of the ${capOp.value} ${unit} has been used this ${resetWords(capTerm.reset)}`
-          : `assuming at least ${n} of the ${capOp.value} ${n === 1 ? unit.replace(/s$/, "") : unit} ${n === 1 ? "is" : "are"} still available this ${resetWords(capTerm.reset)}`);
+          : `assuming at least ${n} of the ${capOp.value} ${unit} ${n === 1 ? "is" : "are"} still available this ${resetWords(capTerm.reset)}`);
       }
       else if (priorPeriods != null && priorPeriods > 0) {
         if (priorPeriods >= Number(capOp.value)) return notPayable(`the ${capOp.value} ${unit} for this ${resetWords(capTerm.reset)} are already used (“${puWords}”; the wording: “${capTerm.span.text}”)`);
@@ -479,16 +479,21 @@ export function billReimbursement(a: {
 }
 
 // ------------------------------------------------------------------------------------------------------ lump sums
-export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null }): CalcOutcome | Refusal {
+export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null; proportion?: DocValue | null; proportionWhen?: string | null }): CalcOutcome | Refusal {
   const t = a.terms, product = t.productName ?? "this policy";
   const s = a.sumInsured.operand;
   if (s.valueKind !== "money" || s.cents == null || !s.currency) return { refused: "the sum insured must be a printed amount" };
   if (a.percent && (a.percent.operand.valueKind !== "percent" || a.percent.operand.ppm == null)) return { refused: "the percentage must be a printed percentage" };
   if (a.cap && (a.cap.operand.valueKind !== "money" || a.cap.operand.currency !== s.currency)) return { refused: "the cap must be a printed amount in the same currency" };
-  const printed = [a.sumInsured, ...(a.percent ? [a.percent] : []), ...(a.cap ? [a.cap] : [])].map((v) => printedOf(v, a.subjectId));
+  if (a.proportion && (a.proportion.operand.valueKind !== "percent" || a.proportion.operand.ppm == null)) return { refused: "the share must be a printed percentage" };
+  if (a.proportion && !a.percent) return { refused: "a share of the percentage needs the printed percentage it is a share of" };
+  const printed = [a.sumInsured, ...(a.percent ? [a.percent] : []), ...(a.proportion ? [a.proportion] : []), ...(a.cap ? [a.cap] : [])].map((v) => printedOf(v, a.subjectId));
   // The claim workflow requires a reviewed decision that the medical evidence meets the policy's own definition
   // (CIDefinitionMatch / DisabilityDefinitionMatch / cause-of-death match, by an authorised reviewer). Never waived here.
   const conds: CalcCondition[] = [{ id: "c_definition", kind: "definition", text: `${a.condition} must meet ${product}’s own definition, confirmed by a reviewed medical decision.`, status: "unresolved", basis: "none", needs: `a reviewed decision that ${a.who}’s diagnosis meets ${product}’s definition of ${a.condition} (the insurer’s medical assessment)` }];
+  // V1.2: the wording pays only a share of the printed percentage in a stated case ("For a simple (closed) fracture 50%
+  // of the percentage shown is payable"): the illustration is for that case, which stays unresolved until known.
+  if (a.proportion) conds.push({ id: "c_case", kind: "eligibility", text: `${a.proportionWhen?.trim() || "the case the wording names"}: ${a.proportion.operand.ppm! / 10_000}% of the percentage shown is payable.`, status: "unresolved", basis: "document", passage: { policyId: a.proportion.operand.evidence.policyId, pageStart: a.proportion.operand.evidence.page.start, pageEnd: a.proportion.operand.evidence.page.end, text: a.proportion.operand.evidence.passage.text } });
   const evidenceRequirements = ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
   const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: printed.map((p) => p.evidence), evidenceRequirements, who: a.who, product };
   // V1.1: a lump sum is only ever a conditional illustration (the definition is the insurer's to confirm) -- for a
@@ -500,10 +505,15 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   ops.push(sum, pct);
   const part = Number(divHalfUp(BigInt(s.cents) * BigInt(a.percent.operand.ppm!), 1_000_000n));
   const steps: CalcStep[] = [{ id: "s_part", op: "percent_of", inputs: ["sum_insured", "percent"], out: part }];
-  let out = part;
-  if (a.cap) { const c = docOperand("cap", "cap", a.cap, a.subjectId); if (typeof c === "string") return { refused: c }; ops.push(c); out = Math.min(part, a.cap.operand.cents!); steps.push({ id: "s_cap", op: "min", inputs: ["s_part", "cap"], out }); }
+  let out = part, last = "s_part";
+  if (a.proportion) {
+    const sh = docOperand("share", "percent", a.proportion, a.subjectId); if (typeof sh === "string") return { refused: sh }; ops.push(sh);
+    out = Number(divHalfUp(BigInt(part) * BigInt(a.proportion.operand.ppm!), 1_000_000n)); last = "s_share";
+    steps.push({ id: "s_share", op: "percent_of", inputs: ["s_part", "share"], out });
+  }
+  if (a.cap) { const c = docOperand("cap", "cap", a.cap, a.subjectId); if (typeof c === "string") return { refused: c }; ops.push(c); out = Math.min(out, a.cap.operand.cents!); steps.push({ id: "s_cap", op: "min", inputs: [last, "cap"], out }); }
   const record: Omit<CalculationRecord, "sentence"> = { id: "", calculator: "lump_sum", kind: "conditional_illustration", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: out / 100, currency: s.currency }, currency: s.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption: a.assumptionWords.trim(), unresolvedText: "" };
-  return finish({ ...base, kind: "conditional_illustration", conditions: conds, requirements: [conds[0].needs!], amount: out / 100, currency: s.currency, record, steps: [`${a.percent.operand.ppm! / 10_000}% of ${money(s.cents, s.currency)} = ${money(part, s.currency)}`, ...(a.cap ? [`capped at ${money(a.cap.operand.cents!, s.currency)}: ${money(out, s.currency)}`] : [])] });
+  return finish({ ...base, kind: "conditional_illustration", conditions: conds, requirements: [conds[0].needs!], amount: out / 100, currency: s.currency, record, steps: [`${a.percent.operand.ppm! / 10_000}% of ${money(s.cents, s.currency)} = ${money(part, s.currency)}`, ...(a.proportion ? [`${a.proportionWhen?.trim() || "in the case the wording names"}: ${a.proportion.operand.ppm! / 10_000}% of ${money(part, s.currency)} = ${money(Number(divHalfUp(BigInt(part) * BigInt(a.proportion.operand.ppm!), 1_000_000n)), s.currency)}`] : []), ...(a.cap ? [`capped at ${money(a.cap.operand.cents!, s.currency)}: ${money(out, s.currency)}`] : [])] });
 }
 
 export type { PolicyDayRule };

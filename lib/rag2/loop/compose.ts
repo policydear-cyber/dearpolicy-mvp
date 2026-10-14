@@ -78,6 +78,8 @@ export function sayBack(words: string): string | null {
   if (!w) return null;
   if (/^(?:i|i['’]m|i['’]ve|we|we['’]re|my|our|me|us)\b/i.test(w)) return `You told me: “${w}”.`;
   if (/^(?:The|A|An|He|She|They|It|This|That|There|Her|His|Their|Both|Yes|No)\b/.test(w)) w = w[0].toLowerCase() + w.slice(1);
+  // V1.2: a bare phrase ("Transverse fracture") is quoted, not run into the sentence.
+  else if (/^[A-Z]/.test(w) && !/\b(?:is|was|were|are|had|has|have|broke|fell|got|went|did)\b/i.test(w)) return `You told me: “${w}”.`;
   return `You told me ${w}.`;
 }
 
@@ -89,10 +91,21 @@ export const MISSING_FACT_NOTE = "missing_fact";
 /** True when two texts share a content word (stemmed). */
 const sharesWords = (a: string, b: string) => { const x = new Set(contentWords(a)); return contentWords(b).some((w) => x.has(w)); };
 /** A clause's own label for a figure: the model's label only when the line that prints the figure carries it. */
-function passageLabel(passage: string, value: number, wanted: string): string {
+function passageLabel(passage: string, value: number, wanted: string, sentence = ""): string {
   const want = contentWords(wanted);
-  if (!want.length) return "";
   const lines = withoutInstructions(passage).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
+  // V1.2: a clause that prints its benefit's name before the figure ("Accident Hospital Income: S$100 for each ...")
+  // names the figure itself: when the sentence names that benefit, the line's own label is the benefit -- never the
+  // model's -- and a sentence that names another benefit is not bound.
+  if (!want.length) {
+    const said = new Set(contentWords(sentence));
+    for (const l of lines) {
+      const label = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim() ?? "";
+      const words = contentWords(label);
+      if (words.length && words.length <= 8 && words.every((w) => said.has(w))) return label;
+    }
+    return "";
+  }
   return lines.some((l) => { const have = new Set(contentWords(l)); return want.every((w) => have.has(w)); }) ? wanted.trim() : "";
 }
 
@@ -119,6 +132,24 @@ function namedDocs(text: string, ctx: Ctx): string[] {
 const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule", "certificate", "wording", "policy", "policies", "plan", "plans", "insurance", "cover", "covers", "covered", "coverage", "benefit", "benefits", "state", "states", "stated", "say", "says", "show", "shows", "shown", "mention", "mentions", "mentioned", "list", "lists", "listed", "name", "names", "named", "specify", "include", "print", "how", "many", "much", "when", "whether", "which", "what", "who", "any", "your", "their", "our", "his", "her", "its", "the", "that", "this", "these", "those", "there", "does", "not", "none", "only", "also", "can", "could", "would", "will", "full", "contract", "claim", "claims", "each", "per", "for", "with", "from", "about", "into", "under", "itself", "too"]);
 /** The household's library text, by document (all stored pages of every readable document), when loaded. */
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
+/** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
+ * document (the save-time gate reads the same heading the same way). Null when none is printed. */
+export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): string | null {
+  const text = ctx.libraryText?.get(ref.policyId) ?? null;
+  if (!text) return null;
+  const sq = (x: string) => x.replace(/\s+/g, " ").trim();
+  const lines = text.split(/\n/);
+  const row = sq(ref.passage.text.split(/\n/).find((l) => /\d/.test(l) && (!ref.table?.rowPerson?.text || l.includes(ref.table.rowPerson.text))) ?? ref.passage.text);
+  const at = lines.findIndex((l) => sq(l).includes(row.slice(0, 60)));
+  for (let i = at - 1; i >= 0 && i >= at - 40; i--) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    const cells = l.split(/\t+| {3,}/).filter(Boolean);
+    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
+    if (cells.length >= 2 && !/\d/.test(l)) return null;
+  }
+  return null;
+}
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
 function lineCarries(text: string, words: string[]): boolean {
   return text.split(/\n+/).some((line) => { const have = contentWords(line); return words.every((w) => have.includes(w) || new RegExp("\\b" + w.replace(/[^a-z0-9]/g, ""), "i").test(line) || have.some((h) => h.length >= 5 && w.length >= 5 && h.slice(0, 5) === w.slice(0, 5))); });
@@ -383,7 +414,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
     const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
     const inlineResult = inline.ids.find((id) => /^r\d/.test(id) && (ctx.tools.results.has(id) || calcOutcomes(ctx.tools).has(id))) ?? null;
-    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : inlineResult;
+    const oneOf = Array.isArray(s.result_ids) && (s.result_ids as unknown[]).length === 1 && typeof (s.result_ids as unknown[])[0] === "string" ? (s.result_ids as string[])[0] : null;
+    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : oneOf ?? inlineResult;
     curEstimate = !!resultId;
     const leak = internalIdsIn(text);
     if (leak.length) { drop(text, `shows an internal id (${leak.slice(0, 3).join(", ")})`); continue; }
@@ -413,6 +445,26 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // something its evidence contradicts.
     const absentDate = dateAbsenceClaim(text) ? printedDateIn([...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), ...values.map((v) => JSON.stringify(v))].join("\n")) : null;
     if (absentDate) { drop(text, `${DATE_ABSENCE_REASON} -- its cited evidence prints “${absentDate}”`); continue; }
+    // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
+    // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
+    // own; the sentence is kept only if every one of them is.
+    const resultIds = Array.isArray(s.result_ids) ? [...new Set((s.result_ids as unknown[]).filter((x): x is string => typeof x === "string" && !!x))] : [];
+    if (resultIds.length >= 2) {
+      const calcs = resultIds.map((id) => calcOutcomes(ctx.tools).get(id) ?? null);
+      if (calcs.some((c) => !c || (c.kind !== "conditional_illustration" && c.kind !== "indicative_estimate"))) { drop(text, "a comparison cites a calculation that is not a resolved illustration or estimate made in this conversation"); continue; }
+      const tmp: Composed = { ...out, sentences: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [] };
+      ONCE.set(tmp, onceFor(out));
+      let t = text; const why: string[] = [];
+      for (const c of calcs) { composeCalcSentence(t, c!, evIds, values.map((v) => v!.operand), subjectId, ctx, tmp, (_x, reason) => { why.push(reason); }); if (why.length) break; t = tmp.sentences.at(-1)!.text; }
+      if (why.length) { drop(text, why[0]); continue; }
+      const parts = sentencesOf(t);
+      for (const r of tmp.calculations) { const fig = moneyFiguresIn(t).find((f) => same(f.value, r.result.value) && f.currency === r.currency); r.sentence = (fig && parts.find((x) => x.includes(fig.raw))) ?? t; }
+      const ids = [...new Set(tmp.sentences.flatMap((x) => x.evidenceIds))];
+      out.calculations.push(...tmp.calculations); out.calcs.push(...tmp.calcs);
+      out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
+      out.sentences.push({ text: t, evidenceIds: ids, estimate: tmp.sentences.some((x) => x.estimate), factKeys: [...new Set(tmp.sentences.flatMap((x) => x.factKeys))], kind: tmp.sentences[0].kind });
+      continue;
+    }
     const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
     if (calc) { composeCalcSentence(text, calc, evIds, values.map((v) => v!.operand), subjectId, ctx, out, drop); continue; }
     const result = resultId ? ctx.tools.results.get(resultId) ?? null : null;
@@ -500,7 +552,13 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // Agent F (D1): the benefit a passage figure is bound to is the passage's OWN label -- its table row, the
         // label a tool gave it, or (for a clause) the model's label only when the line printing the figure says it.
         // A line that is an instruction inside the document is never evidence for a figure.
-        const benefit = (ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "");
+        // V1.2: a certificate roster row (one insured person per row under a product heading) is bound to the product
+        // heading it is printed under -- never to a cell of the row (the person's name) or to the sentence's own label.
+        // No heading found: not bound from this passage.
+        const roster = ref.table?.layout === "person_row";
+        const heading = roster ? rosterHeading(ref, ctx) : null;
+        if (roster && !heading) continue;
+        const benefit = heading ?? ((ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text));
         const policyText = withoutInstructions(evidenceTextOf(ref));
         const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
         // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
@@ -514,7 +572,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       if (b) { bindings.push({ ...b, sentence, value: f.value, currency: f.currency }); return; }
       // The household's own figure, said back to them: the gate decides (attribution, never as cover or a total).
       if (moneyFiguresIn(ctx.userText).some((u) => same(u.value, f.value) && u.currency === f.currency)) return;
-      failed = `${f.raw} is printed in none of the evidence the sentence cites`;
+      // V1.2: say precisely why: printed in a cited passage but not under the benefit the sentence names, or not printed.
+      const printedThere = refsForFigure.some((ref) => numbersIn(withoutInstructions(evidenceTextOf(ref))).some((n) => same(n, f.value)));
+      failed = printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`;
     });
     if (failed) { drop(text, failed); continue; }
     out.figureBindings.push(...bindings); out.computations.push(...records);
@@ -577,7 +637,10 @@ export function attributeHouseholdFigures(text: string, c: Pick<CalcOutcome, "re
 /** Round 8 (F1): the conditions a conditional illustration is stated with (each only when not already said): the rate
  * as amended by an endorsement, the assumption about earlier use of a capped allowance the record made, and the cause
  * limit its own document prints (quoted, cited). Figure-free, so nothing is added the save-time gate would check. */
-export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<Ctx, "state" | "stale" | "policyNames">): { text: string; evidenceIds: string[] } {
+/** V1.2: what is said once per composed answer (an illustration's cause limit). */
+const ONCE = new WeakMap<Composed, { cause?: boolean }>();
+const onceFor = (out: Composed) => { let o = ONCE.get(out); if (!o) { o = {}; ONCE.set(out, o); } return o; };
+export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<Ctx, "state" | "stale" | "policyNames">, once: { cause?: boolean } = {}): { text: string; evidenceIds: string[] } {
   const rec = c.record;
   if (!rec) return { text, evidenceIds: [] };
   const plain = (x: string) => x.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
@@ -588,9 +651,12 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
   const names = [...(ctx.policyNames?.values() ?? []), ...Object.values(ctx.state.docNames ?? {}), rec.benefit].filter(Boolean).sort((a, b) => b.length - a.length);
   let bare = text;
   for (const n of names) bare = bare.split(n).join(" ");
-  if (!/\baccident/i.test(bare)) {
+  // V1.2: the cause limit is said once per answer, with its first illustration -- not repeated on every one.
+  if (!/\baccident/i.test(bare) && !once.cause) {
     const own = Object.values(ctx.state.evidence).filter((e) => e.policyId === rec.policyId && !ctx.stale?.has(e.id) && !e.table);
-    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length);
+    // V1.2: a schedule row ("Death due to Accident     100%": laid out in columns, or ending in its percentage) is a
+    // benefit, not a clause limiting cover to accidents.
+    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
     // The clause that limits cover to accidents ("caused solely by an accident"), else one that says accident only.
     let pick: { e: (typeof own)[number]; line: string } | null = null;
     for (const test of [(l: string) => CAUSE_LIMIT.test(l), (l: string) => /\bonly\b/i.test(l)]) {
@@ -598,8 +664,9 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
       if (pick) break;
     }
     if (pick) {
-      add.push(`and only for a stay the insurer accepts as caused by an accident (the policy says “${pick.line.replace(/[;:,.\s]+$/, "")}”)`);
+      add.push(`and only for ${rec.calculator === "hospital_cash" ? "a stay" : "an injury"} the insurer accepts as caused by an accident (the policy says “${pick.line.replace(/[;:,.\s]+$/, "")}”)`);
       ids.push(evidenceIdOf(ctx.state, pick.e));
+      once.cause = true;
     }
   }
   if (!add.length) return { text, evidenceIds: [] };
@@ -645,7 +712,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
     // Round 8 (F1): a what-if says what else it assumes and what it turns on -- the rate as amended, earlier use of a
     // capped allowance, and the document's cause limit -- so it is never read as the amount for the actual stay.
     let extraIds: string[] = [];
-    if (c.kind === "conditional_illustration") { const w = illustrationConditions(text, c, ctx); text = w.text; extraIds = w.evidenceIds; }
+    if (c.kind === "conditional_illustration") { const w = illustrationConditions(text, c, ctx, onceFor(out)); text = w.text; extraIds = w.evidenceIds; }
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
     if (!fig) { drop(text, "does not state the calculation’s result"); return; }
     out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });

@@ -14,7 +14,7 @@ const ids = (description: string): JsonSchema => ({ type: "array", items: { type
 
 export const NOTE_FACTS: LoopToolSpec = {
   name: "note_facts",
-  description: "Record facts the household has stated about the event (what happened and how, nights in hospital, admission / discharge dates and times, amounts billed...), each quoting their own words verbatim from this conversation; the value must be what those words say. Refused: a policy-defined classification they did not state in those terms (cause=accident, illness, a diagnosis -- record how_it_happened in their words instead), a quantity the policy works out (payable days, claimable amounts), a count in another unit than they used (nights are not days). A paraphrase is kept but marked unconfirmed and cannot be used in a calculation. A fact printed in a document may be recorded with evidence_ids instead of words. Giving a key that is already recorded replaces it (a correction); anything worked out from the old value is withdrawn. Never record a guess.",
+  description: "Record facts the household has stated about the event (what happened and how, nights in hospital, admission / discharge dates and times, amounts billed...), each quoting their own words verbatim from this conversation; the value must be what those words say. Refused: a policy-defined classification they did not state in those terms (cause=accident, illness, a diagnosis -- record how_it_happened in their words instead), a quantity the policy works out (payable days, claimable amounts), a count in another unit than they used (nights are not days). A paraphrase is kept but marked unconfirmed and cannot be used in a calculation. A fact printed in a document may be recorded with evidence_ids instead of words. Giving a key that is already recorded replaces it only when the household corrects it (they say \"actually\", \"sorry\", \"not ...\", \"I meant\", or a count, amount, date or yes/no changes); anything worked out from the old value is then withdrawn. A further detail about something already recorded (\"transverse fracture\" after \"broke his leg\") is new information: give it its own key (e.g. fracture_pattern); if you reuse the key it is kept beside the first report as <key>_detail, never shown as a correction. Never record a guess.",
   parameters: { type: "object", properties: {
     subject_id: str("The household member the event is about (from resolve_person)."),
     facts: { type: "array", items: { type: "object", properties: {
@@ -33,6 +33,7 @@ const SENTENCE: JsonSchema = { type: "object", properties: {
   evidence_ids: ids("Evidence ids (e1, e2...) the sentence rests on."),
   value_ids: ids("Value ids (v1...) from select_table_value whose figures the sentence states."),
   result_id: str("A result id (r1...) from compute whose result the sentence states."),
+  result_ids: ids("Instead of result_id, for one sentence comparing alternatives: two or more calculate result ids of the same person whose amounts the sentence states (e.g. the open and closed illustrations of one row)."),
   benefit: str("The benefit / row the sentence's figure is printed for, as the document words it (when citing a passage rather than a table value)."),
   subject_id: str("Who this sentence is about, if not the answer's subject."),
 }, required: ["text"], additionalProperties: false };

@@ -258,6 +258,10 @@ jobs:
         run: npm run rag2:release-holdout
       - name: "V1.1 acceptance: independently written conversations graded for facts, completeness, person/version, citations, follow-up and presentation"
         run: npm run rag2:v11-test
+      - name: "V1.2 scenario completion: a reported injury conversation and paraphrases graded over the whole visible conversation; fact, certificate-link, share and hospital-day controls"
+        run: npm run rag2:scenario-test
+      - name: "V1.2 replay of the first actual-model run (recorded model output, no model call): the turn-5 illustration and its record, certificate binding, controls"
+        run: npm run rag2:scenario-replay-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

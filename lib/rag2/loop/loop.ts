@@ -13,17 +13,19 @@
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
-import { loadDocs, loadPages } from "../store";
-import { calcOutcomes } from "../calc/tool";
+import { loadDocs, loadPages, policyFamily } from "../store";
+import type { PolicyCoverage } from "../policies";
+import { calcOutcomes, figureFromEvidence } from "../calc/tool";
+import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
-import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
+import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
-import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions";
+import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -45,7 +47,9 @@ export type LoopReply =
   | { kind: "ask"; pending: LoopPending; preface: string | null;
       /** Round 6 (A3): what the turn says before its question (the preface and statements), composed and checked like
        * a final_answer (null when it says nothing). The question itself is presented once, as the question card. */
-      composed?: Composed | null }
+      composed?: Composed | null;
+      /** V1.2: figure-free lines said after the statements (what is still unresolved), from the grounded fallback. */
+      trailing?: string[] }
   | { kind: "fallback"; text: string };
 export type LoopCorrection = { key: string; from: unknown; to: unknown; withdrawn: string[];
   /** Agent F: the facts the withdrawn estimates were worked out from (said back without their figures). */
@@ -78,6 +82,43 @@ export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
 };
 /** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up"). */
 const PERSON_CORRECTION = { test: (m: string) => /\b(?:mixed (?:them|it|those|the two) up|mix-?up|i meant|i mean\b|meant to say|not (?:him|her)\b|wrong (?:child|person|kid|son|daughter)|correction|actually it was|it was (?:\w+ ){0,3}not\b|rather than)\b/i.test(m) || /\bnot [A-Z][a-z]+\b/.test(m) };
+
+/** V1.2: the household corrects a recorded fact -- they say so, or a count / amount / date / yes-no changes. A further
+ * free-text detail with no such cue ("Transverse fracture." after "broke his leg") is an added detail. */
+const CORRECTION_CUE = /\b(?:actually|sorry|apologies|i meant|i mean\b|meant to say|correction|correct that|my mistake|mistaken|mistake|wrong|instead|rather than|not (?:his|her|their|the|a|an|my|our|that|this|it|in|on)\b|it (?:was|is)n['’]t|wasn['’]t|isn['’]t)|^\s*no\b[,.!]?/i;
+const SCALAR_FACT = (v: string) => /^-?\d+(?:[.,]\d+)?(?:\s+[A-Z]{3})?$/.test(v.trim()) || /^(?:yes|no|true|false|y|n)$/i.test(v.trim()) || /^\d{4}-\d{2}-\d{2}/.test(v.trim());
+export function isCorrection(oldValue: string, newValue: string, message: string, words: string): boolean {
+  if (CORRECTION_CUE.test(message) || CORRECTION_CUE.test(words)) return true;
+  return SCALAR_FACT(oldValue) || SCALAR_FACT(newValue);
+}
+
+/** V1.2: the concise canonical sentence for a verified calculation record (conditional status from the record's kind,
+ * never from the model's wording). Only the result is a money figure; percentages and words come from the record. */
+export function canonicalCalcSentence(k: CalcOutcome): string {
+  const amt = `${k.currency === "SGD" ? "S$" : (k.currency ?? "") + " "}${(k.amount ?? 0).toLocaleString("en-SG", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const pcts = k.printed.filter((p) => p.unit === "percent").map((p) => p.value);
+  const share = k.conditions.find((c) => c.id === "c_case");
+  const caseText = share ? /^(.*?):\s*(\d+(?:\.\d+)?)%/.exec(share.text) : null;
+  // The household's words are quoted only when they are one sentence (a quote is never split across sentences).
+  const said = k.record?.assumption?.trim().replace(/[.!\s]+$/, "");
+  const words = said && !/[.!?]\s/.test(said) ? said : null;
+  const open = [...new Set(k.conditions.filter((c) => c.status === "unresolved" && c.id !== "c_case" && c.kind !== "day_count_rule")
+    .map((c) => (c.kind === "definition" ? "the insurer must still accept it under the policy's own definition after its medical review" : c.text.replace(/[.\s]+$/, ""))))];
+  // A stay: the duration counted from the household's own admission / discharge words, the printed rate, the amount,
+  // and -- separately -- what the amount assumes about the limit's earlier use (not something the household said).
+  if (k.kind === "indicative_estimate" && k.calculator === "hospital_cash" && k.record) {
+    const rate = k.printed.find((p) => p.unit === "money");
+    const hh = k.record.operands.filter((o) => o.source === "household" && (o.role === "admission" || o.role === "discharge")).map((o) => (o as { attribution?: string }).attribution).filter((w): w is string => !!w);
+    const n = rate && rate.value > 0 && k.amount != null ? Math.round(k.amount / rate.value) : null;
+    const rateTxt = rate ? `${rate.currency === "SGD" ? "S$" : (rate.currency ?? "") + " "}${rate.value.toLocaleString("en-SG")}` : null;
+    const assumes = k.record.assumption?.trim().replace(/[.\s]+$/, "") || null;
+    const counted = n != null && rateTxt ? `the stay counts as ${n} payable period${n === 1 ? "" : "s"} at ${rateTxt}, so ` : "";
+    return `Indicative estimate: from the admission and discharge you gave${hh.length === 2 ? ` (“${hh[0].replace(/[.\s]+$/, "")}”; “${hh[1].replace(/[.\s]+$/, "")}”)` : ""}, ${counted}${k.benefit} works out at ${amt}${assumes ? `, ${assumes}` : ""}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
+  }
+  if (k.kind === "indicative_estimate") return `Indicative estimate: based on what you told me${words ? ` (“${words}”)` : ""}, ${k.benefit} works out at ${amt}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
+  const what = `“${k.benefit}”${pcts[0] != null ? ` (${pcts[0]}% of the Sum Insured)` : ""}${caseText ? ` applies as ${caseText[1]} (${caseText[2]}% of that percentage)` : " applies"}`;
+  return `If ${what}${words ? `, on what you told me (“${words}”)` : said ? ", on the facts you reported" : ""}, the indicative illustration is ${amt}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
+}
 
 export function loopToolSpecs(): LoopToolSpec[] {
   return [...RAG_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })), ...LOOP_ACTIONS];
@@ -198,7 +239,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (state.established) state.established = state.established.filter((e) => e.evidenceIds.every((id) => state.evidence[id] && !stale.has(id)) && e.valueIds.every((id) => ctx.values.has(id)));
   /** Integration (agent C's request 3): what the latest calculate result for each person still needs from the
    * household (fact key, why, the evidence ids that make it matter), in the order it should be asked. */
-  const calcMissing = new Map<string, { key: string; why: string; evidenceIds: string[] }[]>();
+  /** V1.2: the household facts each benefit's calculation still needs, per person AND per benefit (one benefit's open
+   * requirement never hides another's). */
+  const calcMissingBy = new Map<string, Map<string, { key: string; why: string; evidenceIds: string[] }[]>>();
+  const calcMissing = { get: (subject: string) => [...(calcMissingBy.get(subject)?.values() ?? [])].flat(), benefitOf: (subject: string, key: string) => [...(calcMissingBy.get(subject)?.entries() ?? [])].find(([, items]) => items.some((m) => m.key === key)) ?? null };
   const trace: TraceTurn = { turn: state.turn, userMessage: input.message, modelId: input.model.id, modelKind: input.model.kind, steps: 0, usage: { input: 0, output: 0 }, latencyMs: 0, toolCalls: [], evidenceChosen: [], outcome: "budget_exhausted", dropped: [], gate: [], calls: [], limit: null };
   const corrections: LoopOutput["corrections"] = [];
   const pendingBefore = state.pending;
@@ -362,6 +406,60 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (inline) { const subject = inline.pending.subjectId ?? state.claim?.subjectId ?? state.subjectId; if (subject) recordedNow.push({ key: inline.pending.factKey, words: inline.answer, subject }); }
   /** Round 7: the one bounded repair of a final_answer that left the household's answer with nothing citable. */
   let finalRepaired = false;
+  /** V1.2: calculation results a reply of this turn tried to state (result_id / result_ids), dropped or not. */
+  const attemptedResults = new Set<string>();
+  /** V1.2: of those, the ones whose sentence was refused for its substance (not only its wording). */
+  const substantiveDrops = new Set<string>();
+  // (Calling it a payout is a substantive misstatement of what the figure is, not wording: never restored.)
+  const WORDING_DROP = /^an illustration must state its what-if|^shows an internal id/;
+  /** V1.2: printed money figures a composed reply of this turn bound to its source, per person (cents). */
+  const boundAmounts = new Map<string, Set<number>>();
+  const noteDrops = (sentencesIn: Record<string, unknown>[], c: Composed) => {
+    for (const b of c.figureBindings) if (b.subjectId && typeof b.value === "number") { const m = boundAmounts.get(b.subjectId) ?? new Set<number>(); m.add(Math.round(b.value * 100)); boundAmounts.set(b.subjectId, m); }
+    for (const d of c.dropped) {
+      // Wording only when the sentence itself presents the figure as conditional ("the conditional illustration is ...")
+      // and merely lacks the canonical "if"; a figure stated as fact ("his stay comes to S$330") is not restated.
+      if (WORDING_DROP.test(d.reason) && /\b(?:illustrat\w*|conditional\w*|what[- ]if|hypothetical\w*|indicative)\b/i.test(d.sentence)) continue;
+      const src = sentencesIn.find((x) => String(x?.text ?? "").replace(/\s+/g, " ").trim() === d.sentence.replace(/\s+/g, " ").trim());
+      for (const id of [src?.result_id, ...(Array.isArray(src?.result_ids) ? src!.result_ids as unknown[] : [])]) if (typeof id === "string") substantiveDrops.add(id);
+    }
+  };
+  /** V1.2: the turn's one completion nudge (a new fact left unaddressed) has been given. */
+  let completionNudged = false;
+  /** V1.2: the one refusal of a question that addresses the person typing about someone else's injury. */
+  let secondPersonWarned = false;
+  /** V1.2: calculations completed this turn from an earlier unresolved one, once the household gave its missing facts. */
+  const completedCalcs: CalcOutcome[] = [];
+  /** V1.2: what a claim turn's reply leaves out of what the household just told it -- a hospital stay or a bill they
+   * reported that no sentence addresses, and a percentage of the sum insured stated (or just asked about) without the
+   * person's own sum insured. Lines for the turn's one repair; empty when nothing is missing. */
+  /** V1.2: the text states one of the person's own printed amounts read this conversation (a sum insured). */
+  const statesOwnAmount = (text: string, subject: string) => moneyFiguresIn(text).some((f) => boundAmounts.get(subject)?.has(Math.round(f.value * 100)) || [...ctx.values.values()].some((v) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && Math.abs(f.value * 100 - v.operand.cents) < 1));
+  const completionLines = (texts: string[], question: string | null, subject: string | null | undefined, extraEvidence: string[] = []): string[] => {
+    if (!subject) return [];
+    const now = recordedNow.filter((r) => r.subject === subject);
+    if (!now.length) return [];
+    const said = [...texts.filter((t) => !/^\s*you (?:told me|said|mentioned)\b/i.test(t)), question ?? ""].join(" ");
+    const lines: string[] = [];
+    const ADDRESSES = { stay: /\b(?:hospital\w*|warded|ward|in-?patient|confine\w*|admi\w*|discharg\w*|nights?|stay)\b/i, bill: /\b(?:bill\w*|expenses?|reimburs\w*|costs?|charges?|invoice)\b/i };
+    // With this turn's facts, the ones reported earlier in this claim that no reply has addressed yet.
+    const claimFacts = state.claim?.subjectId === subject ? state.claim.facts : state.otherClaims?.[subject]?.facts ?? {};
+    const earlier = Object.entries(claimFacts).filter(([k]) => !now.some((r) => r.key === k)).map(([key, f]) => ({ key, words: f.words, subject }))
+      .filter((f) => { const c = factConcept(f.key).concept; const re = c === "bill" ? ADDRESSES.bill : ADDRESSES.stay; return (c === "bill" || c === "stay_length" || c === "admission" || c === "discharge" || c === "hospital") && !state.history.some((h) => re.test(h.assistant.replace(/You told me[^.]*\./g, ""))); });
+    const facts = [...now, ...earlier];
+    for (const f of facts) {
+      const c = factConcept(f.key).concept;
+      const kind = c === "stay_length" || c === "admission" || c === "discharge" || c === "hospital" ? "stay" : c === "bill" ? "bill" : null;
+      if (!kind || ADDRESSES[kind].test(said)) continue;
+      lines.push(`the household also told you \"${f.words}\" (${f.key}) and the reply does not address it: look up the benefit it bears on (search_passages${kind === "stay" ? ", e.g. hospital income / hospital cash" : ", e.g. medical expenses"}) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (${kind === "stay" ? "e.g. the admission and discharge dates and times; nights are not payable days" : "e.g. the bill amount"})`);
+    }
+    const ctxText = [said, ...extraEvidence.map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
+    if (/%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText) && !statesOwnAmount(said, subject)) {
+      const who = input.people.find((p) => p.id === subject)?.name ?? "the person";
+      lines.push(`the benefit is a percentage of the Sum Insured but no amount is given: read ${who}'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover`);
+    }
+    return lines;
+  };
   /** Round 7: the household answered the claim question pending from the last turn (facts recorded for its subject). */
   const answeredRequest = (): { pending: Extract<LoopPending, { kind: "fact" }>; facts: { key: string; words: string }[]; subject: string } | null => {
     if (pendingBefore?.kind !== "fact") return null;
@@ -375,7 +473,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const usable = (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every((id) => state.evidence[id] && !stale.has(id)) && e.valueIds.every((id) => ctx.values.has(id)));
     const because = new Set(pending.evidenceIds ?? []);
     const related = usable.filter((e) => e.evidenceIds.some((id) => because.has(id)));
-    return (related.length ? related : usable.filter((e) => e.turn === pending.turn)).slice(-2);
+    // V1.2: with them, the subject's other printed figures already stated (e.g. the certificate's sum insured that a
+    // schedule percentage is of), so a re-explanation connects the clause to its amount instead of repeating it.
+    const figures = usable.filter((e) => e.valueIds.length && !related.includes(e));
+    const chosen = related.length ? [...figures.slice(-2), ...related.slice(-2)] : usable.filter((e) => e.turn === pending.turn).slice(-3);
+    return chosen.slice(-4);
   };
   const cited = (c: Composed) => c.sentences.some((s) => s.evidenceIds.length > 0);
   /** Round 7: the turn a requested fact was given in moves the claim forward: their words said back as theirs, the
@@ -391,7 +493,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!finalRepaired) {
         finalRepaired = true;
         const why = composed.dropped.length ? ` (not shown: ${composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" -- ${d.reason}`).join("; ")})` : "";
-        return { composed, repair: `the household answered your question ("${ans.pending.question}")${why}. Do not only say back what they told you. Answer with final_answer: (1) what they told you, as "You told me ..." -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: ${est.map((e) => `"${e.text}" evidence_ids=[${e.evidenceIds.join(", ")}] value_ids=[${e.valueIds.join(", ")}]${e.benefit ? ` benefit="${e.benefit}"` : ""}`).join("; ")}; (3) what still remains (the insurer checks the documents it asks for and decides the claim); (4) the next step.` };
+        const more = completionLines(composed.sentences.map((x) => x.text), null, ans.subject, ans.pending.evidenceIds ?? []);
+        if (more.length) completionNudged = true;
+        return { composed, repair: `the household answered your question (\"${ans.pending.question}\")${why}. Do not only say back what they told you. Answer with final_answer (or ask_user, when one detail the household can give still changes the result): (1) what they told you, as \"You told me ...\" -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: ${est.map((e) => `\"${e.text}\" evidence_ids=[${e.evidenceIds.join(", ")}] value_ids=[${e.valueIds.join(", ")}]${e.benefit ? ` benefit=\"${e.benefit}\"` : ""}`).join("; ")}; (3) what their answer changes and what is still open${more.length ? `; also: ${more.join("; ")}` : ""}. Keep any remark about the insurer's review or claim paperwork to one short line, and only if it was not said earlier.` };
       }
       // The model repeated it: the answer is composed from what the conversation already established (and checked by
       // the same composer and save-time gate as any sentence the model writes).
@@ -401,7 +505,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const again = composeFinal({ sentences: [...echoes, ...sentencesIn], nextSteps, subjectId }, composeCtx());
       if (cited(again)) out = again;
     }
-    if (cited(out)) {
+    // V1.2: the note that their report is not reviewed evidence, and the paperwork step, are said once per conversation.
+    const toldBefore = (t: string) => state.history.some((h) => h.assistant.includes(t));
+    if (cited(out) && !toldBefore(REPORTED_NOTE) && !toldBefore(REPORTED_MEDICAL_NOTE)) {
       const f = reportedFactFollowUp([...out.sentences.flatMap((s) => s.evidenceIds), ...(ans.pending.evidenceIds ?? [])].map((id) => state.evidence[id]?.passage.text ?? "").concat(ans.pending.why));
       if (![...out.sentences.map((s) => s.text), ...out.notes].some((t) => /\binsurer\b/i.test(t))) out.notes = [...out.notes, f.note];
       if (!out.nextSteps.length) out.nextSteps = [f.step];
@@ -410,7 +516,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   /** Composer drop reasons that are about wording only (the figure itself was not refused). */
   const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout|^an illustration must state its what-if/;
-  const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$/;
+  const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$|does not name the benefit as the line printing it words it/;
   /** Round 9: a final answer that leaves the household at a dead end -- it says the answer depends on something not known
    * yet, or the calculation it ran still needs a household fact -- without asking for it. Deterministic (no extra model
    * call); folded into the turn's ONE bounded repair, so the model may restate it as ask_user with the same statements. */
@@ -422,6 +528,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   const usefulnessLines = (c: Composed): string[] => {
     const subject = c.subjectId ?? state.subjectId;
+    if (!completionNudged) { const more = completionLines([...c.sentences.map((s) => s.text), ...c.dropped.map((d) => d.sentence)], null, subject, pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []); if (more.length) { completionNudged = true; return more.map((m) => m.charAt(0).toUpperCase() + m.slice(1) + "."); } }
     const need = stillMissing(subject);
     if (need.length) return [`calculate still needs ${need[0].key} from the household (${need[0].why}), and the answer does not ask for it: end the turn with ask_user kind=fact for exactly that (fact_key ${need[0].key}${need[0].evidenceIds.length ? `, citing ${[...new Set(need[0].evidenceIds)].slice(0, 3).join(", ")}` : ""}), giving what is already established as statements.`];
     const open = [...c.sentences.map((s) => s.text), ...c.dropped.map((d) => d.sentence)].find((t) => DEPENDS.test(t));
@@ -480,6 +587,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const own = c.sentences.find((s) => { const a = squash(s.text); return !!b && (a.includes(b) || b.includes(a)); });
       if (!own) return [];
       gateRejected.add(own.text);
+      // V1.2: a calculation in a sentence the gate refused is refused for its substance: never restored by the fallback.
+      for (const rec of c.calculations) if (rec.sentence && own.text.includes(rec.sentence)) for (const k of c.calcs) if (k.benefit === rec.benefit && k.amount === rec.result.value) substantiveDrops.add(k.calcId);
       const ids = [...own.evidenceIds, ...(own.valueIds ?? []).map((v) => "value " + v)];
       return [`"${own.text}" -- ${p.figure ? p.figure + ": " : ""}${p.reason}${ids.length ? ` (it cites ${ids.join(", ")})` : ""}`];
     });
@@ -507,6 +616,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
+    if (call.name === "final_answer" || call.name === "ask_user") for (const x of ((a.sentences ?? a.statements) as Record<string, unknown>[] | undefined) ?? []) {
+      for (const id of [x?.result_id, ...(Array.isArray(x?.result_ids) ? x.result_ids : [])]) if (typeof id === "string" && id) attemptedResults.add(id);
+    }
     if (call.name === NOTE_FACTS.name && Array.isArray(a.facts)) a.facts = (a.facts as Record<string, unknown>[]).map((f) => ({ ...f, value: f?.value == null ? f?.value : String(f.value) }));
     const spec = [NOTE_FACTS, ASK_USER, FINAL_ANSWER].find((s) => s.name === call.name)!;
     const bad = validateArgs(spec.parameters, a);
@@ -516,7 +628,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!subject || !householdIds.has(subject)) return { result: { ok: false, error: "subject_id must be a household member (resolve the person first)" } };
       if (unsettled.has(subject)) return { result: { ok: false, error: "who is meant is not settled yet: ask which person the household means before recording facts about one of them" } };
       const claim = claimFor(subject);
-      const recorded: string[] = [], refused: { key: string; error: string }[] = [], unconfirmed: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [], asSaid: string[] = [];
+      const recorded: string[] = [], refused: { key: string; error: string }[] = [], unconfirmed: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [], asSaid: string[] = [], added: { key: string; detail_of: string }[] = [];
       for (const f of a.facts as { key: string; value: string; words?: string; currency?: string; evidence_ids?: string[] }[]) {
         const key = normalizeKey(f.key);
         if (!key || f.value == null) continue;
@@ -546,6 +658,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         // claim_amount / amount_claimed) with another value is a correction of it, not a second fact.
         const oldKey = claim.facts[key] ? key : sameFactKey(claim, key, value);
         const old = oldKey ? claim.facts[oldKey] : undefined;
+        // V1.2: a further detail about something already recorded ("transverse fracture" after "broke his leg") is
+        // new information, not a correction: it is kept beside the first report under its own key, and nothing worked
+        // out from that report is withdrawn. A value is corrected only when the household says so ("actually",
+        // "sorry", "not ...", "I meant") or when a count, amount, date or yes/no changes.
+        if (old && String(old.value) !== value && !isCorrection(String(old.value), value, input.message, String(f.words ?? ""))) {
+          let detailKey = `${key}_detail`;
+          for (let n = 2; claim.facts[detailKey] && String(claim.facts[detailKey].value) !== value; n++) detailKey = `${key}_detail_${n}`;
+          if (!claim.facts[detailKey]) claim.facts[detailKey] = entry;
+          recorded.push(detailKey); added.push({ key: detailKey, detail_of: oldKey ?? key });
+          recordedNow.push({ key: detailKey, words: entry.words, subject });
+          if (chk.basis === "paraphrased") unconfirmed.push(detailKey);
+          const answersDetail = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subject) === subject && (p.factKey === key || p.factKey === detailKey);
+          if (answersDetail(state.pending)) state.pending = null;
+          if (answersDetail(state.parkedPending)) state.parkedPending = null;
+          continue;
+        }
         if (old && String(old.value) !== value) {
           const hit = (ks: string[]) => ks.includes(key) || (!!oldKey && ks.includes(oldKey));
           const withdrawn = claim.derived.filter((d) => hit(d.factKeys)).map((d) => d.sentence);
@@ -567,11 +695,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       corrections.push(...corrected);
       if (!recorded.length && refused.length) return { result: { ok: false, error: refused.map((r) => `${r.key}: ${r.error}`).join("; "), refused } };
-      return { result: { ok: true, recorded, ...(unconfirmed.length ? { unconfirmed, note: "unconfirmed facts are the household's report in your words, not confirmed values: they cannot be used in a calculation; ask to confirm if one matters" } : {}), ...(refused.length ? { refused } : {}), ...(asSaid.length ? { recorded_as_said: asSaid } : {}), corrected, facts: claim.facts } };
+      return { result: { ok: true, recorded, ...(unconfirmed.length ? { unconfirmed, note: "unconfirmed facts are the household's report in your words, not confirmed values: they cannot be used in a calculation; ask to confirm if one matters" } : {}), ...(refused.length ? { refused } : {}), ...(asSaid.length ? { recorded_as_said: asSaid } : {}), ...(added.length ? { added_details: added, note_added: "each added detail is new information kept beside the earlier report (not a correction): say what it changes, if anything" } : {}), corrected, facts: claim.facts } };
     }
     if (call.name === "ask_user") {
-      const question = String(a.question ?? "").trim();
+      let question = String(a.question ?? "").trim();
       if ((question.match(/\?/g) ?? []).length !== 1 || !question.endsWith("?")) return { result: { ok: false, error: "ask exactly one question, ending with a question mark" } };
+      // V1.2: "what were the times, and had any benefit been paid?" asks its first clause now; the second is its own
+      // question for a later turn.
+      const one = firstClauseOnly(question);
+      if (one) { (trace.adjusted ??= []).push(`asked one clause: "${one}" (not "${question.slice(one.length - 1).trim()}")`); question = one; }
       const compound = compoundQuestion(question);
       if (compound) return { result: { ok: false, error: compound } };
       if (moneyFiguresIn(question).length) return { result: { ok: false, error: "a question never states a figure" } };
@@ -586,6 +718,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       let composed: Composed | null = null;
       if (spoken.length) {
         composed = composeFinal({ sentences: spoken, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+        noteDrops(spoken, composed);
         if (composed.dropped.length && !askRefused) {
           askRefused = true;
           return { result: { ok: false, error: "not shown before the question: " + composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" (${d.reason})`).join("; ") + ". State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out." } };
@@ -610,7 +743,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const pending: LoopPending = { kind: "person", question, mention: typeof a.mention === "string" ? a.mention : null, options: options.map((id) => ({ id, label: label(id) })), turn: state.turn, purpose };
         return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
       }
-      const key = normalizeKey(a.fact_key);
+      let key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
       const subject = (a.subject_id as string) ?? state.claim?.subjectId ?? state.subjectId;
       const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
@@ -627,18 +760,62 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const sameFact = (a: string, b: string) => a === b || (!factConcept(a).concept.startsWith("key:") && factConcept(a).concept === factConcept(b).concept);
       const calcItem = stillNeeded.find((m) => sameFact(m.key, key)) ?? null;
       let because = ((a.because_evidence_ids as string[]) ?? []).filter((id) => state.evidence[id] && !stale.has(id));
+      // V1.2: the household's reply gave another detail, not the answer to the question pending, and the model asks
+      // that same question again: when a question asked EARLIER is still unanswered and is about the detail they just
+      // gave (shares its words), that question is the one the documents still need -- asked instead, saying why the
+      // detail does not settle it. The pending question stays open for a later turn.
+      let redirectPreface: string | null = null;
+      const newFacts = recordedNow.filter((x) => x.subject === subject && !sameFact(x.key, key));
+      if (subject && pendingBefore?.kind === "fact" && pendingBefore.factKey === key && newFacts.length && !(claim && knownFactFor(key, claim.facts))) {
+        const stem = (t: string) => (contentWords(t.replace(/_/g, " ")) as string[]).map((w) => w.slice(0, 6));
+        const told = new Set(newFacts.flatMap((x) => [...stem(x.words), ...stem(x.key)]));
+        const earlier = state.turns.flatMap((t) => t.toolCalls.filter((c) => c.ok && c.name === "ask_user" && !c.args?.by).map((c) => c.args)).reverse()
+          .find((x) => String(x.fact_key ?? "") !== key && String(x.subject_id ?? subject) === subject && !(claim && knownFactFor(String(x.fact_key), claim.facts)) && stem(`${String(x.question ?? "")} ${String(x.fact_key ?? "")}`).some((w) => told.has(w)));
+        const eb = ((earlier?.because_evidence_ids as string[]) ?? []).filter((id) => state.evidence[id] && !stale.has(id));
+        if (earlier && eb.length) {
+          const words = newFacts.map((x) => x.words.trim()).join(" ");
+          const distinct = (contentWords(words) as string[]).filter((w) => !stem(String(earlier.question ?? "")).includes(w.slice(0, 6)));
+          const lib = [...(libraryText?.values() ?? [])].join("\n").toLowerCase();
+          const unused = distinct.length && libraryText && distinct.every((w) => !lib.includes(w.toLowerCase()));
+          redirectPreface = unused ? `Your documents don't mention “${distinct.join(" ")}”, so “${words.replace(/[.\s]+$/, "")}” doesn't decide which of their amounts applies.` : `“${words.replace(/[.\s]+$/, "")}” doesn't answer what the documents' amounts depend on yet.`;
+          (trace.adjusted ??= []).push(`asked the earlier unanswered question (${String(earlier.fact_key)}) instead of repeating "${question}": the reply gave ${newFacts.map((x) => x.key).join(", ")}`);
+          question = firstClauseOnly(String(earlier.question)) ?? String(earlier.question);
+          key = normalizeKey(String(earlier.fact_key));
+          because = eb;
+        }
+      }
       if (!because.length && calcItem) because = calcItem.evidenceIds.filter((id) => state.evidence[id]);
       if (!because.length) return { result: { ok: false, error: "cite the evidence (because_evidence_ids) of the benefit or clause that makes this fact matter" } };
       const cause = !CAUSE_KEYS.has(key) ? causeOpen(subject) : null;
       if (cause) return { result: { ok: false, error: `how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
-      if (stillNeeded.length && !CAUSE_KEYS.has(key) && !sameFact(stillNeeded[0].key, key)) return { result: { ok: false, error: `the calculation still needs ${stillNeeded[0].key} (${stillNeeded[0].why}): ask for exactly that next, one question at a time (fact_key ${stillNeeded[0].key}, citing ${stillNeeded[0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
+      // V1.2: requirements are per benefit -- asking another benefit's (or the schedule's) open detail is allowed; within
+      // ONE benefit's calculation its inputs are asked in order.
+      const ownList = subject ? [...(calcMissingBy.get(subject)?.values() ?? [])].map((l) => l.filter((m) => !(claim && knownFactFor(m.key, claim.facts)))).find((l) => l.some((m) => sameFact(m.key, key))) ?? null : null;
+      // A calculator input no open calculation needs (a bill for a daily-rate benefit) is not asked: the first input
+      // an open calculation still needs is.
+      if (!ownList && subject && /^(?:bill_amount|admission_(?:datetime|date|time)|discharge_(?:datetime|date|time)|prior_use\w*)$/.test(key)) {
+        const first = [...(calcMissingBy.get(subject)?.values() ?? [])].map((l) => l.filter((m) => !(claim && knownFactFor(m.key, claim.facts)))).find((l) => l.length);
+        if (first) return { result: { ok: false, error: `that calculation still needs ${first[0].key} first (${first[0].why}): ask for that, one question at a time (fact_key ${first[0].key}, citing ${first[0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
+      }
+      if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
+      // V1.2: the household speaks about this person in the third person ("Desmond broke his leg"): the question names
+      // them, never "your leg" / "your admission" (that would be about the person typing).
+      const subjName = input.people.find((p) => p.id === subject)?.name ?? "";
+      const short = /\(([^)]+)\)\s*$/.exec(subjName)?.[1] ?? subjName.split(/\s+/)[0] ?? "";
+      const thirdPerson = !!short && userTexts.some((t) => new RegExp(`\\b${short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) && !userTexts.some((t) => /\b(?:I|my|me)\b/.test(t));
+      if (thirdPerson && /\byour\b/i.test(question)) { const was = question; question = question.replace(/\byour\b/gi, `${short}'s`); (trace.adjusted ??= []).push(`named ${short}: "${was}" -> "${question}"`); }
+      if (thirdPerson && !secondPersonWarned && /\b(?:were|did|have|had|are|do) you (?:break|fall|stay|get|been|go|have|hurt)\b/i.test(question)) { secondPersonWarned = true; return { result: { ok: false, error: `the household is telling you about ${short} (third person): ask about ${short} by name, not "you" (that would be the person typing)` } }; }
+      if (!completionNudged && !CAUSE_KEYS.has(key)) {
+        const more = completionLines((composed?.sentences ?? []).map((x) => x.text), question, subject);
+        if (more.length) { completionNudged = true; return { result: { ok: false, error: `before asking: ${more.join("; ")}. Then call ask_user again: those statements first, then the one question that most changes the result.` } }; }
+      }
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
-      return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
+      return { result: { ok: true }, terminal: { kind: "ask", pending, preface: redirectPreface, composed } };
     }
     // final_answer
     const answerSubject = (a.subject_id as string) ?? state.subjectId;
@@ -654,6 +831,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       return { ...x, evidence_ids: [...new Set(mapped)] };
     });
     const first = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+    noteDrops(sentencesIn, first);
     if (!first.sentences.length && !first.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
     const fw = forward(first, sentencesIn, a.next_steps, (a.subject_id as string) ?? null);
     if (fw.repair) return { result: { ok: false, error: fw.repair } };
@@ -661,8 +839,57 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return { result: { ok: true }, terminal: { kind: "final", composed } };
   };
 
+  /** V1.2: calculation inputs selected by evidence id (rate_evidence_id, proportion.evidence_id,
+   * passage_limits[].evidence_id) are read from the retrieved record the server holds -- its exact line, page and
+   * figure (figureFromEvidence) -- never from the model's transcription. The record must be one a tool returned in this
+   * conversation, still current (same document version), retrieved for this person, and printed by the calculation's
+   * own document; the tool then validates the quote on that page as for any quoted input. */
+  const resolveEvidenceInputs = (call: ToolCall): string | null => {
+    const a: Record<string, unknown> = { ...call.arguments };
+    const subject = typeof a.subject_id === "string" ? a.subject_id : null, docId = String(a.policy_id ?? "");
+    const pick = (id: unknown, what: string): EvidenceEntry | string => {
+      const e = typeof id === "string" ? state.evidence[id] : undefined;
+      if (!e) return `${what}: unknown evidence id ${String(id)} (use an evidence_id a tool returned in this conversation)`;
+      if (stale.has(e.id)) return `${what}: ${e.id} cannot be used -- ${stale.get(e.id)}`;
+      if (e.subjectId && subject && e.subjectId !== subject) return `${what}: ${e.id} was retrieved for another person`;
+      if (e.policyId !== docId) return `${what}: ${e.id} is printed in another document (${policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? e.policyId}), not the calculation's policy_id`;
+      return e;
+    };
+    let changed = false;
+    if (a.rate_evidence_id != null) {
+      const e = pick(a.rate_evidence_id, "rate_evidence_id"); if (typeof e === "string") return e;
+      const f = figureFromEvidence(e, { kind: "amount", words: String(a.benefit ?? "") }); if (typeof f === "string") return `rate_evidence_id: ${f}`;
+      a.rate_passage = { page: f.page, quote: f.quote, amount: f.amount, currency: f.currency }; delete a.rate_evidence_id; changed = true;
+    }
+    const pr = a.proportion as Record<string, unknown> | undefined;
+    if (pr && pr.evidence_id != null) {
+      const e = pick(pr.evidence_id, "proportion.evidence_id"); if (typeof e === "string") return e;
+      const f = figureFromEvidence(e, { kind: "percent", words: String(pr.applies_when ?? ""), percent: typeof pr.percent === "number" ? pr.percent : null }); if (typeof f === "string") return `proportion.evidence_id: ${f}`;
+      a.proportion = { page: f.page, quote: f.quote, percent: f.percent, applies_when: pr.applies_when }; changed = true;
+    }
+    if (Array.isArray(a.passage_limits) && (a.passage_limits as Record<string, unknown>[]).some((x) => x?.evidence_id != null)) {
+      const out: Record<string, unknown>[] = [];
+      for (const x of a.passage_limits as Record<string, unknown>[]) {
+        if (x?.evidence_id == null) { out.push(x); continue; }
+        const e = pick(x.evidence_id, "passage_limits.evidence_id"); if (typeof e === "string") return e;
+        const f = figureFromEvidence(e, { kind: "amount", words: String(x.label ?? ""), amount: typeof x.amount === "number" ? x.amount : null }); if (typeof f === "string") return `passage_limits.evidence_id: ${f}`;
+        out.push({ page: f.page, quote: f.quote, amount: f.amount, currency: f.currency, label: x.label, applies: x.applies });
+      }
+      a.passage_limits = out; changed = true;
+    }
+    if (changed) call.arguments = a;
+    return null;
+  };
   /** A tool call refused by the loop before it runs (null: run it). */
   const preflight = (call: ToolCall): string | null => {
+    // V1.2: a reported event's illustration states the household's OWN words as its assumption (the save-time gate
+    // requires a verbatim quote; a what-if is checked against the question asked instead). A paraphrase is replaced by their message of this turn when its facts were recorded from it; otherwise
+    // the call is refused with that reason -- never stored as if the household had said it.
+    if (call.name === "calculate" && call.arguments.purpose !== "what_if" && typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim() && !quotedFrom(call.arguments.assumption_words, userTexts)) {
+      if (!recordedNow.length) return "assumption_words must quote the household's own words verbatim (from their messages)";
+      call.arguments = { ...call.arguments, assumption_words: input.message.replace(/\s+/g, " ").trim() };
+    }
+    if (call.name === "calculate") { const bad = resolveEvidenceInputs(call); if (bad) return bad; }
     const sig = call.name + " " + JSON.stringify(call.arguments);
     if (madeCalls.has(sig) && !LOOP_ACTIONS.some((x) => x.name === call.name)) { noteFailure(call.name); return `not run again: the same ${call.name} call was already made for this question (its result is above). Use that result, or end the turn with final_answer and say what is still missing.`; }
     madeCalls.add(sig);
@@ -703,6 +930,172 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return composed;
   };
 
+  /** V1.2: the model had the turn's one repair (or nudge) and its reply still leaves the household's facts
+   * unaddressed -- a bare say-back, a hospital stay or bill nobody looked at, a percentage with no amount. The reply is
+   * completed from what this conversation has ALREADY verified (statements established earlier, passages and table
+   * values the tools returned), each composed and checked like any sentence; what was never looked up is named as
+   * such (never invented); and the grounded question is asked. No extra model call, no retry. */
+  /** V1.2: the ONE bounded lookup the grounded fallback may make when a reply states a percentage of the Sum Insured
+   * without the person's own amount (an unresolved evidence requirement, whatever the benefit): the same tools the
+   * model has -- policies_for, then select_table_value on the documents of the SAME policy as the wording that prints
+   * the percentage (at most 3), each value kept only if it is printed under that wording's own product. Household,
+   * lifecycle, person, version and date checks are the tools' own (and the composer's and the gate's after them). Never
+   * a model call. One match: that value. Several: ambiguous (never the first). None: unavailable, with why. */
+  const lookupSumInsured = async (subject: string): Promise<{ kind: "one"; valueId: string } | { kind: "many"; names: string[]; evidenceIds: string[] } | { kind: "none"; why: string } | null> => {
+    const cited = [...new Set([...trace.toolCalls.flatMap((t) => t.evidenceIds ?? []), ...(pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : [])])];
+    // The document printing the percentages: a passage cited this turn that says so (with its table header / context),
+    // or a percentage value read this turn for this person.
+    const PCT_OF_SUM = /%\s*of (?:the )?sum (?:insured|assured)|percentage shown/i;
+    const fromEvidence = cited.map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e && !stale.has(e.id) && (PCT_OF_SUM.test(evidenceTextOf(e)) || PCT_OF_SUM.test(e.table?.columnHeader ?? ""))).map((e) => e.policyId);
+    const fromValues = [...ctx.values.values()].filter((v) => v.subjectId === subject && v.operand.valueKind === "percent" && !stale.has(evidenceIdOf(state, v.operand.evidence)) && (PCT_OF_SUM.test(evidenceTextOf(v.operand.evidence)) || PCT_OF_SUM.test(v.operand.evidence.table?.columnHeader ?? ""))).map((v) => v.operand.evidence.policyId);
+    const wordingIds = [...new Set([...fromEvidence, ...fromValues])];
+    if (wordingIds.length !== 1) return wordingIds.length ? { kind: "none", why: "more than one policy document prints the percentages, so it is not clear whose sum insured they apply to" } : null;
+    const docs = await loadDocs(input.accountId).catch(() => null);
+    const wording = docs?.find((d) => d.id === wordingIds[0]);
+    if (!docs || !wording) return null;
+    const env2 = loopToolEnv(env);
+    const pf = await runTool(ctx, "policies_for", { subject_id: subject }, env2);
+    const pfIds: string[] = []; resultForModel(pf as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "policies_for", pfIds, new Set());
+    record("policies_for", { subject_id: subject, by: "grounded fallback (sum insured)" }, pf.ok, pfIds, pf.ok ? undefined : pf.error);
+    if (!pf.ok) return { kind: "none", why: "the list of documents that insure them could not be read" };
+    const family = new Set(policyFamily(docs, wording).map((d) => d.id));
+    const candidates = ((pf.data as { covering?: PolicyCoverage[] }).covering ?? []).filter((c) => c.policyId !== wording.id && family.has(c.policyId)).slice(0, 3);
+    const productWords = (t: string) => (t.toLowerCase().replace(/\([^)]*\)/g, " ").match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "the", "and", "for", "sum", "assured", "insured", "benefit", "amount", "cover", "wording", "schedule", "certificate", "plan", "scheme", "public", "service"].includes(w));
+    const own = new Set(productWords(`${wording.productName ?? ""} ${wording.policyType ?? ""}`));
+    const found: { valueId: string; policyId: string; evidenceId: string }[] = [];
+    for (const c of candidates) {
+      const args = { policy_id: c.policyId, benefit: wording.policyType || wording.productName || "sum insured", subject_id: subject, want: "amount" };
+      const r = await runTool(ctx, "select_table_value", args, env2);
+      const ids2: string[] = []; resultForModel(r as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "select_table_value", ids2, new Set());
+      const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; benefit?: string; rowLabel?: string } | null;
+      record("select_table_value", { ...args, by: "grounded fallback (sum insured)" }, r.ok, ids2, r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, valueId: d.valueId, row: d.rowLabel }) : undefined);
+      const under = productWords(String(d?.benefit ?? d?.rowLabel ?? ""));
+      if (d?.status === "ok" && d.valueKind === "money" && d.valueId && under.length && under.every((w) => own.has(w))) found.push({ valueId: d.valueId, policyId: c.policyId, evidenceId: ids2[0] ?? "" });
+    }
+    if (found.length === 1) return { kind: "one", valueId: found[0].valueId };
+    if (found.length > 1) return { kind: "many", names: found.map((f) => policyNames.get(f.policyId) ?? state.docNames?.[f.policyId] ?? "a document"), evidenceIds: found.map((f) => f.evidenceId).filter(Boolean) };
+    return { kind: "none", why: candidates.length ? `the ${candidates.map((c) => c.productName ?? "document").join(" and ")} that insure them under this policy do not print an amount for them under ${wording.productName ?? "this product"}` : `none of their readable documents of this policy lists a sum insured under ${wording.productName ?? "this product"}` };
+  };
+  let lookupAsk: Extract<LoopPending, { kind: "fact" }> | null = null;
+  const groundedFallback = async (r: LoopReply | null): Promise<LoopReply | null> => {
+    if (!r || (r.kind !== "final" && r.kind !== "ask")) return r;
+    const repaired = gateRepaired || finalRepaired || completionNudged;
+    const c0 = r.composed ?? null;
+    const subject = (c0?.subjectId ?? (r.kind === "ask" && r.pending.kind === "fact" ? r.pending.subjectId : null) ?? state.claim?.subjectId ?? state.subjectId) || null;
+    if (!subject || !recordedNow.some((x) => x.subject === subject)) return r;
+    // Without a repair, the fallback only shows a calculation completed this turn that the reply does not show: one
+    // completed when the household's facts arrived (completedCalcs), or the turn's ONLY resolved calculation for this
+    // person when the reply shows none.
+    const shown0 = new Set((c0?.calcs ?? []).map((k) => k.calcId));
+    const ok0 = (k: CalcOutcome) => (k.kind === "conditional_illustration" || k.kind === "indicative_estimate") && k.subjectId === subject && !!k.record && k.amount != null && !shown0.has(k.calcId);
+    const fresh = completedCalcs.filter(ok0);
+    const turnResolved = [...calcOutcomes(ctx).values()].filter(ok0);
+    const single = !shown0.size && !attemptedResults.size && turnResolved.length === 1 ? turnResolved : [];
+    if (!repaired && !fresh.length && !single.length) return r;
+    const texts = (c0?.sentences ?? []).map((x) => x.text);
+    const question = r.kind === "ask" ? r.pending.question : null;
+    const missing = repaired ? completionLines(texts, question, subject, pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []) : [];
+    const bare = repaired && r.kind === "final" && !(c0?.sentences ?? []).some((x) => x.evidenceIds.length);
+    // A resolved calculation of THIS turn for this person that the reply tried to state but that is not shown (left out
+    // for its wording, or the repair went unanswered) -- or, when the reply states no calculation at all, the turn's ONLY
+    // resolved one. Never one withdrawn by a correction, made for someone else, or tried and superseded in exploration.
+    const shownCalc = new Set((c0?.calcs ?? []).map((k) => k.calcId));
+    const resolved = (k: CalcOutcome | undefined): k is CalcOutcome => !!k && (k.kind === "conditional_illustration" || k.kind === "indicative_estimate") && k.subjectId === subject && !!k.record && k.amount != null
+      && !(state.claim?.calcs?.[k.calcId]?.withdrawn) && k.evidence.every((e) => !stale.has(evidenceIdOf(state, e)));
+    // Eligible: a result the reply cited whose sentence was left out ONLY for its wording (or whose reply was never
+    // composed because the repair went unanswered) -- never one refused for its substance (e.g. an illustration given
+    // as the amount for an actual stay). Or, when the reply cites no calculation at all, the turn's ONLY resolved one.
+    let lostCalcs = repaired ? [...attemptedResults].filter((id) => !substantiveDrops.has(id)).map((id) => calcOutcomes(ctx).get(id)).filter(resolved).filter((k) => !shownCalc.has(k.calcId)) : [];
+    if (!lostCalcs.length && !shownCalc.size && !attemptedResults.size) { const all = [...calcOutcomes(ctx).values()].filter(resolved); if (all.length === 1) lostCalcs = all; }
+    lostCalcs = [...lostCalcs, ...fresh.filter(resolved)];
+    lostCalcs = [...new Map(lostCalcs.map((k) => [k.calcId, k])).values()];
+    // The household's reply to the yes / no question just asked, when it visibly answers neither way (no yes / no, and
+    // no word of the question beyond the fact asked about): that question is still open.
+    const replyWords = [...new Set(recordedNow.filter((x) => x.subject === subject).map((x) => x.words.trim()))].join(" ");
+    const unsettled = repaired && r.kind === "final" && !state.pending && pendingBefore?.kind === "fact" && /^\s*(?:was|is|did|does|has|have|were|are|can|could)\b/i.test(pendingBefore.question)
+      && !/\b(?:yes|yeah|yep|no|nope|not|n['’]t|none|neither)\b/i.test(replyWords)
+      && !contentWords(replyWords).some((w) => contentWords(pendingBefore.question).includes(w) && !contentWords(pendingBefore.factKey.replace(/_/g, " ")).includes(w));
+    if (!missing.length && !bare && !unsettled && !lostCalcs.length) return r;
+    trace.incomplete = [...(lostCalcs.length ? [`a verified calculation the reply did not show (${lostCalcs.map((k) => k.benefit).join(", ")}) was stated from its own record`] : []), ...(bare ? ["the reply only said back what the household told it"] : []), ...(unsettled ? ["the household's reply did not visibly answer the question asked"] : []), ...missing.map((m) => m.split(":")[0])];
+    const who = input.people.find((p) => p.id === subject)?.name ?? "";
+    const short = /\(([^)]+)\)\s*$/.exec(who)?.[1] ?? who.split(/\s+/)[0] ?? "they";
+    const live = (id: string) => !!state.evidence[id] && !stale.has(id);
+    const sentences: Record<string, unknown>[] = [];
+    const notes: string[] = [];
+    const sayBacks = r.kind === "final" && !texts.some((t) => /^\s*you (?:told me|said)\b/i.test(t)) ? recordedNow.filter((x) => x.subject === subject).map((x) => sayBack(x.words)).filter((x): x is string => !!x) : [];
+    sentences.push(...[...new Set(sayBacks)].map((text) => ({ text })));
+    // Each lost calculation, in canonical wording built only from its verified record: the benefit as printed, its
+    // printed percentages, the case and the household's own words it assumes, then what is still unresolved. Composed
+    // and checked like any sentence citing that result (subject, policy, versions, operands, arithmetic), then gated.
+    for (const k of lostCalcs) sentences.push({ text: canonicalCalcSentence(k), result_id: k.calcId, subject_id: subject });
+    // Only a lost calculation to restore: nothing else is added (what the reply said stands as it is).
+    const onlyCalcs = !missing.length && !bare && !unsettled;
+    // What the conversation already established for this person (cited, bound), newest last.
+    // Only what bears on what is missing (the sum insured; a hospital stay), or everything when the reply only said back;
+    // one statement per figure, never a figure the reply already states.
+    const wantSum = missing.some((m) => /sum insured/i.test(m)), wantStay = missing.some((m) => /hospital/i.test(m));
+    const figs = new Set(moneyFiguresIn(texts.join(" ")).map((f) => Math.round(f.value * 100)));
+    const est = onlyCalcs ? [] : (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text))
+      .filter((e) => bare || unsettled || (wantSum && /sum (?:insured|assured)/i.test(e.text)) || (wantStay && /hospital|confine/i.test(e.text)))
+      .filter((e) => { const f = moneyFiguresIn(e.text).map((x) => Math.round(x.value * 100)); if (f.length && f.every((x) => figs.has(x))) return false; f.forEach((x) => figs.add(x)); return true; }).slice(-3);
+    sentences.push(...est.map((e) => ({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), subject_id: subject })));
+    const saidNow = [...texts, ...est.map((e) => e.text)].join(" ");
+    // The person's own printed amounts read this conversation (a certificate's sum insured) that nothing says yet.
+    const amounts = [...ctx.values.entries()].filter(([, v]) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && live(evidenceIdOf(state, v.operand.evidence)) && !moneyFiguresIn(saidNow).some((f) => Math.abs(f.value * 100 - v.operand.cents!) < 1));
+    const ctxText = [saidNow, question ?? "", ...(pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []).map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
+    const percentOfSum = /%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText);
+    if (!onlyCalcs && percentOfSum && !statesOwnAmount(saidNow, subject)) {
+      const pick = amounts.find(([, v]) => /sum (?:insured|assured)|personal accident|accident/i.test(`${v.operand.benefit} ${v.selected.benefit ?? ""}`)) ?? null;
+      if (pick) {
+        const [valueId, v] = pick; const e = v.operand.evidence;
+        const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
+        const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
+        sentences.push({ text: `${product} lists ${short}'s ${v.operand.benefit} as ${(e.table?.cell?.text ?? "").replace(/\s+/g, " ").trim() || `${v.operand.currency} ${(v.operand.cents! / 100).toLocaleString("en-SG")}`}${asOf}; the schedule's percentages are of that sum insured.`, value_ids: [valueId], subject_id: subject });
+      } else {
+        // The certificate amount was not read: the one bounded lookup, instead of saying it was not read.
+        const look = await lookupSumInsured(subject);
+        if (look?.kind === "one") {
+          const v = ctx.values.get(look.valueId)!; const e = v.operand.evidence;
+          const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
+          const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
+          sentences.push({ text: `${product} lists ${short}'s ${v.operand.benefit} sum insured as ${(e.table?.cell?.text ?? "").replace(/\s+/g, " ").trim() || `${v.operand.currency} ${(v.operand.cents! / 100).toLocaleString("en-SG")}`}${asOf} (the amount on that date, not confirmation of current cover); the schedule's percentages are of that sum insured.`, value_ids: [look.valueId], subject_id: subject });
+        } else if (look?.kind === "many") {
+          notes.push(`${short} is listed with a sum insured for this product on more than one current document (${look.names.join(" and ")}), so I haven't picked one for the percentages.`);
+          if (r.kind === "final" && look.evidenceIds.length) lookupAsk = { kind: "fact", question: `Which of these is ${short}'s current certificate: ${look.names.join(" or ")}?`, factKey: "current_certificate", subjectId: subject, why: "the percentages are of the sum insured on the current certificate", evidenceIds: look.evidenceIds, turn: state.turn };
+        } else if (look?.kind === "none") notes.push(`I couldn't find ${short}'s own sum insured for this: ${look.why}, so no amount can be worked out from the percentages.`);
+        else notes.push(`I couldn't tell which document's sum insured the schedule's percentages apply to, so no amount is shown.`);
+      }
+    }
+    // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
+    const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
+    for (const m of missing) {
+      const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
+      if (!kind) continue;
+      if (kind === "stay" && lostCalcs.some((k) => k.calculator === "hospital_cash")) continue; // the stay's own calculation is shown
+      const words = /told you "([^"]+)"/.exec(m)?.[1] ?? "";
+      let found: { id: string; line: string; product: string } | null = null;
+      for (const [id, e] of Object.entries(state.evidence)) {
+        if (!live(id) || (e.subjectId && e.subjectId !== subject)) continue;
+        const line = e.passage.text.split(/\n+/).map((l) => l.trim()).find((l) => ADDR[kind].test(l) && moneyFiguresIn(l).length && /^[A-Za-z][A-Za-z ()'’/-]{2,60}:\s/.test(l));
+        if (line) { found = { id, line: line.length > 260 ? line.slice(0, line.indexOf(".", 120) + 1 || 260) : line, product: policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "your policy" }; break; }
+      }
+      if (found) sentences.push({ text: `For the stay you mentioned, the ${found.product} says: “${found.line.replace(/[.\s]+$/, "")}”.`, evidence_ids: [found.id], subject_id: subject });
+      else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
+    }
+    const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
+    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n)) } : (composed ?? c0);
+    // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
+    // reply to the question just asked does not visibly answer it -- that question again.
+    if (r.kind === "ask") return { ...r, composed: merged, trailing: [...(r.trailing ?? []), ...notes] };
+    let ask: Extract<LoopPending, { kind: "fact" }> | null = state.pending?.kind === "fact" ? state.pending : lookupAsk ?? (merged ? followUpFor(merged) : null);
+    if (!ask && unsettled && pendingBefore?.kind === "fact") {
+      ask = { ...pendingBefore, turn: state.turn };
+      notes.push(`I couldn't tell from your reply (“${replyWords.trim()}”) whether that answers my last question, so I'm asking it again.`);
+    }
+    if (ask) return { kind: "ask", pending: ask, preface: null, composed: merged, trailing: notes };
+    if (merged) merged.notes = [...merged.notes, ...notes];
+    return merged ? { kind: "final", composed: merged } : r;
+  };
   for (let step = 0; !reply; step++) {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
@@ -739,7 +1132,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!res.ok) noteFailure(call.name);
       if (res.ok && call.name === "calculate" && typeof call.arguments.subject_id === "string") {
         const miss = ((shown as { data?: { missing?: { key: string; ask: string; why: string; evidence?: { evidence_id?: string }[] }[] } }).data?.missing ?? []).filter((m) => m.ask === "household");
-        calcMissing.set(call.arguments.subject_id, miss.map((m) => ({ key: normalizeKey(m.key), why: m.why, evidenceIds: (m.evidence ?? []).map((e) => e.evidence_id ?? "").filter(Boolean) })));
+        const byBenefit = calcMissingBy.get(call.arguments.subject_id) ?? new Map(); calcMissingBy.set(call.arguments.subject_id, byBenefit);
+        const benefitKey = String(call.arguments.benefit ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+        byBenefit.set(benefitKey, miss.map((m) => ({ key: normalizeKey(m.key), why: m.why, evidenceIds: (m.evidence ?? []).map((e) => e.evidence_id ?? "").filter(Boolean) })));
+        // An unresolved calculation waiting only for household facts is kept (its validated arguments), so the turn
+        // those facts arrive can complete it with the same tool -- whatever else is still being clarified.
+        const kind = (res.data as { kind?: string }).kind;
+        const openKey = `${call.arguments.subject_id}|${String(call.arguments.calculator)}|${benefitKey}`;
+        if (kind === "unresolved" && miss.length) (state.openCalcs ??= {})[openKey] = { args: call.arguments, missing: miss.map((m) => normalizeKey(m.key)), turn: state.turn };
+        else if (kind === "indicative_estimate" || kind === "conditional_illustration") { if (state.openCalcs) delete state.openCalcs[openKey]; }
       }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (call.name === "resolve_person") lastMention = String(call.arguments.mention ?? "");
@@ -773,8 +1174,37 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   trace.calls = meter.calls;
   state.seq = ctx.seq;
 
+  // V1.2: a calculation left unresolved only for household facts (kept per benefit, with its validated arguments) is
+  // completed the turn those facts are recorded -- whatever else is still being clarified -- with the same tool and its
+  // own checks. Only facts the household gave (their words); never a model call; at most two per turn.
+  if (state.openCalcs && reply) {
+    const FILL: Record<string, (f: { value: unknown; words: string }) => [string, Record<string, unknown>] | null> = {
+      admission_datetime: (f) => (/^\d{4}-\d{2}-\d{2}/.test(String(f.value)) ? ["admission", { at: String(f.value), words: f.words }] : null),
+      discharge_datetime: (f) => (/^\d{4}-\d{2}-\d{2}/.test(String(f.value)) ? ["discharge", { at: String(f.value), words: f.words }] : null),
+    };
+    let reruns = 0;
+    for (const [key, open] of Object.entries(state.openCalcs)) {
+      const subject = String(open.args.subject_id ?? "");
+      if (reruns >= 2 || open.turn === state.turn || !recordedNow.some((x) => x.subject === subject)) continue;
+      const facts = (state.claim?.subjectId === subject ? state.claim.facts : state.otherClaims?.[subject]?.facts) ?? {};
+      const fills = open.missing.filter((k) => FILL[k]);
+      if (!fills.length) continue;
+      const args: Record<string, unknown> = { ...open.args };
+      let ready = true;
+      for (const k of fills) { const known = knownFactFor(k, facts as Parameters<typeof knownFactFor>[1]); const v = known ? FILL[k]({ value: known.fact.value, words: String((known.fact as { words?: string }).words ?? "") }) : null; if (!v || !v[1].words) { ready = false; break; } args[v[0]] = v[1]; }
+      if (!ready) continue;
+      reruns++;
+      const res = await runTool(ctx, "calculate", args, loopToolEnv(env));
+      const ids2: string[] = []; resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, "calculate", ids2, new Set());
+      const d = res.ok ? (res.data as { calc_id?: string; kind?: string; amount?: number }) : null;
+      record("calculate", { ...args, by: "grounded fallback (open calculation)" }, res.ok, ids2, res.ok ? undefined : res.error, d ? JSON.stringify({ kind: d.kind, amount: d.amount, calc: d.calc_id }) : undefined);
+      const k = d?.calc_id ? calcOutcomes(ctx).get(d.calc_id) : undefined;
+      if (k && (k.kind === "indicative_estimate" || k.kind === "conditional_illustration")) { completedCalcs.push(k); delete state.openCalcs[key]; }
+    }
+    state.seq = ctx.seq;
+  }
   let reasked: LoopPending | null = null;
-  const done = (reply ?? beforeRepair) as LoopReply | null;
+  const done = await groundedFallback((reply ?? beforeRepair) as LoopReply | null);
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

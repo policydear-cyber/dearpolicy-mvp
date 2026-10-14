@@ -185,6 +185,58 @@
       "calls": 26,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s47-live-1",
+      "tested_code_sha": "eaf88a7426d3aee2c66234a02f07e620c5ef54d8",
+      "request_sha": "b13e7c5dab4e5947b33ee5862b281cc765bec0b4",
+      "at": "2026-10-13T15:05:47.387Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.011071,
+      "reserved_unsettled_usd": 0,
+      "calls": 29,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "s47-live-2",
+      "tested_code_sha": "1fd025d04513d853b3e6fc4cd10be5392a3a052e",
+      "request_sha": "1fd025d04513d853b3e6fc4cd10be5392a3a052e",
+      "at": "2026-10-13T16:05:37.228Z",
+      "preflight": false,
+      "run_cap_usd": 0.03,
+      "spent_usd": 0.012264,
+      "reserved_unsettled_usd": 0,
+      "calls": 37,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "s47-live-3",
+      "tested_code_sha": "315183e81dfe362f63dd99c5854c363d3f125ed4",
+      "request_sha": "315183e81dfe362f63dd99c5854c363d3f125ed4",
+      "at": "2026-10-13T16:32:24.132Z",
+      "preflight": false,
+      "run_cap_usd": 0.03,
+      "spent_usd": 0.009676,
+      "reserved_unsettled_usd": 0,
+      "calls": 26,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "s47-live-4",
+      "tested_code_sha": "22fd52384596d60e9e2e6f194823eade9579d53f",
+      "request_sha": "22fd52384596d60e9e2e6f194823eade9579d53f",
+      "at": "2026-10-14T03:35:21.234Z",
+      "preflight": false,
+      "run_cap_usd": 0.03,
+      "spent_usd": 0.010092,
+      "reserved_unsettled_usd": 0,
+      "calls": 28,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

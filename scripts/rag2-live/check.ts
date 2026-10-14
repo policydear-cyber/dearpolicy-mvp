@@ -85,12 +85,12 @@ export function turnUsefulness(t: LoadedTurn): { ok: boolean; stage: Stage; deta
 }
 
 /** Reads a saved conversation back from the database. */
-export async function loadConversation(conversationId: string): Promise<LoadedConversation> {
-  const c = (await pool.query("SELECT state FROM chat_conversations WHERE id=$1 AND account_id=$2", [conversationId, ACCOUNT_L])).rows[0];
+export async function loadConversation(conversationId: string, account: string = ACCOUNT_L): Promise<LoadedConversation> {
+  const c = (await pool.query("SELECT state FROM chat_conversations WHERE id=$1 AND account_id=$2", [conversationId, account])).rows[0];
   if (!c) throw new Error(`conversation ${conversationId} not found for the live household`);
-  const msgs = (await pool.query("SELECT role, content, answer_json, created_at FROM chat_messages WHERE conversation_id=$1 AND account_id=$2 ORDER BY created_at, message_order", [conversationId, ACCOUNT_L])).rows;
+  const msgs = (await pool.query("SELECT role, content, answer_json, created_at FROM chat_messages WHERE conversation_id=$1 AND account_id=$2 ORDER BY created_at, message_order", [conversationId, account])).rows;
   const pages = new Map<string, string>();
-  for (const r of (await pool.query("SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1", [ACCOUNT_L])).rows) pages.set(`${r.policy_id}:${r.page_number}`, r.text);
+  for (const r of (await pool.query("SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1", [account])).rows) pages.set(`${r.policy_id}:${r.page_number}`, r.text);
   const turns: LoadedTurn[] = [];
   const traces: any[] = c.state?.ragLoop?.turns ?? [];
   let pendingUser: { content: string; at: string } | null = null;
