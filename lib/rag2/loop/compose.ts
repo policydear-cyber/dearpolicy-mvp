@@ -821,7 +821,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (bad) { drop(t, bad, STEP_NOTE); continue; }
     // V1.4: a next step is a practical suggestion; a REQUIREMENT ("you must submit ...") cites the document that states
     // it, in a sentence -- a next step cannot, so a mandatory checklist is never invented there.
-    if (/\b(?:must|mandatory|required|requirement|have to|has to|need to (?:submit|provide|send|produce|file|furnish)|are needed|is needed)\b/i.test(t)) { drop(t, "a next step states a requirement; what a document requires is stated with its citation", STEP_NOTE); continue; }
+    // (Asking the insurer what is required -- "ask which documents are required" -- is a suggestion, not a requirement.)
+    if (/\b(?:must|mandatory|required|requirement|have to|has to|need to (?:submit|provide|send|produce|file|furnish)|are needed|is needed)\b/i.test(t) && !/\b(?:ask|check|find out|confirm|enquire|inquire)\b[^.;]*\b(?:what|which|whether|if)\b/i.test(t)) { drop(t, "a next step states a requirement; what a document requires is stated with its citation", STEP_NOTE); continue; }
     out.nextSteps.push(stepText);
   }
   settleAnswer(out, drops, conditioned, ctx);

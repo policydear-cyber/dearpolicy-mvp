@@ -150,7 +150,7 @@ async function main() {
   const deathTurn = (user: string) => ({ user, steps: [
     () => [call("resolve_person", { mention: "Darren" })],
     () => [call("person_benefits", { subject_id: D })],
-    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: deathAnswer(v), next_steps: ["Keep a copy of the death certificate and the police report from Japan.", "You must submit the original death certificate within 30 days."] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: deathAnswer(v), next_steps: ["Keep a copy of the death certificate and the police report from Japan.", "You must submit the original death certificate within 30 days.", "Contact Meridian Life Ltd and ask which claim forms and supporting documents are required."] })],
   ] });
   const [P2] = await run([deathTurn(DEATH)]);
   await check("P2/P3 death after an accident, the model asking nothing: Darren's Term Life and PA amounts each with its product and date, the documents that establish them, the accidental-death condition -- and ONE question, the accident date, taken from that condition; no total", () => {
@@ -164,6 +164,7 @@ async function main() {
   const [P4] = await run([deathTurn("Darren died in a car accident in Japan on 3 October 2026, what can I do?")]);
   await check("N8 a next step may be a practical suggestion, never an invented requirement: \"You must submit the original death certificate within 30 days\" is not shown", () => {
     assert.match(P4.v, /\[next\] Keep a copy of the death certificate/); assert.ok(!/must submit/i.test(P4.v + P2.v), P4.v);
+    assert.match(P4.v, /\[next\] Contact Meridian Life Ltd and ask which claim forms and supporting documents are required/, "asking the insurer what is required is a suggestion");
   });
   await check("P4 the accident date given in the message: no question about it", () => { assert.deepEqual(P4.q, []); assert.match(P4.v, /S\$1,000,000/); });
   const [P3b] = await run([{ user: DEATH, steps: [

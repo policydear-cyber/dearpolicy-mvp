@@ -26,6 +26,7 @@ APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 
       The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
       The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
       [next] Keep a copy of the death certificate and the police report from Japan.
+      [next] Contact Meridian Life Ltd and ask which claim forms and supporting documents are required.
 
 ### Michelle: certificate vs endorsement
 USER: What is Michelle's personal accident cover?
