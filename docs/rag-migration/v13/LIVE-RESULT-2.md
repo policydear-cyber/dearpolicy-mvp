@@ -6,13 +6,19 @@
 - **Cost:** US$0.006207 for 21 calls (0 refused, 0 failed). Run cap US$0.023, so both samples together stay within US$0.03 (US$0.006949 + US$0.006207 = US$0.013156). Ledger remaining after the run: US$0.120852. The US$0.15 reservation is untouched.
 - **Time:** 53.3 s for the conversation; first useful answer 5.1 s.
 
-## Finding: a wrong-product answer the grader classed as usefulness (turns 2 and 3)
+## Finding: Term Life stated as Personal Accident (turn 2) — a factual correctness failure, now fixed
 
-The model labelled its sentence *Group Personal Accident* but stated the certificate's **Term Life** S$400,000 as "a sum assured". The
-candidate's new figure-identity binding bound the figure to the Term Life row; the value-path product check did not read the sentence's
-own benefit field, and “Group” in the sentence counted as naming “Group Term Life”. The save-time gate passed it. Turn 3 repeated the
-sentence after the model asked resolve_person about “my personal accident cover”. This defect was introduced by `5568ddc` and is fixed
-after this run (see the PR); the run is replayed without a model call in `npm run rag2:stress-test`.
+> **Classification corrected after the run** (see `RECLASSIFICATION.md`). The pre-registered grader recorded turn 2 as a
+> usefulness failure ("S$200,000 is stated"), because its safety pattern needed the words "personal accident" next to the
+> figure. It was a **factual correctness (wrong-product) failure**. The grade files in the run directory are kept unchanged.
+
+The model labelled its sentence *Group Personal Accident* but stated the certificate's **Term Life** S$400,000 as "a sum assured".
+The candidate's new figure-identity binding bound the figure to the Term Life row. The value-path product check did not read the
+sentence's own benefit field, and "Group" in the sentence counted as naming "Group Term Life", so the save-time gate passed it.
+This defect was introduced by `5568ddc` and fixed in `fdc2dae`. The run is replayed with no model call in `npm run rag2:stress-test`.
+
+Turn 3's visible answer was the "couldn't identify" person reply, which is a person-resolution failure; S$400,000 was not shown there.
+The turn-6 member-list check is treated as **disputed** (see `RECLASSIFICATION.md`).
 
 ## Failed checks
 

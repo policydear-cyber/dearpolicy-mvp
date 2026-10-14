@@ -7,6 +7,9 @@
 - **Cost:** US$0.007577 for 22 calls (0 refused, 0 failed). Run cap US$0.016. All three samples: US$0.006949 + US$0.006207 + US$0.007577 = **US$0.020733**, within the task cap of US$0.03. Ledger remaining after the run: US$0.113275. The US$0.15 reservation is untouched.
 - **Time:** 66.8 s for the conversation; first useful answer 6.5 s.
 
+> Post-hoc (see `RECLASSIFICATION.md`): the turn-6 member-list expectation is treated as **disputed**, not as a product
+> requirement; the pre-registered verdict above is kept as recorded.
+
 ## Failed checks
 
 | turn | check | kind | result | stage | visible |

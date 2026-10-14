@@ -136,17 +136,18 @@ APP:  Ivan: Arbor Civil Service Group Scheme - Certificate (Arbor Assurance, a p
       calcs=[]
 
 USER: How much is my personal accident cover?
-APP:  The policy wording uses the Sum Insured as the basis for some personal-accident benefits, but the uploaded documents do not establish that this is the current amount in force.
+APP:  The Arbor Civil Service Group Scheme - Certificate lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm the Group Personal Accident amount for this answer.
       calcs=[]
 
 USER: My personal accident cover is S$400,000, right?
-APP:  The policy wording uses the Sum Insured as the basis for some personal-accident benefits, but the uploaded documents do not establish that this is the current amount in force.
+APP:  The Arbor Civil Service Group Scheme - Certificate lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm the Group Personal Accident amount for this answer.
       calcs=[]
 
 USER: I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it. How much can I claim?
 APP:  You told me, “I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it.”
       Ivan’s Arbor Group Personal Accident wording lists the Simple Fracture benefit limit as S$5,000 per insured person per accident and says a simple fracture confirmed by X-ray is payable at the percentage shown for the bone.
       The wording defines a simple fracture as a closed fracture where the skin is not broken, and the documents do not state that the fall down the stairs meets the policy’s definition of an Accident.
+      The Arbor Civil Service Group Scheme - Certificate lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm which of them applies for this answer.
       If “Simple Fracture” (50% of the Simple Fracture benefit limit of S$5,000) applies, on the facts you reported, the indicative illustration is S$2,500; it is not an approved payment, and the insurer must still accept it under the policy's own definition after its medical review, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
       calcs=[["lump_sum",2500]]
 

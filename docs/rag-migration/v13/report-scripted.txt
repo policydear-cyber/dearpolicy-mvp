@@ -1,0 +1,65 @@
+### R1 household document inventory
+
+USER: What policies does my family have?
+APP:  Here are the documents on file for your household.
+      Marcus: Public Officers Group Scheme - Certificate (Kestrel Assurance, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (Kestrel Assurance, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Assurance, reference wording for the scheme, not a personal policy document); scan-0042.jpg could not be read (the photo is too blurred, dark or faint to read).
+      Serena: Public Officers Group Scheme - Certificate (Kestrel Assurance, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (Kestrel Assurance, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Assurance, reference wording for the scheme, not a personal policy document).
+      Not linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General); PawSafe Pet Insurance - Endorsement (Lumen General) -- link it to a person so it can be used for them.
+      calcs=[]
+
+### R2 direct Personal Accident amount, then a wrong amount corrected
+
+USER: How much is my personal accident cover?
+APP:  Your Group Personal Accident sum assured on the Public Officers Group Scheme certificate is S$450,000 as of 15 September 2023.
+      calcs=[]
+
+USER: So my personal accident cover is S$1,200,000, right?
+APP:  No: your Group Personal Accident sum assured is S$450,000 as of 15 September 2023; the S$1,200,000 on the certificate is your Group Term Life sum assured.
+      calcs=[]
+
+### R3 percentage of a fixed benefit limit (Simple Fracture) versus percentage of the Sum Insured (Other Fracture)
+
+USER: I fractured my tibia in a fall. It's a simple (closed) fracture. How much could the Simple Fracture benefit pay?
+APP:  If the Simple Fracture benefit applies to your simple tibia fracture, the indicative illustration is S$2,500; it is not an approved payment.
+      calcs=[["lump_sum",2500,["benefit_limit=5000","percent=50"]]]
+
+USER: And if it had been a compound fracture of the leg instead?
+APP:  If it had been a compound fracture of the leg and the Other Fracture benefit applied, the illustration would be S$225,000; it is not an approved payment.
+      calcs=[["lump_sum",225000,["sum_insured=450000","percent=50"]]]
+
+### R4 an invalid date, then a valid correction, and the waiting period decided without a rate
+
+USER: I was admitted to hospital after an accident on 30 February 2026 at 9am and discharged on 2 March 2026 at 9am. Does the Daily Hospital Cash pay anything?
+APP:  I'm asking because it changes which of the policy's benefits or amounts applies.
+      [Q] 30 February isn't a calendar date, so on what date were you admitted?
+      calcs=[]
+
+USER: Sorry, I was admitted on 28 February 2026 at 9am and discharged on 2 March 2026 at 9am, Singapore time.
+APP:  You told me admitted on 28 February 2026 at 9am.
+      You told me discharged on 2 March 2026 at 9am, Singapore time.
+      The Daily Hospital Cash is payable from the 11th day onwards.
+      Your stay from 28 February to 2 March does not reach the 11th day, so this benefit does not pay for it.
+      Public Officers Group Personal Accident - Summary of Benefits daily hospital cash does not apply to these facts: the stay you reported (48 hours, from 28 February 2026 to 2 March 2026: at most 3 days even counting the days of admission and discharge) does not reach the 11th day of confinement that the benefit is payable from (“payable from the 11th day onwards”), if this provision applies to the stay.
+      What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.
+      [next] When you make the claim, include the documents that show the policy’s condition is met, with the insurer’s claim form.
+      calcs=[]
+
+### R5 switching the subject between two people
+
+USER: What is Serena's personal accident cover?
+APP:  Serena's Group Personal Accident sum assured is S$450,000 as of 15 September 2023.
+      calcs=[]
+
+USER: And what is my own term life cover?
+APP:  Your Group Term Life sum assured is S$1,200,000 as of 15 September 2023.
+      calcs=[]
+
+USER: Back to Serena: what is her term life cover?
+APP:  Serena's Group Term Life sum assured is S$1,200,000 as of 15 September 2023.
+      calcs=[]
+
+### R6 Term Life figure stated as Personal Accident, repair unavailable
+
+USER: How much is my personal accident cover?
+APP:  The Public Officers Group Scheme - Certificate lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm the Group Personal Accident amount for this answer.
+      calcs=[]

@@ -29,6 +29,9 @@ import { ACCOUNT_T } from "../../scripts/fixtures/rag2-adv/household";
 import { AdvModel } from "../../scripts/fixtures/rag2-adv/model";
 import { ALL } from "../../scripts/fixtures/rag2-adv/scenarios";
 import { ACCOUNT_L } from "../../scripts/fixtures/rag2-live/household";
+import { ACCOUNT as ACCOUNT_R } from "../../scripts/fixtures/rag2-stress/report-household";
+import { REPORT_SCENARIOS } from "../../scripts/fixtures/rag2-stress/report-conversations";
+import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
 import { installFetchGuard } from "./rag2-live-fetch-guard";
 import { HostedLoopModel } from "@/lib/rag2/loop/hosted-model";
@@ -50,7 +53,11 @@ const fetchGuard = live && runLedger ? installFetchGuard({ ledger: runLedger, pr
 process.env.DEV_AUTH_ENABLED = "1";
 // PR #47 reproduction: RAG2_LIVE_HOUSEHOLD=scenario signs in as the scenario-completion suite's synthetic household.
 // V1.3: RAG2_LIVE_HOUSEHOLD=stress signs in as the stress-test structures' synthetic household.
-process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : ACCOUNT_L) : ACCOUNT_T;
+// V1.3: E2E_RAG2_HOUSEHOLD=report (scripted, never live) signs in as the report-layout household
+// (scripts/fixtures/rag2-stress/report-household.ts, seeded by e2e/support/seed-rag2-stress-report.ts); its scripted
+// conversations are chosen per test by POST /__rag2stress/scenario {"id":"R1"} and read back by GET /__rag2stress/last.
+const REPORT = !LIVE && process.env.E2E_RAG2_HOUSEHOLD === "report";
+process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : ACCOUNT_L) : REPORT ? ACCOUNT_R : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 
@@ -68,6 +75,24 @@ async function main() {
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, mode: live!.mode, preflight: guard.preflight, ledger: { ...guard.ledger.snapshot(), failed: fetchGuard?.calls.filter((c) => !c.refused && !c.ok).length ?? 0 }, calls: guard.calls, httpCalls: fetchGuard?.calls ?? [] }));
       return;
     }
+    if (url.pathname.startsWith("/__rag2stress/")) {
+      if (!REPORT) { res.writeHead(404).end(JSON.stringify({ error: "start the server with E2E_RAG2_HOUSEHOLD=report" })); return; }
+      if (url.pathname === "/__rag2stress/scenario" && req.method === "POST") {
+        let body = ""; for await (const c of req) body += c;
+        const s = REPORT_SCENARIOS.find((x) => x.id === (JSON.parse(body || "{}") as { id?: string }).id);
+        if (!s) { res.writeHead(404).end(JSON.stringify({ error: "unknown scenario" })); return; }
+        (globalThis as Record<symbol, unknown>)[KEY] = new ScriptedLoopModel(s.turns);
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, id: s.id, messages: s.messages }));
+        return;
+      }
+      if (url.pathname === "/__rag2stress/last") {
+        const m = (await pool.query("SELECT conversation_id::text AS conversation_id, content, answer_json FROM chat_messages WHERE account_id=$1 AND role='assistant' ORDER BY created_at DESC, message_order DESC LIMIT 1", [ACCOUNT_R])).rows[0];
+        const c = m ? (await pool.query("SELECT state FROM chat_conversations WHERE id=$1 AND account_id=$2", [m.conversation_id, ACCOUNT_R])).rows[0] : null;
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ message: m ?? null, state: c?.state ?? null }));
+        return;
+      }
+    }
+    if (REPORT && url.pathname.startsWith("/__rag2adv/")) { res.writeHead(404).end(JSON.stringify({ error: "the report-layout server runs the /__rag2stress/ routes only" })); return; }
     if (url.pathname === "/__rag2adv/scenario" && req.method === "POST") {
       let body = ""; for await (const c of req) body += c;
       const id = (JSON.parse(body || "{}") as { id?: string }).id;

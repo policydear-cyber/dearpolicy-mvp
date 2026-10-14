@@ -164,8 +164,18 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     if (pctBase && (pctBase.kind === "benefit_limit" || pctBase.kind === "sublimit")) {
       const lim = await printedLimit(ctx, pct!.operand.evidence.policyId, pctBase.name, pctBase.kind);
       if (typeof lim === "string") return fail(`lump_sum: the percentage is of the ${pctBase.name} ${pctBase.kind === "sublimit" ? "sub-limit" : "benefit limit"} (“${pctBase.words}”), and ${lim}`);
+      // The amount the table header names must be the limit the document prints.
+      if (pctBase.printed && (lim.operand.currency !== pctBase.printed.currency || lim.operand.cents !== Math.round(pctBase.printed.value * 100))) return fail(`lump_sum: the table is a percentage of “${pctBase.words}”, but the ${pctBase.name} limit is printed as a different amount, so which applies is not established`);
       sum = lim;
       if (a.sum_insured_value_id != null || a.base_value_id != null) baseNote = `the percentage is of the ${lim.operand.benefit} printed in the wording (“${pctBase.words}”), so that amount is used -- not the sum insured or other amount passed`;
+    } else if (pctBase?.kind === "referenced_amount" && pctBase.printed) {
+      const ev = pct!.operand.evidence;
+      const pages = await pageMap(ctx.accountId, ev.policyId);
+      const line = (pages.get(ev.passage.onPage) ?? "").split(/\n/).find((l) => l.replace(/\s{2,}/g, " ").trim() === pctBase.words) ?? null;
+      const hev = line ? evidenceFor({ policyId: ev.policyId, documentHash: doc.fileHash ?? null, page: ev.passage.onPage, pageText: pages.get(ev.passage.onPage)!, passage: line.trim(), subjectId: null }) : null;
+      if (!hev) return fail(`lump_sum: the percentage is of “${pctBase.words}”, and that line could not be located on its page`);
+      sum = { operand: { kind: "table_value", benefit: `amount the table is a percentage of (${pctBase.name})`, valueKind: "money", cents: Math.round(pctBase.printed.value * 100), ppm: null, count: null, currency: pctBase.printed.currency, period: null, evidence: hev } as TableValueOperand };
+      if (a.sum_insured_value_id != null || a.base_value_id != null) baseNote = `the percentage is of the amount its table prints (“${pctBase.words}”), so that amount is used -- not the sum insured or other amount passed`;
     } else {
       const given = value(a.sum_insured_value_id != null ? "sum_insured_value_id" : "base_value_id", "money"); if (typeof given === "string") return fail(given);
       if (!given) return fail(pctBase?.kind === "referenced_amount" ? `lump_sum: the percentage is of “${pctBase.words}”: read that amount for this person (select_table_value) and pass it as sum_insured_value_id` : "lump_sum needs sum_insured_value_id");
@@ -181,7 +191,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     let share: DocValue | null = null;
     if (a.proportion && !shareIsPercent) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
     out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
-      base: pctBase && pctBase.kind !== "sum_insured" && pctBase.kind !== "referenced_amount" ? { kind: pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
+      base: pctBase && pctBase.kind !== "sum_insured" && (pctBase.kind !== "referenced_amount" || pctBase.printed) ? { kind: pctBase.kind === "referenced_amount" ? "benefit_limit" : pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
     if (!("refused" in out) && baseNote) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote];
   } else return fail(`unknown calculator ${String(a.calculator)}`);
   if ("refused" in out) return fail(out.refused);
@@ -310,7 +320,7 @@ function figureFromWords(e: EvidenceRef, op: { kind: "amount" | "percent"; words
 
 /** V1.3: what a printed percentage is OF, from its own wording: the table's column header or the nearest line above
  * the row that says "% of ..." / "percentage of ...". */
-async function percentBaseOf(ctx: ToolContext, pct: DocValue): Promise<{ kind: "sum_insured" | "benefit_limit" | "sublimit" | "referenced_amount"; name: string; words: string } | null> {
+async function percentBaseOf(ctx: ToolContext, pct: DocValue): Promise<{ kind: "sum_insured" | "benefit_limit" | "sublimit" | "referenced_amount"; name: string; words: string; printed?: { value: number; currency: string } } | null> {
   const ev = pct.operand.evidence;
   const page = (await pageMap(ctx.accountId, ev.policyId)).get(ev.passage.onPage) ?? "";
   const header = ev.table?.columnHeader || ev.table?.columnLeaf || "";
@@ -321,6 +331,16 @@ async function percentBaseOf(ctx: ToolContext, pct: DocValue): Promise<{ kind: "
   const of = OF.exec(line)![1].trim();
   const words = line.trim().replace(/\s{2,}/g, " ");
   if (/\bsum (?:insured|assured)\b/i.test(of)) return { kind: "sum_insured", name: "Sum Insured", words };
+  // A percentage OF A PRINTED AMOUNT ("Compensation (% of S$5,000)"): the amount is that table's fixed base. When the page
+  // names it ("Simple Fracture Benefit Limit: S$5,000") it is that limit, read and checked by the server as any other.
+  const amt = /^(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/.exec(of);
+  if (amt) {
+    const value = Number(amt[2].replace(/,/g, "")), currency = CURRENCY_OF[amt[1]];
+    const named = page.split(/\n/).map((l) => /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s+(sub-?limit|benefit limit|limit)\s*:\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(l))
+      .filter((m): m is RegExpExecArray => !!m && CURRENCY_OF[m[3]] === currency && Number(m[4].replace(/,/g, "")) === value);
+    if (named.length === 1) return { kind: /sub/i.test(named[0][2]) ? "sublimit" : "benefit_limit", name: named[0][1].trim(), words, printed: { value, currency } };
+    return { kind: "referenced_amount", name: of.replace(/\)+$/, ""), words, printed: { value, currency } };
+  }
   const lim = /^(.*?)\s*(sub-?limit|benefit limit|limit)\b/i.exec(of);
   if (lim) return { kind: /sub/i.test(lim[2]) ? "sublimit" : "benefit_limit", name: lim[1].replace(/^(?:the|this)\s+/i, "").trim() || "benefit", words };
   return { kind: "referenced_amount", name: of, words };
