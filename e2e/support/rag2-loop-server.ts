@@ -61,7 +61,7 @@ process.env.DEV_AUTH_ENABLED = "1";
 // V1.4: E2E_RAG2_HOUSEHOLD=binding does the same for the binding household (scripts/fixtures/rag2-binding).
 const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : null;
 const REPORT = !!SCRIPTED_HH;
-process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD === "binding" ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
+process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD?.startsWith("binding") ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 

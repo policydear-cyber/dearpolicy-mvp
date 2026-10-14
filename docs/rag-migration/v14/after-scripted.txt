@@ -35,3 +35,13 @@ APP:  Endorsement No. 3 amends Michelle's Group Personal Accident Sum Insured to
 ### correction back to Darren
 USER: Sorry, I meant Darren
 APP:  Darren's certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.
+
+### certificate one cell per line
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?
+
+### certificate one cell per line, page break and repeated heading
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?

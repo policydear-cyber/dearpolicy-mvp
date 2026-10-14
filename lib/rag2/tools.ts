@@ -11,7 +11,7 @@ import type { EvidenceRef } from "./evidence";
 import { ragToolsEnabled } from "./flag";
 import { resolvePerson, type ConversationContext } from "./people";
 import { policiesFor } from "./policies";
-import { personBenefits, type PersonBenefit } from "./benefits";
+import { personBenefits, selectedFromBenefit, type PersonBenefit } from "./benefits";
 import { householdDocuments } from "./inventory";
 import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
@@ -116,7 +116,9 @@ export const RAG_TOOLS: ToolDef[] = [
         for (const b of bs) {
           let valueId: string | null = null;
           if (b.applicability === "person_row" && b.printed.kind === "money" && !b.conflicts?.length) {
-            const r = await selectTableValue({ accountId: ctx.accountId, policyId, benefit: b.benefit.label, subject: { memberId: String(a.subject_id) }, want: "amount", asOf: ctx.asOf }).catch(() => null);
+            const r0 = await selectTableValue({ accountId: ctx.accountId, policyId, benefit: b.benefit.label, subject: { memberId: String(a.subject_id) }, want: "amount", asOf: ctx.asOf }).catch(() => null);
+            // A roster the table parser does not read (one cell per line): the view's own reconstructed row.
+            const r = r0?.status === "ok" ? r0 : selectedFromBenefit(b, view.member.name);
             if (r?.status === "ok" && r.valueKind === "money" && r.cents === b.printed.cents && r.currency === b.printed.currency) {
               valueId = "v" + ++ctx.seq;
               ctx.values.set(valueId, { selected: r, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: r.valueKind, cents: r.cents, ppm: r.ppm, count: null, currency: r.currency, period: r.period, evidence: r.evidence } });

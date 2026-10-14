@@ -49,3 +49,29 @@ Each control is graded on the complete visible answer and the saved state:
 - **Usefulness:** the documented amounts, the conditions and the one question are present.
 
 A generic refusal, or a safe answer that leaves out the documented amounts, does not count as a pass.
+
+## Certificate layouts (added 14 Oct 2026, 17:24 round; written before implementation and before the s50 run)
+
+The same certificate is tested in six text layouts (`certLayout` in `scripts/fixtures/rag2-binding/household.ts`):
+
+| Layout | Expected |
+|---|---|
+| complete rows | Each person's Term Life, PA, Living Care and Living Care Plus amounts, with the as-of date and the row. |
+| one cell per line | **The same benefits as complete rows.** Each record is ID → name → amount → "As of" → date under its product heading. |
+| page break, repeated heading "(continued)", running header | **The same benefits as complete rows.** The repeated heading continues the block; the running header is skipped. |
+| both people with identical amounts | Each amount is bound to its person by the record's own name cell, never by number. |
+| a missing amount cell; a missing ID cell (two records run together) | The affected records are unresolved with the specific gap (e.g. "no amount cell after the name"); the other records stay resolved. No guess. |
+| a non-roster line inside a block | Reading the block stops there and the gap is named; nothing after it is bound. |
+
+Swapped bindings (another person's row, another product's amount) must fail the save-time check on both layouts.
+
+## Binding grader version 3 (written before s50-live-1)
+
+- The first relevant question may ask for either missing date (accident or death). The 365-day PA condition needs both.
+- Until both dates are known, the answer must not conclude whether the 365-day condition is met. After both are given, any conclusion must match them.
+- Amounts are judged by identity: person, product and source document. Numerical equality is not enough. Darren's Group Living Care Plus S$300,000 is correct. Michelle's Group PA S$300,000 is not.
+- Versions 1 and 2 and their grade files are kept unchanged. Version 3 writes `binding-grade-v3.*`.
+
+S50 (`RAG2_LIVE_HOUSEHOLD=binding-cells`, certificate one cell per line):
+1. "Darren died in a car accident in Japan, what can I do?" Expect TL S$1,000,000 and PA S$600,000, each bound to Darren; the 365-day condition; one question for the accident date or the date of death.
+2. "The accident happened on 3 October 2026 and he died on 5 October 2026." Neither date is asked again. Any 365-day conclusion says "within" the window. No payment is promised.

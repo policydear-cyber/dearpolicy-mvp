@@ -39,6 +39,7 @@ import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, name
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { checkUnitTerms } from "@/lib/claims/unit-terms";
+import { reconstructCellRoster } from "@/lib/claims/roster-layout";
 import { loadDocMeta } from "@/lib/lifecycle/amendment-metadata";
 import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendmentRole, STATES_REMOVAL_LIMITATION, SAYS_NOT_AMENDED, type AmendmentRemoval, type DocMeta, columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
@@ -576,7 +577,7 @@ function personRowProblem(b: FigureBinding, value: number, currency: string, ran
   const name = (b.rowPerson ?? "").trim();
   if (!name) return "the figure is not bound to a person's row";
   const row = passageRows(b.passage).find((r) => amountAppears(value, r) && norm(r).includes(norm(name)));
-  if (!row) return "the bound person's row does not print the figure in the cited passage";
+  if (!row) return cellRosterProblem(b, value, currency, rangeText, subject, pool, name, sentence) ?? null;
   const who = memberNamedInCell(name, pool);
   if (!who) return `the row's name (“${name}”) does not identify ${subject.names[0] ?? "the person"} unambiguously`;
   if (who !== subject.id) return "the figure is printed on another insured person’s row, not the one it is stated for";
@@ -607,6 +608,11 @@ function personRowProblem(b: FigureBinding, value: number, currency: string, ran
   }
   // (Compared on the heading's own words -- "Group", "Policy No." and numbers carry no product meaning -- so "Group
   // Term Life" is never "Group Personal Accident".)
+  return headingAndDateProblem(b, heading, sentence);
+}
+/** The product heading a person's row is printed under must be the benefit the binding states, and a row printed "as
+ * of" a date is presented as the document's amount on that date (shared by both roster layouts). */
+function headingAndDateProblem(b: FigureBinding, heading: string | null, sentence: string | null): string | null {
   const productWords = (s: string) => (s.toLowerCase().replace(/\([^)]*\)/g, " ").match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "the", "and", "for", "sum", "assured", "insured", "benefit", "amount", "cover"].includes(w));
   const hw = heading ? productWords(heading) : [], bw = productWords(b.benefit);
   const sameProduct = hw.length > 0 && bw.length > 0 && (hw.every((w) => bw.includes(w)) || bw.every((w) => hw.includes(w)));
@@ -616,6 +622,22 @@ function personRowProblem(b: FigureBinding, value: number, currency: string, ran
     if (!ATTRIBUTED.test(sentence) && !namesDate(sentence, b.asOf)) return `the document prints this amount as of ${b.asOf}: say it is what the document lists (and as of when), not current cover`;
   }
   return null;
+}
+/** V1.4: a person's row on a roster stored ONE CELL PER LINE, read by its record structure (lib/claims/roster-layout.ts,
+ * the same reconstruction retrieval used) from the stored page -- never trusted from the binding: the bound cells are
+ * one complete record printed in the cited passage, its name cell names this person and no one else, its one amount is
+ * the figure in its currency, under the heading the binding states. A record the structure cannot establish is refused. */
+function cellRosterProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person, pool: Person[], name: string, sentence: string | null): string | null {
+  const sq = (x: string) => x.replace(/\s+/g, " ").trim().toLowerCase();
+  const P = sq(b.passage);
+  const { records } = reconstructCellRoster([{ page: b.pageStart, text: rangeText }], (t) => memberNamedInCell(t, pool));
+  const rec = records.find((r) => sq(r.name.text) === sq(name) && amountAppears(value, r.amount.text) && P.includes(sq(r.cells.map((c) => c.text).join(" "))));
+  if (!rec) return "the bound person's row does not print the figure in the cited passage";
+  const who = memberNamedInCell(rec.name.text, pool);
+  if (!who) return `the row's name (“${rec.name.text}”) does not identify ${subject.names[0] ?? "the person"} unambiguously`;
+  if (who !== subject.id) return "the figure is printed on another insured person’s row, not the one it is stated for";
+  if (amountPrintedWith(value, currency, rec.amount.text) === "other") return "the currency printed in the row is not the figure’s";
+  return headingAndDateProblem(b, rec.heading, sentence);
 }
 
 function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string; people?: Person[] } = {}): string | null {

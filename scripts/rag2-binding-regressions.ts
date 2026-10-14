@@ -112,20 +112,6 @@ async function main() {
     assert.ok((I1.trace.dropped ?? []).some((d: any) => /Lumen General/.test(d.reason)), JSON.stringify(I1.trace.dropped));
   });
 
-  // ---------------------------------------------------------------- the one-cell-per-line roster
-  const cols = await (async () => {
-    // The same household with its certificate stored one cell per line, read through the same resolver.
-    const { DOCS_COLS } = HH;
-    const cert = DOCS_COLS.find((d) => d.key === "CERT")!;
-    await h.db.query("UPDATE policy_pages SET text=$3 WHERE account_id=$1 AND policy_id=$2 AND page_number=1", [HH.ACCOUNT, cert.id, cert.pages[1]]);
-    try { return await personBenefits(HH.ACCOUNT, D); }
-    finally { await h.db.query("UPDATE policy_pages SET text=$3 WHERE account_id=$1 AND policy_id=$2 AND page_number=1", [HH.ACCOUNT, cert.id, HH.doc("CERT").pages[1]]); }
-  })();
-  await check("VIEW a roster stored one cell per line (the name alone on a line): nothing is bound as Darren's figure; each product is listed as unresolved, with why", () => {
-    assert.ok(!cols.benefits.some((b) => b.applicability === "person_row"), JSON.stringify(cols.benefits.map((b) => b.benefit.label)));
-    assert.equal(cols.unresolved.filter((u) => /printed on separate lines/.test(u)).length, 4, cols.unresolved.join("\n"));
-  });
-
   // ---------------------------------------------------------------- V1.4 part 2: retrieval through the view
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
@@ -266,11 +252,65 @@ async function main() {
   await check("INSURER a linked reference booklet is not a personal policy: with only the PA product summary cited, Meridian Life is not recommended (the certificate, a personal policy, is what establishes it -- see INSURER above)", () => {
     assert.ok(!/Contact Meridian Life/i.test(REF.v), REF.v);
   });
-  const colsDeath = await withPage(certDoc.id, String(HH.DOCS_COLS.find((d) => d.key === "CERT")!.pages[1]), () => run([deathTurn(DEATH)]));
-  await check("LAYOUT one cell per line (the name alone on a line): no amount is bound or shown from the roster; the wording's condition is kept and the one date question is asked -- the amounts are a known limitation of this layout, reported, not guessed", () => {
-    const v = colsDeath[0].v; assert.ok(!/S\$1,000,000|S\$600,000/.test(v), v); assert.match(v, /365 days/); assert.deepEqual(colsDeath[0].q, ["On what date did the accident happen?"]);
-  });
   await check("LAYOUT one row per line (the fixture's default): both amounts shown, each with its own product and date (P2)", () => { assert.match(P2.v, /Group Term Life sum assured as S\$1,000,000 as of 6 October 2022/); assert.match(P2.v, /Group Personal Accident sum insured as S\$600,000/); });
+
+  // ---------------------------------------------------------------- V1.4 layouts: the same certificate stored differently
+  const withCert = async <T,>(pages: Record<number, string>, fn: () => Promise<T>): Promise<T> => {
+    const orig = (await h.db.query("SELECT page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id=$2", [HH.ACCOUNT, certDoc.id])).rows as { page_number: number; text: string }[];
+    await h.db.query("DELETE FROM policy_pages WHERE account_id=$1 AND policy_id=$2", [HH.ACCOUNT, certDoc.id]);
+    for (const [n, t] of Object.entries(pages)) await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [HH.ACCOUNT, certDoc.id, Number(n), t]);
+    try { return await fn(); }
+    finally {
+      await h.db.query("DELETE FROM policy_pages WHERE account_id=$1 AND policy_id=$2", [HH.ACCOUNT, certDoc.id]);
+      for (const o of orig) await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [HH.ACCOUNT, certDoc.id, o.page_number, o.text]);
+    }
+  };
+  const rowsOf = (v: Awaited<ReturnType<typeof personBenefits>>) => v.benefits.filter((b) => b.applicability === "person_row" && b.policy.id === certDoc.id).map((b) => [b.benefit.label, (b.printed as any).amount, (b.printed as any).currency, b.asOf, b.source.evidence.table?.rowPerson?.memberId, b.source.row?.label]).sort((x, y) => String(x[0]).localeCompare(String(y[0])));
+  const L: Record<string, { d: Awaited<ReturnType<typeof personBenefits>>; m: Awaited<ReturnType<typeof personBenefits>> }> = {};
+  for (const k of ["rows", "cells", "break", "same", "missing", "stray"] as const) L[k] = await withCert(HH.certLayout(k), async () => ({ d: await personBenefits(HH.ACCOUNT, D), m: await personBenefits(HH.ACCOUNT, MI) }));
+  await check("LAYOUT complete rows, one cell per line, and one cell per line across a page break (heading repeated \"(continued)\", running header) give the SAME person-specific benefits for both people", () => {
+    assert.equal(rowsOf(L.rows.d).length, 4); assert.equal(rowsOf(L.rows.m).length, 4);
+    assert.deepEqual(rowsOf(L.cells.d), rowsOf(L.rows.d)); assert.deepEqual(rowsOf(L.cells.m), rowsOf(L.rows.m));
+    assert.deepEqual(rowsOf(L.break.d), rowsOf(L.rows.d)); assert.deepEqual(rowsOf(L.break.m), rowsOf(L.rows.m));
+    assert.ok(!L.cells.d.unresolved.length && !L.break.d.unresolved.some((u) => /row|cell/.test(u)), JSON.stringify([L.cells.d.unresolved, L.break.d.unresolved]));
+  });
+  await check("LAYOUT identical amounts for both people: each person's rows are their own -- bound by the record's name cell, not by the number", () => {
+    for (const [v, who, name] of [[L.same.d, D, /Darren/], [L.same.m, MI, /Michelle/]] as const) {
+      const r = rowsOf(v); assert.equal(r.length, 4); assert.ok(r.every((x) => x[1] === 500000 && x[4] === who && name.test(String(x[5]))), JSON.stringify(r));
+    }
+  });
+  await check("LAYOUT missing cells are not guessed: Darren's Group Personal Accident row without an amount, and Michelle's Living Care row without its ID (two rows run together), are named gaps; every other row is read", () => {
+    const d = rowsOf(L.missing.d).map((x) => x[0]), m = rowsOf(L.missing.m).map((x) => x[0]);
+    assert.deepEqual(d, ["Group Living Care Plus", "Group Term Life"]); assert.deepEqual(m, ["Group Living Care Plus", "Group Personal Accident", "Group Term Life"]);
+    assert.ok(L.missing.d.unresolved.some((u) => /row 1 under “GROUP PERSONAL ACCIDENT” \(Tan Kai Ming, Darren\) has no amount/.test(u)), L.missing.d.unresolved.join(" | "));
+    assert.ok(L.missing.d.unresolved.some((u) => /under “GROUP LIVING CARE” .*more than one name -- a cell is missing between two rows/.test(u)), L.missing.d.unresolved.join(" | "));
+  });
+  await check("LAYOUT a line that is not a roster cell inside a block stops the reading there, with the line named: the rows after it are unresolved, never re-associated", () => {
+    const m = rowsOf(L.stray.m).map((x) => x[0]); assert.ok(!m.includes("Group Living Care"), JSON.stringify(m)); assert.ok(m.includes("Group Living Care Plus"));
+    assert.ok(L.stray.m.unresolved.some((u) => /not a roster cell \(“Refer to the Policy Wording/.test(u)), L.stray.m.unresolved.join(" | "));
+  });
+  const cellsDeath = await withCert(HH.certLayout("cells"), () => run([deathTurn(DEATH)]));
+  const breakDeath = await withCert(HH.certLayout("break"), () => run([deathTurn(DEATH)]));
+  await check("LAYOUT one cell per line (and across a page break): the death answer states Darren's Term Life S$1,000,000 and PA S$600,000, each with its product and date, verified by the save-time check; the one date question is asked", () => {
+    for (const [what, x] of [["cells", cellsDeath[0]], ["break", breakDeath[0]]] as const) {
+      assert.match(x.v, /Group Term Life sum assured as S\$1,000,000 as of 6 October 2022/, `${what}: ${x.v}`); assert.match(x.v, /Group Personal Accident sum insured as S\$600,000 as of 6 October 2022/, `${what}: ${x.v}`);
+      assert.deepEqual(x.trace.gate ?? [], [], what); assert.deepEqual(x.q, ["On what date did the accident happen?"], what);
+      const fb = (x.answer.figureBindings ?? []).map((b: any) => [b.value, b.benefit, b.subjectId, b.rowPerson]);
+      assert.ok(fb.some((b: any) => b[0] === 1000000 && /Term Life/.test(b[1]) && b[2] === D && /Darren/.test(b[3])) && fb.some((b: any) => b[0] === 600000 && /Personal Accident/.test(b[1]) && b[2] === D), `${what}: ${JSON.stringify(fb)}`);
+    }
+  });
+  const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
+  const swapped = await withCert(HH.certLayout("cells"), async () => {
+    const out: string[][] = [];
+    for (const [field, value] of [["subjectId", MI], ["rowPerson", "Ong Li Ting, Michelle"], ["benefit", "Group Personal Accident"]] as const) {
+      const a = structuredClone(cellsDeath[0].answer); const b = a.figureBindings.find((x: any) => x.value === 1000000); b[field] = value;
+      out.push((await verifyAnswerFigures(a, { accountId: HH.ACCOUNT, userText: DEATH, report: true })).map((p: any) => p.reason ?? String(p)));
+    }
+    return out;
+  });
+  await check("LAYOUT one cell per line: swapped bindings fail the save-time check -- Darren's S$1,000,000 Term Life row bound to Michelle, to Michelle's name cell, or to Personal Accident", () => {
+    for (const r of swapped) assert.ok(r.length, JSON.stringify(swapped));
+  });
 
   if (process.env.BINDING_TRANSCRIPT_FILE) {
     const T = (title: string, user: string, x: { v: string; q?: string[] }) => `### ${title}\nUSER: ${user}\nAPP:  ${x.v.replace(/\n/g, "\n      ")}${x.q?.length ? "\n      [Q] " + x.q.join(" | ") : ""}`;
@@ -278,6 +318,7 @@ async function main() {
       T("figure stated without its product (the reported structure)", DEATH, B), T("two products in one sentence", DEATH, Dd), T("Term Life stated as PA (negative)", DEATH, W1),
       T("unrelated insurer in the advice (negative)", DEATH, I1), T("death after an accident, the model asking nothing", DEATH, P2), T("accident date already given", "Darren died in a car accident in Japan on 3 October 2026, what can I do?", P4),
       T("Michelle: certificate vs endorsement", "What is Michelle's personal accident cover?", P5[0]), T("correction back to Darren", "Sorry, I meant Darren", P5[1]),
+      T("certificate one cell per line", DEATH, cellsDeath[0]), T("certificate one cell per line, page break and repeated heading", DEATH, breakDeath[0]),
     ].join("\n\n") + "\n");
   }
   const failed = results.filter((r) => !r.ok);

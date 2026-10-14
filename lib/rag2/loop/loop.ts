@@ -14,7 +14,7 @@ import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verificat
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
-import { householdBenefits } from "../benefits";
+import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
@@ -964,9 +964,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           // exactly as it was), so this lookup changes no id the model sees.
           const seqBefore = ctx.seq;
           const r = await runTool(ctx, "select_table_value", args, env2);
-          const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
+          let d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
           let key: string | null = null;
           if (d?.valueId && ctx.values.has(d.valueId)) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, ctx.values.get(d.valueId)!); ctx.values.delete(d.valueId); }
+          else {
+            // V1.4: a roster the table parser does not read (one cell per line) -- the view's reconstructed row itself.
+            const sel = selectedFromBenefit(one, input.people.find((p) => p.id === who)?.name ?? "");
+            if (sel) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, { selected: sel, subjectId: who, operand: { kind: "table_value", benefit: sel.rowLabel, valueKind: "money", cents: sel.cents, ppm: null, count: null, currency: sel.currency, period: sel.period, evidence: sel.evidence } }); d = { status: "ok", valueKind: "money", value: sel.value, currency: sel.currency ?? undefined }; }
+          }
           ctx.seq = seqBefore;
           record("select_table_value", { ...args, by: "composition (figure identity)" }, r.ok, [], r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, value: d.value, key }) : undefined);
           if (key && d?.status === "ok" && d.valueKind === "money" && Math.abs(Number(d.value) - f.value) < 0.005 && d.currency === f.currency) { s.value_ids = [...((s.value_ids as string[]) ?? []), key]; bound.add(Math.round(f.value * 100)); break; }

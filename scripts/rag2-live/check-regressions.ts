@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
-import { TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2 } from "./binding-check";
+import { TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2, dateAsked, days365Conclusions, gradeBindingV3, unidentifiedAmounts, wrongIdentity } from "./binding-check";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
 import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 
@@ -231,6 +231,49 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
   const right = ["Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022.", "Term Life S$1,000,000; Personal Accident S$600,000.", "Group Term Life: S$1,000,000. Group Personal Accident: S$600,000.", "S$1,000,000 (Group Term Life) and the Group Personal Accident S$600,000 are separate amounts.", "His Personal Accident sum insured is S$600,000, not S$1,000,000 which is his Term Life amount."];
   t("C40 binding grader v2: every wrong attribution of S$1,000,000 to Personal Accident is flagged", () => { for (const x of wrong) assert.ok(TERM_LIFE_AS_PA_V2.test(x), x); });
   t("C41 binding grader v2: correct answers naming both products separately are NOT flagged (version 1 flagged the first)", () => { for (const x of right) assert.ok(!TERM_LIFE_AS_PA_V2.test(x), x); assert.ok(TERM_LIFE_AS_PA_V1.test(right[0]), "version 1's false positive is reproduced"); });
+}
+
+// V1.4 binding grader version 3: identity-based amounts, either missing date first, no 365-day conclusion before both
+// dates. Independent controls (sentences and bindings written for this check).
+{
+  const DARREN = "7f000000-0000-4000-8000-000000000001", MICHELLE = "7f000000-0000-4000-8000-000000000002", CERT = "7f000000-0000-4000-8000-000000000101", OLD = "7f000000-0000-4000-8000-000000000107";
+  const fb = (value: number, benefit: string, o: Record<string, unknown> = {}) => ({ value, benefit, subjectId: DARREN, rowPerson: "Tan Kai Ming, Darren", policyId: CERT, ...o });
+  t("C42 binding grader v3: amounts judged by identity -- Darren's own S$300,000 Living Care Plus passes, Michelle's S$300,000 PA fails", () => {
+    assert.deepEqual(unidentifiedAmounts("The certificate also lists Group Living Care Plus of S$300,000 for Darren.", []), []);
+    assert.deepEqual(wrongIdentity([fb(300000, "Group Living Care Plus")]), []);
+    assert.equal(wrongIdentity([fb(300000, "Group Personal Accident", { subjectId: MICHELLE, rowPerson: "Ong Li Ting, Michelle" })]).length, 1);
+    assert.equal(wrongIdentity([fb(300000, "Group Personal Accident")]).length, 1, "right person, wrong product: the number exists in the household but not in Darren's PA row");
+    assert.equal(wrongIdentity([fb(600000, "Group Term Life")]).length, 1, "swapped products");
+    assert.equal(wrongIdentity([fb(1000000, "Group Term Life", { policyId: OLD })]).length, 1, "another source document");
+    assert.equal(unidentifiedAmounts("Group Personal Accident of S$300,000 is listed.", []).length, 1, "S$300,000 next to PA is not Darren's PA");
+    assert.equal(unidentifiedAmounts("Michelle's Group Living Care Plus is S$300,000.", []).length, 1, "another member's clause");
+    assert.equal(unidentifiedAmounts("The plan lists S$300,000.", []).length, 1, "an amount with no product or binding");
+    assert.deepEqual(unidentifiedAmounts("The plan lists S$600,000.", [fb(600000, "Group Personal Accident")]), [], "a bound figure");
+  });
+  t("C43 binding grader v3: either missing date is a relevant first question; an ambiguous one is not", () => {
+    assert.equal(dateAsked("On what date did the accident happen?"), "accident");
+    assert.equal(dateAsked("When did Darren die (the date of death)?"), "death");
+    assert.equal(dateAsked("What was Darren's date of death?"), "death");
+    assert.equal(dateAsked("When did Darren die (the date of the accident/death)?"), null);
+    assert.equal(dateAsked("Which hospital was he taken to?"), null);
+  });
+  t("C44 binding grader v3: 365-day conclusions are found, the condition itself and conditional wording are not", () => {
+    for (const x of ["He died within 365 days of the accident.", "The 365-day condition is met.", "Death occurred within the 365 days, so it qualifies.", "His death was outside the 365-day window.", "This satisfies the 365-day requirement."]) assert.equal(days365Conclusions(x).length, 1, x);
+    for (const x of ["Accidental Death: 100% of the Sum Insured if death results from an Accident within 365 days.", "Whether he died within 365 days of the accident decides the PA benefit.", "Did he die within 365 days of the accident?"]) assert.deepEqual(days365Conclusions(x), [], x);
+  });
+  const base = "Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022; the PA summary pays Accidental Death if death occurs within 365 days of the Accident.";
+  const conv3 = (turns: { user: string; visible: string; questions: string[]; fbs?: any[] }[]) => [{ scenario: "S50", turns: turns.map((x) => ({ user: x.user })), loaded: { turns: turns.map((x) => ({ visible: x.visible, questions: x.questions, answer: { figureBindings: x.fbs ?? [fb(1000000, "Group Term Life"), fb(600000, "Group Personal Accident")] }, trace: { outcome: "final_answer", toolCalls: [] } })) } }];
+  const bad3 = (c: any[]) => gradeBindingV3(c).checks.filter((x) => !x.ok).map((x) => x.name);
+  const U1 = "Darren died in a car accident in Japan, what can I do?", U2 = "The accident happened on 3 October 2026 and he died on 5 October 2026.";
+  t("C45 binding grader v3: a correct two-turn conversation passes, whichever date is asked first", () => {
+    for (const q of ["On what date did the accident happen?", "What was Darren's date of death?"]) assert.deepEqual(bad3(conv3([{ user: U1, visible: base, questions: [q] }, { user: U2, visible: base + " He died within 365 days of the accident.", questions: [] }])), [], q);
+  });
+  t("C46 binding grader v3: a 365-day conclusion before both dates, a swapped binding, and re-asking a given date FAIL", () => {
+    assert.ok(bad3(conv3([{ user: U1, visible: base + " He died within 365 days of the accident.", questions: ["On what date did the accident happen?"] }, { user: U2, visible: base, questions: [] }])).some((n) => /before both/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"], fbs: [fb(600000, "Group Term Life"), fb(1000000, "Group Personal Accident")] }, { user: U2, visible: base, questions: [] }])).some((n) => /identity/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base, questions: ["When did Darren die?"] }])).some((n) => /neither is asked/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base + " His death was outside the 365-day window.", questions: [] }])).some((n) => /agrees with the dates/.test(n)));
+  });
 }
 
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);

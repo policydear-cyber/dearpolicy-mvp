@@ -19,7 +19,8 @@
  */
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
-import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf } from "./tables";
+import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf, type SelectedValue } from "./tables";
+import { reconstructCellRoster } from "@/lib/claims/roster-layout";
 
 export type PrintedValue =
   | { kind: "money"; amount: number; cents: number; currency: string; unit: string | null; period: string | null }
@@ -118,14 +119,7 @@ export async function personBenefits(accountId: string, memberId: string, preloa
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i], start = at; at += line.length + 1;
         if (isProductHeading(line, household)) { heading = line.trim(); continue; }
-        // 2. A roster stored one cell per line (the name alone on a line, its amount on a following line): listed as
-        // UNRESOLVED -- the save-time check verifies a person's figure on one printed row only, so it is not bound.
-        if (heading && memberNamedIn(line, household) === memberId && !HAS_MONEY.test(line)) {
-          const next = lines.slice(i + 1, i + 4).map((x) => x.trim());
-          const k = next.findIndex((x) => MONEY_ONLY.test(x));
-          if (k >= 0 && !next.slice(0, k).some((x) => memberNamedIn(x, household))) unresolved.push(`${d.productName ?? "a document"} page ${p.page}: under “${headingLabel(heading)}” ${member.displayName}'s name and ${next[k]} are printed on separate lines; not bound as their figure`);
-          continue;
-        }
+        if (heading && memberNamedIn(line, household) === memberId && !HAS_MONEY.test(line)) continue;
         // 3. Shared wording: "Label: S$150 per day ..." / "Label: 100% of the Sum Insured ...".
         const ll = labelLine(line, household);
         if (!ll) continue;
@@ -142,6 +136,26 @@ export async function personBenefits(accountId: string, memberId: string, preloa
           conditions: CONDITION.test(ll.value) ? [line.trim()] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
       }
     }
+    // 2b. A roster stored ONE CELL PER LINE: reconstructed by its record structure (lib/claims/roster-layout.ts); what
+    // cannot be read is a named gap, never a guess.
+    const memberOf = (t: string) => memberNamedIn(t, household);
+    const cellRoster = reconstructCellRoster(dp.map((p) => ({ page: p.page, text: p.text })), memberOf);
+    for (const r of cellRoster.records.filter((x) => x.memberId === memberId)) {
+      const label = headingLabel(r.heading);
+      if (out.some((b) => b.policy.id === d.id && b.applicability === "person_row" && b.benefit.label === label && b.source.page === r.page)) continue;
+      const v = parseCell(r.amount.text);
+      if (v.kind !== "money") continue;
+      const pageText = dp.find((p) => p.page === r.page)?.text ?? "";
+      const first = r.cells[0], last = r.cells[r.cells.length - 1];
+      const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: first.start, end: last.end, pageStart: r.headingPage, subjectId: memberId,
+        table: { tableId: `${d.id}:p${r.page}:cells`, rowLabel: label, columnHeader: "Sum Assured", columnLeaf: null, appliesTo: null, cell: { text: r.amount.text, start: r.amount.start, end: r.amount.end },
+          row: { cells: r.cells.map((c) => ({ header: c.kind, text: c.text, start: c.start, end: c.end })) }, layout: "person_row", rowPerson: { memberId, text: r.name.text, start: r.name.start, end: r.name.end }, asOf: r.asOf } });
+      push({ key: `${d.id}:${r.page}:${first.start}`, applicability: "person_row", benefit: { label, source: "product_heading" },
+        printed: { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period }, asOf: r.asOf,
+        conditions: r.asOf ? [`printed as of ${r.asOf}: the document's amount on that date, not confirmation of cover on a later date`] : [],
+        source: { page: r.page, passage: evidence.passage.text, row: { label: r.name.text, column: "Sum Assured" }, evidence } });
+    }
+    for (const g of cellRoster.gaps) unresolved.push(`${d.productName ?? "a document"} page ${g.page}: ${g.reason}`);
     // 4. Shared wording tables: a benefit row printing one amount or percentage (not a person's row).
     for (const t of tables) for (const r of t.rows) {
       if (rosterRows.has(r) || !r.label || memberNamedIn(r.label, household) || /\d/.test(r.label.replace(/\([^)]*\)/g, ""))) continue;
@@ -232,4 +246,14 @@ export async function householdBenefits(accountId: string): Promise<HouseholdBen
     labelsByPolicy.set(d.id, [...set]);
   }
   return { byMember, labelsByPolicy, policiesByMember, insurers };
+}
+
+/** V1.4: a person's own documented row as a table value (for a roster the table parser does not read -- one cell per
+ * line), with the same evidence contract select_table_value issues (person_row, the name cell, the as-of date). */
+export function selectedFromBenefit(b: PersonBenefit, memberName: string): SelectedValue | null {
+  if (b.applicability !== "person_row" || b.printed.kind !== "money" || b.conflicts?.length) return null;
+  const ev = b.source.evidence;
+  return { status: "ok", value: b.printed.amount, valueKind: "money", cents: b.printed.cents, ppm: null, currency: b.printed.currency, unit: b.printed.unit, period: (b.printed.period ?? null) as SelectedValue["period"],
+    conditions: [`under “${b.benefit.label}”`, ...b.conditions], benefit: b.benefit.label, rowLabel: b.benefit.label, columnHeader: ev.table?.columnHeader ?? "",
+    columnBasis: { basis: "document", detail: `the document prints ${memberName}'s own row (“${ev.table?.rowPerson?.text ?? ""}”) under “${b.benefit.label}”`, evidence: ev }, version: null, evidence: ev, notes: [] };
 }

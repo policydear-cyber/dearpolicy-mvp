@@ -53,8 +53,18 @@ export const S49B: Scenario = { id: "S49B", title: "V1.4 paraphrase: the same ev
   "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
 ].map((user) => ({ user, expect: {} })) };
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : SCENARIO) as unknown as typeof SCENARIO;
+/** V1.4 (cell-per-line layout): the reported question, then both dates, on the binding household whose certificate
+ * text layer is one cell per line (RAG2_LIVE_HOUSEHOLD=binding-cells; scripts/fixtures/rag2-binding certLayout("cells")).
+ * Graded by scripts/rag2-live/binding-check.ts version 3 (written before the run). */
+export const S50: Scenario = { id: "S50", title: "V1.4 cell-per-line certificate: a member's death after a car accident abroad, then both dates", why: "actual-model sample of the one-cell-per-line roster reconstruction", turns: [
+  "Darren died in a car accident in Japan, what can I do?",
+  "The accident happened on 3 October 2026 and he died on 5 October 2026.",
+].map((user) => ({ user, expect: {} })) };
+/** The binding household with the certificate's text layer one cell per line (same people, products and amounts). */
+export const BINDING_CELLS = { ...BINDING, DOCS: BINDING.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING.certLayout("cells") } : d)) };
+
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -63,7 +73,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" = "s
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which === "binding" ? "SYNTHETIC-DPTEST-binding Household Tan (Darren)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

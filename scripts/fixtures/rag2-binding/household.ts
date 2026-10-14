@@ -89,4 +89,35 @@ export const DOCS: FxDoc[] = [
 ];
 /** The same household with the certificate's text layer one cell per line (the name alone on a line). */
 export const DOCS_COLS: FxDoc[] = DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cols", pages: { 1: [...LETTER, certRows(true)].join("\n") } } : d));
+/** V1.4 layout variants of the SAME certificate (the letter, then the roster), as {page -> text}:
+ *  rows       one row per line (the default above);
+ *  cells      one cell per line;
+ *  break      one cell per line, with a page break inside the Group Personal Accident block: page 2 opens with a running
+ *             header and the heading printed again "(continued)";
+ *  same       one cell per line, both people printed with the SAME amount under each product (S$500,000, ...);
+ *  missing    one cell per line, Darren's Group Personal Accident amount cell missing, and Michelle's ID cell missing
+ *             under Group Living Care (so two rows run together);
+ *  stray      one cell per line, with a line that is not a roster cell inside the Group Living Care block. */
+export function certLayout(kind: "rows" | "cells" | "break" | "same" | "missing" | "stray"): Record<number, string> {
+  const head = [...LETTER, "CERTIFICATE OF GROUP INSURANCE", "This is to certify that the person(s) named herein is/are insured with \"Meridian Life Ltd\" for cover(s) as indicated:", "PUBLIC SERVICE GROUP INSURANCE SCHEME (GROUP POLICY NO. PSG-8800)   Page 1 of 2", "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date"];
+  if (kind === "rows") return { 1: [...LETTER, certRows(false)].join("\n") };
+  const amounts = PRODUCTS.map((p, k) => (kind === "same" ? (["S$500,000", "S$500,000"] as [string, string]) : p[2]));
+  const rec = (k: number, i: number) => [MASKED[i], NAMES[i], amounts[k][i], "As of", "06/10/2022"];
+  const block = (k: number) => {
+    const [product, no] = PRODUCTS[k];
+    let r0 = rec(k, 0), r1 = rec(k, 1);
+    if (kind === "missing" && k === 1) r0 = r0.filter((c) => c !== amounts[k][0]);
+    if (kind === "missing" && k === 2) r1 = r1.slice(1);
+    const lines = [`${product}(POLICY NO. ${no})`, ...r0, ...(kind === "stray" && k === 2 ? ["Refer to the Policy Wording for terms and conditions"] : []), ...r1];
+    return lines;
+  };
+  if (kind === "break") {
+    const gpa = block(1);
+    return {
+      1: [...head, ...block(0), ...gpa.slice(0, 6)].join("\n"),
+      2: ["PUBLIC SERVICE GROUP INSURANCE SCHEME (GROUP POLICY NO. PSG-8800)   Page 2 of 2", `${PRODUCTS[1][0]}(POLICY NO. ${PRODUCTS[1][1]}) (continued)`, ...gpa.slice(6), ...block(2), ...block(3)].join("\n"),
+    };
+  }
+  return { 1: [...head, ...block(0), ...block(1), ...block(2), ...block(3)].join("\n") };
+}
 export const doc = (key: string) => DOCS.find((d) => d.key === key)!;
