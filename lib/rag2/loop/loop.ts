@@ -523,7 +523,12 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // V1.2: the note that their report is not reviewed evidence, and the paperwork step, are said once per conversation.
     const toldBefore = (t: string) => state.history.some((h) => h.assistant.includes(t));
     if (cited(out) && !toldBefore(REPORTED_NOTE) && !toldBefore(REPORTED_MEDICAL_NOTE)) {
-      const f = reportedFactFollowUp([...out.sentences.flatMap((s) => s.evidenceIds), ...(ans.pending.evidenceIds ?? [])].map((id) => state.evidence[id]?.passage.text ?? "").concat(ans.pending.why));
+      // V1.4: medical or not is decided by the condition the answered question was about (its "why" and the lines of
+      // its own evidence that state that condition) -- not by every passage the answer cites (a Term Life summary that
+      // also mentions a Terminal Illness diagnosis made s50-live-2's death answer ask for a doctor's report).
+      const whyWords = new Set((String(ans.pending.why ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []));
+      const conditionLines = (ans.pending.evidenceIds ?? []).flatMap((id) => (state.evidence[id]?.passage.text ?? "").split(/\n+|(?<=[.;])\s+/)).filter((l) => (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => whyWords.has(w)).length >= 3);
+      const f = reportedFactFollowUp([String(ans.pending.why ?? ""), ...conditionLines]);
       if (![...out.sentences.map((s) => s.text), ...out.notes].some((t) => /\binsurer\b/i.test(t))) out.notes = [...out.notes, f.note];
       if (!out.nextSteps.length) out.nextSteps = [f.step];
     }

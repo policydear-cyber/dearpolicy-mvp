@@ -315,6 +315,19 @@
       "calls": 11,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s50-live-2",
+      "tested_code_sha": "a13c755bd9ffedcf5f1b96a3fb65308f7050b514",
+      "request_sha": "a13c755bd9ffedcf5f1b96a3fb65308f7050b514",
+      "at": "2026-10-14T11:03:53.834Z",
+      "preflight": false,
+      "run_cap_usd": 0.01,
+      "spent_usd": 0.004238,
+      "reserved_unsettled_usd": 0,
+      "calls": 12,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

@@ -327,6 +327,7 @@ async function main() {
   const MIXED = "Darren died in a car accident in Japan. What can I do, and which documents do we have for him?";
   const mixedTurn = { user: MIXED, steps: [() => [call("resolve_person", { mention: "Darren" })], () => [call("household_documents", {})], () => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: twoFigures(v) })]] };
   const BACK = "The accident happened on 3 October 2026 and he died on 5 October 2026.";
+  const nf2 = () => () => [call("note_facts", { subject_id: D, facts: [{ key: "accident_date", value: "2026-10-03", words: "The accident happened on 3 October 2026" }, { key: "death_date", value: "2026-10-05", words: "he died on 5 October 2026" }] })];
   const backTurn = { user: BACK, steps: [() => [call("note_facts", { subject_id: D, facts: [{ key: "accident_date", value: "2026-10-03", words: "The accident happened on 3 October 2026" }, { key: "death_date", value: "2026-10-05", words: "he died on 5 October 2026" }] })], () => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: twoFigures(v) })]] };
   const invOnly = await run([inventoryTurn as any]);
   const invThenDeath = await withCert(HH.certLayout("cells"), () => run([inventoryTurn as any, lookedUp as any]));
@@ -386,6 +387,23 @@ async function main() {
     assert.match(deathCalc.v, /\[next\] Notify Meridian Life Ltd about the death within 6 months, with the death certificate\./, deathCalc.v);
     assert.match(deathCalc.v, /\[next\] Suggestion, not stated in your documents \(confirm with the insurer\): Notify Meridian Life Ltd about the death and ask for the claim requirements; provide the death certificate and relevant medical records\./, deathCalc.v);
     assert.match(deathCalc.v, /\[next\] Ask Meridian Life Ltd whether it needs a police report from Japan\./, deathCalc.v);
+  });
+  // s50-live-2 turn 2: the answer also cited the Term Life summary (which mentions a Terminal Illness diagnosis and the
+  // death certificate); the "your own account" note then asked for a doctor's report and scans for a death.
+  const searchHit = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const h = ((o.result?.data?.hits ?? []) as any[]).find((x) => re.test(x.evidence?.excerpt ?? "")); if (h) return [h.evidence.evidence_id as string]; } return [] as string[]; };
+  const citesTermLife = { user: BACK, steps: [nf2(), () => [call("person_benefits", { subject_id: D })], () => [call("search_passages", { query: "Group Term Life death benefit notify death certificate", subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [
+    ...twoFigures(v),
+    { text: "The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person, and to notify Meridian Life Ltd of a death within 6 months, with the death certificate.", evidence_ids: searchHit(v, /Terminal Illness|death certificate/), subject_id: D },
+  ] })]] };
+  const [, termLifeCited] = await withCert(HH.certLayout("cells"), () => run([lookedUp as any, citesTermLife as any]));
+  const { reportedFactFollowUp, REPORTED_NOTE, REPORTED_MEDICAL_NOTE } = await import("@/lib/rag2/loop/compose");
+  await check("REPORTED NOTE the note after the household answers is chosen from the answered condition: a death answer citing the Term Life summary gets no doctor's report or scans; a medical condition keeps them", () => {
+    assert.ok(!/doctor|scan|medical record/i.test(termLifeCited.v), termLifeCited.v);
+    assert.match(termLifeCited.v, /death certificate/, "the Term Life passage (which also prints a Terminal Illness diagnosis) is cited: " + termLifeCited.v);
+    assert.match(termLifeCited.v, /your own account/, termLifeCited.v);
+    assert.equal(reportedFactFollowUp(["Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.", "notify Meridian Life Ltd of a death within 6 months, with the death certificate", "the Sum Assured shown in the Certificate of Group Insurance"]).note, REPORTED_NOTE);
+    assert.equal(reportedFactFollowUp(["a Simple Fracture confirmed by X-ray"]).note, REPORTED_MEDICAL_NOTE);
+    assert.equal(reportedFactFollowUp(["diagnosed by a specialist"]).note, REPORTED_MEDICAL_NOTE);
   });
   const { benefitEvent } = await import("@/lib/rag2/calc/engine");
   const { labelUnsupportedPaperwork, unsupportedPaperworkClaim } = await import("@/lib/rag2/loop/compose");

@@ -1,0 +1,190 @@
+{
+  "verdict": "FAIL",
+  "checks": [
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "the turn was not ended by a limit, and no answer call was refused as malformed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no person's name used as a product or benefit",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "the unrelated insurer (Lumen General) is not suggested",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "every saved figure is Darren's own amount for its product, from the current certificate (identity, not number)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "every amount shown is bound to Darren or stated with the product whose amount in Darren's row it is",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no total of different benefits and no promised payment / current-cover claim",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "Term Life is never presented as Personal Accident",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no 365-day conclusion before both the accident and death dates are known",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "Darren's Group Term Life S$1,000,000 and Group Personal Accident S$600,000 are each bound (saved) to their own product and to Darren",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "the accidental-death condition (within 365 days of the accident) is given",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "exactly one question, asking for a missing date (accident or death)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "the turn was not ended by a limit, and no answer call was refused as malformed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "no person's name used as a product or benefit",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "the unrelated insurer (Lumen General) is not suggested",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "every saved figure is Darren's own amount for its product, from the current certificate (identity, not number)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "every amount shown is bound to Darren or stated with the product whose amount in Darren's row it is",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "no total of different benefits and no promised payment / current-cover claim",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "Term Life is never presented as Personal Accident",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "any 365-day conclusion agrees with the dates given (2 days apart: within)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "both dates are known: neither is asked for again",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no inventory replaces or pads the answer (no document-list lines)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no injury / illness wording in the death answer (diagnosis, medical assessment, specialist, doctor's report, scans)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 1,
+      "name": "no paperwork presented as needed unless Darren's documents print it or it is labelled as a suggestion to confirm with the insurer",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "no inventory replaces or pads the answer (no document-list lines)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "no injury / illness wording in the death answer (diagnosis, medical assessment, specialist, doctor's report, scans)",
+      "ok": false,
+      "kind": "correctness",
+      "detail": "doctor’s report :: You told me the accident happened on 3 October 2026 and Darren died on 5 October 2026.\nThe linked Personal Accident summary says Accidental Death is 100% of the Sum Insured if death results from an Accident within 365 days, and that territorial limits are worldwide, 24 hours a day; the dates you gave fall within that stated period, but the documents do not confirm whether the event meets the policy definition of Accident.\nThe Term Life summary says the Death Benefit is the Sum"
+    },
+    {
+      "conv": "S50",
+      "turn": 2,
+      "name": "no paperwork presented as needed unless Darren's documents print it or it is labelled as a suggestion to confirm with the insurer",
+      "ok": false,
+      "kind": "correctness",
+      "detail": "medical record in \"What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report\""
+    }
+  ],
+  "incomplete": null
+}

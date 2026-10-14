@@ -70,7 +70,8 @@ export const SUGGESTION_PREFIX = "Suggestion, not stated in your documents (conf
 /** V1.4: DearPolicy's own practical steps name paperwork no document prints, so they are labelled as suggestions. */
 export const REPORTED_MEDICAL_STEP = SUGGESTION_PREFIX + "when you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
 export const REPORTED_STEP = SUGGESTION_PREFIX + "send the documents that show the policy’s condition is met with the insurer’s claim form.";
-const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certif\w*|medical report)\b/i;
+// V1.4: "certified / certification / a medical certificate" -- not a "death certificate" or a "Certificate of Insurance".
+const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certified|certification|medical certificates?|medical report)\b/i;
 export function reportedFactFollowUp(conditionTexts: string[]): { note: string; step: string } {
   const medical = conditionTexts.some((t) => MEDICAL_CONDITION.test(t));
   return medical ? { note: REPORTED_MEDICAL_NOTE, step: REPORTED_MEDICAL_STEP } : { note: REPORTED_NOTE, step: REPORTED_STEP };
