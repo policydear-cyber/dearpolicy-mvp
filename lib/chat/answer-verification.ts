@@ -1261,7 +1261,10 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
     ...(answer.nextSteps ?? []).map((_, i) => ({ where: "nextSteps[" + i + "]", get: () => answer.nextSteps[i] ?? "", set: (v: string) => { answer.nextSteps[i] = v; } })),
     ...(answer.claimItems ?? []).map((_, i) => ({ where: "claim[" + i + "].reason", get: () => answer.claimItems[i]?.reason ?? "", set: (v: string) => { answer.claimItems[i].reason = v; } })),
   ];
-  const all = fields.flatMap((f) => sentencesOf(f.get()).map((s) => ({ field: f, sentence: s, figures: moneyFiguresIn(s) })));
+  // V1.5: names quoted from the library record (file / document names in an inventory) are not figures.
+  const names = [...new Set((answer.libraryNames ?? []).filter((n) => typeof n === "string" && n.trim().length >= 3))].sort((a, b) => b.length - a.length);
+  const unnamed = (s: string) => names.reduce((t, n) => t.split(n).join(" "), s);
+  const all = fields.flatMap((f) => sentencesOf(f.get()).map((s) => ({ field: f, sentence: s, figures: moneyFiguresIn(unnamed(s)) })));
   const anyFigure = all.some((x) => x.figures.length);
   const anyCover = all.some((x) => COVER_CLAIM.test(x.sentence.trim()));
   if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence) || CLAIMS_REMOVAL.test(x.sentence))) return [];

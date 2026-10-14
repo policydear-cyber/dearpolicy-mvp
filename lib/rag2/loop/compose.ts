@@ -37,6 +37,8 @@ export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: 
   valueIds?: string[]; benefit?: string | null };
 export type Composed = {
   sentences: ComposedSentence[]; nextSteps: string[];
+  /** V1.5: names quoted from the library record by an inventory answer (see ChatAnswer.libraryNames). */
+  libraryNames?: string[];
   figureBindings: BoundFigure[]; computations: ComputationRecord[];
   /** Agent K: benefit calculations bound to the sentences that state them (re-run by the save-time gate). */
   calculations: CalculationRecord[];
@@ -143,6 +145,42 @@ export function withoutEndorsementClauses(text: string): string | null {
   return t.split(/\s+/).length >= 4 ? t : null;
 }
 const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
+const WINDOW_CLAUSE = /\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b/gi;
+const OWN_LABEL = /^\s*([A-Za-z][A-Za-z ()'’/&,-]{2,80}?)\s*(?::|\t| {2,}|\s[–—-]\s)/;
+/** The benefit label each line of a passage belongs to: its own "Label:" (or first table cell), else the label of the
+ * line above it (a continuation). */
+function lineOwners(passage: string): { line: string; owner: string | null }[] {
+  let cur: string | null = null;
+  return passage.split(/\n+/).map((line) => { const m = OWN_LABEL.exec(line); if (m && /[a-z]/i.test(m[1]) && m[1].trim().split(/\s+/).length <= 8) cur = m[1].trim(); return { line, owner: cur }; });
+}
+const ownWords = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["benefit", "benefits", "group", "cover", "insured", "with", "from", "that", "this", "payable"].includes(w)));
+/** A sentence stating a time-window condition ("within 365 days") that its cited wording prints ONLY under another
+ * benefit's own line than the benefit(s) the sentence names. Null when the window is printed under a benefit the
+ * sentence names, when the sentence names no benefit of the passage, or when nothing is cited. A window the cited
+ * wording does not print at all is not stated either. */
+export function borrowedCondition(text: string, passages: string[]): string | null {
+  const windows = [...text.matchAll(WINDOW_CLAUSE)].map((m) => m[0].toLowerCase().replace(/\s+/g, " "));
+  if (!windows.length || !passages.length) return null;
+  const said = ownWords(text);
+  for (const w of windows) {
+    const owners = passages.flatMap((p) => lineOwners(p)).filter((x) => x.line.toLowerCase().replace(/\s+/g, " ").includes(w));
+    if (!owners.length) return `states “${w}”, which its cited wording does not print`;
+    const labels = [...new Set(passages.flatMap((p) => lineOwners(p)).map((x) => x.owner).filter((x): x is string => !!x))];
+    const named = labels.filter((l) => [...ownWords(l)].some((x) => said.has(x)));
+    if (!named.length) continue;
+    const underNamed = owners.some((o) => o.owner && named.includes(o.owner));
+    if (!underNamed) return `states “${w}” for ${named.join(" / ")}, but the cited wording prints it only under ${[...new Set(owners.map((o) => o.owner ?? "another line"))].join(" / ")}`;
+  }
+  return null;
+}
+/** The sentence without its time-window clauses (", if … within 365 days of the Accident"); null when nothing is left. */
+export function withoutWindowClauses(text: string): string | null {
+  let t = text.replace(/,?\s*(?:but\s+)?(?:only\s+)?(?:if|provided(?: that)?|when|where)\b[^.;]*?\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b[^.;]*/gi, "");
+  t = t.replace(/\s*\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b(?:\s+(?:of|from|after)\s+[^.;,]*)?/gi, "");
+  t = t.replace(/\s{2,}/g, " ").replace(/\s+([.;,])/g, "$1").trim();
+  if (!/[.!?]$/.test(t)) t += ".";
+  return t.split(/\s+/).length >= 5 ? t : null;
+}
 const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
 /** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
  * someone else (its amending clause names only another member). Null when the person has an endorsement
@@ -671,6 +709,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // V1.4: an endorsement that belongs to another household member supports no conclusion about this person -- no
     // amendment, caveat, uncertainty or conflict (s50-live-2: Michelle's endorsement cited as making Darren's amount
     // uncertain). Person / policy / version binding applies to statements without figures too.
+    // V1.5: a condition is stated only for the benefit whose own wording prints it -- a "within 365 days" printed under
+    // Permanent Dismemberment is never borrowed for Accidental Death because the two lines are adjacent in the passage.
+    const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => evidenceTextOf(e)));
+    if (borrowed) { const kept = withoutWindowClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: borrowed + " (that condition was taken out)" }); text = kept; } else { drop(text, borrowed); continue; } }
     const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
     if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this

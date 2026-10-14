@@ -1353,7 +1353,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // (An empty name names nothing: an unreadable upload has no product name, only its file name and status.)
     const has = (t: string | null | undefined) => !!t && t.trim().length > 0 && said.includes(t.toLowerCase());
     const named = (d: InventoryDoc) => (d.readable === "ready" ? has(d.name) || has(d.filename) : has(d.filename));
-    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
+    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return { ...r, composed: { ...r.composed, libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
     // V1.5 (live verification, 14 Oct): a reply that names every readable document but leaves out a file that could not
     // be read keeps what it says and gains that file's status line from the lookup -- the household asked for it, and a
     // status fact needs no page citation (it is the library's own record).
@@ -1361,7 +1361,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (statusMissing.length && docs.filter((d) => d.readable === "ready").every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) {
       const owner = (d: InventoryDoc) => inv.people.find((p) => p.documents.includes(d))?.short ?? null;
       const lines = statusMissing.map((d) => ({ text: `${d.filename} could not be read (${d.reason ?? "it could not be read"})${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
-      return { ...r, composed: { ...r.composed, sentences: [...r.composed.sentences, ...lines] } };
+      return { ...r, composed: { ...r.composed, sentences: [...r.composed.sentences, ...lines], libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
     }
     // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
     // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
@@ -1371,7 +1371,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const keptBindings = keep.filter(boundFigures).flatMap((x) => bindingsOf(x.text));
     const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
     trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
-    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    const composed: Composed = { ...r.composed, libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean), sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
   /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's

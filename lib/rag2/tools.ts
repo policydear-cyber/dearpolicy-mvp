@@ -132,7 +132,10 @@ export const RAG_TOOLS: ToolDef[] = [
       const score = (b: PersonBenefit) => sharedTopic(want, topicStems([b.benefit.label, b.policy.product ?? "", ...b.conditions].join(" "))).length;
       const shared = view.benefits.filter((b) => b.applicability === "shared_wording");
       const ranked = shared.map((b, i) => ({ b, i, s: score(b) })).sort((x, y) => y.s - x.s || x.i - y.i);
-      const keepShared = new Set(ranked.slice(0, SHARED_MAX).map((x) => x.b));
+      // Exclusions and limitations printed for this person's products are never cut for relevance: a ranked-out
+      // exclusion would make the answer look unconditional. (The person's own rows and amendments are kept above.)
+      const EXCLUSION = /\b(?:exclusions?|excluded|not covered|does not cover|will not pay|we do not pay|no benefit|not payable|limitations?)\b/i;
+      const keepShared = new Set([...ranked.slice(0, SHARED_MAX).map((x) => x.b), ...shared.filter((b) => EXCLUSION.test([b.benefit.label, ...b.conditions, b.source.passage].join(" "))).slice(0, SHARED_MAX)]);
       const omitted = shared.length - keepShared.size;
       view.benefits = view.benefits.filter((b) => b.applicability !== "shared_wording" || keepShared.has(b));
       const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? `${b.printed.currency === "SGD" ? "S$" : b.printed.currency + " "}${b.printed.amount.toLocaleString("en-SG")}${b.printed.unit ? " " + b.printed.unit : ""}` : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
