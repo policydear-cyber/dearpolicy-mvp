@@ -202,19 +202,23 @@ async function main() {
   // The first actual-model sample on these structures (s48-live-1), replayed without any model call: its recorded
   // tool calls, with this run's evidence / value ids.
   const { recordedTurns, replayScript, runDir } = await import("./fixtures/rag2-live-replay");
-  const dir = (() => { try { return runDir("RUN-s48-live-1-"); } catch { return null; } })();
-  if (dir) {
+  const replayRun = async (name: string): Promise<{ V: (i: number) => string; out: { answer: ChatAnswer; state: any }[] } | null> => {
+    const dir = (() => { try { return runDir(`RUN-${name}-`); } catch { return null; } })();
+    if (!dir) return null;
     const turns = recordedTurns(dir, "S48");
     const { installLoopModel } = await import("@/lib/rag2/loop/model");
     const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
     installLoopModel(new ScriptedLoopModel(replayScript(turns)));
     let c: { id?: string; rev?: number } = {};
     const out: { answer: ChatAnswer; state: any }[] = [];
-    for (const t of turns) { const a = await h.send(t.user, c); c = { id: a.conversationId, rev: a.conversationRevision }; const s2 = await h.savedAnswer(c.id!); out.push({ answer: s2.answer, state: s2.state }); }
-    installLoopModel(null);
-    transcript.push("### s48-live-1 replayed (recorded model output, no model call)", ...out.map((o, i) => `USER: ${turns[i].user}\nAPP:  ${visible(o.answer).replace(/\n/g, "\n      ")}\n      calcs=${JSON.stringify(((o.answer as any).calculations ?? []).map((r: any) => [r.calculator, r.result?.value]))}`));
+    try { for (const t of turns) { const a = await h.send(t.user, c); c = { id: a.conversationId, rev: a.conversationRevision }; const s2 = await h.savedAnswer(c.id!); out.push({ answer: s2.answer, state: s2.state }); } } finally { installLoopModel(null); }
+    transcript.push(`### ${name} replayed (recorded model output, no model call)`, ...out.map((o, i) => `USER: ${turns[i].user}\nAPP:  ${visible(o.answer).replace(/\n/g, "\n      ")}\n      calcs=${JSON.stringify(((o.answer as any).calculations ?? []).map((r: any) => [r.calculator, r.result?.value]))}`));
     if (process.env.STRESS_TRANSCRIPT) console.log("\n" + transcript.slice(-out.length - 1).join("\n\n"));
-    const V = (i: number) => visible(out[i].answer);
+    return { V: (i: number) => visible(out[i].answer), out };
+  };
+  const r1 = await replayRun("s48-live-1");
+  if (r1) {
+    const { V, out } = r1;
     await check("s48-live-1 replay: inventory, PA amount and the waiting period still hold; no save-time gate rejection", () => {
       assert.match(V(0), /Ivan:[\s\S]*Lena:[\s\S]*Noah:[\s\S]*Not linked/); assert.ok(!/S\$\d/.test(V(0)));
       assert.match(V(1), /S\$200,000/); assert.match(V(4), /11th day/); assert.ok(!((out[4].answer as any).calculations ?? []).some((r: any) => r.result?.value != null));
@@ -230,6 +234,21 @@ async function main() {
     });
     await check("s48-live-1 replay turn 6 (unchanged by design): an unknown name is said to match nobody linked to the account, with no figure -- the household's member list is not offered (the same reply is used for another household's member, whose name must not prompt a choice)", () => {
       assert.match(V(5), /couldn['’]t identify “Bob”/); assert.ok(!/S\$\d/.test(V(5)));
+    });
+  }
+  // The second actual-model sample (s48-live-2, on 5568ddc), replayed: its turn 2 stated the Term Life S$400,000 for
+  // a sentence the model labelled Group Personal Accident; its turn 3 asked resolve_person about "my personal accident
+  // cover"; its turn 4 named the proportion only as "a simple fracture".
+  const r2 = await replayRun("s48-live-2");
+  if (r2) {
+    const { V, out } = r2;
+    await check("s48-live-2 replay turns 2-3 (safety): the Term Life S$400,000 is never stated in a Personal Accident answer", () => {
+      for (const i of [1, 2]) assert.ok(!/S\$400,000/.test(V(i)) || /not S\$400,000/.test(V(i)), `turn ${i + 1}: ${V(i)}`);
+    });
+    await check("s48-live-2 replay turn 4: the leg row named by the calculation's own condition is read -- 50% of the S$5,000 Simple Fracture limit, S$2,500, saved", () => {
+      const r = ((out[3].answer as any).calculations ?? []).find((x: any) => x.calculator === "lump_sum");
+      assert.ok(r, V(3)); assert.equal(r.result.value, 2500); assert.ok(r.operands.some((o: any) => o.id === "benefit_limit" && o.value === 5000));
+      assert.ok(!/S\$400,000 sum/.test(V(3)), V(3));
     });
   }
   if (process.env.STRESS_TRANSCRIPT_FILE) (await import("node:fs")).writeFileSync(process.env.STRESS_TRANSCRIPT_FILE, transcript.join("\n\n") + "\n");
@@ -302,6 +321,23 @@ async function controls(h: Harness) {
     assert.ok(!bad.ok || bad.data.kind !== "not_payable", JSON.stringify(bad).slice(0, 300));
     const short = await hc("2026-10-05T10:00+08:00", "2026-10-07T10:00+08:00");
     assert.ok(short.ok && short.data.kind === "not_payable" && short.data.amount == null && /11th day/.test(short.data.reason), JSON.stringify(short).slice(0, 400));
+  });
+  await check("CONTROL person: \"my personal accident cover\" is the speaker; \"my friend Bob\" and another household's member are not", async () => {
+    const rp = async (mention: string) => ((await runTool(fresh(), "resolve_person", { mention }, env)) as any).data;
+    const a = await rp("my personal accident cover"); assert.equal(a.status, "ok"); assert.equal(a.person.id, I);
+    assert.equal((await rp("my friend Bob")).status, "unknown");
+    assert.notEqual((await rp("my wife's policy")).person?.id, I);
+  });
+  await check("CONTROL proportion row by the calculation's condition: one best table row only -- a tie, a prose sentence, or a case another line names is refused", async () => {
+    const { figureFromEvidence } = await import("@/lib/rag2/calc/tool");
+    const text = "4.1 Simple Fracture\nWe will pay the percentage shown below for a simple fracture.\nBone fractured        % of Simple Fracture benefit limit\nSkull                 100%\nLeg (tibia or fibula)     50%\nThigh (femur)         60%";
+    const e: any = { policyId: "x", passage: { text, start: 0, end: text.length, onPage: 1 }, page: { start: 1, end: 1 } };
+    const ok = figureFromEvidence(e, { kind: "percent", words: "a simple fracture", also: "simple fracture of the tibia" }) as any;
+    assert.equal(ok.percent, 50); assert.match(ok.quote, /^Leg \(tibia/);
+    assert.equal(typeof figureFromEvidence(e, { kind: "percent", words: "a simple fracture", also: "fracture of the tibia and femur" }), "string");
+    assert.equal(typeof figureFromEvidence(e, { kind: "percent", words: "a simple fracture", also: "tibia", percent: 60 }), "string");
+    const prose: any = { ...e, passage: { ...e.passage, text: "For a simple (closed) fracture 50% of the percentage shown is payable; for a compound (open) fracture the full percentage is payable." } };
+    assert.equal(typeof figureFromEvidence(prose, { kind: "percent", words: "a compound (open) fracture", also: "closed tibia fracture" }), "string");
   });
   await check("CONTROL timestamps: the same time with a time zone added is the same fact; a different time or instant is a change", () => {
     assert.ok(sameFactValue("2026-10-02T09:00", "2026-10-02T09:00+08:00"));

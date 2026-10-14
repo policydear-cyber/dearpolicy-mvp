@@ -13,7 +13,7 @@
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
-import { loadDocs, loadPages, policyFamily } from "../store";
+import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
@@ -861,6 +861,23 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * figure (figureFromEvidence) -- never from the model's transcription. The record must be one a tool returned in this
    * conversation, still current (same document version), retrieved for this person, and printed by the calculation's
    * own document; the tool then validates the quote on that page as for any quoted input. */
+  const tableRest = new Map<string, EvidenceRef>();
+  const readTableRest = async (call: ToolCall) => {
+    const id = (call.arguments.proportion as Record<string, unknown> | undefined)?.evidence_id;
+    const e = typeof id === "string" ? state.evidence[id] : undefined;
+    if (!e || tableRest.has(e.id)) return;
+    const ROW = /\S(?:\t+| {3,})\S/;
+    const last = e.passage.text.split(/\n/).filter((l) => l.trim()).at(-1) ?? "";
+    if (!ROW.test(last)) return;
+    const page = (await pageMap(input.accountId, e.policyId).catch(() => new Map<number, string>())).get(e.passage.onPage) ?? "";
+    if (page.slice(e.passage.start, e.passage.end) !== e.passage.text) return;
+    const after = page.slice(e.passage.end).split(/\n/);
+    const rows: string[] = [];
+    for (const l of after.slice(after[0]?.trim() ? 0 : 1)) { if (!ROW.test(l)) break; rows.push(l); }
+    if (!rows.length) return;
+    const text = e.passage.text + "\n" + rows.join("\n");
+    tableRest.set(e.id, { ...e, passage: { ...e.passage, text, end: e.passage.start + text.length } } as EvidenceRef);
+  };
   const resolveEvidenceInputs = (call: ToolCall): string | null => {
     const a: Record<string, unknown> = { ...call.arguments };
     const subject = typeof a.subject_id === "string" ? a.subject_id : null, docId = String(a.policy_id ?? "");
@@ -881,7 +898,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const pr = a.proportion as Record<string, unknown> | undefined;
     if (pr && pr.evidence_id != null) {
       const e = pick(pr.evidence_id, "proportion.evidence_id"); if (typeof e === "string") return e;
-      const f = figureFromEvidence(e, { kind: "percent", words: String(pr.applies_when ?? ""), percent: typeof pr.percent === "number" ? pr.percent : null }); if (typeof f === "string") return `proportion.evidence_id: ${f}`;
+      const want = { kind: "percent" as const, words: String(pr.applies_when ?? ""), percent: typeof pr.percent === "number" ? pr.percent : null, also: typeof a.condition === "string" ? a.condition : null };
+      let f = figureFromEvidence(e, want);
+      // V1.3: a passage cut off inside a table is read with the rest of that table on the same page (its following
+      // rows, up to the first line that is not a row) -- the same stored page, so the row's page and quote still hold.
+      const more = tableRest.get(e.id);
+      if (typeof f === "string" && more) { const g = figureFromEvidence(more, want); if (typeof g !== "string") f = g; }
+      if (typeof f === "string") return `proportion.evidence_id: ${f}`;
       a.proportion = { page: f.page, quote: f.quote, percent: f.percent, applies_when: pr.applies_when }; changed = true;
     }
     if (Array.isArray(a.passage_limits) && (a.passage_limits as Record<string, unknown>[]).some((x) => x?.evidence_id != null)) {
@@ -1183,6 +1206,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (r.terminal && TERMINAL.has(call.name)) reply = r.terminal;
         continue;
       }
+      if (call.name === "calculate") await readTableRest(call);
       const refusal = preflight(call);
       if (refusal) { record(call.name, call.arguments, false, [], refusal); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: refusal }) }); continue; }
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));

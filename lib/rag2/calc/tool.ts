@@ -266,7 +266,24 @@ function unitsOf(text: string): string[] {
  * percentage. The page, quote and figure come from the stored record, never from the model's transcription. No such
  * line, or more than one equally good: refused (never the first, never any line that merely prints the same figure).
  */
-export function figureFromEvidence(e: EvidenceRef, op: { kind: "amount" | "percent"; words: string; percent?: number | null; amount?: number | null }): { page: number; quote: string; amount?: number; currency?: string; percent?: number } | string {
+export function figureFromEvidence(e: EvidenceRef, op: { kind: "amount" | "percent"; words: string; percent?: number | null; amount?: number | null; also?: string | null }): { page: number; quote: string; amount?: number; currency?: string; percent?: number } | string {
+  const first = figureFromWords(e, op);
+  // V1.3: a proportion named only by its section ("a simple fracture", no row of which says it) is read from the ONE table row (cells, never a prose sentence) the calculation's
+  // own condition names ("... of the leg (tibia) ..."): the single line printing one percentage with the most of those
+  // words, strictly ahead of every other line. A tie or no such line: the first refusal stands.
+  if (typeof first !== "string" || op.kind !== "percent" || !op.also?.trim() || !/no single line/.test(first)) return first;
+  // Only when the case the proportion was given for names no row at all (a section name, not another row's case).
+  const own = selectWords(op.words);
+  if (unitsOf(e.passage.text).some((u) => /\d\s*%/.test(u) && own.some((w) => u.toLowerCase().includes(w)))) return first;
+  const want = selectWords(`${op.words} ${op.also}`);
+  const rows = unitsOf(e.passage.text).map((u) => ({ u, hits: want.filter((w) => u.toLowerCase().includes(w)).length, pcts: (u.match(/(\d+(?:\.\d+)?)\s*%/g) ?? []).map((m) => Number(m.replace(/[%\s]/g, ""))) }))
+    .filter((x) => x.pcts.length === 1 && x.hits > 0 && /\S(?:\t+| {3,})\S/.test(x.u)).sort((a, b) => b.hits - a.hits);
+  if (!rows.length || (rows[1] && rows[1].hits === rows[0].hits)) return first;
+  const r = rows[0];
+  if (op.percent != null && Math.abs(op.percent - r.pcts[0]) > 1e-9) return `that passage prints ${r.pcts[0]}%, not ${op.percent}%`;
+  return { page: e.passage.onPage, quote: r.u, percent: r.pcts[0] };
+}
+function figureFromWords(e: EvidenceRef, op: { kind: "amount" | "percent"; words: string; percent?: number | null; amount?: number | null }): { page: number; quote: string; amount?: number; currency?: string; percent?: number } | string {
   const want = selectWords(op.words);
   if (!want.length) return `name the ${op.kind === "percent" ? "case" : "benefit"} the figure is for`;
   const scored = unitsOf(e.passage.text).map((u) => {

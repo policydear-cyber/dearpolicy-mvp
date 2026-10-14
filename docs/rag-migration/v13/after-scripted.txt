@@ -125,3 +125,37 @@ APP:  Ivan’s Arbor Civil Service Group Personal Accident wording lists Daily H
 USER: What cover does Bob have?
 APP:  I couldn’t identify “Bob” among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.
       calcs=[]
+
+### s48-live-2 replayed (recorded model output, no model call)
+
+USER: What policies does my family have?
+APP:  Ivan: Arbor Civil Service Group Scheme - Certificate (Arbor Assurance, a personal policy document); Arbor Civil Service Group Personal Accident - Policy Wording (Arbor Assurance, reference wording for the scheme, not a personal policy document); IMG_2231.jpg could not be read (the photo is too blurred, dark or faint to read).
+      Lena: Arbor Civil Service Group Scheme - Certificate (Arbor Assurance, a personal policy document); Arbor Civil Service Group Personal Accident - Policy Wording (Arbor Assurance, reference wording for the scheme, not a personal policy document); SecureLife Term Plan (Harbourline Life, a personal policy document); lena-hospital-plan.pdf could not be read (it is password protected and was uploaded without its password).
+      Noah: no documents on file.
+      Not linked to anyone in the household: Annual Travel Plan (Bluewave General) -- link it to a person so it can be used for them.
+      calcs=[]
+
+USER: How much is my personal accident cover?
+APP:  The policy wording uses the Sum Insured as the basis for some personal-accident benefits, but the uploaded documents do not establish that this is the current amount in force.
+      calcs=[]
+
+USER: My personal accident cover is S$400,000, right?
+APP:  The policy wording uses the Sum Insured as the basis for some personal-accident benefits, but the uploaded documents do not establish that this is the current amount in force.
+      calcs=[]
+
+USER: I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it. How much can I claim?
+APP:  You told me, “I fractured my leg, the tibia, when I fell down the stairs. It's a simple fracture and the X-ray confirmed it.”
+      Ivan’s Arbor Group Personal Accident wording lists the Simple Fracture benefit limit as S$5,000 per insured person per accident and says a simple fracture confirmed by X-ray is payable at the percentage shown for the bone.
+      The wording defines a simple fracture as a closed fracture where the skin is not broken, and the documents do not state that the fall down the stairs meets the policy’s definition of an Accident.
+      If “Simple Fracture” (50% of the Simple Fracture benefit limit of S$5,000) applies, on the facts you reported, the indicative illustration is S$2,500; it is not an approved payment, and the insurer must still accept it under the policy's own definition after its medical review, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
+      calcs=[["lump_sum",2500]]
+
+USER: I was also in hospital for 48 hours: admitted 5 October 2026 at 10am, discharged 7 October 2026 at 10am. Does the Daily Hospital Income pay anything?
+APP:  Ivan’s Arbor Group Personal Accident wording lists Daily Hospital Income at S$150 for each day of inpatient confinement directly resulting from an Accident, payable from the 11th day of continuous confinement, up to 180 days per Accident.
+      For the 48-hour stay you reported, the calculator finds no Daily Hospital Income benefit because the stay does not reach the 11th day of continuous confinement, if this provision applies to the stay.
+      Arbor Civil Service Group Personal Accident - Policy Wording daily hospital income does not apply to these facts: the stay you reported (48 hours, from 5 October 2026 to 7 October 2026: at most 3 days even counting the days of admission and discharge) does not reach the 11th day of confinement that the benefit is payable from (“payable from the 11th day of continuous confinement”), if this provision applies to the stay.
+      calcs=[]
+
+USER: What cover does Bob have?
+APP:  I couldn’t identify “Bob” among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.
+      calcs=[]

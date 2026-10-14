@@ -174,6 +174,13 @@ function documentLabels(text: string): string[] {
   }
   return [...out].filter((x) => benefitWords(x).size > 0);
 }
+/** The clause names its own label, not merely a word it shares with the competing one ("Group" in "Group Term Life" /
+ * "Group Personal Accident"): the label verbatim, or a word of it the competing label does not have. */
+const ownNamed = (clause: string, own: string, other: string) => {
+  if (clause.toLowerCase().includes(own.toLowerCase())) return true;
+  const theirs = benefitWords(other), have = benefitWords(clause);
+  return [...benefitWords(own)].some((w) => !theirs.has(w) && have.has(w));
+};
 const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
 /**
  * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
@@ -213,6 +220,8 @@ function verifiableParts(text: string, failedRaw: string | null): string[] | nul
   const at = segs.findIndex((x) => x.includes(failedRaw));
   if (at <= 0) return null;
   const head = tidy(segs.slice(0, at).join(", "));
+  // A head that is the reason given for the dropped figure ("Nothing on file amends it, so ... is S$80") is not kept alone.
+  if (/^(?:so|and so|therefore|thus|hence|which means|meaning|because|as)\b/i.test(segs[at].trim())) return null;
   return enough(head) && !/\b(?:if|unless|when|provided|subject to)\b/i.test(segs.slice(at).join(" ")) ? [head] : null;
 }
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
@@ -613,10 +622,21 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // V1.3: a table value's own benefit decides what it is; the clause stating it must not attribute it to another
       // benefit the same document prints ("your Personal Accident cover is S$400,000" for the Term Life row).
       if (b && op) {
-        const clause = sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence;
+        // The sentence's own benefit field is part of what it states the figure for.
+        const clause = `${sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence} ${typeof s.benefit === "string" ? s.benefit : ""}`;
         const own = tidyLabel(op.benefit);
-        const better = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !namesBenefit(clause, own));
+        const better = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
         if (better) { failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence states it for “${better}”`; return; }
+        // A figure bound by the composer from its printed identity (not a value the model selected by benefit), in a
+        // document printing several benefits (a roster's product headings): the clause must say which one the figure is
+        // -- one of its own label's words that the document's other labels do not share. Unnamed, it is not stated.
+        const others = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").filter((o) => o.toLowerCase() !== own.toLowerCase());
+        const otherWords = new Set(others.flatMap((o) => [...benefitWords(o)]));
+        const distinct = [...benefitWords(own)].filter((w) => !otherWords.has(w));
+        const competing = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)));
+        const have = benefitWords(clause);
+        const byIdentity = valIds.some((id) => /^vb\d/.test(id) && ctx.tools.values.get(id)?.operand === op);
+        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
       }
       // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
       // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
