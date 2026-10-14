@@ -263,6 +263,19 @@
       "calls": 21,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s48-live-3",
+      "tested_code_sha": "fdc2daee4d62aad2c85c9d496b13cdeaff37570a",
+      "request_sha": "fdc2daee4d62aad2c85c9d496b13cdeaff37570a",
+      "at": "2026-10-14T06:39:12.815Z",
+      "preflight": false,
+      "run_cap_usd": 0.016,
+      "spent_usd": 0.007577,
+      "reserved_unsettled_usd": 0,
+      "calls": 22,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
