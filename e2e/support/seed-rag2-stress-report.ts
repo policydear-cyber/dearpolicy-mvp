@@ -10,7 +10,9 @@ import * as REPORT_HH from "../../scripts/fixtures/rag2-stress/report-household"
 import * as BINDING_HH from "../../scripts/fixtures/rag2-binding/household";
 
 // V1.4: `--household binding` seeds the binding household (scripts/fixtures/rag2-binding) instead.
-const HH = process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+// `--household binding-cells` seeds it with the certificate one cell per line (the s50 live runs' layout).
+const CELLS = process.argv.includes("binding-cells");
+const HH = CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];
