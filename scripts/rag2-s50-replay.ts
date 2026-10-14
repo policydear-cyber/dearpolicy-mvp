@@ -94,8 +94,10 @@ async function main() {
     console.log(`bindings: ${JSON.stringify((s.answer.figureBindings ?? []).map((b: any) => [b.value, b.benefit, b.rowPerson, b.layout, b.policyId?.slice(-3), b.pageStart]))}`);
     console.log(`citations: ${JSON.stringify((s.answer.citations ?? []).map((x: any) => [x.policyId?.slice(-3), x.pageStart]))}  gate=${JSON.stringify(s.trace?.gate ?? [])} dropped=${JSON.stringify((s.trace?.dropped ?? []).map((d: any) => d.reason))}`);
   }
-  await check("the prompt and the tool schema the model saw are byte-identical on this code (same sha256 as the run recorded)", () => {
-    assert.equal(sha(SYSTEM_PROMPT), run.prompt.systemPromptSha256); assert.equal(sha(canon(tools)), run.prompt.toolSchemaSha256);
+  await check("the system prompt the model saw is byte-identical on this code (same sha256 as the run recorded); the tool schema is reported (V1.5 added person_benefits' optional topic, so it differs from the run's)", () => {
+    assert.equal(sha(SYSTEM_PROMPT), run.prompt.systemPromptSha256);
+    const same = sha(canon(tools)) === run.prompt.toolSchemaSha256;
+    console.log(`tool schema: ${same ? "identical to the run's" : "DIFFERS from the run's (the model would see a changed tool schema; the replay plays the recorded calls, which remain valid)"}`);
   });
   await check("every recorded model step replays with the same tool outcomes as live (same tools, same ok / refused)", () => {
     for (const [i, s] of saved.entries()) {

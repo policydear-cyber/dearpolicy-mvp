@@ -800,6 +800,22 @@ function columnCurrency(b: FigureBinding, rangeText: string): string | null {
   return null;
 }
 
+/**
+ * V1.5 (live verification: a policy wording printing "$2,000" bare): the currency a DOCUMENT itself declares for its
+ * bare "$" amounts -- "All amounts are in Singapore Dollars", "Currency: SGD", "'$' means Singapore dollars". Source
+ * identity is kept: only the same document's own declaration counts (never another document's "S$2,000", never an
+ * assumption that "$" is SGD), and a document that also prints another explicit currency declares nothing.
+ */
+const DECLARES_SGD = [
+  /\b(?:all\s+)?(?:monetary\s+)?(?:amounts?|sums?|benefits?|limits?|figures?|premiums?)\b[^.\n]{0,60}?\b(?:are|is|shall be|will be)\s+(?:shown\s+|stated\s+|expressed\s+|payable\s+|denominated\s+)?in\s+(?:Singapore\s+dollars?|SGD|S\$)/i,
+  /\bcurrency\s*[:=]\s*(?:SGD|Singapore\s+dollars?)\b/i,
+  /["“']?\$["”']?\s+(?:refers\s+to|means|denotes)\s+(?:the\s+)?(?:Singapore\s+dollars?|SGD)\b/i,
+];
+export function documentCurrency(text: string): "SGD" | null {
+  if (!DECLARES_SGD.some((re) => re.test(text))) return null;
+  if (/\b(?:US|A|NZ|HK|C)\$\s?\d|\b(?:USD|AUD|EUR|GBP|MYR|HKD|JPY|CNY|RM)\s?\d|[€£¥]\s?\d/.test(text)) return null;
+  return "SGD";
+}
 /** Rule 2: is `value` in `currency` grounded by `b` (and, when `sentence` is given, for that sentence)? Null when it is. */
 /** "the same benefit lists S$150,000", "that benefit is S$80": a sentence that refers back to the benefit named just before. */
 const BENEFIT_BACK_REFERENCE = /\b(?:the same|that|this)\s+(?:benefit|item|row|cover)\b/i;
@@ -833,7 +849,7 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   const how = [amountPrintedWith(value, currency, b.passage), amountPrintedWith(value, currency, shown)].sort((x, y) => RANK[x] - RANK[y])[0];
   if (how === "absent") return "the figure is not printed in the cited passage";
   if (how === "other") return "the figure is printed in another currency in the cited passage";
-  if (how === "bare") { const named = currenciesStatedIn(shown); if (!(named.length === 1 && named[0] === currency)) { const c = columnCurrency(b, rangeText); if (c !== currency) return "the cited passage prints the figure without its currency"; } }
+  if (how === "bare") { const named = currenciesStatedIn(shown); if (!(named.length === 1 && named[0] === currency)) { const c = columnCurrency(b, rangeText); if (c !== currency && documentCurrency([...doc.pages.values()].join("\n")) !== currency) return "the cited passage prints the figure without its currency"; } }
   let benefit = (opts.benefit ?? b.benefit ?? "").trim();
   if (!benefit) return "the figure is not bound to a benefit";
   // An item code bound as the benefit ("A", "4"): the benefit is the row's own name printed beside that code.

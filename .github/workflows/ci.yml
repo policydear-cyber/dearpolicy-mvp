@@ -268,6 +268,8 @@ jobs:
         run: npm run rag2:stress-report-test
       - name: rag2 person / product / benefit binding (a member's name is never a product; insurers only for the person's own documents)
         run: npm run rag2:binding-test
+      - name: "Live-verification regressions (V1.5 -- inventory status, limit fallback, value types, insurer aliases)"
+        run: npm run rag2:live-verify-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

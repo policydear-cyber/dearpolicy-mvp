@@ -232,6 +232,11 @@ export type HouseholdBenefits = {
   /** V1.4: each member's view of each endorsement document (lib/rag2/endorsement-scope.ts): whether it applies to
    * them, belongs to another member, or does not state whom it applies to. */
   endorsementsByMember: Map<string, { policyId: string; product: string | null; scope: "applies" | "other" | "unresolved"; basis: string; namedIds: string[] }[]>;
+  /** V1.5: other names the SAME insurer goes by for a document, from the documents themselves: the insurer recorded on
+   * another document of the same policy (policy number), or an insurer name the document's own text prints (a
+   * certificate stored under the insurer's registered name whose scheme summary is stored under its brand name). Never a name-similarity
+   * guess. */
+  insurerAliases: Map<string, string[]>;
 };
 export async function householdBenefits(accountId: string): Promise<HouseholdBenefits> {
   const [members, docs] = await Promise.all([loadMembers(accountId), loadDocs(accountId)]);
@@ -256,7 +261,15 @@ export async function householdBenefits(accountId: string): Promise<HouseholdBen
     const sc = endorsementScope({ text: pages.filter((x) => x.policyId === d.id).map((x) => x.text).join("\n"), subjectId: m.id, household });
     return { policyId: d.id, product: d.productName, ...sc };
   })]));
-  return { byMember, labelsByPolicy, policiesByMember, insurers, endorsementsByMember };
+  const insurerAliases = new Map<string, string[]>();
+  for (const d of docs) {
+    const own = (d.insurer ?? "").trim();
+    const text = pages.filter((x) => x.policyId === d.id).map((x) => x.text).join("\n").toLowerCase();
+    const fam = policyFamily(docs, d).map((f) => (f.insurer ?? "").trim());
+    const printed = insurers.filter((n) => n.length >= 4 && new RegExp(`(?<![a-z0-9])${n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`).test(text));
+    insurerAliases.set(d.id, [...new Set([...fam, ...printed].filter((n) => n && n !== own))]);
+  }
+  return { byMember, labelsByPolicy, policiesByMember, insurers, endorsementsByMember, insurerAliases };
 }
 
 /** V1.4: a person's own documented row as a table value (for a roster the table parser does not read -- one cell per

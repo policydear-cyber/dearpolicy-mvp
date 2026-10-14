@@ -7,6 +7,7 @@
  * this context, result ids of earlier computations, or household figures with the household's own words attached.
  * Nothing here is wired into the existing chat; runTool() refuses unless ragToolsEnabled() (lib/rag2/flag.ts).
  */
+import { sharedTopic, topicStems } from "./loop/topic";
 import type { EvidenceRef } from "./evidence";
 import { ragToolsEnabled } from "./flag";
 import { resolvePerson, type ConversationContext } from "./people";
@@ -31,6 +32,11 @@ export type ToolContext = {
   /** V1.4: the person's own row values person_benefits already issued (policy|subject|benefit -> value id): a
    * select_table_value for the same row reuses it instead of reading the table again. */
   personRows?: Map<string, string>;
+  /** V1.5: what the conversation is about (the household's messages), for ranking printed wording by relevance. */
+  topicText?: string;
+  /** V1.5: tool reads already returned this turn (person_benefits per person, read_page per page): repeats are answered
+   * by reference instead of resending the same records. */
+  returned?: Set<string>;
 };
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };
@@ -79,7 +85,15 @@ export const RAG_TOOLS: ToolDef[] = [
     name: "read_page",
     description: "Read one whole stored page of one of the household's readable documents.",
     parameters: { type: "object", properties: { policy_id: str("The document."), page: { type: "integer", minimum: 1 } }, required: ["policy_id", "page"], additionalProperties: false },
-    handler: async (ctx, a) => { const r = await readPage({ accountId: ctx.accountId, policyId: String(a.policy_id), page: Number(a.page) }); return r.status === "ok" ? ok(r, [r.evidence]) : fail(r.reason); },
+    handler: async (ctx, a) => {
+      const key = `read_page|${String(a.policy_id)}|${Number(a.page)}`;
+      const r = await readPage({ accountId: ctx.accountId, policyId: String(a.policy_id), page: Number(a.page) });
+      if (r.status !== "ok") return fail(r.reason);
+      // V1.5: the same page twice in one turn is answered by reference (its evidence id), not resent.
+      if ((ctx.returned ??= new Set()).has(key)) return ok({ status: "ok", reused: "this page was already read this turn -- use that result" }, [r.evidence]);
+      ctx.returned.add(key);
+      return ok(r, [r.evidence]);
+    },
   },
   {
     name: "resolve_person",
@@ -102,10 +116,25 @@ export const RAG_TOOLS: ToolDef[] = [
   {
     name: "person_benefits",
     description: "One household member's DOCUMENTED benefits, read from their linked documents: each document (personal proof such as a certificate, reference wording such as a product summary, or an amendment) with each benefit it prints for them -- the product / benefit as the document names it, the printed amount or percentage (and what it is a percentage of), its date, its printed conditions, page, and a value_id for an amount printed on the person's own row. Lists conflicts (a certificate and an endorsement printing different amounts) and what is unresolved. Printed facts only: never confirmation of current cover or of a claim. Use it first for questions about what a person is covered for, or after an event (a death, an accident, an illness).",
-    parameters: { type: "object", properties: { subject_id: str("The household member.") }, required: ["subject_id"], additionalProperties: false },
+    parameters: { type: "object", properties: { subject_id: str("The household member."), topic: str("Optional: what the question is about (e.g. 'death after an accident', 'fracture', 'hospital stay'): printed wording about it is returned first.") }, required: ["subject_id"], additionalProperties: false },
     handler: async (ctx, a) => {
       const view = await personBenefits(ctx.accountId, String(a.subject_id));
       if (!view.member.name) return fail("that person is not an active member of this household");
+      // V1.5 (live verification: one call returned 95 evidence records and the turn ran out of model budget): the
+      // person's own rows and amendments are always returned; shared reference wording ranked by how much it is about the
+      // question (topic, else the conversation), at most SHARED_MAX lines, the rest counted. A second call for the same
+      // person in the same turn is answered by reference.
+      const key = `person_benefits|${String(a.subject_id)}|${String(a.topic ?? "")}`;
+      if ((ctx.returned ??= new Set()).has(key)) return ok({ person: view.member.name, reused: "already returned earlier this turn -- use the value_ids and evidence ids from that result" }, []);
+      ctx.returned.add(key);
+      const SHARED_MAX = 10;
+      const want = topicStems(String(a.topic ?? "") + " " + (ctx.topicText ?? ""));
+      const score = (b: PersonBenefit) => sharedTopic(want, topicStems([b.benefit.label, b.policy.product ?? "", ...b.conditions].join(" "))).length;
+      const shared = view.benefits.filter((b) => b.applicability === "shared_wording");
+      const ranked = shared.map((b, i) => ({ b, i, s: score(b) })).sort((x, y) => y.s - x.s || x.i - y.i);
+      const keepShared = new Set(ranked.slice(0, SHARED_MAX).map((x) => x.b));
+      const omitted = shared.length - keepShared.size;
+      view.benefits = view.benefits.filter((b) => b.applicability !== "shared_wording" || keepShared.has(b));
       const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? `${b.printed.currency === "SGD" ? "S$" : b.printed.currency + " "}${b.printed.amount.toLocaleString("en-SG")}${b.printed.unit ? " " + b.printed.unit : ""}` : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
       const byDoc = new Map<string, PersonBenefit[]>();
       for (const b of view.benefits) byDoc.set(b.policy.id, [...(byDoc.get(b.policy.id) ?? []), b]);
@@ -132,7 +161,7 @@ export const RAG_TOOLS: ToolDef[] = [
         }
         documents.push({ policy_id: policyId, product: p.product, insurer: p.insurer, role: p.personalProof ? "personal proof (lists this person)" : bs.some((b) => b.applicability === "amendment") ? "amendment" : "reference wording", benefits });
       }
-      return ok({ person: view.member.name, documents, unresolved: view.unresolved, note: "These are this person's printed benefit lines in their linked documents: cite their value_ids / evidence directly; search_passages only for something not listed here. Printed facts only. A dated amount is the document's amount on that date, not confirmation of current cover; amounts of different benefits are never added into a total unless a document says they are paid together." }, view.benefits.map((b) => b.source.evidence));
+      return ok({ person: view.member.name, documents, unresolved: view.unresolved, ...(omitted > 0 ? { omitted: `${omitted} other printed wording line(s) of these documents are not listed (not about this question); call again with a topic, or search_passages, if you need them` } : {}), note: "These are this person's printed benefit lines in their linked documents: cite their value_ids / evidence directly; search_passages only for something not listed here. Printed facts only. A dated amount is the document's amount on that date, not confirmation of current cover; amounts of different benefits are never added into a total unless a document says they are paid together." }, view.benefits.map((b) => b.source.evidence));
     },
   },
   {

@@ -139,6 +139,20 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     out = billReimbursement({ subjectId, who, benefit, terms, bill, subLimits: subs, limits: lims, deductible: ded as DocValue | null, coInsurance: co as DocValue | null, coInsuranceCap: coCap as DocValue | null, settled, whatIf });
   } else if (a.calculator === "lump_sum") {
     let pct = value("percent_value_id", "percent"); const cap = value("cap_value_id", "money");
+    let recoveredNote: string | null = null;
+    // V1.5 (live verification: percent_value_id pointed at a printed amount, the call was refused and the turn ran out
+    // of budget): the wrong value type is still never used as a percentage. The ONE bounded recovery is the percentage
+    // this document prints for the benefit row named -- the same server read as leaving percent_value_id out. If there
+    // is none, the refusal names the percentages already read for this person on this policy.
+    if (typeof pct === "string" && /is a printed money, not a percent$/.test(pct)) {
+      const wrong = ctx.values.get(String(a.percent_value_id));
+      const read = await printedPercent(ctx, policyId, subjectId, benefit);
+      if (read) { recoveredNote = `percent_value_id ${String(a.percent_value_id)} is a printed amount (${wrong?.operand.benefit ?? "an amount"}), not a percentage, so it was not used; the percentage printed for “${read.operand.benefit}” was read instead`; pct = read; }
+      else {
+        const pcts = [...ctx.values.entries()].filter(([, v]) => v.subjectId === subjectId && v.operand.valueKind === "percent" && ofPolicy(v.operand.evidence)).map(([id, v]) => `${id} (${v.operand.benefit}: ${(v.operand.ppm ?? 0) / 10_000}%)`);
+        return fail(`${pct}. ${pcts.length ? `Percentages already read for this person on this policy: ${pcts.join("; ")}.` : "No percentage has been read for this person on this policy yet."} Pass one of those as percent_value_id, or leave percent_value_id out and name the table row (as printed) in benefit -- the server reads the percentage printed for it.`);
+      }
+    }
     if (typeof pct === "string") return fail(pct); if (typeof cap === "string") return fail(cap);
     // V1.2: no percentage passed -- the percentage this document prints for the benefit named, for this person, read
     // by the server with the select_table_value rules (one row, this person's column; anything ambiguous is not used).
@@ -192,7 +206,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     if (a.proportion && !shareIsPercent) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
     out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
       base: pctBase && pctBase.kind !== "sum_insured" && (pctBase.kind !== "referenced_amount" || pctBase.printed) ? { kind: pctBase.kind === "referenced_amount" ? "benefit_limit" : pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
-    if (!("refused" in out) && baseNote) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote];
+    if (!("refused" in out) && (baseNote || recoveredNote)) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote, recoveredNote].filter((x): x is string => !!x);
   } else return fail(`unknown calculator ${String(a.calculator)}`);
   if ("refused" in out) return fail(out.refused);
   calcOutcomes(ctx).set(out.calcId, { ...out, purpose } as CalcOutcome & { purpose: string });

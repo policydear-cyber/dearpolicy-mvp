@@ -10,6 +10,7 @@
  * break the conversation rules (a second question, a fact already known, a question no evidence makes relevant).
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
+import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
@@ -217,7 +218,7 @@ const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)
 const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_passages"]);
 
 /** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
-export const INVENTORY_QUESTION = /\b(?:what|which|list|show)\b[^?.!]*\b(?:polic(?:y|ies)|documents?|uploads?|files?|plans?)\b[^?.!]*\b(?:have|has|got|hold|holds|on file|uploaded)\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have)\b/i;
+export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|submit|provide|bring|send|attach)\b)[^]*(?:\b(?:what|which|list|show|tell me|give me)\b[^?.!]*\b(?:policies|documents|uploads|files|plans|(?:every|all|each|any) (?:of (?:the|our|my) )?(?:polic(?:y|ies)|documents?|files?|uploads?))\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have|does \w+ have)\b|\b(?:our|my|the household'?s?) (?:document )?library\b|\bwhat plans? does\b)/i;
 
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
@@ -228,6 +229,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (!state.subjectId && input.initialSubjectId) state.subjectId = input.initialSubjectId;
   const householdIds = new Set(input.people.map((p) => p.id));
   const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
+  ctx.topicText = [...state.history.map((h) => h.user), input.message].join(" ");
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
   const computeCalls = new Map<string, ComputeCall>();
@@ -1014,10 +1016,26 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
 
   /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
   const partialAnswer = (): Composed | null => {
-    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)));
+    // V1.5 (live verification, 14 Oct): only figures RELEVANT to what the household asked -- their label, product and
+    // printed conditions (and the wording of the same product, e.g. a Term Life summary's Death Benefit) share a topic
+    // word with the conversation. A verified figure about something else (Living Care Plus for a death or a fracture
+    // question) is never shown just because it was read; most relevant first, then the latest read.
+    const said = topicStems(userTexts.join(" "));
+    const relevance = (policyId: string, label: string, subject: string) => {
+      const parts = [label, policyNames.get(policyId) ?? ""];
+      const lw = [...topicStems(label)];
+      for (const b of benefitView?.byMember.get(subject)?.benefits ?? []) {
+        if (b.policy.id === policyId && b.benefit.label.toLowerCase() === label.toLowerCase()) parts.push(...b.conditions);
+        if (b.applicability === "shared_wording" && lw.length && lw.every((w) => topicStems(b.policy.product ?? "").has(w))) parts.push(b.benefit.label, ...b.conditions);
+      }
+      return sharedTopic(said, topicStems(parts.join(" "))).length;
+    };
+    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)))
+      .map(([id, v], i) => ({ id, v, i, score: relevance(v.operand.evidence.policyId, v.operand.benefit, v.subjectId) }))
+      .filter((x) => x.score > 0).sort((a, b) => a.score - b.score || a.i - b.i).map((x) => [x.id, x.v] as const);
     const seenRows = new Set<string>();
     const sentences: Record<string, unknown>[] = [];
-    for (const [valueId, v] of read.reverse()) {
+    for (const [valueId, v] of [...read].reverse()) {
       const e = v.operand.evidence, t = e.table;
       const rowKey = `${e.policyId}|${t?.rowLabel ?? v.operand.benefit}|${t?.columnHeader ?? ""}`;
       if (seenRows.has(rowKey) || sentences.length >= 3) continue;
@@ -1027,6 +1045,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const label = rowLabelOf(v.operand.benefit, e.passage.text, cell);
       const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your policy";
       sentences.unshift({ text: `${product} prints “${label}” as ${cell}${t?.columnHeader ? ` in its ${t.columnHeader} column` : ""}.`, value_ids: [valueId], subject_id: v.subjectId });
+    }
+    // Nothing relevant read this turn: what the conversation already established about the question (stated, cited
+    // and bound in an earlier turn), re-checked by the same composer and gate.
+    if (!sentences.length) for (const e of (state.established ?? []).filter((x) => !state.subjectId || x.subjectId === state.subjectId).slice(-3)) {
+      if (sharedTopic(said, topicStems(`${e.text} ${e.benefit ?? ""}`)).length) sentences.push({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), ...(e.subjectId ? { subject_id: e.subjectId } : {}) });
     }
     if (!sentences.length) return null;
     const composed = composeFinal({ sentences, subjectId: state.subjectId }, composeCtx());
@@ -1327,8 +1350,19 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
-    const named = (d: InventoryDoc) => said.includes(d.name.toLowerCase()) || said.includes(d.filename.toLowerCase());
+    // (An empty name names nothing: an unreadable upload has no product name, only its file name and status.)
+    const has = (t: string | null | undefined) => !!t && t.trim().length > 0 && said.includes(t.toLowerCase());
+    const named = (d: InventoryDoc) => (d.readable === "ready" ? has(d.name) || has(d.filename) : has(d.filename));
     if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
+    // V1.5 (live verification, 14 Oct): a reply that names every readable document but leaves out a file that could not
+    // be read keeps what it says and gains that file's status line from the lookup -- the household asked for it, and a
+    // status fact needs no page citation (it is the library's own record).
+    const statusMissing = docs.filter((d) => d.readable !== "ready" && !named(d));
+    if (statusMissing.length && docs.filter((d) => d.readable === "ready").every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) {
+      const owner = (d: InventoryDoc) => inv.people.find((p) => p.documents.includes(d))?.short ?? null;
+      const lines = statusMissing.map((d) => ({ text: `${d.filename} could not be read (${d.reason ?? "it could not be read"})${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
+      return { ...r, composed: { ...r.composed, sentences: [...r.composed.sentences, ...lines] } };
+    }
     // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
     // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
     const bindingsOf = (text: string) => r.composed.figureBindings.filter((b) => !!b.sentence && (text.includes(b.sentence) || b.sentence.includes(text)));
@@ -1349,12 +1383,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (!r || r.kind !== "final" || state.pending || !benefitView) return r;
     const subject = r.composed.subjectId ?? state.claim?.subjectId ?? state.subjectId ?? null;
     if (!subject) return r;
-    const STEM_SYN: [RegExp, string][] = [[/^(?:die|dies|died|dying|death|deaths|dead|deceased|killed|fatal|fatally)$/, "death"], [/^(?:accident|accidents|accidental|accidentally|crash|crashed|collision)$/, "accident"], [/^(?:injury|injuries|injured|injure)$/, "injury"], [/^(?:diagnosis|diagnosed)$/, "diagnosis"]];
-    const GEN = new Set(["insured", "person", "result", "within", "days", "day", "benefit", "payable", "sum", "that", "this", "with", "from", "will", "shall", "pay", "policy", "the", "and", "for", "group", "public", "service"]);
-    const stems = (t: string) => new Set((t.toLowerCase().replace(/\bpass(?:ed|es)? away\b/g, "died").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !GEN.has(w)).map((w) => STEM_SYN.find(([re]) => re.test(w))?.[1] ?? w.replace(/(?:ies|es|s|ed|ing|al|ly)$/, "").slice(0, 6)));
+    const STEM_SYN = TOPIC_SYN;
+    const stems = topicStems;
     const said = stems(userTexts.join(" "));
     const DATE_GIVEN = /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{4})?\b|\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b(?:yesterday|today|last (?:night|week|month))\b/i;
-    const WINDOW = /within\s+(\d+)\s+(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(accident|injury|onset|diagnosis|event)/i;
+    const WINDOW = /within\s+(\d+)\s+(?:calendar\s+)?(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(?:(?:date|day)\s+of\s+(?:the\s+|that\s+|an?\s+)?|occurrence\s+of\s+(?:the\s+|that\s+)?)?(accident|injury|onset|diagnosis|event)/i;
     for (const b of benefitView.byMember.get(subject)?.benefits ?? []) {
       const cond = b.conditions.find((c) => WINDOW.test(c));
       if (!cond) continue;

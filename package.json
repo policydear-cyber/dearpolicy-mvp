@@ -183,6 +183,7 @@
     "rag2:stress-test": "node --import tsx scripts/rag2-stress-regressions.ts",
     "rag2:stress-report-test": "node --import tsx scripts/rag2-stress-report-regressions.ts",
     "rag2:binding-test": "node --import tsx scripts/rag2-binding-regressions.ts",
+    "rag2:live-verify-test": "node --import tsx scripts/rag2-live-verify-regressions.ts && node --import tsx scripts/rag2-live-verify-regressions.ts --binding",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
     "ingest:live-check": "node --import tsx scripts/ingest-live/check.ts",
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",

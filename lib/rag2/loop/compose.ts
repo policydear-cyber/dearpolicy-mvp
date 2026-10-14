@@ -13,7 +13,7 @@ import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRec
 import { calcOutcomes } from "../calc/tool";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
-import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { documentCurrency, moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { benefitWords, namesBenefit, printedPeriodsOf } from "@/lib/chat/assertions";
 import type { HouseholdBenefits } from "../benefits";
@@ -281,7 +281,9 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
   const lower = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
   // V1.4: only an insurer of a PERSONAL policy document of this person (never a reference booklet linked to them, never
   // a document linked to nobody) -- and, when the answer's relevant documents are known, one this answer relies on.
-  const mine = (hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => key(p.insurer ?? "").join(" ")).filter(Boolean);
+  // V1.5: with the names the same insurer goes by on those documents (hb.insurerAliases: same policy number, or printed
+  // in the document itself) -- a brand name for a certificate stored under the registered name.
+  const mine = (hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).flatMap((p) => [p.insurer ?? "", ...(hb.insurerAliases?.get(p.policyId) ?? [])]).map((n) => key(n).join(" ")).filter(Boolean);
   for (const ins of hb.insurers) {
     const k = key(ins);
     if (!k.length || !lower.includes(` ${k.join(" ")} `)) continue;
@@ -295,7 +297,7 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
 export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, relevant?: Set<string> | null): string | null {
   const hb = ctx.benefits;
   if (!hb || !subjectId) return null;
-  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => (p.insurer ?? "").trim()).filter(Boolean));
+  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).flatMap((p) => [p.insurer ?? "", ...(hb.insurerAliases?.get(p.policyId) ?? [])]).map((n) => n.trim()).filter(Boolean));
   let t = text;
   for (const ins of hb.insurers) {
     if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true, relevant)) continue;
@@ -331,7 +333,9 @@ const wordScore = (clause: string, label: string) => { const have = new Set(cont
 function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText" | "benefits" | "people">): { label: string } | { conflict: string } | null {
   const all = withoutInstructions(evidenceTextOf(ref)).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
   // The amount as printed: in the currency the sentence states it in, never another one.
-  const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && m.currency === currency));
+  // (A bare "$" amount is in the currency its own document declares for "$", if it declares one -- documentCurrency.)
+  const declared = documentCurrency(ctx.libraryText?.get(ref.policyId) ?? "");
+  const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && (m.currency === currency || (m.currency === "$" && declared === currency))));
   if (all.length && !lines.length) return { conflict: `printed in another currency than the sentence states` };
   // A row printing several amounts (one per column, person or tier) is bound by its column, not by its label.
   if (lines.some((l) => moneyFiguresIn(l).length > 1)) return null;
