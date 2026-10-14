@@ -1,0 +1,4460 @@
+{
+  "scenario": "S52B",
+  "title": "V1.5 report turns 3-4: direct amounts and certificate date, then switch person and challenge a wrong PA amount",
+  "conversationId": "950533e4-df1a-400c-b17e-705f28539648",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nIt lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe certificate date shown is 6 October 2022 (page 1).",
+      "timings": {
+        "acceptedMs": 14,
+        "firstAssistantPersistedMs": 8329,
+        "answerSeenMs": 8537,
+        "modelMs": 7168,
+        "upstreamMs": 7111,
+        "relayMs": 7113
+      },
+      "calls": [
+        {
+          "seq": 7,
+          "at": "2026-10-14T15:41:14.898Z",
+          "estInputTokens": 14909,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024909,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 2,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7235,
+            "output": 18,
+            "cached": 7087
+          },
+          "latencyMs": 1311,
+          "upstreamMs": 1311,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-14T15:41:16.222Z",
+          "estInputTokens": 15134,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025134000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 4,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7350,
+            "output": 49,
+            "cached": 7109
+          },
+          "latencyMs": 3110,
+          "upstreamMs": 3110,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-14T15:41:19.375Z",
+          "estInputTokens": 18409,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028409,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 6,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9473,
+            "output": 163,
+            "cached": 7224
+          },
+          "latencyMs": 2747,
+          "upstreamMs": 2747,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 7,
+          "at": "2026-10-14T15:41:14.904Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15124,
+          "reservedUsd": 0.0025124,
+          "chargedUsd": 0.00009467,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "68f5f5da86806bc5",
+          "kind": "loop",
+          "upstreamMs": 1310,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvONJBrjDtHQdMuioSjrJGAeVdPg",
+          "usage": {
+            "input": 7235,
+            "output": 18,
+            "cached": 7087,
+            "reasoning": 0
+          },
+          "scenario": "S52B",
+          "turn": 1
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-14T15:41:16.223Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15356,
+          "reservedUsd": 0.0025356000000000003,
+          "chargedUsd": 0.00011969,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "68f5f5da86806bc5",
+          "kind": "loop",
+          "upstreamMs": 3068,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOPyGM3dAretwAtUoejCQmY4GsN",
+          "usage": {
+            "input": 7350,
+            "output": 49,
+            "cached": 7109,
+            "reasoning": 0
+          },
+          "scenario": "S52B",
+          "turn": 1
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-14T15:41:19.376Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18638,
+          "reservedUsd": 0.0028638,
+          "chargedUsd": 0.00037863999999999997,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "68f5f5da86806bc5",
+          "kind": "loop",
+          "upstreamMs": 2746,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOSZflvoBfsoGN6kqeGpXB953yL",
+          "usage": {
+            "input": 9473,
+            "output": 163,
+            "cached": 7224,
+            "reasoning": 0
+          },
+          "scenario": "S52B",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-14T15:41:14Z",
+          "t": 1791992474.906,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 1307,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvONJBrjDtHQdMuioSjrJGAeVdPg",
+          "usage": {
+            "prompt_tokens": 7235,
+            "completion_tokens": 18,
+            "total_tokens": 7253,
+            "cached_tokens": 7087,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person"
+          ],
+          "status": 200,
+          "relay_ms": 1308
+        },
+        {
+          "at": "2026-10-14T15:41:16Z",
+          "t": 1791992476.225,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 3065,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOPyGM3dAretwAtUoejCQmY4GsN",
+          "usage": {
+            "prompt_tokens": 7350,
+            "completion_tokens": 49,
+            "total_tokens": 7399,
+            "cached_tokens": 7109,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 3065
+        },
+        {
+          "at": "2026-10-14T15:41:19Z",
+          "t": 1791992479.382,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2739,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOSZflvoBfsoGN6kqeGpXB953yL",
+          "usage": {
+            "prompt_tokens": 9473,
+            "completion_tokens": 163,
+            "total_tokens": 9636,
+            "cached_tokens": 7224,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 2740
+        }
+      ],
+      "tokens": {
+        "input": 24058,
+        "output": 230
+      },
+      "costUsd": {
+        "charged": 0.000593,
+        "reserved": 0.0079118,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          7,
+          8,
+          9
+        ],
+        "guardUsd": 0.000593,
+        "rowsUsd": 0
+      }
+    },
+    {
+      "turn": 2,
+      "user": "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+      "timings": {
+        "acceptedMs": 10,
+        "firstAssistantPersistedMs": 6030,
+        "answerSeenMs": 6246,
+        "modelMs": 4887,
+        "upstreamMs": 4877,
+        "relayMs": 4880
+      },
+      "calls": [
+        {
+          "seq": 10,
+          "at": "2026-10-14T15:41:23.436Z",
+          "estInputTokens": 15305,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025305,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 4,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7501,
+            "output": 42,
+            "cached": 0
+          },
+          "latencyMs": 2252,
+          "upstreamMs": 2252,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-14T15:41:25.737Z",
+          "estInputTokens": 18564,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028564000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 6,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9618,
+            "output": 120,
+            "cached": 7375
+          },
+          "latencyMs": 2635,
+          "upstreamMs": 2635,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 10,
+          "at": "2026-10-14T15:41:23.437Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15520,
+          "reservedUsd": 0.002552,
+          "chargedUsd": 0.0007711,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "699a6bd736bb0b2c",
+          "kind": "loop",
+          "upstreamMs": 2252,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOWODdHOjb4Eu1fmB0LpgHtkOhg",
+          "usage": {
+            "input": 7501,
+            "output": 42,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "S52B",
+          "turn": 2
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-14T15:41:25.739Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18787,
+          "reservedUsd": 0.0028786999999999997,
+          "chargedUsd": 0.00035805,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "699a6bd736bb0b2c",
+          "kind": "loop",
+          "upstreamMs": 2633,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOZH3hVQOYKYnTmAYufpRfA0z4f",
+          "usage": {
+            "input": 9618,
+            "output": 120,
+            "cached": 7375,
+            "reasoning": 0
+          },
+          "scenario": "S52B",
+          "turn": 2
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-14T15:41:23Z",
+          "t": 1791992483.439,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2248,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOWODdHOjb4Eu1fmB0LpgHtkOhg",
+          "usage": {
+            "prompt_tokens": 7501,
+            "completion_tokens": 42,
+            "total_tokens": 7543,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 2249
+        },
+        {
+          "at": "2026-10-14T15:41:25Z",
+          "t": 1791992485.741,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2629,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOZH3hVQOYKYnTmAYufpRfA0z4f",
+          "usage": {
+            "prompt_tokens": 9618,
+            "completion_tokens": 120,
+            "total_tokens": 9738,
+            "cached_tokens": 7375,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 2631
+        }
+      ],
+      "tokens": {
+        "input": 17119,
+        "output": 162
+      },
+      "costUsd": {
+        "charged": 0.00112915,
+        "reserved": 0.0054307,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          10,
+          11
+        ],
+        "guardUsd": 0.00112915,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 14795,
+  "firstUsefulResponseMs": 8329,
+  "tokens": {
+    "input": 41177,
+    "output": 392
+  },
+  "costUsd": 0.00172215,
+  "calls": 5,
+  "loaded": {
+    "conversationId": "950533e4-df1a-400c-b17e-705f28539648",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 6,
+        "turn": 2,
+        "claim": null,
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7235,
+                "output": 18,
+                "attempt": 1,
+                "costUsd": 0.00009467,
+                "latencyMs": 1317
+              },
+              {
+                "ok": true,
+                "input": 7350,
+                "output": 49,
+                "attempt": 1,
+                "costUsd": 0.00011969,
+                "latencyMs": 3110
+              },
+              {
+                "ok": true,
+                "input": 9473,
+                "output": 163,
+                "attempt": 1,
+                "costUsd": 0.00037863999999999997,
+                "latencyMs": 2747
+              }
+            ],
+            "limit": null,
+            "steps": 3,
+            "usage": {
+              "input": 24058,
+              "output": 230
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+              "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+              "The certificate date shown is 6 October 2022 (page 1)."
+            ],
+            "latencyMs": 7235,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Adrian"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "Term Life and Personal Accident amounts and certificate date",
+                  "subject_id": "7e600000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+                      "benefit": "Group Term Life",
+                      "value_ids": [
+                        "v1"
+                      ],
+                      "evidence_ids": [
+                        "e1"
+                      ]
+                    },
+                    {
+                      "text": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+                      "benefit": "Group Personal Accident",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "evidence_ids": [
+                        "e2"
+                      ]
+                    },
+                    {
+                      "text": "The certificate date shown is 6 October 2022 (page 1).",
+                      "evidence_ids": [
+                        "e1",
+                        "e2"
+                      ]
+                    }
+                  ],
+                  "subject_id": "7e600000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+            "evidenceChosen": [
+              "e1",
+              "e2"
+            ]
+          },
+          {
+            "gate": [],
+            "turn": 2,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7501,
+                "output": 42,
+                "attempt": 1,
+                "costUsd": 0.0007711,
+                "latencyMs": 2253
+              },
+              {
+                "ok": true,
+                "input": 9618,
+                "output": 120,
+                "attempt": 1,
+                "costUsd": 0.00035805,
+                "latencyMs": 2636
+              }
+            ],
+            "limit": null,
+            "steps": 2,
+            "usage": {
+              "input": 17119,
+              "output": 162
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000."
+            ],
+            "latencyMs": 4947,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "topic": "Personal Accident",
+                  "subject_id": "7e600000-0000-4000-8000-000000000002"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e14",
+                  "e15",
+                  "e16",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+                      "benefit": "Group Personal Accident",
+                      "value_ids": [
+                        "v5"
+                      ],
+                      "subject_id": "7e600000-0000-4000-8000-000000000002",
+                      "evidence_ids": [
+                        "e15"
+                      ]
+                    }
+                  ],
+                  "subject_id": "7e600000-0000-4000-8000-000000000002"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+            "evidenceChosen": [
+              "e15"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP TERM LIFE(POLICY NO.KPT-310045)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 364,
+                          "text": "S****604D",
+                          "start": 355,
+                          "header": ""
+                        },
+                        {
+                          "end": 385,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 365,
+                          "header": ""
+                        },
+                        {
+                          "end": 397,
+                          "text": "S$1,000,000",
+                          "start": 386,
+                          "header": ""
+                        },
+                        {
+                          "end": 403,
+                          "text": "As of",
+                          "start": 398,
+                          "header": ""
+                        },
+                        {
+                          "end": 414,
+                          "text": "06/10/2022",
+                          "start": 404,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 397,
+                      "text": "S$1,000,000",
+                      "start": 386
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 385,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 365,
+                      "memberId": "7e600000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 414,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                    "start": 355,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP PERSONAL ACCIDENT(POLICY NO. KPA-310046)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 531,
+                          "text": "S****604D",
+                          "start": 522,
+                          "header": ""
+                        },
+                        {
+                          "end": 552,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 532,
+                          "header": ""
+                        },
+                        {
+                          "end": 562,
+                          "text": "S$600,000",
+                          "start": 553,
+                          "header": ""
+                        },
+                        {
+                          "end": 568,
+                          "text": "As of",
+                          "start": 563,
+                          "header": ""
+                        },
+                        {
+                          "end": 579,
+                          "text": "06/10/2022",
+                          "start": 569,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 562,
+                      "text": "S$600,000",
+                      "start": 553
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 552,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 532,
+                      "memberId": "7e600000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 579,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                    "start": 522,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 30000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Living Care Plus",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 693,
+                        "text": "S****604D",
+                        "start": 684,
+                        "header": ""
+                      },
+                      {
+                        "end": 714,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 694,
+                        "header": ""
+                      },
+                      {
+                        "end": 724,
+                        "text": "S$300,000",
+                        "start": 715,
+                        "header": ""
+                      },
+                      {
+                        "end": 730,
+                        "text": "As of",
+                        "start": 725,
+                        "header": ""
+                      },
+                      {
+                        "end": 741,
+                        "text": "06/10/2022",
+                        "start": 731,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 724,
+                    "text": "S$300,000",
+                    "start": 715
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 714,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 694,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 741,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+                  "start": 684,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 30000000,
+              "notes": [],
+              "value": 300000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Living Care Plus",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 693,
+                        "text": "S****604D",
+                        "start": 684,
+                        "header": ""
+                      },
+                      {
+                        "end": 714,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 694,
+                        "header": ""
+                      },
+                      {
+                        "end": 724,
+                        "text": "S$300,000",
+                        "start": 715,
+                        "header": ""
+                      },
+                      {
+                        "end": 730,
+                        "text": "As of",
+                        "start": 725,
+                        "header": ""
+                      },
+                      {
+                        "end": 741,
+                        "text": "06/10/2022",
+                        "start": 731,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 724,
+                    "text": "S$300,000",
+                    "start": 715
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 714,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 694,
+                    "memberId": "7e600000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 741,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+                  "start": 684,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Living Care Plus",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Living Care Plus”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP LIVING CARE PLUS(POLICY NO. KPL-310047)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 693,
+                          "text": "S****604D",
+                          "start": 684,
+                          "header": ""
+                        },
+                        {
+                          "end": 714,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 694,
+                          "header": ""
+                        },
+                        {
+                          "end": 724,
+                          "text": "S$300,000",
+                          "start": 715,
+                          "header": ""
+                        },
+                        {
+                          "end": 730,
+                          "text": "As of",
+                          "start": 725,
+                          "header": ""
+                        },
+                        {
+                          "end": 741,
+                          "text": "06/10/2022",
+                          "start": 731,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 724,
+                      "text": "S$300,000",
+                      "start": 715
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 714,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 694,
+                      "memberId": "7e600000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 741,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+                    "start": 684,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "v4": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 424,
+                        "text": "S****917H",
+                        "start": 415,
+                        "header": ""
+                      },
+                      {
+                        "end": 445,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 425,
+                        "header": ""
+                      },
+                      {
+                        "end": 457,
+                        "text": "S$1,000,000",
+                        "start": 446,
+                        "header": ""
+                      },
+                      {
+                        "end": 463,
+                        "text": "As of",
+                        "start": 458,
+                        "header": ""
+                      },
+                      {
+                        "end": 474,
+                        "text": "06/10/2022",
+                        "start": 464,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 457,
+                    "text": "S$1,000,000",
+                    "start": 446
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 445,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 425,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 474,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 415,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 424,
+                        "text": "S****917H",
+                        "start": 415,
+                        "header": ""
+                      },
+                      {
+                        "end": 445,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 425,
+                        "header": ""
+                      },
+                      {
+                        "end": 457,
+                        "text": "S$1,000,000",
+                        "start": 446,
+                        "header": ""
+                      },
+                      {
+                        "end": 463,
+                        "text": "As of",
+                        "start": 458,
+                        "header": ""
+                      },
+                      {
+                        "end": 474,
+                        "text": "06/10/2022",
+                        "start": 464,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 457,
+                    "text": "S$1,000,000",
+                    "start": 446
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 445,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 425,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 474,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 415,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Cheryl Lim Pei Shan's own row (“Lim Pei Shan, Cheryl”) under “GROUP TERM LIFE(POLICY NO.KPT-310045)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 424,
+                          "text": "S****917H",
+                          "start": 415,
+                          "header": ""
+                        },
+                        {
+                          "end": 445,
+                          "text": "Lim Pei Shan, Cheryl",
+                          "start": 425,
+                          "header": ""
+                        },
+                        {
+                          "end": 457,
+                          "text": "S$1,000,000",
+                          "start": 446,
+                          "header": ""
+                        },
+                        {
+                          "end": 463,
+                          "text": "As of",
+                          "start": 458,
+                          "header": ""
+                        },
+                        {
+                          "end": 474,
+                          "text": "06/10/2022",
+                          "start": 464,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 457,
+                      "text": "S$1,000,000",
+                      "start": 446
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****917H",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 445,
+                      "text": "Lim Pei Shan, Cheryl",
+                      "start": 425,
+                      "memberId": "7e600000-0000-4000-8000-000000000002"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 474,
+                    "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+                    "start": 415,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000002",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000002"
+          },
+          "v5": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 589,
+                        "text": "S****917H",
+                        "start": 580,
+                        "header": ""
+                      },
+                      {
+                        "end": 610,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 590,
+                        "header": ""
+                      },
+                      {
+                        "end": 620,
+                        "text": "S$600,000",
+                        "start": 611,
+                        "header": ""
+                      },
+                      {
+                        "end": 626,
+                        "text": "As of",
+                        "start": 621,
+                        "header": ""
+                      },
+                      {
+                        "end": 637,
+                        "text": "06/10/2022",
+                        "start": 627,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 620,
+                    "text": "S$600,000",
+                    "start": 611
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 610,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 590,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 637,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+                  "start": 580,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 589,
+                        "text": "S****917H",
+                        "start": 580,
+                        "header": ""
+                      },
+                      {
+                        "end": 610,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 590,
+                        "header": ""
+                      },
+                      {
+                        "end": 620,
+                        "text": "S$600,000",
+                        "start": 611,
+                        "header": ""
+                      },
+                      {
+                        "end": 626,
+                        "text": "As of",
+                        "start": 621,
+                        "header": ""
+                      },
+                      {
+                        "end": 637,
+                        "text": "06/10/2022",
+                        "start": 627,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 620,
+                    "text": "S$600,000",
+                    "start": 611
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 610,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 590,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 637,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+                  "start": 580,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Cheryl Lim Pei Shan's own row (“Lim Pei Shan, Cheryl”) under “GROUP PERSONAL ACCIDENT(POLICY NO. KPA-310046)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 589,
+                          "text": "S****917H",
+                          "start": 580,
+                          "header": ""
+                        },
+                        {
+                          "end": 610,
+                          "text": "Lim Pei Shan, Cheryl",
+                          "start": 590,
+                          "header": ""
+                        },
+                        {
+                          "end": 620,
+                          "text": "S$600,000",
+                          "start": 611,
+                          "header": ""
+                        },
+                        {
+                          "end": 626,
+                          "text": "As of",
+                          "start": 621,
+                          "header": ""
+                        },
+                        {
+                          "end": 637,
+                          "text": "06/10/2022",
+                          "start": 627,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 620,
+                      "text": "S$600,000",
+                      "start": 611
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****917H",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 610,
+                      "text": "Lim Pei Shan, Cheryl",
+                      "start": 590,
+                      "memberId": "7e600000-0000-4000-8000-000000000002"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 637,
+                    "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+                    "start": 580,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000002",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000002"
+          },
+          "v6": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 30000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Living Care Plus",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 751,
+                        "text": "S****917H",
+                        "start": 742,
+                        "header": ""
+                      },
+                      {
+                        "end": 772,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 752,
+                        "header": ""
+                      },
+                      {
+                        "end": 782,
+                        "text": "S$300,000",
+                        "start": 773,
+                        "header": ""
+                      },
+                      {
+                        "end": 788,
+                        "text": "As of",
+                        "start": 783,
+                        "header": ""
+                      },
+                      {
+                        "end": 799,
+                        "text": "06/10/2022",
+                        "start": 789,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 782,
+                    "text": "S$300,000",
+                    "start": 773
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 772,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 752,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 799,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+                  "start": 742,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 30000000,
+              "notes": [],
+              "value": 300000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Living Care Plus",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 751,
+                        "text": "S****917H",
+                        "start": 742,
+                        "header": ""
+                      },
+                      {
+                        "end": 772,
+                        "text": "Lim Pei Shan, Cheryl",
+                        "start": 752,
+                        "header": ""
+                      },
+                      {
+                        "end": 782,
+                        "text": "S$300,000",
+                        "start": 773,
+                        "header": ""
+                      },
+                      {
+                        "end": 788,
+                        "text": "As of",
+                        "start": 783,
+                        "header": ""
+                      },
+                      {
+                        "end": 799,
+                        "text": "06/10/2022",
+                        "start": 789,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 782,
+                    "text": "S$300,000",
+                    "start": 773
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****917H",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 772,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 752,
+                    "memberId": "7e600000-0000-4000-8000-000000000002"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 799,
+                  "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+                  "start": 742,
+                  "onPage": 1
+                },
+                "policyId": "7e600000-0000-4000-8000-000000000101",
+                "subjectId": "7e600000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:livelib-cert"
+              },
+              "rowLabel": "Group Living Care Plus",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Living Care Plus”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Cheryl Lim Pei Shan's own row (“Lim Pei Shan, Cheryl”) under “GROUP LIVING CARE PLUS(POLICY NO. KPL-310047)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 751,
+                          "text": "S****917H",
+                          "start": 742,
+                          "header": ""
+                        },
+                        {
+                          "end": 772,
+                          "text": "Lim Pei Shan, Cheryl",
+                          "start": 752,
+                          "header": ""
+                        },
+                        {
+                          "end": 782,
+                          "text": "S$300,000",
+                          "start": 773,
+                          "header": ""
+                        },
+                        {
+                          "end": 788,
+                          "text": "As of",
+                          "start": 783,
+                          "header": ""
+                        },
+                        {
+                          "end": 799,
+                          "text": "06/10/2022",
+                          "start": 789,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 782,
+                      "text": "S$300,000",
+                      "start": 773
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****917H",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 772,
+                      "text": "Lim Pei Shan, Cheryl",
+                      "start": 752,
+                      "memberId": "7e600000-0000-4000-8000-000000000002"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 799,
+                    "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+                    "start": 742,
+                    "onPage": 1
+                  },
+                  "policyId": "7e600000-0000-4000-8000-000000000101",
+                  "subjectId": "7e600000-0000-4000-8000-000000000002",
+                  "documentHash": "sha256:livelib-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e600000-0000-4000-8000-000000000002"
+          }
+        },
+        "history": [
+          {
+            "user": "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+            "assistant": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022. It lists Group Personal Accident of S$600,000 as of 6 October 2022. The certificate date shown is 6 October 2022 (page 1)."
+          },
+          {
+            "user": "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+            "assistant": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7e600000-0000-4000-8000-000000000101": "Public Officers Group Insurance Scheme - Certificate",
+          "7e600000-0000-4000-8000-000000000102": "Public Officers Group Personal Accident - Summary of Benefits"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 364,
+                    "text": "S****604D",
+                    "start": 355,
+                    "header": ""
+                  },
+                  {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "header": ""
+                  },
+                  {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386,
+                    "header": ""
+                  },
+                  {
+                    "end": 403,
+                    "text": "As of",
+                    "start": 398,
+                    "header": ""
+                  },
+                  {
+                    "end": 414,
+                    "text": "06/10/2022",
+                    "start": 404,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "memberId": "7e600000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "support": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 531,
+                    "text": "S****604D",
+                    "start": 522,
+                    "header": ""
+                  },
+                  {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "header": ""
+                  },
+                  {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553,
+                    "header": ""
+                  },
+                  {
+                    "end": 568,
+                    "text": "As of",
+                    "start": 563,
+                    "header": ""
+                  },
+                  {
+                    "end": 579,
+                    "text": "06/10/2022",
+                    "start": 569,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "memberId": "7e600000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "support": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 693,
+                    "text": "S****604D",
+                    "start": 684,
+                    "header": ""
+                  },
+                  {
+                    "end": 714,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 694,
+                    "header": ""
+                  },
+                  {
+                    "end": 724,
+                    "text": "S$300,000",
+                    "start": 715,
+                    "header": ""
+                  },
+                  {
+                    "end": 730,
+                    "text": "As of",
+                    "start": 725,
+                    "header": ""
+                  },
+                  {
+                    "end": 741,
+                    "text": "06/10/2022",
+                    "start": 731,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 724,
+                "text": "S$300,000",
+                "start": 715
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Living Care Plus",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 714,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 694,
+                "memberId": "7e600000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 741,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+              "start": 684,
+              "onPage": 1
+            },
+            "support": {
+              "end": 741,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+              "start": 684,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 5,
+              "start": 5
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 320,
+              "text": "Daily Hospital Cash: S$40 per day of confinement in hospital as an in-patient as a result of an Accident, payable from the 11th day onwards, up to 90 days per Accident.",
+              "start": 152,
+              "onPage": 5
+            },
+            "support": {
+              "end": 320,
+              "text": "Daily Hospital Cash: S$40 per day of confinement in hospital as an in-patient as a result of an Accident, payable from the 11th day onwards, up to 90 days per Accident.",
+              "start": 152,
+              "onPage": 5
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 164,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 122,
+              "onPage": 9
+            },
+            "support": {
+              "end": 164,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 122,
+              "onPage": 9
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 433,
+              "text": "Repatriation of Mortal Remains: S$2,000 per Insured Person, if death occurs outside Singapore as a result of an Accident.",
+              "start": 312,
+              "onPage": 9
+            },
+            "support": {
+              "end": 433,
+              "text": "Repatriation of Mortal Remains: S$2,000 per Insured Person, if death occurs outside Singapore as a result of an Accident.",
+              "start": 312,
+              "onPage": 9
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 155,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 117,
+              "onPage": 13
+            },
+            "support": {
+              "end": 155,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 117,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 364,
+              "text": "Bone fractured                          Compensation (% of S$5,000)",
+              "start": 297,
+              "onPage": 13
+            },
+            "support": {
+              "end": 364,
+              "text": "Bone fractured                          Compensation (% of S$5,000)",
+              "start": 297,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 409,
+              "text": "Skull                                   100%",
+              "start": 365,
+              "onPage": 13
+            },
+            "support": {
+              "end": 409,
+              "text": "Skull                                   100%",
+              "start": 365,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 453,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee         50%",
+              "start": 410,
+              "onPage": 13
+            },
+            "support": {
+              "end": 453,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee         50%",
+              "start": 410,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 497,
+              "text": "Arm, Wrist or Elbow                     40%",
+              "start": 454,
+              "onPage": 13
+            },
+            "support": {
+              "end": 497,
+              "text": "Arm, Wrist or Elbow                     40%",
+              "start": 454,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 541,
+              "text": "Collarbone or Rib                       20%",
+              "start": 498,
+              "onPage": 13
+            },
+            "support": {
+              "end": 541,
+              "text": "Collarbone or Rib                       20%",
+              "start": 498,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 585,
+              "text": "Finger or Toe                           10%",
+              "start": 542,
+              "onPage": 13
+            },
+            "support": {
+              "end": 585,
+              "text": "Finger or Toe                           10%",
+              "start": 542,
+              "onPage": 13
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000102",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-summary"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 424,
+                    "text": "S****917H",
+                    "start": 415,
+                    "header": ""
+                  },
+                  {
+                    "end": 445,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 425,
+                    "header": ""
+                  },
+                  {
+                    "end": 457,
+                    "text": "S$1,000,000",
+                    "start": 446,
+                    "header": ""
+                  },
+                  {
+                    "end": 463,
+                    "text": "As of",
+                    "start": 458,
+                    "header": ""
+                  },
+                  {
+                    "end": 474,
+                    "text": "06/10/2022",
+                    "start": 464,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 457,
+                "text": "S$1,000,000",
+                "start": 446
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 445,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 425,
+                "memberId": "7e600000-0000-4000-8000-000000000002"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 474,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 415,
+              "onPage": 1
+            },
+            "support": {
+              "end": 474,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 415,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e15": {
+            "id": "e15",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 589,
+                    "text": "S****917H",
+                    "start": 580,
+                    "header": ""
+                  },
+                  {
+                    "end": 610,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 590,
+                    "header": ""
+                  },
+                  {
+                    "end": 620,
+                    "text": "S$600,000",
+                    "start": 611,
+                    "header": ""
+                  },
+                  {
+                    "end": 626,
+                    "text": "As of",
+                    "start": 621,
+                    "header": ""
+                  },
+                  {
+                    "end": 637,
+                    "text": "06/10/2022",
+                    "start": 627,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 620,
+                "text": "S$600,000",
+                "start": 611
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 610,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 590,
+                "memberId": "7e600000-0000-4000-8000-000000000002"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 637,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+              "start": 580,
+              "onPage": 1
+            },
+            "support": {
+              "end": 637,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+              "start": 580,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e16": {
+            "id": "e16",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 751,
+                    "text": "S****917H",
+                    "start": 742,
+                    "header": ""
+                  },
+                  {
+                    "end": 772,
+                    "text": "Lim Pei Shan, Cheryl",
+                    "start": 752,
+                    "header": ""
+                  },
+                  {
+                    "end": 782,
+                    "text": "S$300,000",
+                    "start": 773,
+                    "header": ""
+                  },
+                  {
+                    "end": 788,
+                    "text": "As of",
+                    "start": 783,
+                    "header": ""
+                  },
+                  {
+                    "end": 799,
+                    "text": "06/10/2022",
+                    "start": 789,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 782,
+                "text": "S$300,000",
+                "start": 773
+              },
+              "layout": "person_row",
+              "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Living Care Plus",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 772,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 752,
+                "memberId": "7e600000-0000-4000-8000-000000000002"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 799,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+              "start": 742,
+              "onPage": 1
+            },
+            "support": {
+              "end": 799,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+              "start": 742,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": "7e600000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:livelib-cert"
+          }
+        },
+        "speakerId": "7e600000-0000-4000-8000-000000000001",
+        "subjectId": "7e600000-0000-4000-8000-000000000002",
+        "established": [
+          {
+            "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+            "turn": 1,
+            "benefit": "Group Term Life",
+            "valueIds": [
+              "v1"
+            ],
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e1"
+            ]
+          },
+          {
+            "text": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+            "turn": 1,
+            "benefit": "Group Personal Accident",
+            "valueIds": [
+              "v2"
+            ],
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e2"
+            ]
+          },
+          {
+            "text": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+            "turn": 2,
+            "benefit": "Group Personal Accident",
+            "valueIds": [
+              "v5"
+            ],
+            "subjectId": "7e600000-0000-4000-8000-000000000002",
+            "evidenceIds": [
+              "e15"
+            ]
+          }
+        ],
+        "recentSubjectIds": [
+          "7e600000-0000-4000-8000-000000000002",
+          "7e600000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+            "The certificate date shown is 6 October 2022 (page 1)."
+          ],
+          "summary": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+          "citations": [
+            {
+              "chunkId": "rag2:e1",
+              "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "950533e4-df1a-400c-b17e-705f28539648",
+          "figureBindings": [
+            {
+              "asOf": "2022-10-06",
+              "value": 1000000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Term Life",
+              "pageEnd": 1,
+              "passage": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "currency": "SGD",
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "sentence": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+              "pageStart": 1,
+              "rowPerson": "Wong Jia Hui, Adrian",
+              "subjectId": "7e600000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:livelib-cert"
+            },
+            {
+              "asOf": "2022-10-06",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "currency": "SGD",
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "sentence": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+              "pageStart": 1,
+              "rowPerson": "Wong Jia Hui, Adrian",
+              "subjectId": "7e600000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:livelib-cert"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7e600000-0000-4000-8000-000000000001"
+        },
+        "content": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+        "visible": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nIt lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe certificate date shown is 6 October 2022 (page 1).",
+        "questions": [],
+        "userAt": "2026-10-14T15:41:22.149Z",
+        "assistantAt": "2026-10-14T15:41:22.149Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7235,
+              "output": 18,
+              "attempt": 1,
+              "costUsd": 0.00009467,
+              "latencyMs": 1317
+            },
+            {
+              "ok": true,
+              "input": 7350,
+              "output": 49,
+              "attempt": 1,
+              "costUsd": 0.00011969,
+              "latencyMs": 3110
+            },
+            {
+              "ok": true,
+              "input": 9473,
+              "output": 163,
+              "attempt": 1,
+              "costUsd": 0.00037863999999999997,
+              "latencyMs": 2747
+            }
+          ],
+          "limit": null,
+          "steps": 3,
+          "usage": {
+            "input": 24058,
+            "output": 230
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+            "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+            "The certificate date shown is 6 October 2022 (page 1)."
+          ],
+          "latencyMs": 7235,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Adrian"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "Term Life and Personal Accident amounts and certificate date",
+                "subject_id": "7e600000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+                    "benefit": "Group Term Life",
+                    "value_ids": [
+                      "v1"
+                    ],
+                    "evidence_ids": [
+                      "e1"
+                    ]
+                  },
+                  {
+                    "text": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+                    "benefit": "Group Personal Accident",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "evidence_ids": [
+                      "e2"
+                    ]
+                  },
+                  {
+                    "text": "The certificate date shown is 6 October 2022 (page 1).",
+                    "evidence_ids": [
+                      "e1",
+                      "e2"
+                    ]
+                  }
+                ],
+                "subject_id": "7e600000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+          "evidenceChosen": [
+            "e1",
+            "e2"
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "user": "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+        "answer": {
+          "mode": "answer",
+          "details": [],
+          "summary": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+          "citations": [
+            {
+              "chunkId": "rag2:e15",
+              "excerpt": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "950533e4-df1a-400c-b17e-705f28539648",
+          "figureBindings": [
+            {
+              "asOf": "2022-10-06",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+              "currency": "SGD",
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "sentence": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+              "pageStart": 1,
+              "rowPerson": "Lim Pei Shan, Cheryl",
+              "subjectId": "7e600000-0000-4000-8000-000000000002",
+              "documentHash": "sha256:livelib-cert"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 2,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7e600000-0000-4000-8000-000000000002"
+        },
+        "content": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+        "visible": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+        "questions": [],
+        "userAt": "2026-10-14T15:41:28.392Z",
+        "assistantAt": "2026-10-14T15:41:28.392Z",
+        "trace": {
+          "gate": [],
+          "turn": 2,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7501,
+              "output": 42,
+              "attempt": 1,
+              "costUsd": 0.0007711,
+              "latencyMs": 2253
+            },
+            {
+              "ok": true,
+              "input": 9618,
+              "output": 120,
+              "attempt": 1,
+              "costUsd": 0.00035805,
+              "latencyMs": 2636
+            }
+          ],
+          "limit": null,
+          "steps": 2,
+          "usage": {
+            "input": 17119,
+            "output": 162
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000."
+          ],
+          "latencyMs": 4947,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "topic": "Personal Accident",
+                "subject_id": "7e600000-0000-4000-8000-000000000002"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e14",
+                "e15",
+                "e16",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "text": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+                    "benefit": "Group Personal Accident",
+                    "value_ids": [
+                      "v5"
+                    ],
+                    "subject_id": "7e600000-0000-4000-8000-000000000002",
+                    "evidence_ids": [
+                      "e15"
+                    ]
+                  }
+                ],
+                "subject_id": "7e600000-0000-4000-8000-000000000002"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+          "evidenceChosen": [
+            "e15"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "S52B",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7e600000-0000-4000-8000-000000000002",
+    "speakerId": "7e600000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 3,
+        "usage": {
+          "input": 24058,
+          "output": 230
+        },
+        "latencyMs": 7235,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Adrian"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "Term Life and Personal Accident amounts and certificate date",
+              "subject_id": "7e600000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+                  "benefit": "Group Term Life",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "evidence_ids": [
+                    "e1"
+                  ]
+                },
+                {
+                  "text": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+                  "benefit": "Group Personal Accident",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "evidence_ids": [
+                    "e2"
+                  ]
+                },
+                {
+                  "text": "The certificate date shown is 6 October 2022 (page 1).",
+                  "evidence_ids": [
+                    "e1",
+                    "e2"
+                  ]
+                }
+              ],
+              "subject_id": "7e600000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e1",
+          "e2"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 17119,
+          "output": 162
+        },
+        "latencyMs": 4947,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "topic": "Personal Accident",
+              "subject_id": "7e600000-0000-4000-8000-000000000002"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e14",
+              "e15",
+              "e16",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+                  "benefit": "Group Personal Accident",
+                  "value_ids": [
+                    "v5"
+                  ],
+                  "subject_id": "7e600000-0000-4000-8000-000000000002",
+                  "evidence_ids": [
+                    "e15"
+                  ]
+                }
+              ],
+              "subject_id": "7e600000-0000-4000-8000-000000000002"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e15"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 364,
+                "text": "S****604D",
+                "start": 355,
+                "header": ""
+              },
+              {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "header": ""
+              },
+              {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386,
+                "header": ""
+              },
+              {
+                "end": 403,
+                "text": "As of",
+                "start": 398,
+                "header": ""
+              },
+              {
+                "end": 414,
+                "text": "06/10/2022",
+                "start": 404,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 397,
+            "text": "S$1,000,000",
+            "start": 386
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 385,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 365,
+            "memberId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "support": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 531,
+                "text": "S****604D",
+                "start": 522,
+                "header": ""
+              },
+              {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "header": ""
+              },
+              {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553,
+                "header": ""
+              },
+              {
+                "end": 568,
+                "text": "As of",
+                "start": 563,
+                "header": ""
+              },
+              {
+                "end": 579,
+                "text": "06/10/2022",
+                "start": 569,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 562,
+            "text": "S$600,000",
+            "start": 553
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 552,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 532,
+            "memberId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "support": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 693,
+                "text": "S****604D",
+                "start": 684,
+                "header": ""
+              },
+              {
+                "end": 714,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 694,
+                "header": ""
+              },
+              {
+                "end": 724,
+                "text": "S$300,000",
+                "start": 715,
+                "header": ""
+              },
+              {
+                "end": 730,
+                "text": "As of",
+                "start": 725,
+                "header": ""
+              },
+              {
+                "end": 741,
+                "text": "06/10/2022",
+                "start": 731,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 724,
+            "text": "S$300,000",
+            "start": 715
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Living Care Plus",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 714,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 694,
+            "memberId": "7e600000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 741,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+          "start": 684,
+          "onPage": 1
+        },
+        "support": {
+          "end": 741,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$300,000\tAs of\t06/10/2022",
+          "start": 684,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 5,
+          "start": 5
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 320,
+          "text": "Daily Hospital Cash: S$40 per day of confinement in hospital as an in-patient as a result of an Accident, payable from the 11th day onwards, up to 90 days per Accident.",
+          "start": 152,
+          "onPage": 5
+        },
+        "support": {
+          "end": 320,
+          "text": "Daily Hospital Cash: S$40 per day of confinement in hospital as an in-patient as a result of an Accident, payable from the 11th day onwards, up to 90 days per Accident.",
+          "start": 152,
+          "onPage": 5
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 164,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 122,
+          "onPage": 9
+        },
+        "support": {
+          "end": 164,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 122,
+          "onPage": 9
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 433,
+          "text": "Repatriation of Mortal Remains: S$2,000 per Insured Person, if death occurs outside Singapore as a result of an Accident.",
+          "start": 312,
+          "onPage": 9
+        },
+        "support": {
+          "end": 433,
+          "text": "Repatriation of Mortal Remains: S$2,000 per Insured Person, if death occurs outside Singapore as a result of an Accident.",
+          "start": 312,
+          "onPage": 9
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 155,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 117,
+          "onPage": 13
+        },
+        "support": {
+          "end": 155,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 117,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 364,
+          "text": "Bone fractured                          Compensation (% of S$5,000)",
+          "start": 297,
+          "onPage": 13
+        },
+        "support": {
+          "end": 364,
+          "text": "Bone fractured                          Compensation (% of S$5,000)",
+          "start": 297,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 409,
+          "text": "Skull                                   100%",
+          "start": 365,
+          "onPage": 13
+        },
+        "support": {
+          "end": 409,
+          "text": "Skull                                   100%",
+          "start": 365,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 453,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee         50%",
+          "start": 410,
+          "onPage": 13
+        },
+        "support": {
+          "end": 453,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee         50%",
+          "start": 410,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 497,
+          "text": "Arm, Wrist or Elbow                     40%",
+          "start": 454,
+          "onPage": 13
+        },
+        "support": {
+          "end": 497,
+          "text": "Arm, Wrist or Elbow                     40%",
+          "start": 454,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 541,
+          "text": "Collarbone or Rib                       20%",
+          "start": 498,
+          "onPage": 13
+        },
+        "support": {
+          "end": 541,
+          "text": "Collarbone or Rib                       20%",
+          "start": 498,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 585,
+          "text": "Finger or Toe                           10%",
+          "start": 542,
+          "onPage": 13
+        },
+        "support": {
+          "end": 585,
+          "text": "Finger or Toe                           10%",
+          "start": 542,
+          "onPage": 13
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000102",
+        "subjectId": "7e600000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:livelib-summary"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 424,
+                "text": "S****917H",
+                "start": 415,
+                "header": ""
+              },
+              {
+                "end": 445,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 425,
+                "header": ""
+              },
+              {
+                "end": 457,
+                "text": "S$1,000,000",
+                "start": 446,
+                "header": ""
+              },
+              {
+                "end": 463,
+                "text": "As of",
+                "start": 458,
+                "header": ""
+              },
+              {
+                "end": 474,
+                "text": "06/10/2022",
+                "start": 464,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 457,
+            "text": "S$1,000,000",
+            "start": 446
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 445,
+            "text": "Lim Pei Shan, Cheryl",
+            "start": 425,
+            "memberId": "7e600000-0000-4000-8000-000000000002"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 474,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 415,
+          "onPage": 1
+        },
+        "support": {
+          "end": 474,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 415,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 589,
+                "text": "S****917H",
+                "start": 580,
+                "header": ""
+              },
+              {
+                "end": 610,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 590,
+                "header": ""
+              },
+              {
+                "end": 620,
+                "text": "S$600,000",
+                "start": 611,
+                "header": ""
+              },
+              {
+                "end": 626,
+                "text": "As of",
+                "start": 621,
+                "header": ""
+              },
+              {
+                "end": 637,
+                "text": "06/10/2022",
+                "start": 627,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 620,
+            "text": "S$600,000",
+            "start": 611
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 610,
+            "text": "Lim Pei Shan, Cheryl",
+            "start": 590,
+            "memberId": "7e600000-0000-4000-8000-000000000002"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 637,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+          "start": 580,
+          "onPage": 1
+        },
+        "support": {
+          "end": 637,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+          "start": 580,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 751,
+                "text": "S****917H",
+                "start": 742,
+                "header": ""
+              },
+              {
+                "end": 772,
+                "text": "Lim Pei Shan, Cheryl",
+                "start": 752,
+                "header": ""
+              },
+              {
+                "end": 782,
+                "text": "S$300,000",
+                "start": 773,
+                "header": ""
+              },
+              {
+                "end": 788,
+                "text": "As of",
+                "start": 783,
+                "header": ""
+              },
+              {
+                "end": 799,
+                "text": "06/10/2022",
+                "start": 789,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 782,
+            "text": "S$300,000",
+            "start": 773
+          },
+          "layout": "person_row",
+          "tableId": "7e600000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Living Care Plus",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 772,
+            "text": "Lim Pei Shan, Cheryl",
+            "start": 752,
+            "memberId": "7e600000-0000-4000-8000-000000000002"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 799,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+          "start": 742,
+          "onPage": 1
+        },
+        "support": {
+          "end": 799,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$300,000\tAs of\t06/10/2022",
+          "start": 742,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": "7e600000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:livelib-cert"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7e600000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e1",
+            "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2022-10-06",
+            "value": 1000000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Term Life",
+            "pageEnd": 1,
+            "passage": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+            "currency": "SGD",
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "sentence": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.",
+            "pageStart": 1,
+            "rowPerson": "Wong Jia Hui, Adrian",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-cert"
+          },
+          {
+            "asOf": "2022-10-06",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+            "currency": "SGD",
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "sentence": "It lists Group Personal Accident of S$600,000 as of 6 October 2022.",
+            "pageStart": 1,
+            "rowPerson": "Wong Jia Hui, Adrian",
+            "subjectId": "7e600000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:livelib-cert"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": "7e600000-0000-4000-8000-000000000002",
+        "citations": [
+          {
+            "chunkId": "rag2:e15",
+            "excerpt": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2022-10-06",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+            "currency": "SGD",
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "sentence": "No—the certificate lists Cheryl’s Group Personal Accident amount as S$600,000 as of 6 October 2022, not S$1,000,000.",
+            "pageStart": 1,
+            "rowPerson": "Lim Pei Shan, Cheryl",
+            "subjectId": "7e600000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:livelib-cert"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
