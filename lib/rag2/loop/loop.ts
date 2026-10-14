@@ -284,7 +284,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // meant), before the model is called; the model is told who was chosen.
   if (pendingBefore?.kind === "person" && input.personChoiceId && pendingBefore.options.some((o) => o.id === input.personChoiceId)) {
     const id = input.personChoiceId;
-    if (pendingBefore.purpose === "speaker") { state.speakerId = id; ctx.conversation.speakerId = id; }
+    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; }
     else { state.subjectId = id; state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5); ctx.conversation.lastSubjectId = id; }
     unsettled = new Set();
     state.pending = null;
@@ -1261,7 +1261,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const id = r.person.id;
           if (pendingBefore?.kind === "person" && pendingBefore.purpose === "speaker" && pendingBefore.options.some((o) => o.id === id) && !state.speakerId) {
             // The household said who is typing: that is the speaker, not who the conversation is about.
-            state.speakerId = id; ctx.conversation.speakerId = id;
+            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id;
           } else setSubject(id, r.via === "self");
           unsettled = new Set();
           if (state.pending?.kind === "person") state.pending = null;

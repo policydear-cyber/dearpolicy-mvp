@@ -97,6 +97,10 @@ export type RagLoopState = {
   /** The household member typing ("me", "my", "I"), once known: the only member recorded as self, or who they said
    * they are in a shared household login. Never changed by who a question is about. */
   speakerId?: string | null;
+  /** V1.4: true only when the household itself said who is typing (it answered the "who is asking" question). The
+   * member recorded as self is a default for "I / me / my", never proof of who is typing: the sign-in establishes the
+   * account, not the member. */
+  speakerConfirmed?: boolean;
   /** The active subject: who the conversation (and its claim) is about -- e.g. the child in a claim. A side question
    * about the speaker does not change it. */
   subjectId: string | null; recentSubjectIds: string[];

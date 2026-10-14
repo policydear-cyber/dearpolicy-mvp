@@ -421,6 +421,73 @@ async function main() {
     assert.equal(unsupportedPaperworkClaim("The documents do not state which medical records are needed.", src), null);
   });
 
+  // ---------------------------------------------------------------- V1.4: endorsement scope and the speaker
+  // s50-live-2: Michelle's endorsement (it names only her, and is linked only to her) was reported by policies_for as
+  // amending Darren's certificate (shared policy number), and the model then cited it as making Darren's amount uncertain.
+  const END = HH.doc("ENDORSE"), CERT_ID = HH.doc("CERT").id;
+  const { policiesFor } = await import("@/lib/rag2/policies");
+  const { endorsementScope } = await import("@/lib/rag2/endorsement-scope");
+  const { otherPersonsEndorsement } = await import("@/lib/rag2/loop/compose");
+  const certCov = async (who: string) => { const r = await policiesFor({ accountId: HH.ACCOUNT, subjectId: who, topic: "accident" }); return [...r.covering, ...r.notCovering].find((c) => c.policyId === CERT_ID)!; };
+  const household = [{ id: D, names: [HH.M.darren.name, "Darren"] }, { id: MI, names: [HH.M.michelle.name, "Michelle"] }];
+  const caveat = { user: DEATH, steps: [() => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [
+    twoFigures(v)[0],
+    { text: "Darren’s Group Personal Accident amount may differ, because an endorsement effective 1 January 2024 amends the policy.", evidence_ids: evOf(v, D, /^Group Personal Accident$/), subject_id: D },
+  ] })]] };
+  const [otherCaveat] = await run([caveat as any]);
+  await check("ENDORSEMENT another person's endorsement cannot qualify Darren's cover: not reported as amending his certificate, and a caveat relying on it is not shown (Michelle's own view keeps it)", async () => {
+    assert.equal(endorsementScope({ text: String(END.pages[1]), subjectId: D, household }).scope, "other");
+    assert.equal(endorsementScope({ text: String(END.pages[1]), subjectId: MI, household }).scope, "applies");
+    assert.equal(endorsementScope({ text: "Policyholder: Ong Li Ting, Michelle\nWith effect from 1 July 2026 the Daily Hospital Allowance is amended to S$110.", subjectId: D, household }).scope, "applies", "naming the policyholder is not a person-specific scope");
+    const d = await certCov(D), m = await certCov(MI);
+    assert.deepEqual(d.version.amendments, []); assert.equal(d.version.current, "the schedule as issued");
+    assert.deepEqual(m.version.amendments.map((a) => [a.policyId, a.scope]), [[END.id, "applies"]]);
+    assert.ok(!/endorsement|amend/i.test(otherCaveat.v), otherCaveat.v); assert.match(otherCaveat.v, AMOUNTS);
+    assert.ok((otherCaveat.trace.dropped ?? []).some((x: any) => /applies only to Michelle/.test(x.reason)), JSON.stringify(otherCaveat.trace.dropped));
+  });
+  const SHARED = ["Meridian Life Ltd - Public Service Group Insurance Scheme - Endorsement No. 3 (Policy No. PSG-880100)", "With effect from 01/01/2024 the territorial limits for all Insured Persons are amended to worldwide excluding sanctioned countries.", "All other terms and conditions remain unchanged."].join("\n");
+  const NAMES_DARREN = ["Meridian Life Ltd - Public Service Group Insurance Scheme - Endorsement No. 3 (Policy No. PSG-880100)", "With effect from 01/01/2024 the Group Personal Accident Sum Insured for Tan Kai Ming, Darren is amended to S$700,000."].join("\n");
+  const [sharedCov, sharedCaveat, namedCov] = await withPage(END.id, SHARED, async () => [await certCov(D), (await run([caveat as any]))[0], await withPage(END.id, NAMES_DARREN, () => certCov(D))] as const);
+  await check("ENDORSEMENT a shared endorsement applies to Darren when its scope explicitly includes him (all Insured Persons, or naming him), though the document is linked to Michelle; a caveat relying on it stays", () => {
+    assert.deepEqual(sharedCov.version.amendments.map((a) => [a.policyId, a.scope, a.scopeBasis]), [[END.id, "applies", "its wording applies to all insured persons"]]);
+    assert.equal(sharedCov.version.current, "the schedule as amended by the endorsement effective 2024-01-01");
+    assert.deepEqual(namedCov.version.amendments.map((a) => [a.scope, a.scopeBasis]), [["applies", "its amending clause names this person"]]);
+    assert.match(sharedCaveat.v, /an endorsement effective 1 January 2024 amends the policy/, sharedCaveat.v);
+  });
+  const UNSTATED = ["Meridian Life Ltd - Public Service Group Insurance Scheme - Endorsement No. 3 (Policy No. PSG-880100)", "With effect from 01/01/2024 the Group Personal Accident Sum Insured for the Insured Person S****999Z is amended to S$400,000."].join("\n");
+  const links = (await h.db.query("SELECT policy_id, family_member_id, account_id, source, confidence, benefit_tier FROM policy_members WHERE policy_id=$1", [END.id])).rows as any[];
+  await h.db.query("DELETE FROM policy_members WHERE policy_id=$1", [END.id]);
+  let unresolved: { d: any; m: any; ctxScope: any[] };
+  try {
+    unresolved = await withPage(END.id, UNSTATED, async () => {
+      const { householdBenefits } = await import("@/lib/rag2/benefits");
+      const hb = await householdBenefits(HH.ACCOUNT);
+      return { d: await certCov(D), m: await certCov(MI), ctxScope: [hb.endorsementsByMember.get(D), hb.endorsementsByMember.get(MI)] };
+    });
+  } finally { for (const l of links) await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,$4,$5,$6)", [l.policy_id, l.family_member_id, l.account_id, l.source, l.confidence, l.benefit_tier]); }
+  await check("ENDORSEMENT a person-specific endorsement whose person is not established (a masked ID matching no household member) is reported as exactly that, for each person, and attributed to nobody", () => {
+    for (const c of [unresolved.d, unresolved.m]) {
+      assert.deepEqual(c.version.amendments.map((a: any) => a.scope), ["unresolved"]);
+      assert.match(c.version.current, /^not established: an endorsement of this policy number \(effective 2024-01-01\) does not establish whom it applies to$/);
+      const note = c.undetermined.find((u: string) => /does not establish which household member/.test(u));
+      assert.ok(note && !/Darren|Michelle|Tan Kai Ming|Ong Li Ting/.test(note), JSON.stringify(c.undetermined));
+    }
+    for (const list of unresolved.ctxScope) assert.deepEqual(list.map((e: any) => [e.scope, e.namedIds]), [["unresolved", []]]);
+    assert.equal(otherPersonsEndorsement("An endorsement effective 1 January 2024 may change this amount.", D, { benefits: { endorsementsByMember: new Map([[D, unresolved.ctxScope[0]]]) } as any, people: household }), null, "an unresolved endorsement may be reported as uncertainty");
+  });
+  const { stateNote } = await import("@/lib/rag2/loop/prompt");
+  const { withoutUnconfirmedAddress } = await import("@/lib/rag2/loop/compose");
+  const { emptyLoopState } = await import("@/lib/rag2/loop/types");
+  await check("SPEAKER the member recorded as self is not presented as the person typing unless the household said so; the reader is not addressed by name", () => {
+    const people = [{ id: D, name: "Darren", relationship: "self" }, { id: MI, name: "Michelle", relationship: "spouse" }];
+    const unconfirmed = stateNote({ ...emptyLoopState(), speakerId: D } as any, people, D);
+    assert.ok(!/the person typing\)/.test(unconfirmed) && /Speaker[^\n]*not established \(the sign-in identifies the household, not the member\)[^\n]*never assume or say who is typing, and never address them by name/.test(unconfirmed), unconfirmed);
+    const confirmed = stateNote({ ...emptyLoopState(), speakerId: MI, speakerConfirmed: true } as any, people, MI);
+    assert.match(confirmed, /Michelle \(spouse, the person typing\)/); assert.match(confirmed, /Speaker \("I" \/ "me" \/ "my"\): Michelle id=/);
+    assert.equal(withoutUnconfirmedAddress("I’m so sorry for your loss, Michelle; Darren’s certificate lists S$1.", household), "I’m so sorry for your loss; Darren’s certificate lists S$1.");
+    assert.equal(withoutUnconfirmedAddress("Michelle’s certificate lists S$300,000.", household), "Michelle’s certificate lists S$300,000.");
+  });
+
   if (process.env.BINDING_TRANSCRIPT_FILE) {
     const T = (title: string, user: string, x: { v: string; q?: string[] }) => `### ${title}\nUSER: ${user}\nAPP:  ${x.v.replace(/\n/g, "\n      ")}${x.q?.length ? "\n      [Q] " + x.q.join(" | ") : ""}`;
     (await import("node:fs")).writeFileSync(process.env.BINDING_TRANSCRIPT_FILE, [

@@ -1,9 +1,9 @@
 {
-  "replayedOn": "8d5a838dc389d89aea9d4bdfbe3ba961e994375a",
+  "replayedOn": null,
   "turns": [
     {
       "user": "Darren died in a car accident in Japan, what can I do?",
-      "visible": "I’m so sorry for your loss, Michelle; Darren’s uploaded certificate lists Group Term Life of S$1,000,000 as of 6 October 2022, and the linked wording says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance. The same certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, while the linked summary says Accidental Death is 100% of the Sum Insured if death results from an Accident within 365 days; it also says territorial limits are worldwide, 24 hours a day. The uploaded documents do not establish the amount applicable on the date of death: an endorsement effective 1 January 2024 is linked to the policy, and the certificate figures above are dated 6 October 2022. The Term Life summary says to notify Meridian Life Ltd of a death within 6 months, with the death certificate. The uploaded documents do not state the Personal Accident claim-notification process or the documents required for that claim.\nOn what date did the accident happen?",
+      "visible": "I’m so sorry for your loss; Darren’s uploaded certificate lists Group Term Life of S$1,000,000 as of 6 October 2022, and the linked wording says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance. The same certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, while the linked summary says Accidental Death is 100% of the Sum Insured if death results from an Accident within 365 days; it also says territorial limits are worldwide, 24 hours a day. The uploaded documents do not establish the amount applicable on the date of death: the certificate figures above are dated 6 October 2022. The Term Life summary says to notify Meridian Life Ltd of a death within 6 months, with the death certificate. The uploaded documents do not state the Personal Accident claim-notification process or the documents required for that claim.\nOn what date did the accident happen?",
       "questions": [
         "On what date did the accident happen?"
       ],
@@ -18,7 +18,7 @@
           "passage": "S****771J\nTan Kai Ming, Darren\nS$1,000,000\nAs of\n06/10/2022",
           "currency": "SGD",
           "policyId": "7f000000-0000-4000-8000-000000000101",
-          "sentence": "I’m so sorry for your loss, Michelle; Darren’s uploaded certificate lists Group Term Life of S$1,000,000 as of 6 October 2022, and the linked wording says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance.",
+          "sentence": "I’m so sorry for your loss; Darren’s uploaded certificate lists Group Term Life of S$1,000,000 as of 6 October 2022, and the linked wording says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance.",
           "pageStart": 1,
           "rowPerson": "Tan Kai Ming, Darren",
           "subjectId": "7f000000-0000-4000-8000-000000000001",
@@ -84,11 +84,16 @@
         }
       ],
       "gate": [],
-      "dropped": []
+      "dropped": [
+        {
+          "reason": "relies on an endorsement that applies only to Michelle Ong Li Ting, not to Darren Tan Kai Ming (that clause was taken out)",
+          "sentence": "The uploaded documents do not establish the amount applicable on the date of death: an endorsement effective 1 January 2024 is linked to the policy, and the certificate figures above are dated 6 October 2022."
+        }
+      ]
     },
     {
       "user": "The accident happened on 3 October 2026 and he died on 5 October 2026.",
-      "visible": "You told me the accident happened on 3 October 2026 and Darren died on 5 October 2026.\nThe linked Personal Accident summary says Accidental Death is 100% of the Sum Insured if death results from an Accident within 365 days, and that territorial limits are worldwide, 24 hours a day; the dates you gave fall within that stated period, but the documents do not confirm whether the event meets the policy definition of Accident.\nThe Term Life summary says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance and says to notify Meridian Life Ltd of a death within 6 months, with the death certificate.\nThe certificate lists Darren’s Group Personal Accident sum insured as S$600,000 as of 6 October 2022, but the uploaded documents do not establish the amount applicable on the accident date; an endorsement effective 1 January 2024 is linked to the policy.\nWhat you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.\nNotify Meridian Life Ltd about the Term Life death claim and provide the death certificate; ask the insurer what additional documents it needs for both claims.",
+      "visible": "You told me the accident happened on 3 October 2026 and Darren died on 5 October 2026.\nThe linked Personal Accident summary says Accidental Death is 100% of the Sum Insured if death results from an Accident within 365 days, and that territorial limits are worldwide, 24 hours a day; the dates you gave fall within that stated period, but the documents do not confirm whether the event meets the policy definition of Accident.\nThe Term Life summary says the Death Benefit is the Sum Assured shown in the Certificate of Group Insurance and says to notify Meridian Life Ltd of a death within 6 months, with the death certificate.\nThe certificate lists Darren’s Group Personal Accident sum insured as S$600,000 as of 6 October 2022 the uploaded documents do not establish the amount applicable on the accident date.\nWhat you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.\nNotify Meridian Life Ltd about the Term Life death claim and provide the death certificate; ask the insurer what additional documents it needs for both claims.",
       "questions": [],
       "figureBindings": [
         {
@@ -101,7 +106,7 @@
           "passage": "S****771J\nTan Kai Ming, Darren\nS$600,000\nAs of\n06/10/2022",
           "currency": "SGD",
           "policyId": "7f000000-0000-4000-8000-000000000101",
-          "sentence": "The certificate lists Darren’s Group Personal Accident sum insured as S$600,000 as of 6 October 2022, but the uploaded documents do not establish the amount applicable on the accident date; an endorsement effective 1 January 2024 is linked to the policy.",
+          "sentence": "The certificate lists Darren’s Group Personal Accident sum insured as S$600,000 as of 6 October 2022 the uploaded documents do not establish the amount applicable on the accident date.",
           "pageStart": 1,
           "rowPerson": "Tan Kai Ming, Darren",
           "subjectId": "7f000000-0000-4000-8000-000000000001",
@@ -131,7 +136,7 @@
         },
         {
           "chunkId": "rag2:e17",
-          "excerpt": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+          "excerpt": "06/10/2022",
           "insurer": "Meridian Life Ltd",
           "pageEnd": 1,
           "policyId": "7f000000-0000-4000-8000-000000000101",
@@ -151,7 +156,12 @@
         }
       ],
       "gate": [],
-      "dropped": []
+      "dropped": [
+        {
+          "reason": "relies on an endorsement that applies only to Michelle Ong Li Ting, not to Darren Tan Kai Ming (that clause was taken out)",
+          "sentence": "The certificate lists Darren’s Group Personal Accident sum insured as S$600,000 as of 6 October 2022, but the uploaded documents do not establish the amount applicable on the accident date; an endorsement effective 1 January 2024 is linked to the policy."
+        }
+      ]
     }
   ]
 }

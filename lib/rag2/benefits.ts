@@ -17,6 +17,7 @@
  * A household member's name, an address, a date or a salutation is NEVER a benefit label: labels come only from the
  * document's product headings and its own benefit rows / "Label: value" lines.
  */
+import { endorsementScope } from "./endorsement-scope";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
 import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf, type SelectedValue } from "./tables";
@@ -228,6 +229,9 @@ export type HouseholdBenefits = {
   policiesByMember: Map<string, { policyId: string; insurer: string | null; product: string | null; personal: boolean }[]>;
   /** Every insurer named on the household's readable documents. */
   insurers: string[];
+  /** V1.4: each member's view of each endorsement document (lib/rag2/endorsement-scope.ts): whether it applies to
+   * them, belongs to another member, or does not state whom it applies to. */
+  endorsementsByMember: Map<string, { policyId: string; product: string | null; scope: "applies" | "other" | "unresolved"; basis: string; namedIds: string[] }[]>;
 };
 export async function householdBenefits(accountId: string): Promise<HouseholdBenefits> {
   const [members, docs] = await Promise.all([loadMembers(accountId), loadDocs(accountId)]);
@@ -245,7 +249,14 @@ export async function householdBenefits(accountId: string): Promise<HouseholdBen
     for (const p of pages.filter((x) => x.policyId === d.id)) for (const line of p.text.split("\n")) if (isProductHeading(line, household)) set.add(headingLabel(line.trim()));
     labelsByPolicy.set(d.id, [...set]);
   }
-  return { byMember, labelsByPolicy, policiesByMember, insurers };
+  const endorsements = docs.filter((d) => d.documentRole === "endorsement" || /\bendorsement\b/i.test(d.productName ?? ""));
+  // Only endorsements of a policy the member holds (same policy family as one of their linked documents) are theirs to
+  // consider; an unrelated insurer's endorsement linked to nobody is not part of their cover either way.
+  const endorsementsByMember = new Map(members.map((m) => [m.id, endorsements.filter((d) => policyFamily(docs, d).some((f) => f.id !== d.id && (policiesByMember.get(m.id) ?? []).some((p) => p.policyId === f.id))).map((d) => {
+    const sc = endorsementScope({ text: pages.filter((x) => x.policyId === d.id).map((x) => x.text).join("\n"), subjectId: m.id, household });
+    return { policyId: d.id, product: d.productName, ...sc };
+  })]));
+  return { byMember, labelsByPolicy, policiesByMember, insurers, endorsementsByMember };
 }
 
 /** V1.4: a person's own documented row as a table value (for a roster the table parser does not read -- one cell per

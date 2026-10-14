@@ -112,6 +112,49 @@ export function unsupportedPaperworkClaim(text: string, sourceText: string): str
   const missing = [...new Set([...text.matchAll(PAPERWORK)].map((m) => m[0]))].filter((w) => !src.includes(norm(w)));
   return missing.length ? `presents paperwork as needed (${missing.join(", ")}) that the documents do not state; a general suggestion belongs in the next steps, labelled as one` : null;
 }
+/** A household member's name used to ADDRESS the reader ("…for your loss, Michelle;", "Michelle, I'm sorry…",
+ * "Hi Michelle,") is taken out; a name that is the subject or object of the sentence stays. */
+export function withoutUnconfirmedAddress(text: string, people: { id: string; names: string[] }[]): string {
+  const names = [...new Set(people.flatMap((p) => p.names).filter((n) => n && n.trim().length >= 2))].sort((a, b) => b.length - a.length);
+  if (!names.length) return text;
+  const alt = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  let t = text;
+  // after a greeting or condolence: "sorry for your loss, Michelle;" / "Hello Michelle," / "Thank you, Michelle."
+  t = t.replace(new RegExp(`(\\b(?:your loss|sorry|condolences|sympathies|hi|hello|dear|thank you|thanks))\\s*,?\\s+(?:${alt})(?=\\s*[;,.!?:—–-])`, "gi"), "$1");
+  // at the start, before what is said to them: "Michelle, I'm so sorry…"
+  t = t.replace(new RegExp(`^(?:${alt}),\\s+(?=(?:I|I’m|I'm|I am|we|sorry|thank|please|here|my)\\b)`, "i"), "");
+  return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
+}
+/** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */
+export function withoutEndorsementClauses(text: string): string | null {
+  // clauses with the separator that introduces each (kept as written, so the remaining connectives read as before)
+  const re = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though)\b))/;
+  const bits = text.split(re);
+  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
+  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
+  const keep = clauses.filter((c) => !ENDORSEMENT_WORDS_RE().test(c.body));
+  if (keep.length === clauses.length) return text;
+  if (!keep.length) return null;
+  let t = keep.map((c, k) => (k ? c.sep + c.body.replace(k === 0 ? /^$/ : /^$/, "") : c.body)).join("").trim();
+  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though)\s+/i, "");
+  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
+  if (!/[.!?]$/.test(t)) t += ".";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  return t.split(/\s+/).length >= 4 ? t : null;
+}
+const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
+const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
+/** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
+ * someone else (its amending clause names only another member). Null when the person has an endorsement
+ * that applies to them or whose scope is unresolved, or when the household has no endorsement at all. */
+export function otherPersonsEndorsement(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits" | "people">): string | null {
+  if (!subjectId || !ctx.benefits?.endorsementsByMember || !ENDORSEMENT_WORDS.test(text)) return null;
+  const list = ctx.benefits.endorsementsByMember.get(subjectId) ?? [];
+  if (!list.length || list.some((e) => e.scope !== "other")) return null;
+  const nameOf = (id: string) => ctx.people?.find((p) => p.id === id)?.names[0] ?? "another household member";
+  const owners = [...new Set(list.flatMap((e) => e.namedIds.length ? e.namedIds : []))].map(nameOf);
+  return `relies on an endorsement that applies only to ${owners.length ? owners.join(" and ") : "another household member"}, not to ${nameOf(subjectId)}`;
+}
 /** A next step naming paperwork its documents do not print is labelled as a suggestion to confirm with the insurer
  * (never presented as a policy requirement). A step that only asks the insurer what is needed, or is already worded as
  * a suggestion, is left as it is; paperwork the documents print is not a suggestion. */
@@ -597,6 +640,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // kept as the sentence's citations (the household sees them as its page links), checked like any other.
     const inline = stripInternalIds(String(s.text ?? "").replace(/\s+/g, " ").trim());
     let text = tidyNames(inline.text, people);
+    // V1.4: the person typing is addressed by name only when the household said who is typing (s50-live-2: "I'm so
+    // sorry for your loss, Michelle" -- an assumption the sign-in does not establish).
+    // (A wording edit, like tidyNames: nothing the sentence states is removed, so it is not recorded as a drop.)
+    if (!ctx.state.speakerConfirmed) text = withoutUnconfirmedAddress(text, ctx.people ?? []);
     if (!text) continue;
     let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
     const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
@@ -617,6 +664,11 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
     const wrongInsurer = insurerNotFor(text, subjectId, ctx, false, relevantPolicies);
     if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx, relevantPolicies); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
+    // V1.4: an endorsement that belongs to another household member supports no conclusion about this person -- no
+    // amendment, caveat, uncertainty or conflict (s50-live-2: Michelle's endorsement cited as making Darren's amount
+    // uncertain). Person / policy / version binding applies to statements without figures too.
+    const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
+    if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
     // household's current, active version -- with or without a figure in the sentence.
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));

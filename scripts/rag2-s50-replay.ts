@@ -117,11 +117,25 @@ async function main() {
       assert.ok(bound(s, 1000000, /Term Life/) && bound(s, 600000, /Personal Accident/), JSON.stringify(s.answer.figureBindings));
       assert.ok((s.answer.citations ?? []).some((x: any) => x.policyId === CERT), "the certificate is cited");
     });
-    await check("turn 2 keeps every amount the model stated (PA S$600,000, bound and cited); the model did not restate Term Life in turn 2, and nothing it wrote was dropped", () => {
+    await check("turn 2 keeps every amount the model stated (PA S$600,000, bound and cited; the model did not restate Term Life in turn 2); the only thing taken out is the clause relying on Michelle's endorsement", () => {
       const s = saved[1], v = visible(s.answer);
-      assert.match(v, /Group Personal Accident sum insured as S\$600,000/); assert.ok(bound(s, 600000, /Personal Accident/));
+      assert.match(v, /Group Personal Accident sum insured as S\$600,000 as of 6 October 2022, but the uploaded documents do not establish the amount applicable on the accident date\./); assert.ok(bound(s, 600000, /Personal Accident/));
       assert.ok((s.answer.citations ?? []).some((x: any) => x.policyId === CERT));
-      assert.deepEqual(s.trace?.dropped ?? [], []); assert.deepEqual(s.trace?.gate ?? [], []);
+      assert.deepEqual((s.trace?.dropped ?? []).map((d: any) => d.reason), ["relies on an endorsement that applies only to Michelle Ong Li Ting, not to Darren Tan Kai Ming (that clause was taken out)"]);
+      assert.deepEqual(s.trace?.gate ?? [], []);
+    });
+    await check("Michelle's endorsement supports no conclusion about Darren: no endorsement, amendment or its date in either answer; policies_for for Darren reports no amendment, while Michelle's still does", async () => {
+      for (const s of saved) assert.ok(!/endorsement|amend|1 January 2024/i.test(visible(s.answer)), visible(s.answer));
+      const { policiesFor } = await import("@/lib/rag2/policies");
+      const d = await policiesFor({ accountId: BINDING.ACCOUNT, subjectId: DARREN, topic: "death" } as any);
+      const m = await policiesFor({ accountId: BINDING.ACCOUNT, subjectId: BINDING.M.michelle.id, topic: "accident" } as any);
+      const cert = (x: any) => [...x.covering, ...x.notCovering].find((c: any) => c.policyId === CERT);
+      assert.deepEqual(cert(d).version.amendments, []); assert.equal(cert(d).version.current, "the schedule as issued");
+      assert.ok(!JSON.stringify(d).includes(BINDING.doc("ENDORSE").id), "Darren's coverage mentions the endorsement");
+      assert.deepEqual(cert(m).version.amendments.map((a: any) => [a.policyId, a.scope]), [[BINDING.doc("ENDORSE").id, "applies"]]);
+    });
+    await check("the person typing is not addressed by name: the sign-in does not establish who is typing (no 'Michelle' as the reader in either turn)", () => {
+      for (const s of saved) assert.ok(!/\b(?:loss|sorry|hello|hi|thank you|thanks),?\s+Michelle\b|^Michelle,/im.test(visible(s.answer)), visible(s.answer));
     });
     await check("no injury-specific paperwork note (doctor's report, test or scan results, medical record) in either turn", () => {
       for (const s of saved) assert.ok(!/doctor|scan results|medical record|diagnos|specialist|medical assessment/i.test(visible(s.answer)), visible(s.answer));
@@ -138,17 +152,20 @@ async function main() {
       const g = gradeBindingV4(conv);
       assert.equal(g.verdict, "PASS", JSON.stringify(g.checks.filter((x) => !x.ok)));
     });
-    await check("only the application's own note changed from the live answer: every other line is identical", () => {
+    await check("the differences from the live answer are exactly: the reader's name, the clauses relying on Michelle's endorsement, and the application's note", () => {
+      const diffs: string[][] = [];
       for (const [i, s] of saved.entries()) {
         const live = String(liveConv.loaded.turns[i].visible).split("\n").filter((l: string) => !/^This changes what your policy pays under/.test(l));
         const now = visible(s.answer).split("\n");
         const removed = live.filter((l: string) => !now.includes(l)), added = now.filter((l) => !live.includes(l));
-        console.log(`turn ${i + 1}: removed ${JSON.stringify(removed)}; added ${JSON.stringify(added)}`);
-        if (i === 0) { assert.deepEqual(removed, []); assert.deepEqual(added, []); }
-        else { assert.deepEqual(removed.map((l: string) => /your own account, not a reviewed medical record/.test(l)), [true]); assert.deepEqual(added.map((l) => /^What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim/.test(l)), [true]); }
+        console.log(`turn ${i + 1}:\n  removed ${JSON.stringify(removed)}\n  added   ${JSON.stringify(added)}`);
+        diffs.push([...removed, ...added]);
+        const norm = (t: string) => t.replace(/, Michelle(?=;)/, "").replace(/: an endorsement effective 1 January 2024 is linked to the policy, and/, ", and").replace(/; an endorsement effective 1 January 2024 is linked to the policy\./, ".")
+          .replace(/What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for \(such as the doctor’s report and the test or scan results\) and decides/, "What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides");
+        assert.deepEqual(live.map(norm), now, `turn ${i + 1}: a difference other than the three expected`);
       }
     });
-    fs.writeFileSync(path.join(dir, "REPLAY-8d5a838.json"), JSON.stringify({ replayedOn: process.env.REPLAY_TESTED_SHA ?? null, turns: saved.map((s, i) => ({ user: turns[i].user, visible: visible(s.answer), questions: (s.answer.questions ?? []).map((q) => q.text), figureBindings: s.answer.figureBindings, citations: s.answer.citations, gate: s.trace?.gate ?? [], dropped: s.trace?.dropped ?? [] })) }, null, 2));
+    fs.writeFileSync(path.join(dir, `REPLAY-${(process.env.REPLAY_TESTED_SHA ?? "local").slice(0, 7)}.json`), JSON.stringify({ replayedOn: process.env.REPLAY_TESTED_SHA ?? null, turns: saved.map((s, i) => ({ user: turns[i].user, visible: visible(s.answer), questions: (s.answer.questions ?? []).map((q) => q.text), figureBindings: s.answer.figureBindings, citations: s.answer.citations, gate: s.trace?.gate ?? [], dropped: s.trace?.dropped ?? [] })) }, null, 2));
   }
   const failed = results.filter((r) => !r.ok);
   console.log(`\nreplay ${MODE} ${results.length - failed.length}/${results.length} passed`);

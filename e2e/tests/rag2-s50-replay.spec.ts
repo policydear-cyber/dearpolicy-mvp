@@ -26,7 +26,7 @@ const norm = (t: string) => t.replace(/[\s ]+/g, " ").trim();
 const savedLines = (a: any): string[] => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...(a.nextSteps ?? [])].filter(Boolean).flatMap((t: string) => String(t).split("\n")).map(norm).filter(Boolean);
 test.describe.configure({ mode: "serial" });
 
-test("R50 replay of s50-live-2: what the browser displays is the saved answer, turn by turn -- amounts, no injury note, no repeated date question", async ({ page, request }) => {
+test("R50 replay of s50-live-2: what the browser displays is the saved answer, turn by turn -- amounts, no injury note, no other person's endorsement, no assumed reader, no repeated date question", async ({ page, request }) => {
   const msgs = await scenario(request, "R50");
   await page.goto("/chat"); await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
   const out: { shown: string; saved: any }[] = [];
@@ -41,6 +41,9 @@ test("R50 replay of s50-live-2: what the browser displays is the saved answer, t
     for (const amt of shown.match(/S\$[\d,]+/g) ?? []) expect(savedJson, `turn ${i + 1}: displayed amount not saved: ${amt}`).toContain(amt);
     for (const line of shown.split("\n").map(norm).filter((l) => l.length > 40)) expect(savedJson, `turn ${i + 1}: displayed line not in the saved answer: ${line}`).toContain(line.slice(0, 60));
     expect(shown).not.toMatch(/doctor|scan results|medical record|diagnos|specialist|medical assessment/i);
+    // Michelle's endorsement supports no conclusion about Darren, and the reader is not addressed by name
+    expect(shown).not.toMatch(/endorsement|amend|1 January 2024/i);
+    expect(shown).not.toMatch(/\b(?:loss|sorry|hello|hi|thanks|thank you),?\s+Michelle\b/i);
   }
   expect(out[0].shown).toMatch(/Group Term Life of S\$1,000,000/); expect(out[0].shown).toMatch(/Group Personal Accident of S\$600,000/);
   expect(out[0].shown).toMatch(/On what date did the accident happen\?/);

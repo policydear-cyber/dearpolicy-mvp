@@ -40,8 +40,11 @@ const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 export function stateNote(s: RagLoopState, people: { id: string; name: string; relationship: string }[], speakerId: string | null): string {
   const name = (id: string | null | undefined) => (id ? people.find((p) => p.id === id)?.name ?? id : null);
   const lines: string[] = ["Conversation state:"];
-  lines.push(`- Household members: ${people.map((p) => `${p.name} (${p.relationship}${p.id === speakerId ? ", the person typing" : ""}) id=${p.id}`).join("; ")}`);
-  lines.push(`- Speaker (\"I\" / \"me\" / \"my\"): ${speakerId ? `${name(speakerId)} id=${speakerId}` : "not known (shared household login): if the question is about the speaker, ask who is asking"}`);
+  // V1.4: who is typing is known only when the household said so; the member recorded as self is a default for
+  // "I / me / my", not the identity of the person typing (the sign-in establishes the account, not the member).
+  const confirmed = !!s.speakerConfirmed && !!speakerId;
+  lines.push(`- Household members: ${people.map((p) => `${p.name} (${p.relationship}${confirmed && p.id === speakerId ? ", the person typing" : ""}) id=${p.id}`).join("; ")}`);
+  lines.push(`- Speaker (\"I\" / \"me\" / \"my\"): ${confirmed ? `${name(speakerId)} id=${speakerId}` : speakerId ? `not established (the sign-in identifies the household, not the member): "I / me / my" default to ${name(speakerId)} id=${speakerId} (recorded as self) for lookups; never assume or say who is typing, and never address them by name` : "not known (shared household login): if the question is about the speaker, ask who is asking"}`);
   lines.push(`- Active subject (who the conversation / claim is about): ${s.subjectId ? `${name(s.subjectId)} id=${s.subjectId}` : "none yet"}`);
   if (s.pending?.kind === "person") lines.push(`- Pending: you asked ${s.pending.purpose === "speaker" ? "who is typing" : `who "${s.pending.mention ?? "they"}" means`}: "${s.pending.question}" (candidates: ${s.pending.options.map((o) => `${o.label} id=${o.id}`).join(", ")}). The household's reply answers it.`);
   if (s.parkedPending?.kind === "fact") lines.push(`- Claim question set aside until the person question is answered (fact_key=${s.parkedPending.factKey}): "${s.parkedPending.question}"`);
