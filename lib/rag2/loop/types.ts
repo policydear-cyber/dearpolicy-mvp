@@ -75,6 +75,8 @@ export type TraceTurn = {
   outcome: "final_answer" | "ask_user" | "budget_exhausted" | "limit_reached" | "timeout" | "error";
   /** V1.2: what the model's reply left unaddressed after its one repair (the reply was completed by the grounded fallback). */
   incomplete?: string[];
+  /** V1.2: how the model's question was adjusted before it was shown (one clause, the person named, an unanswered earlier question). */
+  adjusted?: string[];
   /** Every model call this turn (attempts, including failed and retried ones), as metered (usage-meter.ts). */
   calls?: { attempt: number; ok: boolean; input: number; output: number; costUsd: number | null; latencyMs: number; error?: string; retry?: boolean }[];
   /** Which limit stopped the turn, when one did. */
@@ -119,6 +121,8 @@ export type RagLoopState = {
   values?: Record<string, PersistedValue>;
   /** Round 7: benefits already stated, cited and bound in this conversation (newest last). */
   established?: EstablishedStatement[];
+  /** Calculations left unresolved for missing household facts, per subject|calculator|benefit, re-run when the facts arrive. */
+  openCalcs?: Record<string, { args: Record<string, unknown>; missing: string[]; turn: number }>;
 };
 
 export function emptyLoopState(): RagLoopState {

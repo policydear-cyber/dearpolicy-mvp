@@ -17,8 +17,22 @@ const AUX = "(?:was|were|is|are|am|did|does|do|will|would|can|could|has|have|had
 /** An interrogative clause: a wh-word, at most two words, then an auxiliary verb ("what time was", "how did", "when was"). */
 const WH_CLAUSE = new RegExp(`\\b${WH}(?:\\s+(?!and\\b|or\\b)[a-z'’-]+){0,2}?\\s+${AUX}\\b`, "gi");
 /** A yes/no clause after "and": ", and was he discharged", "and did she stay". */
-const AND_AUX = new RegExp(`(?:,\\s*|\\s)and\\s+${AUX}\\s+(?:he|she|they|it|you|we|i|there|[A-Z][a-z]+)\\b`, "g");
+/** (V1.2: also a determiner after the auxiliary -- ", and had any benefit already been paid".) */
+const AND_AUX = new RegExp(`(?:,\\s*|\\s)and\\s+${AUX}\\s+(?:he|she|they|it|you|we|i|there|any|anything|anyone|the|his|her|their|a|an|this|that|[A-Z][a-z]+)\\b`, "g");
 const LEAD_AUX = new RegExp(`^\\s*${AUX}\\s+(?:he|she|they|it|you|we|i|there|[A-Z][a-z]+)\\b`, "i");
+
+/** V1.2: a wh-question with a yes/no clause joined by "and" (\"What were the admission and discharge times, and had any
+ * benefit already been paid?\") asks its first clause only; the second is its own question, asked later. Null when the
+ * question is not of that shape (two wh-clauses stay refused: which one is meant is the model's choice). */
+export function firstClauseOnly(question: string): string | null {
+  const q = question.replace(/\s+/g, " ").trim();
+  if ((q.match(WH_CLAUSE) ?? []).length !== 1) return null;
+  AND_AUX.lastIndex = 0;
+  const m = AND_AUX.exec(q); AND_AUX.lastIndex = 0;
+  if (!m || m.index < 8) return null;
+  const head = q.slice(0, m.index).replace(/[\s,;:]+$/, "");
+  return WH_CLAUSE.test(head) && (WH_CLAUSE.lastIndex = 0, true) ? head + "?" : null;
+}
 
 export function compoundQuestion(question: string): string | null {
   const q = question.replace(/\s+/g, " ").trim();
