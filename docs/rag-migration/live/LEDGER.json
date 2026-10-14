@@ -289,6 +289,19 @@
       "calls": 16,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s49-live-2",
+      "tested_code_sha": "4e35f58d95de7019b285ae7101b0212171440bd0",
+      "request_sha": "4e35f58d95de7019b285ae7101b0212171440bd0",
+      "at": "2026-10-14T09:21:14.675Z",
+      "preflight": false,
+      "run_cap_usd": 0.03,
+      "spent_usd": 0.004377,
+      "reserved_unsettled_usd": 0,
+      "calls": 13,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

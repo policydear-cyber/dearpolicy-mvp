@@ -1,0 +1,4047 @@
+{
+  "scenario": "S49B",
+  "title": "V1.4 paraphrase: the same event in other words",
+  "conversationId": "0e198d96-da3c-4b47-976d-cdf31878be15",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death. Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here. The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.\nOn what date did the accident happen?",
+      "timings": {
+        "acceptedMs": 13,
+        "firstAssistantPersistedMs": 18878,
+        "answerSeenMs": 18997,
+        "modelMs": 17659,
+        "upstreamMs": 17445,
+        "relayMs": 17465
+      },
+      "calls": [
+        {
+          "seq": 8,
+          "at": "2026-10-14T09:19:21.380Z",
+          "estInputTokens": 14771,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024771000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 2,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7156,
+            "output": 18,
+            "cached": 7005
+          },
+          "latencyMs": 1586,
+          "upstreamMs": 1585,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-14T09:19:22.975Z",
+          "estInputTokens": 14996,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024996000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 4,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7271,
+            "output": 86,
+            "cached": 7030
+          },
+          "latencyMs": 2542,
+          "upstreamMs": 2542,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-14T09:19:25.523Z",
+          "estInputTokens": 15366,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025366000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 6,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7466,
+            "output": 37,
+            "cached": 7145
+          },
+          "latencyMs": 1814,
+          "upstreamMs": 1814,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-14T09:19:27.371Z",
+          "estInputTokens": 17676,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0027676000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 8,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8935,
+            "output": 129,
+            "cached": 7340
+          },
+          "latencyMs": 3158,
+          "upstreamMs": 3158,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 12,
+          "at": "2026-10-14T09:19:30.554Z",
+          "estInputTokens": 21188,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0031188,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 11,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11541,
+            "output": 79,
+            "cached": 8809
+          },
+          "latencyMs": 2935,
+          "upstreamMs": 2935,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 13,
+          "at": "2026-10-14T09:19:33.513Z",
+          "estInputTokens": 21910,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.003191,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 13,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11980,
+            "output": 387,
+            "cached": 11415
+          },
+          "latencyMs": 5624,
+          "upstreamMs": 5624,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 8,
+          "at": "2026-10-14T09:19:21.381Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 14986,
+          "reservedUsd": 0.0024986000000000006,
+          "chargedUsd": 0.00009415000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 1585,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpQojrcMF3oX6NMQ9pqhayP2Jrid",
+          "usage": {
+            "input": 7156,
+            "output": 18,
+            "cached": 7005,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-14T09:19:22.976Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15218,
+          "reservedUsd": 0.0025218000000000003,
+          "chargedUsd": 0.0001374,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 2502,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpQpSQv5SgRXc47PiMwiXW1nJBmr",
+          "usage": {
+            "input": 7271,
+            "output": 86,
+            "cached": 7030,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-14T09:19:25.523Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15606,
+          "reservedUsd": 0.0025606000000000005,
+          "chargedUsd": 0.00012205000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 1768,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpQsy4FDiMaoVoM1E9de7S2gM0eK",
+          "usage": {
+            "input": 7466,
+            "output": 37,
+            "cached": 7145,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-14T09:19:27.377Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 17922,
+          "reservedUsd": 0.0027922,
+          "chargedUsd": 0.00029739999999999996,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 3157,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpQupaL9YUqC3NIa303CxDmWNpoB",
+          "usage": {
+            "input": 8935,
+            "output": 129,
+            "cached": 7340,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        },
+        {
+          "seq": 12,
+          "at": "2026-10-14T09:19:30.558Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 21453,
+          "reservedUsd": 0.0031453,
+          "chargedUsd": 0.00040079,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 2895,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpQx2uoNc8TNkbiNDfwy9oyiBjVc",
+          "usage": {
+            "input": 11541,
+            "output": 79,
+            "cached": 8809,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        },
+        {
+          "seq": 13,
+          "at": "2026-10-14T09:19:33.514Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 22185,
+          "reservedUsd": 0.0032185,
+          "chargedUsd": 0.00036415,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "416ac0b9661c49da",
+          "kind": "loop",
+          "upstreamMs": 5582,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYpR094u1OUjFVNfwlrTYeoafPscB",
+          "usage": {
+            "input": 11980,
+            "output": 387,
+            "cached": 11415,
+            "reasoning": 0
+          },
+          "scenario": "S49B",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-14T09:19:21Z",
+          "t": 1791969561.383,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 1582,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpQojrcMF3oX6NMQ9pqhayP2Jrid",
+          "usage": {
+            "prompt_tokens": 7156,
+            "completion_tokens": 18,
+            "total_tokens": 7174,
+            "cached_tokens": 7005,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person"
+          ],
+          "status": 200,
+          "relay_ms": 1583
+        },
+        {
+          "at": "2026-10-14T09:19:22Z",
+          "t": 1791969562.978,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2499,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpQpSQv5SgRXc47PiMwiXW1nJBmr",
+          "usage": {
+            "prompt_tokens": 7271,
+            "completion_tokens": 86,
+            "total_tokens": 7357,
+            "cached_tokens": 7030,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "note_facts"
+          ],
+          "status": 200,
+          "relay_ms": 2499
+        },
+        {
+          "at": "2026-10-14T09:19:25Z",
+          "t": 1791969565.528,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 1749,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpQsy4FDiMaoVoM1E9de7S2gM0eK",
+          "usage": {
+            "prompt_tokens": 7466,
+            "completion_tokens": 37,
+            "total_tokens": 7503,
+            "cached_tokens": 7145,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 1766
+        },
+        {
+          "at": "2026-10-14T09:19:27Z",
+          "t": 1791969567.379,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 8,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 3154,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpQupaL9YUqC3NIa303CxDmWNpoB",
+          "usage": {
+            "prompt_tokens": 8935,
+            "completion_tokens": 129,
+            "total_tokens": 9064,
+            "cached_tokens": 7340,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "policies_for",
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 3155
+        },
+        {
+          "at": "2026-10-14T09:19:30Z",
+          "t": 1791969570.56,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 11,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2892,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpQx2uoNc8TNkbiNDfwy9oyiBjVc",
+          "usage": {
+            "prompt_tokens": 11541,
+            "completion_tokens": 79,
+            "total_tokens": 11620,
+            "cached_tokens": 8809,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "select_table_value"
+          ],
+          "status": 200,
+          "relay_ms": 2893
+        },
+        {
+          "at": "2026-10-14T09:19:33Z",
+          "t": 1791969573.526,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 13,
+          "tools": 12,
+          "tools_sha256": "cd7e78dd38646c89c7b69da5bda3519cdac48505c725e2c10588dd90495db989",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 5569,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYpR094u1OUjFVNfwlrTYeoafPscB",
+          "usage": {
+            "prompt_tokens": 11980,
+            "completion_tokens": 387,
+            "total_tokens": 12367,
+            "cached_tokens": 11415,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 5569
+        }
+      ],
+      "tokens": {
+        "input": 54349,
+        "output": 736
+      },
+      "costUsd": {
+        "charged": 0.0014159399999999999,
+        "reserved": 0.016737000000000002,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "guardUsd": 0.0014159399999999999,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 19005,
+  "firstUsefulResponseMs": 18878,
+  "tokens": {
+    "input": 54349,
+    "output": 736
+  },
+  "costUsd": 0.0014159399999999999,
+  "calls": 6,
+  "loaded": {
+    "conversationId": "0e198d96-da3c-4b47-976d-cdf31878be15",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 5,
+        "turn": 1,
+        "claim": {
+          "facts": {
+            "death": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "passed away",
+              "words": "Darren passed away",
+              "source": "user_reported"
+            },
+            "how_it_happened": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "after a traffic accident while travelling in Japan",
+              "words": "after a traffic accident while travelling in Japan",
+              "source": "user_reported"
+            }
+          },
+          "derived": [],
+          "subjectId": "7f000000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7156,
+                "output": 18,
+                "attempt": 1,
+                "costUsd": 0.00009415000000000001,
+                "latencyMs": 1587
+              },
+              {
+                "ok": true,
+                "input": 7271,
+                "output": 86,
+                "attempt": 1,
+                "costUsd": 0.0001374,
+                "latencyMs": 2543
+              },
+              {
+                "ok": true,
+                "input": 7466,
+                "output": 37,
+                "attempt": 1,
+                "costUsd": 0.00012205000000000001,
+                "latencyMs": 1815
+              },
+              {
+                "ok": true,
+                "input": 8935,
+                "output": 129,
+                "attempt": 1,
+                "costUsd": 0.00029739999999999996,
+                "latencyMs": 3164
+              },
+              {
+                "ok": true,
+                "input": 11541,
+                "output": 79,
+                "attempt": 1,
+                "costUsd": 0.00040079,
+                "latencyMs": 2939
+              },
+              {
+                "ok": true,
+                "input": 11980,
+                "output": 387,
+                "attempt": 1,
+                "costUsd": 0.00036415,
+                "latencyMs": 5625
+              }
+            ],
+            "limit": null,
+            "steps": 6,
+            "usage": {
+              "input": 54349,
+              "output": 736
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "ask_user",
+            "adjusted": [
+              "asked the date a printed condition counts from (Accidental Death: \"Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.\")"
+            ],
+            "composed": [
+              "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+              "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+              "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death."
+            ],
+            "latencyMs": 17778,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Darren"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "death",
+                      "value": "passed away",
+                      "words": "Darren passed away"
+                    },
+                    {
+                      "key": "how_it_happened",
+                      "value": "after a traffic accident while travelling in Japan",
+                      "words": "after a traffic accident while travelling in Japan"
+                    }
+                  ],
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "as_of": "2026-10-14",
+                  "topic": "death, accidental death, life insurance",
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e8",
+                  "e9",
+                  "e10"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "Accidental Death benefit definition Accident death within 365 days exclusions overseas travel Japan traffic accident",
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":3}",
+                "evidenceIds": [
+                  "e11",
+                  "e12",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "want": "amount",
+                  "as_of": "2026-10-14",
+                  "benefit": "Group Term Life",
+                  "policy_id": "7f000000-0000-4000-8000-000000000101",
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "select_table_value",
+                "summary": "{\"status\":\"ok\",\"valueId\":\"v5\",\"value\":1000000,\"column\":\"\",\"row\":\"Group Term Life\"}",
+                "evidenceIds": [
+                  "e1"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+                      "benefit": "Group Term Life / Death Benefit",
+                      "value_ids": [
+                        "v1"
+                      ],
+                      "evidence_ids": [
+                        "e5"
+                      ]
+                    },
+                    {
+                      "text": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+                      "benefit": "Group Personal Accident / Accidental Death",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "evidence_ids": [
+                        "e11"
+                      ]
+                    },
+                    {
+                      "text": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+                      "benefit": "Group Living Care; Group Living Care Plus",
+                      "value_ids": [
+                        "v3",
+                        "v4"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "The group scheme endorsement effective 1 January 2024 is linked to these policies, but its changed amounts are not shown in the available benefit details; Meridian Life Ltd will need to confirm the applicable amounts and assess the claim. The term-life wording says to notify the insurer of a death within 6 months, with the death certificate."
+                  ],
+                  "subject_id": "7f000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
+            "evidenceChosen": [
+              "e5",
+              "e1",
+              "e11",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****771J",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 542,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 557,
+                        "text": "S$1,000,000",
+                        "start": 546,
+                        "header": ""
+                      },
+                      {
+                        "end": 567,
+                        "text": "As of",
+                        "start": 562,
+                        "header": ""
+                      },
+                      {
+                        "end": 580,
+                        "text": "06/10/2022",
+                        "start": 570,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 557,
+                    "text": "S$1,000,000",
+                    "start": 546
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 542,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 522,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****771J",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 542,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 557,
+                        "text": "S$1,000,000",
+                        "start": 546,
+                        "header": ""
+                      },
+                      {
+                        "end": 567,
+                        "text": "As of",
+                        "start": 562,
+                        "header": ""
+                      },
+                      {
+                        "end": 580,
+                        "text": "06/10/2022",
+                        "start": 570,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 557,
+                    "text": "S$1,000,000",
+                    "start": 546
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 542,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 522,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Darren Tan Kai Ming's own row (“Tan Kai Ming, Darren”) under “GROUP TERM LIFE(POLICY NO. PSG-880100)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 517,
+                          "text": "S****771J",
+                          "start": 508,
+                          "header": ""
+                        },
+                        {
+                          "end": 542,
+                          "text": "Tan Kai Ming, Darren",
+                          "start": 522,
+                          "header": ""
+                        },
+                        {
+                          "end": 557,
+                          "text": "S$1,000,000",
+                          "start": 546,
+                          "header": ""
+                        },
+                        {
+                          "end": 567,
+                          "text": "As of",
+                          "start": 562,
+                          "header": ""
+                        },
+                        {
+                          "end": 580,
+                          "text": "06/10/2022",
+                          "start": 570,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 557,
+                      "text": "S$1,000,000",
+                      "start": 546
+                    },
+                    "layout": "person_row",
+                    "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****771J",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 542,
+                      "text": "Tan Kai Ming, Darren",
+                      "start": 522,
+                      "memberId": "7f000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 580,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "policyId": "7f000000-0000-4000-8000-000000000101",
+                  "subjectId": "7f000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:binding-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 710,
+                        "text": "S****771J",
+                        "start": 701,
+                        "header": ""
+                      },
+                      {
+                        "end": 735,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 715,
+                        "header": ""
+                      },
+                      {
+                        "end": 748,
+                        "text": "S$600,000",
+                        "start": 739,
+                        "header": ""
+                      },
+                      {
+                        "end": 760,
+                        "text": "As of",
+                        "start": 755,
+                        "header": ""
+                      },
+                      {
+                        "end": 773,
+                        "text": "06/10/2022",
+                        "start": 763,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 748,
+                    "text": "S$600,000",
+                    "start": 739
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 735,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 715,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 773,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+                  "start": 701,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 710,
+                        "text": "S****771J",
+                        "start": 701,
+                        "header": ""
+                      },
+                      {
+                        "end": 735,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 715,
+                        "header": ""
+                      },
+                      {
+                        "end": 748,
+                        "text": "S$600,000",
+                        "start": 739,
+                        "header": ""
+                      },
+                      {
+                        "end": 760,
+                        "text": "As of",
+                        "start": 755,
+                        "header": ""
+                      },
+                      {
+                        "end": 773,
+                        "text": "06/10/2022",
+                        "start": 763,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 748,
+                    "text": "S$600,000",
+                    "start": 739
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 735,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 715,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 773,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+                  "start": 701,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Darren Tan Kai Ming's own row (“Tan Kai Ming, Darren”) under “GROUP PERSONAL ACCIDENT(POLICY NO. PSG-880100)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 710,
+                          "text": "S****771J",
+                          "start": 701,
+                          "header": ""
+                        },
+                        {
+                          "end": 735,
+                          "text": "Tan Kai Ming, Darren",
+                          "start": 715,
+                          "header": ""
+                        },
+                        {
+                          "end": 748,
+                          "text": "S$600,000",
+                          "start": 739,
+                          "header": ""
+                        },
+                        {
+                          "end": 760,
+                          "text": "As of",
+                          "start": 755,
+                          "header": ""
+                        },
+                        {
+                          "end": 773,
+                          "text": "06/10/2022",
+                          "start": 763,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 748,
+                      "text": "S$600,000",
+                      "start": 739
+                    },
+                    "layout": "person_row",
+                    "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****771J",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 735,
+                      "text": "Tan Kai Ming, Darren",
+                      "start": 715,
+                      "memberId": "7f000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 773,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+                    "start": 701,
+                    "onPage": 1
+                  },
+                  "policyId": "7f000000-0000-4000-8000-000000000101",
+                  "subjectId": "7f000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:binding-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 35000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Living Care",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 897,
+                        "text": "S****771J",
+                        "start": 888,
+                        "header": ""
+                      },
+                      {
+                        "end": 922,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 902,
+                        "header": ""
+                      },
+                      {
+                        "end": 935,
+                        "text": "S$350,000",
+                        "start": 926,
+                        "header": ""
+                      },
+                      {
+                        "end": 947,
+                        "text": "As of",
+                        "start": 942,
+                        "header": ""
+                      },
+                      {
+                        "end": 960,
+                        "text": "06/10/2022",
+                        "start": 950,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 935,
+                    "text": "S$350,000",
+                    "start": 926
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 922,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 902,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 960,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+                  "start": 888,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 35000000,
+              "notes": [],
+              "value": 350000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Living Care",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 897,
+                        "text": "S****771J",
+                        "start": 888,
+                        "header": ""
+                      },
+                      {
+                        "end": 922,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 902,
+                        "header": ""
+                      },
+                      {
+                        "end": 935,
+                        "text": "S$350,000",
+                        "start": 926,
+                        "header": ""
+                      },
+                      {
+                        "end": 947,
+                        "text": "As of",
+                        "start": 942,
+                        "header": ""
+                      },
+                      {
+                        "end": 960,
+                        "text": "06/10/2022",
+                        "start": 950,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 935,
+                    "text": "S$350,000",
+                    "start": 926
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 922,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 902,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 960,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+                  "start": 888,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "rowLabel": "Group Living Care",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Living Care”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Darren Tan Kai Ming's own row (“Tan Kai Ming, Darren”) under “GROUP LIVING CARE(POLICY NO. PSG-880100)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 897,
+                          "text": "S****771J",
+                          "start": 888,
+                          "header": ""
+                        },
+                        {
+                          "end": 922,
+                          "text": "Tan Kai Ming, Darren",
+                          "start": 902,
+                          "header": ""
+                        },
+                        {
+                          "end": 935,
+                          "text": "S$350,000",
+                          "start": 926,
+                          "header": ""
+                        },
+                        {
+                          "end": 947,
+                          "text": "As of",
+                          "start": 942,
+                          "header": ""
+                        },
+                        {
+                          "end": 960,
+                          "text": "06/10/2022",
+                          "start": 950,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 935,
+                      "text": "S$350,000",
+                      "start": 926
+                    },
+                    "layout": "person_row",
+                    "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****771J",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 922,
+                      "text": "Tan Kai Ming, Darren",
+                      "start": 902,
+                      "memberId": "7f000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 960,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+                    "start": 888,
+                    "onPage": 1
+                  },
+                  "policyId": "7f000000-0000-4000-8000-000000000101",
+                  "subjectId": "7f000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:binding-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "v4": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 30000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Living Care Plus",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 1089,
+                        "text": "S****771J",
+                        "start": 1080,
+                        "header": ""
+                      },
+                      {
+                        "end": 1114,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 1094,
+                        "header": ""
+                      },
+                      {
+                        "end": 1127,
+                        "text": "S$300,000",
+                        "start": 1118,
+                        "header": ""
+                      },
+                      {
+                        "end": 1139,
+                        "text": "As of",
+                        "start": 1134,
+                        "header": ""
+                      },
+                      {
+                        "end": 1152,
+                        "text": "06/10/2022",
+                        "start": 1142,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 1127,
+                    "text": "S$300,000",
+                    "start": 1118
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 1114,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 1094,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 1152,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+                  "start": 1080,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 30000000,
+              "notes": [],
+              "value": 300000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Living Care Plus",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 1089,
+                        "text": "S****771J",
+                        "start": 1080,
+                        "header": ""
+                      },
+                      {
+                        "end": 1114,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 1094,
+                        "header": ""
+                      },
+                      {
+                        "end": 1127,
+                        "text": "S$300,000",
+                        "start": 1118,
+                        "header": ""
+                      },
+                      {
+                        "end": 1139,
+                        "text": "As of",
+                        "start": 1134,
+                        "header": ""
+                      },
+                      {
+                        "end": 1152,
+                        "text": "06/10/2022",
+                        "start": 1142,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 1127,
+                    "text": "S$300,000",
+                    "start": 1118
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 1114,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 1094,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 1152,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+                  "start": 1080,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "rowLabel": "Group Living Care Plus",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Living Care Plus”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Darren Tan Kai Ming's own row (“Tan Kai Ming, Darren”) under “GROUP LIVING CARE PLUS(POLICY NO. PSG-880100)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 1089,
+                          "text": "S****771J",
+                          "start": 1080,
+                          "header": ""
+                        },
+                        {
+                          "end": 1114,
+                          "text": "Tan Kai Ming, Darren",
+                          "start": 1094,
+                          "header": ""
+                        },
+                        {
+                          "end": 1127,
+                          "text": "S$300,000",
+                          "start": 1118,
+                          "header": ""
+                        },
+                        {
+                          "end": 1139,
+                          "text": "As of",
+                          "start": 1134,
+                          "header": ""
+                        },
+                        {
+                          "end": 1152,
+                          "text": "06/10/2022",
+                          "start": 1142,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 1127,
+                      "text": "S$300,000",
+                      "start": 1118
+                    },
+                    "layout": "person_row",
+                    "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****771J",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 1114,
+                      "text": "Tan Kai Ming, Darren",
+                      "start": 1094,
+                      "memberId": "7f000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 1152,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+                    "start": 1080,
+                    "onPage": 1
+                  },
+                  "policyId": "7f000000-0000-4000-8000-000000000101",
+                  "subjectId": "7f000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:binding-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "v5": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****771J",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 542,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 557,
+                        "text": "S$1,000,000",
+                        "start": 546,
+                        "header": ""
+                      },
+                      {
+                        "end": 567,
+                        "text": "As of",
+                        "start": 562,
+                        "header": ""
+                      },
+                      {
+                        "end": 580,
+                        "text": "06/10/2022",
+                        "start": 570,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 557,
+                    "text": "S$1,000,000",
+                    "start": 546
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 542,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 522,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****771J",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 542,
+                        "text": "Tan Kai Ming, Darren",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 557,
+                        "text": "S$1,000,000",
+                        "start": 546,
+                        "header": ""
+                      },
+                      {
+                        "end": 567,
+                        "text": "As of",
+                        "start": 562,
+                        "header": ""
+                      },
+                      {
+                        "end": 580,
+                        "text": "06/10/2022",
+                        "start": 570,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 557,
+                    "text": "S$1,000,000",
+                    "start": 546
+                  },
+                  "layout": "person_row",
+                  "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****771J",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 542,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 522,
+                    "memberId": "7f000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 580,
+                  "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7f000000-0000-4000-8000-000000000101",
+                "subjectId": "7f000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:binding-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Darren Tan Kai Ming's own row (“Tan Kai Ming, Darren”) under “GROUP TERM LIFE(POLICY NO. PSG-880100)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 517,
+                          "text": "S****771J",
+                          "start": 508,
+                          "header": ""
+                        },
+                        {
+                          "end": 542,
+                          "text": "Tan Kai Ming, Darren",
+                          "start": 522,
+                          "header": ""
+                        },
+                        {
+                          "end": 557,
+                          "text": "S$1,000,000",
+                          "start": 546,
+                          "header": ""
+                        },
+                        {
+                          "end": 567,
+                          "text": "As of",
+                          "start": 562,
+                          "header": ""
+                        },
+                        {
+                          "end": 580,
+                          "text": "06/10/2022",
+                          "start": 570,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 557,
+                      "text": "S$1,000,000",
+                      "start": 546
+                    },
+                    "layout": "person_row",
+                    "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****771J",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 542,
+                      "text": "Tan Kai Ming, Darren",
+                      "start": 522,
+                      "memberId": "7f000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "context": null,
+                  "passage": {
+                    "end": 580,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "support": {
+                    "end": 580,
+                    "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "policyId": "7f000000-0000-4000-8000-000000000101",
+                  "subjectId": "7f000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:binding-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7f000000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
+            "assistant": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death. Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here. The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death. On what date did the accident happen?"
+          }
+        ],
+        "pending": {
+          "why": "Public Service Group Personal Accident - Product Summary pays its Accidental Death only if the Insured Person dies as a result of an Accident within 365 days of that Accident",
+          "kind": "fact",
+          "turn": 1,
+          "factKey": "accident_date",
+          "question": "On what date did the accident happen?",
+          "subjectId": "7f000000-0000-4000-8000-000000000001",
+          "evidenceIds": [
+            "e7"
+          ]
+        },
+        "docNames": {
+          "7f000000-0000-4000-8000-000000000101": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+          "7f000000-0000-4000-8000-000000000102": "Public Service Group Term Life - Product Summary",
+          "7f000000-0000-4000-8000-000000000103": "Public Service Group Personal Accident - Product Summary",
+          "7f000000-0000-4000-8000-000000000105": "PawSafe Pet Insurance - Endorsement"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 517,
+                    "text": "S****771J",
+                    "start": 508,
+                    "header": ""
+                  },
+                  {
+                    "end": 542,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 522,
+                    "header": ""
+                  },
+                  {
+                    "end": 557,
+                    "text": "S$1,000,000",
+                    "start": 546,
+                    "header": ""
+                  },
+                  {
+                    "end": 567,
+                    "text": "As of",
+                    "start": 562,
+                    "header": ""
+                  },
+                  {
+                    "end": 580,
+                    "text": "06/10/2022",
+                    "start": 570,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 557,
+                "text": "S$1,000,000",
+                "start": 546
+              },
+              "layout": "person_row",
+              "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 542,
+                "text": "Tan Kai Ming, Darren",
+                "start": 522,
+                "memberId": "7f000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 580,
+              "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "start": 508,
+              "onPage": 1
+            },
+            "support": {
+              "end": 580,
+              "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "start": 508,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 710,
+                    "text": "S****771J",
+                    "start": 701,
+                    "header": ""
+                  },
+                  {
+                    "end": 735,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 715,
+                    "header": ""
+                  },
+                  {
+                    "end": 748,
+                    "text": "S$600,000",
+                    "start": 739,
+                    "header": ""
+                  },
+                  {
+                    "end": 760,
+                    "text": "As of",
+                    "start": 755,
+                    "header": ""
+                  },
+                  {
+                    "end": 773,
+                    "text": "06/10/2022",
+                    "start": 763,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 748,
+                "text": "S$600,000",
+                "start": 739
+              },
+              "layout": "person_row",
+              "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 735,
+                "text": "Tan Kai Ming, Darren",
+                "start": 715,
+                "memberId": "7f000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 773,
+              "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+              "start": 701,
+              "onPage": 1
+            },
+            "support": {
+              "end": 773,
+              "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+              "start": 701,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 897,
+                    "text": "S****771J",
+                    "start": 888,
+                    "header": ""
+                  },
+                  {
+                    "end": 922,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 902,
+                    "header": ""
+                  },
+                  {
+                    "end": 935,
+                    "text": "S$350,000",
+                    "start": 926,
+                    "header": ""
+                  },
+                  {
+                    "end": 947,
+                    "text": "As of",
+                    "start": 942,
+                    "header": ""
+                  },
+                  {
+                    "end": 960,
+                    "text": "06/10/2022",
+                    "start": 950,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 935,
+                "text": "S$350,000",
+                "start": 926
+              },
+              "layout": "person_row",
+              "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Living Care",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 922,
+                "text": "Tan Kai Ming, Darren",
+                "start": 902,
+                "memberId": "7f000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 960,
+              "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+              "start": 888,
+              "onPage": 1
+            },
+            "support": {
+              "end": 960,
+              "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+              "start": 888,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 1089,
+                    "text": "S****771J",
+                    "start": 1080,
+                    "header": ""
+                  },
+                  {
+                    "end": 1114,
+                    "text": "Tan Kai Ming, Darren",
+                    "start": 1094,
+                    "header": ""
+                  },
+                  {
+                    "end": 1127,
+                    "text": "S$300,000",
+                    "start": 1118,
+                    "header": ""
+                  },
+                  {
+                    "end": 1139,
+                    "text": "As of",
+                    "start": 1134,
+                    "header": ""
+                  },
+                  {
+                    "end": 1152,
+                    "text": "06/10/2022",
+                    "start": 1142,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 1127,
+                "text": "S$300,000",
+                "start": 1118
+              },
+              "layout": "person_row",
+              "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Living Care Plus",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 1114,
+                "text": "Tan Kai Ming, Darren",
+                "start": 1094,
+                "memberId": "7f000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 1152,
+              "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+              "start": 1080,
+              "onPage": 1
+            },
+            "support": {
+              "end": 1152,
+              "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+              "start": 1080,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 190,
+              "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+              "start": 69,
+              "onPage": 1
+            },
+            "support": {
+              "end": 190,
+              "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+              "start": 69,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000102",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-gtl"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 284,
+              "text": "Terminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.",
+              "start": 191,
+              "onPage": 1
+            },
+            "support": {
+              "end": 284,
+              "text": "Terminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.",
+              "start": 191,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000102",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-gtl"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 206,
+              "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+              "start": 77,
+              "onPage": 1
+            },
+            "support": {
+              "end": 206,
+              "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+              "start": 77,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000103",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-gpa"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 468,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date",
+              "start": 379,
+              "onPage": 1
+            },
+            "support": {
+              "end": 468,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date",
+              "start": 379,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 580,
+              "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "start": 508,
+              "onPage": 1
+            },
+            "support": {
+              "end": 580,
+              "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "start": 508,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "passage": {
+              "end": 134,
+              "text": "With effect from 1 March 2026 the Excess for each claim is amended to S$150.",
+              "start": 58,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000105",
+            "subjectId": null,
+            "documentHash": "sha256:binding-pet-end"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 358,
+              "text": "Meridian Life Ltd - Public Service Group Personal Accident - Product Summary\nAccidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.\nTerritorial limits: worldwide, 24 hours a day.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 206,
+              "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+              "start": 77,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000103",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-gpa"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 373,
+              "text": "Meridian Life Ltd - Public Service Group Term Life - Product Summary\nDeath Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.\nTerminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.\nClaims: notify Meridian Life Ltd of a death within 6 months, with the death certificate.",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 190,
+              "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+              "start": 69,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000102",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-gtl"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 960,
+              "text": "S****402F     Ong Li Ting, Michelle   S$500,000       As of   06/10/2022\nGROUP PERSONAL ACCIDENT(POLICY NO. PSG-880100)\nS****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022\nS****402F     Ong Li Ting, Michelle   S$300,000       As of   06/10/2022\nGROUP LIVING CARE(POLICY NO. PSG-880100)\nS****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+              "start": 581,
+              "onPage": 1
+            },
+            "support": {
+              "end": 688,
+              "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+              "start": 654,
+              "onPage": 1
+            },
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          }
+        },
+        "speakerId": "7f000000-0000-4000-8000-000000000001",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "established": [
+          {
+            "text": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+            "turn": 1,
+            "benefit": "Group Term Life / Death Benefit",
+            "valueIds": [
+              "v1"
+            ],
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e5",
+              "e1"
+            ]
+          },
+          {
+            "text": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+            "turn": 1,
+            "benefit": "Group Personal Accident / Accidental Death",
+            "valueIds": [
+              "v2"
+            ],
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e11",
+              "e2"
+            ]
+          },
+          {
+            "text": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+            "turn": 1,
+            "benefit": "Group Living Care; Group Living Care Plus",
+            "valueIds": [
+              "v3",
+              "v4"
+            ],
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e3",
+              "e4"
+            ]
+          }
+        ],
+        "parkedPending": null,
+        "recentSubjectIds": [
+          "7f000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
+        "answer": {
+          "mode": "fact_finding",
+          "details": [],
+          "summary": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death. Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here. The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+          "citations": [
+            {
+              "chunkId": "rag2:e5",
+              "excerpt": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000102",
+              "pageStart": 1,
+              "policyName": "Public Service Group Term Life - Product Summary",
+              "documentRole": "product_summary"
+            },
+            {
+              "chunkId": "rag2:e1",
+              "excerpt": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e11",
+              "excerpt": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000103",
+              "pageStart": 1,
+              "policyName": "Public Service Group Personal Accident - Product Summary",
+              "documentRole": "product_summary"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e3",
+              "excerpt": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e4",
+              "excerpt": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+              "insurer": "Meridian Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [
+            {
+              "id": "rag_fact_accident_date",
+              "why": "This changes what your policy pays under: Public Service Group Personal Accident - Product Summary pays its Accidental Death only if the Insured Person dies as a result of an Accident within 365 days of that Accident",
+              "text": "On what date did the accident happen?",
+              "type": "text"
+            }
+          ],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "0e198d96-da3c-4b47-976d-cdf31878be15",
+          "figureBindings": [
+            {
+              "asOf": "2022-10-06",
+              "value": 1000000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Term Life",
+              "pageEnd": 1,
+              "passage": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+              "currency": "SGD",
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "sentence": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+              "pageStart": 1,
+              "rowPerson": "Tan Kai Ming, Darren",
+              "subjectId": "7f000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:binding-cert"
+            },
+            {
+              "asOf": "2022-10-06",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+              "currency": "SGD",
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "sentence": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+              "pageStart": 1,
+              "rowPerson": "Tan Kai Ming, Darren",
+              "subjectId": "7f000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:binding-cert"
+            },
+            {
+              "asOf": "2022-10-06",
+              "value": 350000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Living Care",
+              "pageEnd": 1,
+              "passage": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+              "currency": "SGD",
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "sentence": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+              "pageStart": 1,
+              "rowPerson": "Tan Kai Ming, Darren",
+              "subjectId": "7f000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:binding-cert"
+            },
+            {
+              "asOf": "2022-10-06",
+              "value": 300000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Living Care Plus",
+              "pageEnd": 1,
+              "passage": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+              "currency": "SGD",
+              "policyId": "7f000000-0000-4000-8000-000000000101",
+              "sentence": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+              "pageStart": 1,
+              "rowPerson": "Tan Kai Ming, Darren",
+              "subjectId": "7f000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:binding-cert"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7f000000-0000-4000-8000-000000000001"
+        },
+        "content": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death. Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here. The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+        "visible": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death. Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here. The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.\nOn what date did the accident happen?\nThis changes what your policy pays under: Public Service Group Personal Accident - Product Summary pays its Accidental Death only if the Insured Person dies as a result of an Accident within 365 days of that Accident",
+        "questions": [
+          "On what date did the accident happen?"
+        ],
+        "userAt": "2026-10-14T09:19:39.178Z",
+        "assistantAt": "2026-10-14T09:19:39.178Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7156,
+              "output": 18,
+              "attempt": 1,
+              "costUsd": 0.00009415000000000001,
+              "latencyMs": 1587
+            },
+            {
+              "ok": true,
+              "input": 7271,
+              "output": 86,
+              "attempt": 1,
+              "costUsd": 0.0001374,
+              "latencyMs": 2543
+            },
+            {
+              "ok": true,
+              "input": 7466,
+              "output": 37,
+              "attempt": 1,
+              "costUsd": 0.00012205000000000001,
+              "latencyMs": 1815
+            },
+            {
+              "ok": true,
+              "input": 8935,
+              "output": 129,
+              "attempt": 1,
+              "costUsd": 0.00029739999999999996,
+              "latencyMs": 3164
+            },
+            {
+              "ok": true,
+              "input": 11541,
+              "output": 79,
+              "attempt": 1,
+              "costUsd": 0.00040079,
+              "latencyMs": 2939
+            },
+            {
+              "ok": true,
+              "input": 11980,
+              "output": 387,
+              "attempt": 1,
+              "costUsd": 0.00036415,
+              "latencyMs": 5625
+            }
+          ],
+          "limit": null,
+          "steps": 6,
+          "usage": {
+            "input": 54349,
+            "output": 736
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "ask_user",
+          "adjusted": [
+            "asked the date a printed condition counts from (Accidental Death: \"Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.\")"
+          ],
+          "composed": [
+            "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+            "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+            "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death."
+          ],
+          "latencyMs": 17778,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Darren"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "death",
+                    "value": "passed away",
+                    "words": "Darren passed away"
+                  },
+                  {
+                    "key": "how_it_happened",
+                    "value": "after a traffic accident while travelling in Japan",
+                    "words": "after a traffic accident while travelling in Japan"
+                  }
+                ],
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "as_of": "2026-10-14",
+                "topic": "death, accidental death, life insurance",
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "policies_for",
+              "summary": "{}",
+              "evidenceIds": [
+                "e8",
+                "e9",
+                "e10"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "k": 10,
+                "query": "Accidental Death benefit definition Accident death within 365 days exclusions overseas travel Japan traffic accident",
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "search_passages",
+              "summary": "{\"hits\":3}",
+              "evidenceIds": [
+                "e11",
+                "e12",
+                "e13"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "want": "amount",
+                "as_of": "2026-10-14",
+                "benefit": "Group Term Life",
+                "policy_id": "7f000000-0000-4000-8000-000000000101",
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "select_table_value",
+              "summary": "{\"status\":\"ok\",\"valueId\":\"v5\",\"value\":1000000,\"column\":\"\",\"row\":\"Group Term Life\"}",
+              "evidenceIds": [
+                "e1"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "text": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+                    "benefit": "Group Term Life / Death Benefit",
+                    "value_ids": [
+                      "v1"
+                    ],
+                    "evidence_ids": [
+                      "e5"
+                    ]
+                  },
+                  {
+                    "text": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+                    "benefit": "Group Personal Accident / Accidental Death",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "evidence_ids": [
+                      "e11"
+                    ]
+                  },
+                  {
+                    "text": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+                    "benefit": "Group Living Care; Group Living Care Plus",
+                    "value_ids": [
+                      "v3",
+                      "v4"
+                    ]
+                  }
+                ],
+                "next_steps": [
+                  "The group scheme endorsement effective 1 January 2024 is linked to these policies, but its changed amounts are not shown in the available benefit details; Meridian Life Ltd will need to confirm the applicable amounts and assess the claim. The term-life wording says to notify the insurer of a death within 6 months, with the death certificate."
+                ],
+                "subject_id": "7f000000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Darren passed away after a traffic accident while travelling in Japan. What insurance can we claim for him?",
+          "evidenceChosen": [
+            "e5",
+            "e1",
+            "e11",
+            "e2",
+            "e3",
+            "e4"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "S49B",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7f000000-0000-4000-8000-000000000001",
+    "speakerId": "7f000000-0000-4000-8000-000000000001",
+    "pending": {
+      "why": "Public Service Group Personal Accident - Product Summary pays its Accidental Death only if the Insured Person dies as a result of an Accident within 365 days of that Accident",
+      "kind": "fact",
+      "turn": 1,
+      "factKey": "accident_date",
+      "question": "On what date did the accident happen?",
+      "subjectId": "7f000000-0000-4000-8000-000000000001",
+      "evidenceIds": [
+        "e7"
+      ]
+    },
+    "claim": {
+      "facts": {
+        "death": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "passed away",
+          "words": "Darren passed away",
+          "source": "user_reported"
+        },
+        "how_it_happened": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "after a traffic accident while travelling in Japan",
+          "words": "after a traffic accident while travelling in Japan",
+          "source": "user_reported"
+        }
+      },
+      "derived": [],
+      "subjectId": "7f000000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "ask_user",
+        "steps": 6,
+        "usage": {
+          "input": 54349,
+          "output": 736
+        },
+        "latencyMs": 17778,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Darren"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "death",
+                  "value": "passed away",
+                  "words": "Darren passed away"
+                },
+                {
+                  "key": "how_it_happened",
+                  "value": "after a traffic accident while travelling in Japan",
+                  "words": "after a traffic accident while travelling in Japan"
+                }
+              ],
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "as_of": "2026-10-14",
+              "topic": "death, accidental death, life insurance",
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e8",
+              "e9",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "Accidental Death benefit definition Accident death within 365 days exclusions overseas travel Japan traffic accident",
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":3}",
+            "evidenceIds": [
+              "e11",
+              "e12",
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "want": "amount",
+              "as_of": "2026-10-14",
+              "benefit": "Group Term Life",
+              "policy_id": "7f000000-0000-4000-8000-000000000101",
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v5\",\"value\":1000000,\"column\":\"\",\"row\":\"Group Term Life\"}",
+            "evidenceIds": [
+              "e1"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+                  "benefit": "Group Term Life / Death Benefit",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "evidence_ids": [
+                    "e5"
+                  ]
+                },
+                {
+                  "text": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+                  "benefit": "Group Personal Accident / Accidental Death",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "evidence_ids": [
+                    "e11"
+                  ]
+                },
+                {
+                  "text": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+                  "benefit": "Group Living Care; Group Living Care Plus",
+                  "value_ids": [
+                    "v3",
+                    "v4"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "The group scheme endorsement effective 1 January 2024 is linked to these policies, but its changed amounts are not shown in the available benefit details; Meridian Life Ltd will need to confirm the applicable amounts and assess the claim. The term-life wording says to notify the insurer of a death within 6 months, with the death certificate."
+              ],
+              "subject_id": "7f000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e5",
+          "e1",
+          "e11",
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 517,
+                "text": "S****771J",
+                "start": 508,
+                "header": ""
+              },
+              {
+                "end": 542,
+                "text": "Tan Kai Ming, Darren",
+                "start": 522,
+                "header": ""
+              },
+              {
+                "end": 557,
+                "text": "S$1,000,000",
+                "start": 546,
+                "header": ""
+              },
+              {
+                "end": 567,
+                "text": "As of",
+                "start": 562,
+                "header": ""
+              },
+              {
+                "end": 580,
+                "text": "06/10/2022",
+                "start": 570,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 557,
+            "text": "S$1,000,000",
+            "start": 546
+          },
+          "layout": "person_row",
+          "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 542,
+            "text": "Tan Kai Ming, Darren",
+            "start": 522,
+            "memberId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 580,
+          "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+          "start": 508,
+          "onPage": 1
+        },
+        "support": {
+          "end": 580,
+          "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+          "start": 508,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 710,
+                "text": "S****771J",
+                "start": 701,
+                "header": ""
+              },
+              {
+                "end": 735,
+                "text": "Tan Kai Ming, Darren",
+                "start": 715,
+                "header": ""
+              },
+              {
+                "end": 748,
+                "text": "S$600,000",
+                "start": 739,
+                "header": ""
+              },
+              {
+                "end": 760,
+                "text": "As of",
+                "start": 755,
+                "header": ""
+              },
+              {
+                "end": 773,
+                "text": "06/10/2022",
+                "start": 763,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 748,
+            "text": "S$600,000",
+            "start": 739
+          },
+          "layout": "person_row",
+          "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 735,
+            "text": "Tan Kai Ming, Darren",
+            "start": 715,
+            "memberId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 773,
+          "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+          "start": 701,
+          "onPage": 1
+        },
+        "support": {
+          "end": 773,
+          "text": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+          "start": 701,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 897,
+                "text": "S****771J",
+                "start": 888,
+                "header": ""
+              },
+              {
+                "end": 922,
+                "text": "Tan Kai Ming, Darren",
+                "start": 902,
+                "header": ""
+              },
+              {
+                "end": 935,
+                "text": "S$350,000",
+                "start": 926,
+                "header": ""
+              },
+              {
+                "end": 947,
+                "text": "As of",
+                "start": 942,
+                "header": ""
+              },
+              {
+                "end": 960,
+                "text": "06/10/2022",
+                "start": 950,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 935,
+            "text": "S$350,000",
+            "start": 926
+          },
+          "layout": "person_row",
+          "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Living Care",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 922,
+            "text": "Tan Kai Ming, Darren",
+            "start": 902,
+            "memberId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 960,
+          "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+          "start": 888,
+          "onPage": 1
+        },
+        "support": {
+          "end": 960,
+          "text": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+          "start": 888,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 1089,
+                "text": "S****771J",
+                "start": 1080,
+                "header": ""
+              },
+              {
+                "end": 1114,
+                "text": "Tan Kai Ming, Darren",
+                "start": 1094,
+                "header": ""
+              },
+              {
+                "end": 1127,
+                "text": "S$300,000",
+                "start": 1118,
+                "header": ""
+              },
+              {
+                "end": 1139,
+                "text": "As of",
+                "start": 1134,
+                "header": ""
+              },
+              {
+                "end": 1152,
+                "text": "06/10/2022",
+                "start": 1142,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 1127,
+            "text": "S$300,000",
+            "start": 1118
+          },
+          "layout": "person_row",
+          "tableId": "7f000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Living Care Plus",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 1114,
+            "text": "Tan Kai Ming, Darren",
+            "start": 1094,
+            "memberId": "7f000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 1152,
+          "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+          "start": 1080,
+          "onPage": 1
+        },
+        "support": {
+          "end": 1152,
+          "text": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+          "start": 1080,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 190,
+          "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+          "start": 69,
+          "onPage": 1
+        },
+        "support": {
+          "end": 190,
+          "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+          "start": 69,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000102",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-gtl"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 284,
+          "text": "Terminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.",
+          "start": 191,
+          "onPage": 1
+        },
+        "support": {
+          "end": 284,
+          "text": "Terminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.",
+          "start": 191,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000102",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-gtl"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 206,
+          "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+          "start": 77,
+          "onPage": 1
+        },
+        "support": {
+          "end": 206,
+          "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+          "start": 77,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000103",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-gpa"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 468,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date",
+          "start": 379,
+          "onPage": 1
+        },
+        "support": {
+          "end": 468,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date",
+          "start": 379,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 580,
+          "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+          "start": 508,
+          "onPage": 1
+        },
+        "support": {
+          "end": 580,
+          "text": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+          "start": 508,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 134,
+          "text": "With effect from 1 March 2026 the Excess for each claim is amended to S$150.",
+          "start": 58,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:binding-pet-end"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 358,
+          "text": "Meridian Life Ltd - Public Service Group Personal Accident - Product Summary\nAccidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.\nTerritorial limits: worldwide, 24 hours a day.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 206,
+          "text": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+          "start": 77,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000103",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-gpa"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 373,
+          "text": "Meridian Life Ltd - Public Service Group Term Life - Product Summary\nDeath Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.\nTerminal Illness Benefit: the Sum Assured is payable once on diagnosis of a Terminal Illness.\nClaims: notify Meridian Life Ltd of a death within 6 months, with the death certificate.",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 190,
+          "text": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+          "start": 69,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000102",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-gtl"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 960,
+          "text": "S****402F     Ong Li Ting, Michelle   S$500,000       As of   06/10/2022\nGROUP PERSONAL ACCIDENT(POLICY NO. PSG-880100)\nS****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022\nS****402F     Ong Li Ting, Michelle   S$300,000       As of   06/10/2022\nGROUP LIVING CARE(POLICY NO. PSG-880100)\nS****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+          "start": 581,
+          "onPage": 1
+        },
+        "support": {
+          "end": 688,
+          "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+          "start": 654,
+          "onPage": 1
+        },
+        "policyId": "7f000000-0000-4000-8000-000000000101",
+        "subjectId": "7f000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:binding-cert"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7f000000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e5",
+            "excerpt": "Death Benefit: the Sum Assured shown in the Certificate of Group Insurance is payable on the death of the Insured Person.",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000102",
+            "pageStart": 1,
+            "policyName": "Public Service Group Term Life - Product Summary",
+            "documentRole": "product_summary"
+          },
+          {
+            "chunkId": "rag2:e1",
+            "excerpt": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e11",
+            "excerpt": "Accidental Death: 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000103",
+            "pageStart": 1,
+            "policyName": "Public Service Group Personal Accident - Product Summary",
+            "documentRole": "product_summary"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e3",
+            "excerpt": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e4",
+            "excerpt": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+            "insurer": "Meridian Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "PUBLIC SERVICE GROUP INSURANCE SCHEME",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2022-10-06",
+            "value": 1000000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Term Life",
+            "pageEnd": 1,
+            "passage": "S****771J     Tan Kai Ming, Darren    S$1,000,000     As of   06/10/2022",
+            "currency": "SGD",
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "sentence": "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the Group Term Life wording says the Death Benefit is the Sum Assured shown in the certificate, but these documents do not confirm the amount or cover in force at the time of death.",
+            "pageStart": 1,
+            "rowPerson": "Tan Kai Ming, Darren",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          {
+            "asOf": "2022-10-06",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****771J     Tan Kai Ming, Darren    S$600,000       As of   06/10/2022",
+            "currency": "SGD",
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "sentence": "Darren’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022, and the product summary describes Accidental Death as 100% of the Sum Insured if death results from an Accident within 365 days; it also states worldwide cover, 24 hours a day, but the uploaded documents do not establish the current Sum Insured or whether the policy’s Accident definition is met here.",
+            "pageStart": 1,
+            "rowPerson": "Tan Kai Ming, Darren",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          {
+            "asOf": "2022-10-06",
+            "value": 350000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Living Care",
+            "pageEnd": 1,
+            "passage": "S****771J     Tan Kai Ming, Darren    S$350,000       As of   06/10/2022",
+            "currency": "SGD",
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "sentence": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+            "pageStart": 1,
+            "rowPerson": "Tan Kai Ming, Darren",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          },
+          {
+            "asOf": "2022-10-06",
+            "value": 300000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Living Care Plus",
+            "pageEnd": 1,
+            "passage": "S****771J     Tan Kai Ming, Darren    S$300,000       As of   06/10/2022",
+            "currency": "SGD",
+            "policyId": "7f000000-0000-4000-8000-000000000101",
+            "sentence": "The uploaded documents also list Group Living Care of S$350,000 and Group Living Care Plus of S$300,000 for Darren as of 6 October 2022, but they do not state that either is payable on death.",
+            "pageStart": 1,
+            "rowPerson": "Tan Kai Ming, Darren",
+            "subjectId": "7f000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:binding-cert"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": [
+          {
+            "id": "rag_fact_accident_date",
+            "why": "This changes what your policy pays under: Public Service Group Personal Accident - Product Summary pays its Accidental Death only if the Insured Person dies as a result of an Accident within 365 days of that Accident",
+            "text": "On what date did the accident happen?",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}
