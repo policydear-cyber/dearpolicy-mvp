@@ -141,4 +141,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:scenario-replay-test",
   "rag2:stress-test",
   "rag2:stress-report-test",
+  "rag2:binding-test",
 ];

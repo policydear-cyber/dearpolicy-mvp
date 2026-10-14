@@ -1,0 +1,84 @@
+### figure stated without its product (the reported structure)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists S$1,000,000 (Group Term Life) as of 6 October 2022.
+
+### two products in one sentence
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Tan Kai Ming, Darren's Group Term Life death benefit is S$1,000,000 and his Group Personal Accident sum insured is S$600,000, as of 6 October 2022.
+
+### Term Life stated as PA (negative)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  The PUBLIC SERVICE GROUP INSURANCE SCHEME lists separate Group Term Life and Group Personal Accident amounts; I couldn’t confirm the Group Personal Accident amount for this answer.
+
+### unrelated insurer in the advice (negative)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's Group Term Life sum assured is S$1,000,000 as of 6 October 2022. Contact Meridian Life Ltd to report the death.
+
+### death after an accident, the model asking nothing
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?
+
+### accident date already given
+USER: Darren died in a car accident in Japan on 3 October 2026, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022.
+      The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.
+      The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
+      The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [next] Suggestion, not stated in your documents (confirm with the insurer): Keep a copy of the death certificate and the police report from Japan.
+      [next] Contact Meridian Life Ltd and ask which claim forms and supporting documents are required.
+
+### Michelle: certificate vs endorsement
+USER: What is Michelle's personal accident cover?
+APP:  Endorsement No. 3 amends Michelle's Group Personal Accident Sum Insured to S$400,000 with effect from 1 January 2024; her certificate listed S$300,000 as of 6 October 2022, before that endorsement.
+
+### correction back to Darren
+USER: Sorry, I meant Darren
+APP:  Darren's certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022.
+
+### inventory request
+USER: What policies does my family have?
+APP:  Here are the documents on file for your household.
+      Darren: PUBLIC SERVICE GROUP INSURANCE SCHEME (Meridian Life Ltd, a personal policy document); Public Service Group Term Life - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Personal Accident - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document).
+      Michelle: PUBLIC SERVICE GROUP INSURANCE SCHEME (Meridian Life Ltd, a personal policy document); Public Service Group Term Life - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Personal Accident - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Insurance Scheme - Endorsement No. 3 (Meridian Life Ltd, linked, but not confirmed as a personal policy document).
+      Not linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General); PawSafe Pet Insurance - Endorsement (Lumen General) -- link it to a person so it can be used for them.
+
+### death question that looks the documents up (cells)
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren’s certificate lists Group Term Life sum assured of S$1,000,000 and Group Personal Accident sum assured of S$600,000, each as of 6 October 2022; these dated figures do not confirm cover on the date of death. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
+      [Q] On what date did the accident happen?
+
+### death question with an inventory side question (cells)
+USER: Darren died in a car accident in Japan. What can I do, and which documents do we have for him?
+APP:  Darren’s certificate lists Group Term Life sum assured of S$1,000,000 and Group Personal Accident sum assured of S$600,000, each as of 6 October 2022; these dated figures do not confirm cover on the date of death. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. Darren: PUBLIC SERVICE GROUP INSURANCE SCHEME (Meridian Life Ltd, a personal policy document); Public Service Group Term Life - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Personal Accident - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document). Michelle: PUBLIC SERVICE GROUP INSURANCE SCHEME (Meridian Life Ltd, a personal policy document); Public Service Group Term Life - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Personal Accident - Product Summary (Meridian Life Ltd, reference wording for the scheme, not a personal policy document); Public Service Group Insurance Scheme - Endorsement No. 3 (Meridian Life Ltd, linked, but not confirmed as a personal policy document). Not linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General); PawSafe Pet Insurance - Endorsement (Lumen General) -- link it to a person so it can be used for them.
+      [Q] On what date did the accident happen?
+
+### back to the claim, both dates
+USER: The accident happened on 3 October 2026 and he died on 5 October 2026.
+APP:  You told me the accident happened on 3 October 2026.
+      You told me he died on 5 October 2026.
+      Darren’s certificate lists Group Term Life sum assured of S$1,000,000 and Group Personal Accident sum assured of S$600,000, each as of 6 October 2022; these dated figures do not confirm cover on the date of death.
+      The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
+      What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.
+      [next] Suggestion, not stated in your documents (confirm with the insurer): send the documents that show the policy’s condition is met with the insurer’s claim form.
+
+### both dates, Accidental Death calculation, paperwork in sentences and next steps (cells)
+USER: The accident happened on 3 October 2026 and he died on 5 October 2026.
+APP:  You told me the accident happened on 3 October 2026.
+      You told me he died on 5 October 2026.
+      Darren’s certificate lists Group Term Life sum assured of S$1,000,000 and Group Personal Accident sum assured of S$600,000, each as of 6 October 2022; these dated figures do not confirm cover on the date of death.
+      The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.
+      What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.
+      [next] Notify Meridian Life Ltd about the death within 6 months, with the death certificate.
+      [next] Suggestion, not stated in your documents (confirm with the insurer): Notify Meridian Life Ltd about the death and ask for the claim requirements; provide the death certificate and relevant medical records.
+      [next] Ask Meridian Life Ltd whether it needs a police report from Japan.
+
+### certificate one cell per line
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?
+
+### certificate one cell per line, page break and repeated heading
+USER: Darren died in a car accident in Japan, what can I do?
+APP:  Darren's certificate lists his Group Term Life sum assured as S$1,000,000 as of 6 October 2022. The same certificate lists his Group Personal Accident sum insured as S$600,000 as of 6 October 2022. The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident. The Group Term Life product summary says the Sum Assured is payable on the death of the Insured Person.
+      [Q] On what date did the accident happen?

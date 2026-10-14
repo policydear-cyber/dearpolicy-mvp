@@ -8,6 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
+import { blobSha, checkProvenance } from "./provenance";
+import os from "node:os";
+import { gradeBindingV4, inventedPaperwork, TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2, dateAsked, days365Conclusions, gradeBindingV3, unidentifiedAmounts, wrongIdentity } from "./binding-check";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
 import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 
@@ -222,6 +225,123 @@ t("C31 L5 fallback prose with a placeholder ('a set amount') FAILS although S$1,
 t("C32 L5 'the effective date is not confirmed' FAILS (the endorsement prints 01 Jul 2026)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["The endorsement's effective date is not confirmed in your records."] }]))).includes("no uncertainty the expected facts contradict")));
 t("C33 L5 S$1,000,000 stated as current in a second sentence FAILS (whole answer)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["Your limit for this year is S$1,000,000."] }]))).includes("no superseded figure presented as current")));
 t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqual(wa(grade(sc("L5"), conv("L5", [endt]))), []));
+
+// V1.4: the binding grader's "Term Life presented as Personal Accident" pattern -- version 2 fixes version 1's false
+// positive, with independent controls (sentences written for this check, not taken from the run it misgraded alone).
+{
+  const wrong = ["Your Personal Accident cover is S$1,000,000.", "Darren's Group Personal Accident sum insured is S$1,000,000 as of 6 October 2022.", "Personal Accident: S$1,000,000", "S$1,000,000 under Group Personal Accident is payable.", "The certificate shows S$1,000,000 for the Personal Accident benefit.", "S$1,000,000 is his Personal Accident amount."];
+  const right = ["Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022.", "Term Life S$1,000,000; Personal Accident S$600,000.", "Group Term Life: S$1,000,000. Group Personal Accident: S$600,000.", "S$1,000,000 (Group Term Life) and the Group Personal Accident S$600,000 are separate amounts.", "His Personal Accident sum insured is S$600,000, not S$1,000,000 which is his Term Life amount."];
+  t("C40 binding grader v2: every wrong attribution of S$1,000,000 to Personal Accident is flagged", () => { for (const x of wrong) assert.ok(TERM_LIFE_AS_PA_V2.test(x), x); });
+  t("C41 binding grader v2: correct answers naming both products separately are NOT flagged (version 1 flagged the first)", () => { for (const x of right) assert.ok(!TERM_LIFE_AS_PA_V2.test(x), x); assert.ok(TERM_LIFE_AS_PA_V1.test(right[0]), "version 1's false positive is reproduced"); });
+}
+
+// V1.4 binding grader version 3: identity-based amounts, either missing date first, no 365-day conclusion before both
+// dates. Independent controls (sentences and bindings written for this check).
+{
+  const DARREN = "7f000000-0000-4000-8000-000000000001", MICHELLE = "7f000000-0000-4000-8000-000000000002", CERT = "7f000000-0000-4000-8000-000000000101", OLD = "7f000000-0000-4000-8000-000000000107";
+  const fb = (value: number, benefit: string, o: Record<string, unknown> = {}) => ({ value, benefit, subjectId: DARREN, rowPerson: "Tan Kai Ming, Darren", policyId: CERT, ...o });
+  t("C42 binding grader v3: amounts judged by identity -- Darren's own S$300,000 Living Care Plus passes, Michelle's S$300,000 PA fails", () => {
+    assert.deepEqual(unidentifiedAmounts("The certificate also lists Group Living Care Plus of S$300,000 for Darren.", []), []);
+    assert.deepEqual(wrongIdentity([fb(300000, "Group Living Care Plus")]), []);
+    assert.equal(wrongIdentity([fb(300000, "Group Personal Accident", { subjectId: MICHELLE, rowPerson: "Ong Li Ting, Michelle" })]).length, 1);
+    assert.equal(wrongIdentity([fb(300000, "Group Personal Accident")]).length, 1, "right person, wrong product: the number exists in the household but not in Darren's PA row");
+    assert.equal(wrongIdentity([fb(600000, "Group Term Life")]).length, 1, "swapped products");
+    assert.equal(wrongIdentity([fb(1000000, "Group Term Life", { policyId: OLD })]).length, 1, "another source document");
+    assert.equal(unidentifiedAmounts("Group Personal Accident of S$300,000 is listed.", []).length, 1, "S$300,000 next to PA is not Darren's PA");
+    assert.equal(unidentifiedAmounts("Michelle's Group Living Care Plus is S$300,000.", []).length, 1, "another member's clause");
+    assert.equal(unidentifiedAmounts("The plan lists S$300,000.", []).length, 1, "an amount with no product or binding");
+    assert.deepEqual(unidentifiedAmounts("The plan lists S$600,000.", [fb(600000, "Group Personal Accident")]), [], "a bound figure");
+  });
+  t("C43 binding grader v3: either missing date is a relevant first question; an ambiguous one is not", () => {
+    assert.equal(dateAsked("On what date did the accident happen?"), "accident");
+    assert.equal(dateAsked("When did Darren die (the date of death)?"), "death");
+    assert.equal(dateAsked("What was Darren's date of death?"), "death");
+    assert.equal(dateAsked("When did Darren die (the date of the accident/death)?"), null);
+    assert.equal(dateAsked("Which hospital was he taken to?"), null);
+  });
+  t("C44 binding grader v3: 365-day conclusions are found, the condition itself and conditional wording are not", () => {
+    for (const x of ["He died within 365 days of the accident.", "The 365-day condition is met.", "Death occurred within the 365 days, so it qualifies.", "His death was outside the 365-day window.", "This satisfies the 365-day requirement."]) assert.equal(days365Conclusions(x).length, 1, x);
+    for (const x of ["Accidental Death: 100% of the Sum Insured if death results from an Accident within 365 days.", "Whether he died within 365 days of the accident decides the PA benefit.", "Did he die within 365 days of the accident?"]) assert.deepEqual(days365Conclusions(x), [], x);
+  });
+  const base = "Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022; the PA summary pays Accidental Death if death occurs within 365 days of the Accident.";
+  const conv3 = (turns: { user: string; visible: string; questions: string[]; fbs?: any[] }[]) => [{ scenario: "S50", turns: turns.map((x) => ({ user: x.user })), loaded: { turns: turns.map((x) => ({ visible: x.visible, questions: x.questions, answer: { figureBindings: x.fbs ?? [fb(1000000, "Group Term Life"), fb(600000, "Group Personal Accident")] }, trace: { outcome: "final_answer", toolCalls: [] } })) } }];
+  const bad3 = (c: any[]) => gradeBindingV3(c).checks.filter((x) => !x.ok).map((x) => x.name);
+  const U1 = "Darren died in a car accident in Japan, what can I do?", U2 = "The accident happened on 3 October 2026 and he died on 5 October 2026.";
+  t("C45 binding grader v3: a correct two-turn conversation passes, whichever date is asked first", () => {
+    for (const q of ["On what date did the accident happen?", "What was Darren's date of death?"]) assert.deepEqual(bad3(conv3([{ user: U1, visible: base, questions: [q] }, { user: U2, visible: base + " He died within 365 days of the accident.", questions: [] }])), [], q);
+  });
+  t("C46 binding grader v3: a 365-day conclusion before both dates, a swapped binding, and re-asking a given date FAIL", () => {
+    assert.ok(bad3(conv3([{ user: U1, visible: base + " He died within 365 days of the accident.", questions: ["On what date did the accident happen?"] }, { user: U2, visible: base, questions: [] }])).some((n) => /before both/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"], fbs: [fb(600000, "Group Term Life"), fb(1000000, "Group Personal Accident")] }, { user: U2, visible: base, questions: [] }])).some((n) => /identity/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base, questions: ["When did Darren die?"] }])).some((n) => /neither is asked/.test(n)));
+    assert.ok(bad3(conv3([{ user: U1, visible: base, questions: ["When did the accident happen?"] }, { user: U2, visible: base + " His death was outside the 365-day window.", questions: [] }])).some((n) => /agrees with the dates/.test(n)));
+  });
+}
+
+// V1.4: a run refuses to start when the SHA it would record is not the checked-out code (s50-live-1 recorded a stale
+// SHA). Temporary trees; no model call.
+{
+  const SHA = "a".repeat(40), OTHER = "b".repeat(40);
+  const tree = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), "prov-"));
+    fs.mkdirSync(path.join(d, "lib")); fs.mkdirSync(path.join(d, "scripts")); fs.mkdirSync(path.join(d, ".next"));
+    fs.writeFileSync(path.join(d, "lib/a.ts"), "export const a = 1;\n"); fs.writeFileSync(path.join(d, "scripts/b.ts"), "b\n");
+    const t = Date.now() / 1000; fs.utimesSync(path.join(d, "lib/a.ts"), t - 100, t - 100); fs.utimesSync(path.join(d, "scripts/b.ts"), t - 100, t - 100);
+    fs.writeFileSync(path.join(d, ".next/BUILD_ID"), "x");
+    const manifest = { sha: SHA, files: { "lib/a.ts": blobSha(fs.readFileSync(path.join(d, "lib/a.ts"))), "scripts/b.ts": blobSha(fs.readFileSync(path.join(d, "scripts/b.ts"))) } };
+    return { d, manifest };
+  };
+  const noGit = () => null;
+  t("C47 provenance: the recorded SHA's tree and a newer build start the run; every mismatch refuses", () => {
+    const { d, manifest } = tree();
+    const ok = checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit });
+    assert.ok(ok.ok, JSON.stringify(ok));
+    const no = (r: ReturnType<typeof checkProvenance>, re: RegExp) => { assert.equal(r.ok, false); assert.match((r as { reason: string }).reason, re); };
+    no(checkProvenance({ recordedSha: null, cwd: d, manifest, git: noGit }), /no full 40-character/);
+    no(checkProvenance({ recordedSha: OTHER, cwd: d, manifest, git: noGit }), /manifest is for/);
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest: null, git: noGit }), /no tree manifest/);
+    fs.writeFileSync(path.join(d, "lib/extra.ts"), "x\n");
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit }), /not in that commit.*lib\/extra\.ts/);
+    fs.rmSync(path.join(d, "lib/extra.ts"));
+    fs.writeFileSync(path.join(d, "lib/a.ts"), "export const a = 2;\n");
+    no(checkProvenance({ recordedSha: SHA, cwd: d, manifest, git: noGit }), /1 file\(s\) differ \(lib\/a\.ts\)/);
+    const { d: d2, manifest: m2 } = tree();
+    fs.utimesSync(path.join(d2, "lib/a.ts"), Date.now() / 1000 + 50, Date.now() / 1000 + 50);
+    no(checkProvenance({ recordedSha: SHA, cwd: d2, manifest: m2, git: noGit }), /build is older/);
+  });
+  t("C48 provenance (git checkout): HEAD must be the recorded SHA, or a request commit on it changing only run-request.json; a dirty tree refuses", () => {
+    const { d } = tree();
+    const g = (map: Record<string, string>) => (c: string) => map[c] ?? null;
+    const base = { "git ls-files": "lib/a.ts\nscripts/b.ts", "git status --porcelain --untracked-files=no": "" };
+    assert.ok(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": SHA }) }).ok);
+    assert.ok(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": SHA, [`git diff --name-only ${SHA} HEAD`]: "scripts/rag2-live/run-request.json" }) }).ok);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": SHA, [`git diff --name-only ${SHA} HEAD`]: "scripts/rag2-live/run-request.json\nlib/a.ts" }) }).ok, false);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": OTHER, "git rev-parse HEAD^1": "c".repeat(40) }) }).ok, false);
+    assert.equal(checkProvenance({ recordedSha: SHA, cwd: d, git: g({ ...base, "git rev-parse HEAD": SHA, "git status --porcelain --untracked-files=no": " M lib/a.ts" }) }).ok, false);
+  });
+}
+
+// V1.4 binding grader version 4 (written before s50-live-2): inventory padding, injury wording in a death answer and
+// invented paperwork, with independent controls.
+{
+  t("C49 grader v4: paperwork only where Darren's documents print it, or labelled as a suggestion, or asked of the insurer", () => {
+    assert.deepEqual(inventedPaperwork("Notify Meridian Life Ltd of a death within 6 months, with the death certificate."), []);
+    assert.equal(inventedPaperwork("Provide the death certificate and relevant medical records.").length, 1);
+    assert.equal(inventedPaperwork("[next] Keep the police report from Japan.").length, 1);
+    assert.deepEqual(inventedPaperwork("[next] Suggestion, not stated in your documents (confirm with the insurer): keep the police report from Japan."), []);
+    assert.deepEqual(inventedPaperwork("[next] Ask Meridian Life Ltd whether it needs a police report from Japan."), []);
+    assert.deepEqual(inventedPaperwork("The documents do not state which medical records are needed."), []);
+  });
+  const mk4 = (v1: string, v2: string, q1: string[] = ["On what date did the accident happen?"]) => [{ scenario: "S50", turns: [{ user: "Darren died in a car accident in Japan, what can I do?" }, { user: "The accident happened on 3 October 2026 and he died on 5 October 2026." }], loaded: { turns: [v1, v2].map((v, i) => ({ visible: v, questions: i ? [] : q1, answer: { figureBindings: [{ value: 1000000, benefit: "Group Term Life", subjectId: "7f000000-0000-4000-8000-000000000001", rowPerson: "Tan Kai Ming, Darren", policyId: "7f000000-0000-4000-8000-000000000101" }, { value: 600000, benefit: "Group Personal Accident", subjectId: "7f000000-0000-4000-8000-000000000001", rowPerson: "Tan Kai Ming, Darren", policyId: "7f000000-0000-4000-8000-000000000101" }] }, trace: { outcome: "final_answer", toolCalls: [] } })) } }];
+  const good = "Darren's certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022. The PA summary pays Accidental Death if death occurs within 365 days of the Accident.";
+  const bad4 = (c: any[]) => gradeBindingV4(c).checks.filter((x) => !x.ok).map((x) => x.name);
+  t("C50 grader v4: a correct conversation passes; inventory padding, injury wording and invented paperwork each FAIL", () => {
+    assert.deepEqual(bad4(mk4(good, good)), []);
+    assert.ok(bad4(mk4(good + "\nNot linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General).", good)).some((n) => /inventory/.test(n)));
+    assert.ok(bad4(mk4(good, good + " Whether Darren's death meets the definition must be confirmed through the insurer's medical assessment.")).some((n) => /injury/.test(n)));
+    assert.ok(bad4(mk4(good, good + "\n[next] Provide the death certificate and relevant medical records.")).some((n) => /paperwork/.test(n)));
+  });
+}
 
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

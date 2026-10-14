@@ -110,8 +110,11 @@ async function main() {
   if (r2) await check("s47-live-2 turn 1: the omitted certificate lookup is completed by the one bounded lookup (dated amount, own product and person)", () => {
     const v1 = visible(r2.saved[0].answer);
     assert.match(v1, /S\$300,000(?![\d,]*\d)[^.]*1 July 2025/, v1); assert.ok(!/haven['’]t yet read/i.test(v1), v1);
+    // V1.4: the figure is completed either by the one bounded lookup or -- when the model's sentence already states it
+    // -- bound directly to Desmond's own certificate row through the shared benefit view (no lookup needed).
     const look = (r2.saved[0].trace.toolCalls as any[]).filter((x) => /grounded fallback/.test(String(x.args?.by ?? "")));
-    assert.ok(look.length >= 2 && look.length <= 4, JSON.stringify(look.map((x) => x.name)));
+    const direct = ((r2.saved[0].answer as any).figureBindings ?? []).some((b: any) => b.value === 300000 && /personal accident/i.test(b.benefit) && b.subjectId === D);
+    assert.ok((look.length >= 2 && look.length <= 4) || direct, JSON.stringify({ look: look.map((x) => x.name), bindings: ((r2.saved[0].answer as any).figureBindings ?? []).map((b: any) => [b.value, b.benefit, b.subjectId]) }));
   });
   if (r3) {
     await check("s47-live-3 turn 5: the model's proportion quote ending \".\" where the page prints \";\" is accepted (trailing punctuation only); the percentage is read from the schedule row", () => {

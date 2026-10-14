@@ -14,6 +14,7 @@ import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verificat
 import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
+import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
@@ -25,7 +26,7 @@ import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-r
 import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
-import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
+import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
@@ -215,6 +216,9 @@ const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)
 /** Tools that establish what a person's policies say: never run for a person until who is meant is settled. */
 const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_passages"]);
 
+/** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
+export const INVENTORY_QUESTION = /\b(?:what|which|list|show)\b[^?.!]*\b(?:polic(?:y|ies)|documents?|uploads?|files?|plans?)\b[^?.!]*\b(?:have|has|got|hold|holds|on file|uploaded)\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have)\b/i;
+
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
@@ -233,6 +237,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // V1.1 (grounded negatives): the full stored text of every readable document of this household, so a sentence that
   // says something is NOT in a document (or in the library) is checked against the whole document, never a passage.
   const libraryText = await loadLibraryText(input.accountId).catch(() => undefined);
+  // V1.4: each member's documented benefits with explicit identities (lib/rag2/benefits.ts): which product / benefit a
+  // printed figure is, and which insurers a statement about a member may name.
+  const benefitView = await householdBenefits(input.accountId).catch(() => null);
   // Round 7: table values issued in earlier turns stay citable (value ids are unique across the conversation) while
   // their document is still current; a benefit already stated, cited and bound stays available to explain again.
   for (const [id, v] of Object.entries(state.values ?? {})) {
@@ -277,7 +284,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // meant), before the model is called; the model is told who was chosen.
   if (pendingBefore?.kind === "person" && input.personChoiceId && pendingBefore.options.some((o) => o.id === input.personChoiceId)) {
     const id = input.personChoiceId;
-    if (pendingBefore.purpose === "speaker") { state.speakerId = id; ctx.conversation.speakerId = id; }
+    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; }
     else { state.subjectId = id; state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5); ctx.conversation.lastSubjectId = id; }
     unsettled = new Set();
     state.pending = null;
@@ -397,7 +404,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -516,7 +523,12 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // V1.2: the note that their report is not reviewed evidence, and the paperwork step, are said once per conversation.
     const toldBefore = (t: string) => state.history.some((h) => h.assistant.includes(t));
     if (cited(out) && !toldBefore(REPORTED_NOTE) && !toldBefore(REPORTED_MEDICAL_NOTE)) {
-      const f = reportedFactFollowUp([...out.sentences.flatMap((s) => s.evidenceIds), ...(ans.pending.evidenceIds ?? [])].map((id) => state.evidence[id]?.passage.text ?? "").concat(ans.pending.why));
+      // V1.4: medical or not is decided by the condition the answered question was about (its "why" and the lines of
+      // its own evidence that state that condition) -- not by every passage the answer cites (a Term Life summary that
+      // also mentions a Terminal Illness diagnosis made s50-live-2's death answer ask for a doctor's report).
+      const whyWords = new Set((String(ans.pending.why ?? "").toLowerCase().match(/[a-z]{4,}/g) ?? []));
+      const conditionLines = (ans.pending.evidenceIds ?? []).flatMap((id) => (state.evidence[id]?.passage.text ?? "").split(/\n+|(?<=[.;])\s+/)).filter((l) => (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => whyWords.has(w)).length >= 3);
+      const f = reportedFactFollowUp([String(ans.pending.why ?? ""), ...conditionLines]);
       if (![...out.sentences.map((s) => s.text), ...out.notes].some((t) => /\binsurer\b/i.test(t))) out.notes = [...out.notes, f.note];
       if (!out.nextSteps.length) out.nextSteps = [f.step];
     }
@@ -629,6 +641,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     if (call.name === NOTE_FACTS.name && Array.isArray(a.facts)) a.facts = (a.facts as Record<string, unknown>[]).map((f) => ({ ...f, value: f?.value == null ? f?.value : String(f.value) }));
     const spec = [NOTE_FACTS, ASK_USER, FINAL_ANSWER].find((s) => s.name === call.name)!;
+    // V1.4: ids written as object keys instead of in their citation field are moved there (unambiguous only).
+    const moved = call.name === "note_facts" ? [] : normalizeCitationKeys(a.sentences ?? a.statements);
+    if (moved.length) (trace.adjusted ??= []).push(`${call.name}: ${moved.join("; ")}`);
     const bad = validateArgs(spec.parameters, a);
     if (bad) return { result: { ok: false, error: bad } };
     if (call.name === "note_facts") {
@@ -937,24 +952,34 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const bound = new Set(((s.value_ids as string[]) ?? []).map((id) => ctx.values.get(id)?.operand.cents).filter((x): x is number => x != null));
       for (const f of figs) {
         if (bound.has(Math.round(f.value * 100)) || lookups >= 4) continue;
-        for (const id of s.evidence_ids as string[]) {
-          const e = state.evidence[id];
-          if (!e || stale.has(id) || e.table?.layout === "person_row") continue;
-          const line = e.passage.text.split(/\n/).find((l) => numbersIn(l).some((x) => Math.abs(x - f.value) < 0.005));
-          // Only a roster line: one that names this person (their own row), under a product heading.
-          const names = personNames(input.people.find((p) => p.id === who)?.name ?? "").filter((n) => n.length >= 3);
-          const ownRow = !!line && names.some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(line));
-          const heading = line && ownRow ? rosterHeading({ ...e, passage: { ...e.passage, text: line } }, { libraryText }) : null;
-          if (!heading) continue;
+        // The household's own figure said back as NOT the documented one ("S$200,000, not S$400,000") is theirs, not a
+        // documented figure of this sentence: never bound here (the save-time check attributes it).
+        const said = String(s.text ?? "");
+        const at = said.indexOf(f.raw);
+        if (at >= 0 && /\b(?:not|n['’]t|rather than|instead of|than)\s*$/i.test(said.slice(Math.max(0, at - 16), at).trim() + " ") && userTexts.some((u) => moneyFiguresIn(u).some((m) => Math.abs(m.value - f.value) < 0.005))) continue;
+        // V1.4: the figure's identity comes from the shared benefit view -- this person's OWN documented rows (a
+        // certificate roster under a product heading) in the documents the sentence cites, matched by amount and
+        // currency. Exactly one benefit: bound to it; none, or several with that amount: not bound here.
+        const cited = new Set((s.evidence_ids as string[]).map((id) => (state.evidence[id] && !stale.has(id) ? state.evidence[id].policyId : null)).filter((x): x is string => !!x));
+        const rows = (benefitView?.byMember.get(who)?.benefits ?? []).filter((b) => b.applicability === "person_row" && !b.conflicts?.length && cited.has(b.policy.id) && b.printed.kind === "money" && Math.abs(b.printed.amount - f.value) < 0.005 && b.printed.currency === f.currency);
+        const labels = [...new Set(rows.map((b) => `${b.policy.id}|${b.benefit.label}`))];
+        for (const one of labels.length === 1 ? [rows[0]] : []) {
+          const e = { policyId: one.policy.id };
+          const heading = one.benefit.label;
           lookups++;
           const args = { policy_id: e.policyId, benefit: heading.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim(), subject_id: who, want: "amount" };
           // The value is kept under the composer's own key (never the model-visible v1, v2 ... sequence, which is left
           // exactly as it was), so this lookup changes no id the model sees.
           const seqBefore = ctx.seq;
           const r = await runTool(ctx, "select_table_value", args, env2);
-          const d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
+          let d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
           let key: string | null = null;
           if (d?.valueId && ctx.values.has(d.valueId)) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, ctx.values.get(d.valueId)!); ctx.values.delete(d.valueId); }
+          else {
+            // V1.4: a roster the table parser does not read (one cell per line) -- the view's reconstructed row itself.
+            const sel = selectedFromBenefit(one, input.people.find((p) => p.id === who)?.name ?? "");
+            if (sel) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, { selected: sel, subjectId: who, operand: { kind: "table_value", benefit: sel.rowLabel, valueKind: "money", cents: sel.cents, ppm: null, count: null, currency: sel.currency, period: sel.period, evidence: sel.evidence } }); d = { status: "ok", valueKind: "money", value: sel.value, currency: sel.currency ?? undefined }; }
+          }
           ctx.seq = seqBefore;
           record("select_table_value", { ...args, by: "composition (figure identity)" }, r.ok, [], r.ok ? undefined : r.error, d ? JSON.stringify({ status: d.status, value: d.value, key }) : undefined);
           if (key && d?.status === "ok" && d.valueKind === "money" && Math.abs(Number(d.value) - f.value) < 0.005 && d.currency === f.currency) { s.value_ids = [...((s.value_ids as string[]) ?? []), key]; bound.add(Math.round(f.value * 100)); break; }
@@ -1236,7 +1261,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const id = r.person.id;
           if (pendingBefore?.kind === "person" && pendingBefore.purpose === "speaker" && pendingBefore.options.some((o) => o.id === id) && !state.speakerId) {
             // The household said who is typing: that is the speaker, not who the conversation is about.
-            state.speakerId = id; ctx.conversation.speakerId = id;
+            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id;
           } else setSubject(id, r.via === "self");
           unsettled = new Set();
           if (state.pending?.kind === "person") state.pending = null;
@@ -1294,19 +1319,63 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * document are kept and the inventory is stated from the lookup (no amount is added). */
   const withInventory = (r: LoopReply | null): LoopReply | null => {
     if (!inventoryNow || !r || r.kind !== "final" || !r.composed) return r;
+    // V1.4: only an inventory QUESTION ("what policies does my family have?") is answered as an inventory. A model that
+    // looks the documents up while answering something else (a death claim) keeps its own verified, bound answer: the
+    // inventory rule removes every sentence with a figure and every binding, so applying it to any turn that called
+    // household_documents silently dropped verified amounts (s50-live-1 turn 1).
+    if (!INVENTORY_QUESTION.test(input.message)) return r;
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
     const named = (d: InventoryDoc) => said.includes(d.name.toLowerCase()) || said.includes(d.filename.toLowerCase());
     if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
-    const keep = r.composed.sentences.filter((x) => !moneyFiguresIn(x.text).length && !docs.some((d) => x.text.toLowerCase().includes(d.name.toLowerCase())) && !inv.people.some((p) => new RegExp(`\\b${p.short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(x.text)));
+    // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
+    // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
+    const bindingsOf = (text: string) => r.composed.figureBindings.filter((b) => !!b.sentence && (text.includes(b.sentence) || b.sentence.includes(text)));
+    const boundFigures = (x: { text: string; estimate?: boolean }) => !x.estimate && moneyFiguresIn(x.text).length > 0 && bindingsOf(x.text).length >= moneyFiguresIn(x.text).length;
+    const keep = r.composed.sentences.filter((x) => boundFigures(x) || (!moneyFiguresIn(x.text).length && !docs.some((d) => x.text.toLowerCase().includes(d.name.toLowerCase())) && !inv.people.some((p) => new RegExp(`\\b${p.short.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(x.text))));
+    const keptBindings = keep.filter(boundFigures).flatMap((x) => bindingsOf(x.text));
     const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
     trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
-    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: [], computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
+  /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's
+   * own linked documents (lib/rag2/benefits.ts) whose printed condition counts a time window from an event ("within 365
+   * days of that Accident"), relevant to what the household reported (its words share the event and the benefit), and
+   * the event's date not given: the household is asked for that date, citing the condition. Chosen from the documents'
+   * own requirements -- never a scripted question; nothing is asked when no printed condition needs a missing fact. */
+  const conditionQuestion = (r: LoopReply | null): LoopReply | null => {
+    if (!r || r.kind !== "final" || state.pending || !benefitView) return r;
+    const subject = r.composed.subjectId ?? state.claim?.subjectId ?? state.subjectId ?? null;
+    if (!subject) return r;
+    const STEM_SYN: [RegExp, string][] = [[/^(?:die|dies|died|dying|death|deaths|dead|deceased|killed|fatal|fatally)$/, "death"], [/^(?:accident|accidents|accidental|accidentally|crash|crashed|collision)$/, "accident"], [/^(?:injury|injuries|injured|injure)$/, "injury"], [/^(?:diagnosis|diagnosed)$/, "diagnosis"]];
+    const GEN = new Set(["insured", "person", "result", "within", "days", "day", "benefit", "payable", "sum", "that", "this", "with", "from", "will", "shall", "pay", "policy", "the", "and", "for", "group", "public", "service"]);
+    const stems = (t: string) => new Set((t.toLowerCase().replace(/\bpass(?:ed|es)? away\b/g, "died").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !GEN.has(w)).map((w) => STEM_SYN.find(([re]) => re.test(w))?.[1] ?? w.replace(/(?:ies|es|s|ed|ing|al|ly)$/, "").slice(0, 6)));
+    const said = stems(userTexts.join(" "));
+    const DATE_GIVEN = /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{4})?\b|\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b(?:yesterday|today|last (?:night|week|month))\b/i;
+    const WINDOW = /within\s+(\d+)\s+(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(accident|injury|onset|diagnosis|event)/i;
+    for (const b of benefitView.byMember.get(subject)?.benefits ?? []) {
+      const cond = b.conditions.find((c) => WINDOW.test(c));
+      if (!cond) continue;
+      const anchor = WINDOW.exec(cond)![3].toLowerCase();
+      const own = stems(`${b.benefit.label} ${cond}`);
+      const shared = [...own].filter((w) => said.has(w));
+      const anchorStem = STEM_SYN.find(([re]) => re.test(anchor))?.[1] ?? anchor;
+      if (!shared.includes(anchorStem) || shared.length < 2) continue;
+      const known = Object.keys(state.claim?.facts ?? {}).some((k) => new RegExp(`${anchorStem}.*(?:date|time)|(?:date|time).*${anchorStem}|event_date|incident_date`, "i").test(k)) || userTexts.some((u) => DATE_GIVEN.test(u));
+      if (known) return r;
+      const id = evidenceIdOf(state, b.source.evidence, "person_benefits");
+      const doc = b.policy.product ?? "your document";
+      const clause = (/\b(?:if|provided|when)\b.*$/i.exec(cond)?.[0] ?? cond).replace(/[.\s]+$/, "");
+      const pending: Extract<LoopPending, { kind: "fact" }> = { kind: "fact", question: `On what date did the ${anchor} happen?`, factKey: `${anchorStem}_date`, subjectId: subject, why: `${doc} pays its ${b.benefit.label} only ${clause}`, evidenceIds: [id], turn: state.turn };
+      (trace.adjusted ??= []).push(`asked the date a printed condition counts from (${b.benefit.label}: "${cond}")`);
+      return { kind: "ask", pending, preface: null, composed: r.composed };
+    }
+    return r;
+  };
   let reasked: LoopPending | null = null;
-  const done = withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null));
+  const done = conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null)));
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {

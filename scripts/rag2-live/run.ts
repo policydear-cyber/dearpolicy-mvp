@@ -70,6 +70,14 @@ async function main() {
   const runId = arg("run-id");
   if (runId != null && !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
   const safety = liveSafetyChecks(process.env);
+  // V1.4: the SHA a run records must be the checked-out code (s50-live-1 recorded a stale one). Refuse before any call.
+  {
+    const { checkProvenance } = await import("./provenance");
+    const mf = process.env.RAG2_LIVE_TREE_MANIFEST;
+    const prov = checkProvenance({ recordedSha: process.env.RAG2_LIVE_TESTED_SHA ?? null, manifest: mf && fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, "utf8")) : null });
+    if (!prov.ok) throw new Error(`provenance: ${prov.reason}; refusing to start`);
+    console.log(`provenance: the recorded SHA is the checked-out code (${prov.via}, ${prov.checked} files)`);
+  }
   const port = Number(arg("port", "3310"));
   const relayUrl = arg("relay", "http://127.0.0.1:8787")!;
   type RelayHealth = { mode: string; log: string; allowed_models: string[] };
@@ -88,10 +96,12 @@ async function main() {
   const relayPlumbing = !!health && health.mode !== "live";
   const relayLog = health?.log ?? "";
   if (!fs.existsSync(".next/BUILD_ID")) throw new Error("no next build output (.next/BUILD_ID) in this directory: the server serves the production build");
-  const scenarioHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "scenario" || process.env.RAG2_LIVE_HOUSEHOLD === "stress";
+  const scenarioHousehold = ["scenario", "stress", "binding", "binding-cells"].includes(process.env.RAG2_LIVE_HOUSEHOLD ?? "");
   const stressHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "stress";
-  const { S47, S48, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT } = await import("./scenario-household");
-  const scenarios: Scenario[] = scenarioHousehold ? [stressHousehold ? S48 : S47] : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
+  const cellsHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding-cells";
+  const bindingHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding" || cellsHousehold;
+  const { S47, S48, S49, S49B, S50, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT, BINDING_ACCOUNT } = await import("./scenario-household");
+  const scenarios: Scenario[] = scenarioHousehold ? (cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
 
   const started = new Date();
   const stamp = started.toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -103,7 +113,7 @@ async function main() {
   const availability = arg("availability-status") != null ? { status: arg("availability-status")!, id: arg("availability-id") ?? null } : null;
   const shaEnv = (k: string) => (process.env[k] && /^[0-9a-f]{7,40}$/.test(process.env[k]!) ? process.env[k]! : null);
   const meta = {
-    testedCodeSha: shaEnv("RAG2_LIVE_TESTED_SHA") ?? git("git rev-parse HEAD"),
+    testedCodeSha: shaEnv("RAG2_LIVE_TESTED_SHA"),
     requestSha: shaEnv("RAG2_LIVE_REQUEST_SHA"),
     modelsRequested: Object.fromEntries((["CHAT_MODEL", "JUDGEMENT_MODEL", "NARRATION_MODEL", "READING_MODEL"] as const).map((k) => [k, process.env[k] ?? null])),
     availability,
@@ -128,7 +138,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (scenarioHousehold) await seedScenario(stressHousehold ? "stress" : "scenario"); else await seedLive();
+  if (scenarioHousehold) await seedScenario(cellsHousehold ? "binding-cells" : bindingHousehold ? "binding" : stressHousehold ? "stress" : "scenario"); else await seedLive();
   const env = { ...process.env, E2E_RAG2_LIVE: "1", PORT: String(port), DEARPOLICY_RAG_LOOP: "1", E2E_RAG2_NEXT: "start", NEXT_TELEMETRY_DISABLED: "1" };
   const log = fs.createWriteStream(path.join(outDir, "server.log"));
   const server: ChildProcess = spawn(process.execPath, ["--import", "tsx", "e2e/support/rag2-loop-server.ts"], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -212,7 +222,7 @@ async function main() {
       conv.costUsd = conv.turns.reduce((n: number, t: any) => n + (t.costUsd?.charged ?? 0), 0);
       conv.calls = conv.turns.reduce((n: number, t: any) => n + (t.httpCalls?.filter((c: any) => !c.refused).length ?? 0), 0);
       if (conversationId) {
-        const loaded = await loadConversation(conversationId, scenarioHousehold ? (stressHousehold ? STRESS_ACCOUNT : SCENARIO_ACCOUNT) : undefined);
+        const loaded = await loadConversation(conversationId, scenarioHousehold ? (bindingHousehold ? BINDING_ACCOUNT : stressHousehold ? STRESS_ACCOUNT : SCENARIO_ACCOUNT) : undefined);
         // The scenario household is graded separately (scripts/rag2-live/scenario-check.ts, written before the run).
         const verdict: Verdict = scenarioHousehold ? { scenario: s.id, verdict: "INCOMPLETE", failureStage: null, incomplete: "graded by scenario-check.ts", checks: [] } as unknown as Verdict : grade(s, loaded);
         if (scenarioHousehold) conv.loaded = { conversationId: loaded.conversationId, state: loaded.state, turns: loaded.turns };

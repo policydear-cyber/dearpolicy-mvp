@@ -1,0 +1,223 @@
+{
+  "verdict": "PASS",
+  "checks": [
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "the turn was not ended by a limit, and no answer call was refused as malformed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "no person's name used as a product or benefit",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "the unrelated insurer (Lumen General) is not suggested",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "every saved figure is Darren's own amount for its product, from the current certificate (identity, not number)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "every amount shown is bound to Darren or stated with the product whose amount in Darren's row it is",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "no total of different benefits and no promised payment / current-cover claim",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "Term Life is never presented as Personal Accident",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "no 365-day conclusion before both the accident and death dates are known",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "Darren's Group Term Life S$1,000,000 and Group Personal Accident S$600,000 are each bound (saved) to their own product and to Darren",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "the accidental-death condition (within 365 days of the accident) is given",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49",
+      "turn": 1,
+      "name": "exactly one question, asking for a missing date (accident or death)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "the turn was not ended by a limit, and no answer call was refused as malformed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "no person's name used as a product or benefit",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "the unrelated insurer (Lumen General) is not suggested",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "every saved figure is Darren's own amount for its product, from the current certificate (identity, not number)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "every amount shown is bound to Darren or stated with the product whose amount in Darren's row it is",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "no total of different benefits and no promised payment / current-cover claim",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "Term Life is never presented as Personal Accident",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "no 365-day conclusion before both the accident and death dates are known",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49",
+      "turn": 2,
+      "name": "exactly one question, asking for a missing date (death)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "the turn was not ended by a limit, and no answer call was refused as malformed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "no person's name used as a product or benefit",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "the unrelated insurer (Lumen General) is not suggested",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "every saved figure is Darren's own amount for its product, from the current certificate (identity, not number)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "every amount shown is bound to Darren or stated with the product whose amount in Darren's row it is",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "no total of different benefits and no promised payment / current-cover claim",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "Term Life is never presented as Personal Accident",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "no 365-day conclusion before both the accident and death dates are known",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "Darren's Group Term Life S$1,000,000 and Group Personal Accident S$600,000 are each bound (saved) to their own product and to Darren",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "the accidental-death condition (within 365 days of the accident) is given",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S49B",
+      "turn": 1,
+      "name": "exactly one question, asking for a missing date (accident or death)",
+      "ok": true,
+      "kind": "usefulness"
+    }
+  ],
+  "incomplete": null
+}

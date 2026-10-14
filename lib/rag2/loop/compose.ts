@@ -16,6 +16,7 @@ import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { benefitWords, namesBenefit, printedPeriodsOf } from "@/lib/chat/assertions";
+import type { HouseholdBenefits } from "../benefits";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import { parseTables } from "../tables";
 import type { ComputeOk, TableValueOperand } from "../compute";
@@ -65,9 +66,12 @@ export const INCOMPLETE_NOTE = "This may not be everything your documents say ab
  * decision, a payment or an entitlement. */
 export const REPORTED_MEDICAL_NOTE = "What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.";
 export const REPORTED_NOTE = "What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.";
-export const REPORTED_MEDICAL_STEP = "When you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
-export const REPORTED_STEP = "When you make the claim, include the documents that show the policy’s condition is met, with the insurer’s claim form.";
-const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certif\w*|medical report)\b/i;
+export const SUGGESTION_PREFIX = "Suggestion, not stated in your documents (confirm with the insurer): ";
+/** V1.4: DearPolicy's own practical steps name paperwork no document prints, so they are labelled as suggestions. */
+export const REPORTED_MEDICAL_STEP = SUGGESTION_PREFIX + "when you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
+export const REPORTED_STEP = SUGGESTION_PREFIX + "send the documents that show the policy’s condition is met with the insurer’s claim form.";
+// V1.4: "certified / certification / a medical certificate" -- not a "death certificate" or a "Certificate of Insurance".
+const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certified|certification|medical certificates?|medical report)\b/i;
 export function reportedFactFollowUp(conditionTexts: string[]): { note: string; step: string } {
   const medical = conditionTexts.some((t) => MEDICAL_CONDITION.test(t));
   return medical ? { note: REPORTED_MEDICAL_NOTE, step: REPORTED_MEDICAL_STEP } : { note: REPORTED_NOTE, step: REPORTED_STEP };
@@ -86,6 +90,83 @@ export function sayBack(words: string): string | null {
 /** Internal markers (trace / categorisation only; never shown to the household). */
 export const UNSUPPORTED_NOTE = "unsupported";
 export const STEP_NOTE = "step";
+
+/** V1.4: documents and records a household might gather for a claim. */
+export const PAPERWORK = /\b(?:death certificates?|medical (?:records?|reports?|certificates?|bills?)|hospital (?:records?|reports?|bills?)|police (?:reports?|records?)|accident reports?|post-?mortem(?: reports?)?|autopsy(?: reports?)?|coroner['’]?s? (?:reports?|findings)|claim forms?|receipts?|invoices?|discharge summar(?:y|ies)|translations?|certified(?: true)? copies|(?:identity|identification) (?:cards?|documents?)|passports?|birth certificates?|marriage certificates?|letters? of administration|grants? of probate|probate|bank (?:statements?|details)|specialist['’]?s? (?:reports?|diagnosis)|diagnosis reports?|x-?ray reports?|scan reports?|(?:transport|travel|flight) records?|repatriation (?:records?|documents?))\b/gi;
+const SUGGESTION_LABEL = /^(?:suggestion|you could|you may (?:also )?want to|it may help to|consider)\b/i;
+const ASKS_INSURER = /\b(?:ask|check (?:with|whether)|find out|confirm with|enquire|inquire)\b[^.;]*\b(?:what|which|whether|if)\b/i;
+/** The text of the documents a next step's paperwork could be required by: the policies the answer cites and the
+ * person's own linked documents. Empty when no document text is loaded (nothing then counts as supported). */
+export function paperworkSourceText(ctx: Pick<Ctx, "libraryText" | "benefits">, subjectId: string | null, relevant: Set<string>): string {
+  const ids = [...new Set([...relevant, ...(subjectId ? (ctx.benefits?.policiesByMember.get(subjectId) ?? []).map((p) => p.policyId) : [])])];
+  return ids.map((id) => ctx.libraryText?.get(id) ?? "").join("\n").toLowerCase();
+}
+const REQUIRED_FRAME = /\b(?:require[sd]?|requirements?|must|need(?:s|ed)?|submit(?:ted)?|provide[sd]?|attach(?:ed)?|supporting documents?|relevant evidence|as evidence|identif(?:y|ies) [^.;]*evidence)\b/i;
+const PAPERWORK_NOT_STATED = /\b(?:do(?:es)? not (?:state|list|say|explain|name)|not stated|ask (?:the insurer|[A-Z][\w ]*?) (?:what|which|whether))\b/i;
+/** A sentence presenting paperwork as needed or required (\"provide the medical records\", \"a specialist's report is
+ * relevant evidence\") that neither its cited passages nor the person's documents print. */
+export function unsupportedPaperworkClaim(text: string, sourceText: string): string | null {
+  if (!REQUIRED_FRAME.test(text) || PAPERWORK_NOT_STATED.test(text)) return null;
+  const norm = (w: string) => w.toLowerCase().replace(/[’']/g, "'").replace(/s\b/g, "");
+  const src = norm(sourceText);
+  const missing = [...new Set([...text.matchAll(PAPERWORK)].map((m) => m[0]))].filter((w) => !src.includes(norm(w)));
+  return missing.length ? `presents paperwork as needed (${missing.join(", ")}) that the documents do not state; a general suggestion belongs in the next steps, labelled as one` : null;
+}
+/** A household member's name used to ADDRESS the reader ("…for your loss, Michelle;", "Michelle, I'm sorry…",
+ * "Hi Michelle,") is taken out; a name that is the subject or object of the sentence stays. */
+export function withoutUnconfirmedAddress(text: string, people: { id: string; names: string[] }[]): string {
+  const names = [...new Set(people.flatMap((p) => p.names).filter((n) => n && n.trim().length >= 2))].sort((a, b) => b.length - a.length);
+  if (!names.length) return text;
+  const alt = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  let t = text;
+  // after a greeting or condolence: "sorry for your loss, Michelle;" / "Hello Michelle," / "Thank you, Michelle."
+  t = t.replace(new RegExp(`(\\b(?:your loss|sorry|condolences|sympathies|hi|hello|dear|thank you|thanks))\\s*,?\\s+(?:${alt})(?=\\s*[;,.!?:—–-])`, "gi"), "$1");
+  // at the start, before what is said to them: "Michelle, I'm so sorry…"
+  t = t.replace(new RegExp(`^(?:${alt}),\\s+(?=(?:I|I’m|I'm|I am|we|sorry|thank|please|here|my)\\b)`, "i"), "");
+  return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
+}
+/** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */
+export function withoutEndorsementClauses(text: string): string | null {
+  // clauses with the separator that introduces each (kept as written, so the remaining connectives read as before)
+  const re = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though)\b))/;
+  const bits = text.split(re);
+  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
+  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
+  const keep = clauses.filter((c) => !ENDORSEMENT_WORDS_RE().test(c.body));
+  if (keep.length === clauses.length) return text;
+  if (!keep.length) return null;
+  let t = keep.map((c, k) => (k ? c.sep + c.body.replace(k === 0 ? /^$/ : /^$/, "") : c.body)).join("").trim();
+  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though)\s+/i, "");
+  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
+  if (!/[.!?]$/.test(t)) t += ".";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  return t.split(/\s+/).length >= 4 ? t : null;
+}
+const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
+const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
+/** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
+ * someone else (its amending clause names only another member). Null when the person has an endorsement
+ * that applies to them or whose scope is unresolved, or when the household has no endorsement at all. */
+export function otherPersonsEndorsement(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits" | "people">): string | null {
+  if (!subjectId || !ctx.benefits?.endorsementsByMember || !ENDORSEMENT_WORDS.test(text)) return null;
+  const list = ctx.benefits.endorsementsByMember.get(subjectId) ?? [];
+  if (!list.length || list.some((e) => e.scope !== "other")) return null;
+  const nameOf = (id: string) => ctx.people?.find((p) => p.id === id)?.names[0] ?? "another household member";
+  const owners = [...new Set(list.flatMap((e) => e.namedIds.length ? e.namedIds : []))].map(nameOf);
+  return `relies on an endorsement that applies only to ${owners.length ? owners.join(" and ") : "another household member"}, not to ${nameOf(subjectId)}`;
+}
+/** A next step naming paperwork its documents do not print is labelled as a suggestion to confirm with the insurer
+ * (never presented as a policy requirement). A step that only asks the insurer what is needed, or is already worded as
+ * a suggestion, is left as it is; paperwork the documents print is not a suggestion. */
+export function labelUnsupportedPaperwork(step: string, sourceText: string): string {
+  const named = [...step.matchAll(PAPERWORK)].map((m) => m[0].toLowerCase());
+  if (!named.length || SUGGESTION_LABEL.test(step.trim())) return step;
+  const norm = (w: string) => w.replace(/[’']/g, "'").replace(/s\b/g, "");
+  const unsupported = named.filter((w) => !sourceText.replace(/[’']/g, "'").replace(/s\b/g, "").includes(norm(w)));
+  if (!unsupported.length) return step;
+  if (ASKS_INSURER.test(step) && unsupported.every((w) => new RegExp(`\\b(?:ask|check|find out|confirm|enquire|inquire)\\b[^.;]*${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(step))) return step;
+  return `${SUGGESTION_PREFIX}${step.trim()}`;
+}
 export const UNRESOLVED_NOTE = "unresolved";
 export const MISSING_FACT_NOTE = "missing_fact";
 /** True when two texts share a content word (stemmed). */
@@ -134,7 +215,7 @@ const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule",
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
 /** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
  * document (the save-time gate reads the same heading the same way). Null when none is printed. */
-export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): string | null {
+export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const text = ctx.libraryText?.get(ref.policyId) ?? null;
   if (!text) return null;
   const sq = (x: string) => x.replace(/\s+/g, " ").trim();
@@ -145,6 +226,8 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): 
     const l = lines[i].trim();
     if (!l) continue;
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
+    // V1.4: a line naming a household member (a name printed on its own line) is never a product heading.
+    if (cells.length === 1 && (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)))) continue;
     if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
     if (cells.length >= 2 && !/\d/.test(l)) return null;
   }
@@ -154,12 +237,14 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): 
 const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
 /** A line's own label ("Daily Hospital Income: S$150 for ...") or, failing that, the heading it is printed under on its
  * stored page (a certificate roster's product heading). */
-function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">): string | null {
+function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
   if (own) return own;
   // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
   const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
-  if (first && first !== line.trim() && !/\d/.test(first) && benefitWords(first).size > 0) return first;
+  // V1.4: never a cell naming a household member (a roster row's name cell).
+  const isPerson = (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(first)));
+  if (first && first !== line.trim() && !/\d/.test(first) && !isPerson && benefitWords(first).size > 0) return first;
   return rosterHeading({ policyId, passage: { text: line, start: 0, end: line.length, onPage: 0 }, page: { start: 0, end: 0 }, documentHash: null } as EvidenceRef, ctx);
 }
 /** Every label a document prints: its headings and its "Label:" lines. */
@@ -181,6 +266,59 @@ const ownNamed = (clause: string, own: string, other: string) => {
   const theirs = benefitWords(other), have = benefitWords(clause);
   return [...benefitWords(own)].some((w) => !theirs.has(w) && have.has(w));
 };
+const ACT_WITH_INSURER = /\b(?:contact|call|phone|email|write to|notify|inform|tell|reach out|approach|claim (?:from|with)|make (?:a|the) claims?|submit|file|lodge|start (?:a|the) claims?|send)\b/i;
+/** V1.4: why a statement may not name an insurer for this person (null when it may): the insurer is one of the
+ * household's, but none of the person's linked documents is from it. Matched on the insurer's distinctive words
+ * ("Lumen General" in "Lumen General Insurance Ltd"), never on generic ones (Life, General, Insurance, Ltd). */
+export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, step = false, relevant?: Set<string> | null): string | null {
+  const hb = ctx.benefits;
+  if (!hb || !subjectId) return null;
+  // Only ADVICE to act through an insurer (contact / claim / notify ...): a statement of fact about a document ("Cai
+  // is not insured under ...") may name its insurer.
+  if (!step && !ACT_WITH_INSURER.test(text)) return null;
+  const GENERIC = new Set(["life", "general", "insurance", "assurance", "ltd", "limited", "pte", "berhad", "bhd", "company", "co", "the", "singapore", "group", "of"]);
+  const key = (n: string) => (n.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => !GENERIC.has(w));
+  const lower = ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  // V1.4: only an insurer of a PERSONAL policy document of this person (never a reference booklet linked to them, never
+  // a document linked to nobody) -- and, when the answer's relevant documents are known, one this answer relies on.
+  const mine = (hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => key(p.insurer ?? "").join(" ")).filter(Boolean);
+  for (const ins of hb.insurers) {
+    const k = key(ins);
+    if (!k.length || !lower.includes(` ${k.join(" ")} `)) continue;
+    if (!mine.includes(k.join(" "))) return `names ${ins}, but none of this person's documents is from ${ins}`;
+  }
+  return null;
+}
+/** V1.4: the statement with an insurer the person has no document from taken out of a list of insurers ("contact
+ * Meridian Life and Lumen General" -> "contact Meridian Life"), when what remains still names one of the person's own
+ * insurers; null when it cannot be (the sentence is then left out). */
+export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, relevant?: Set<string> | null): string | null {
+  const hb = ctx.benefits;
+  if (!hb || !subjectId) return null;
+  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).map((p) => (p.insurer ?? "").trim()).filter(Boolean));
+  let t = text;
+  for (const ins of hb.insurers) {
+    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true, relevant)) continue;
+    const esc = ins.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+(?:Ltd|Limited|Pte\.? Ltd|Insurance)\.?$/i, "");
+    const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
+    const before = t;
+    t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
+    if (t === before) return null;
+  }
+  t = t.replace(/\s{2,}/g, " ").trim();
+  if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
+  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true, relevant) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
+}
+/** V1.4: the benefits a document prints -- its product headings and benefit labels, from the shared benefit view.
+ * Never a household member's name, an address, a date or a letter line. (Without the view: the document's own label
+ * lines, less any naming a household member or printing a digit.) */
+function labelsOf(ctx: Pick<Ctx, "benefits" | "libraryText" | "people">, policyId: string, fallbackText?: string): string[] {
+  const known = ctx.benefits?.labelsByPolicy.get(policyId);
+  if (known) return known;
+  const people = ctx.people ?? [];
+  const namesPerson = (l: string) => people.some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)));
+  return documentLabels(ctx.libraryText?.get(policyId) ?? fallbackText ?? "").filter((l) => !namesPerson(l) && !/\d/.test(l));
+}
 const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
 /**
  * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
@@ -190,7 +328,7 @@ const wordScore = (clause: string, label: string) => { const have = new Set(cont
  * S$400,000 is printed under Group Term Life is refused). Several lines printing the figure under different labels: the
  * one the clause names; none or a tie: not bound.
  */
-function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText">): { label: string } | { conflict: string } | null {
+function identityLabel(ref: EvidenceRef, value: number, currency: string, clause: string, ctx: Pick<Ctx, "libraryText" | "benefits" | "people">): { label: string } | { conflict: string } | null {
   const all = withoutInstructions(evidenceTextOf(ref)).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
   // The amount as printed: in the currency the sentence states it in, never another one.
   const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && m.currency === currency));
@@ -202,7 +340,7 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   const named = labels.filter((l) => namesBenefit(clause, l));
   const pick = labels.length === 1 ? labels[0] : named.length === 1 ? named[0] : null;
   if (!pick) return null;
-  const others = documentLabels(ctx.libraryText?.get(ref.policyId) ?? evidenceTextOf(ref)).filter((o) => o.toLowerCase() !== pick.toLowerCase() && !labels.some((l) => l.toLowerCase() === o.toLowerCase()));
+  const others = labelsOf(ctx, ref.policyId, evidenceTextOf(ref)).filter((o) => o.toLowerCase() !== pick.toLowerCase() && !labels.some((l) => l.toLowerCase() === o.toLowerCase()));
   const better = others.filter((o) => wordScore(clause, o) > wordScore(clause, pick)).sort((a, b) => wordScore(clause, b) - wordScore(clause, a))[0];
   if (!namesBenefit(clause, pick)) return better ? { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` } : null;
   if (better) return { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` };
@@ -326,6 +464,8 @@ type Ctx = {
   docFacts?: Map<string, string>;
   /** V1.1: every readable document's full stored text (all pages), loaded when the answer states an absence. */
   libraryText?: Map<string, string>;
+  /** V1.4: each member's documented benefits and each document's benefit identities (lib/rag2/benefits.ts). */
+  benefits?: HouseholdBenefits | null;
 };
 
 const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
@@ -483,6 +623,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   // V1.3: figures refused because the sentence put them under another benefit the same document prints (Term Life
   // stated as Personal Accident): the document and its product headings are still stated, without the figure.
   const productMiss: { policyId: string; evidenceId: string; labels: string[]; wanted: string | null }[] = [];
+  // V1.4: the documents this answer relies on (what any of its sentences cites): an insurer is recommended only for a
+  // personal policy of the person among them -- relevant to this person AND this scenario.
+  const relevantPolicies = new Set<string>(args.sentences.flatMap((x) => [
+    ...(((x?.evidence_ids as string[]) ?? []).map((id) => ctx.state.evidence[id]?.policyId)),
+    ...(((x?.value_ids as string[]) ?? []).map((id) => ctx.tools.values.get(id)?.operand.evidence.policyId)),
+  ]).filter((x): x is string => !!x));
   const people = peopleFromLabels(ctx.names ?? []);
   const sentencesIn = [...(args.sentences ?? [])];
   for (let i = 0; i < sentencesIn.length; i++) {
@@ -494,6 +640,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // kept as the sentence's citations (the household sees them as its page links), checked like any other.
     const inline = stripInternalIds(String(s.text ?? "").replace(/\s+/g, " ").trim());
     let text = tidyNames(inline.text, people);
+    // V1.4: the person typing is addressed by name only when the household said who is typing (s50-live-2: "I'm so
+    // sorry for your loss, Michelle" -- an assumption the sign-in does not establish).
+    // (A wording edit, like tidyNames: nothing the sentence states is removed, so it is not recorded as a drop.)
+    if (!ctx.state.speakerConfirmed) text = withoutUnconfirmedAddress(text, ctx.people ?? []);
     if (!text) continue;
     let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
     const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
@@ -510,6 +660,15 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const explicitSubject = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : null;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
+    // V1.4: an insurer is named for a person only when one of that person's linked documents is from it -- never an
+    // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
+    const wrongInsurer = insurerNotFor(text, subjectId, ctx, false, relevantPolicies);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx, relevantPolicies); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
+    // V1.4: an endorsement that belongs to another household member supports no conclusion about this person -- no
+    // amendment, caveat, uncertainty or conflict (s50-live-2: Michelle's endorsement cited as making Darren's amount
+    // uncertain). Person / policy / version binding applies to statements without figures too.
+    const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
+    if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
     // household's current, active version -- with or without a figure in the sentence.
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));
@@ -520,6 +679,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D1): a sentence resting on an instruction inside a document (not policy wording) is never stated.
     const injected = evIds.filter((id) => instructionLines(ctx.state.evidence[id].passage.text).length && !withoutInstructions(ctx.state.evidence[id].passage.text).split(/\n+/).some((l) => sharesWords(l, text)));
     if (injected.length) { drop(text, "cites text inside a document that is an instruction, not policy wording", INSTRUCTION_NOTE); continue; }
+    // V1.4: paperwork stated as needed / required / relevant evidence is stated only where the documents print it.
+    const paper = unsupportedPaperworkClaim(text, [...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), paperworkSourceText(ctx, subjectId, relevantPolicies)].join("\n").toLowerCase());
+    if (paper) { drop(text, paper); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
     // V1.1 (evidence contract): a value's amendment relationship (the schedule row an endorsement amends, an
@@ -621,6 +783,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     }
     const figs = moneyFiguresIn(text);
     let failed: string | null = null, failedRaw: string | null = null, conflictWhy: string | null = null;
+    const annotations: { raw: string; label: string }[] = [];
     figs.forEach((f, i) => {
       if (failed || covered.has(i)) return;
       const sentence = partOf(f.raw);
@@ -635,18 +798,22 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // The sentence's own benefit field is part of what it states the figure for.
         const clause = `${sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence} ${typeof s.benefit === "string" ? s.benefit : ""}`;
         const own = tidyLabel(op.benefit);
-        const better = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
+        const better = labelsOf(ctx, op.evidence.policyId).find((o) => o.toLowerCase() !== own.toLowerCase() && wordScore(clause, o) > wordScore(clause, own) && !ownNamed(clause, own, o));
         if (better) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, better], wanted: better }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence states it for “${better}”`; return; }
         // A figure bound by the composer from its printed identity (not a value the model selected by benefit), in a
         // document printing several benefits (a roster's product headings): the clause must say which one the figure is
         // -- one of its own label's words that the document's other labels do not share. Unnamed, it is not stated.
-        const others = documentLabels(ctx.libraryText?.get(op.evidence.policyId) ?? "").filter((o) => o.toLowerCase() !== own.toLowerCase());
+        const others = labelsOf(ctx, op.evidence.policyId).filter((o) => o.toLowerCase() !== own.toLowerCase());
         const otherWords = new Set(others.flatMap((o) => [...benefitWords(o)]));
         const distinct = [...benefitWords(own)].filter((w) => !otherWords.has(w));
         const competing = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)));
         const have = benefitWords(clause);
         const byIdentity = valIds.some((id) => /^vb\d/.test(id) && ctx.tools.values.get(id)?.operand === op);
-        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, ...others.filter((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)))], wanted: null }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
+        // V1.4: a clause naming NO other benefit of the document ("Darren is covered for S$1,000,000 on the
+        // certificate"): the figure is stated with the product it is printed under, named by the source's identity.
+        const namesOther = others.some((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w) && have.has(w)));
+        if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w)) && !namesOther) annotations.push({ raw: f.raw, label: own });
+        else if (byIdentity && competing && distinct.length && !distinct.some((w) => have.has(w))) { productMiss.push({ policyId: op.evidence.policyId, evidenceId: evidenceIdOf(ctx.state, op.evidence), labels: [own, ...others.filter((o) => [...benefitWords(o)].some((w) => !benefitWords(own).has(w) && !/^(?:certificat|insuranc|schedul|polic)/.test(w)))], wanted: null }); failedRaw = f.raw; failed = `${f.raw} is printed under “${own}”, but the sentence does not say it is the ${own} figure`; return; }
       }
       // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
       // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
@@ -667,7 +834,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // stating the figure names that benefit and no other benefit of the document more closely.
         if (!benefit && !roster && !ref.table?.rowLabel) {
           const clause = sentence.split(/;\s+/).find((c) => c.includes(f.raw)) ?? sentence;
-          const idl = identityLabel(ref, f.value, f.currency, `${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, ctx);
+          // V1.4: the shared view's own record of this person's amount on this line (an endorsement amending their
+          // benefit) names the benefit -- when the clause names that benefit too.
+          const who0 = explicitSubject ?? ref.subjectId ?? subjectId;
+          const viewed = (ctx.benefits?.byMember.get(who0 ?? "")?.benefits ?? []).find((x) => x.policy.id === ref.policyId && (x.applicability === "amendment" || x.applicability === "person_row") && x.printed.kind === "money" && same(x.printed.amount, f.value) && x.printed.currency === f.currency && evidenceTextOf(ref).includes(x.source.passage.trim()));
+          if (viewed && namesBenefit(`${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, viewed.benefit.label)) benefit = viewed.benefit.label;
+          const idl = benefit ? null : identityLabel(ref, f.value, f.currency, `${clause} ${typeof s.benefit === "string" ? s.benefit : ""}`, ctx);
           if (idl && "label" in idl) {
             // A roster line names the person it is for: the figure is that person's, never another member's.
             const who = explicitSubject ?? ref.subjectId ?? subjectId;
@@ -702,6 +874,14 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       failedRaw = f.raw;
       failed = conflictWhy ?? (printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`);
     });
+    if (!failed && annotations.length) {
+      for (const a of annotations) {
+        const named = `${a.raw} (${a.label})`;
+        if (text.includes(named)) continue;
+        text = text.replace(a.raw, named);
+        for (const b of bindings) if (b.sentence.includes(a.raw) && !b.sentence.includes(named)) b.sentence = b.sentence.replace(a.raw, named);
+      }
+    }
     if (failed) {
       // V1.3: the parts of the sentence that can stand on their own are checked on their own (once); only the part
       // whose figure is unsupported is left out, never the supported document, person and date facts with it.
@@ -732,11 +912,21 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const t = stripInternalIds(String(step ?? "")).text;
     if (!t) continue;
     if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
+    let stepText = t;
+    const wrongInsurer = insurerNotFor(stepText, out.subjectId, ctx, true, relevantPolicies);
+    if (wrongInsurer) { const kept = withoutOtherInsurers(stepText, out.subjectId, ctx, relevantPolicies); if (!kept) { drop(stepText, wrongInsurer, STEP_NOTE); continue; } stepText = kept; }
     if (internalIdsIn(t).length) { drop(t, "a next step may not show an internal id", STEP_NOTE); continue; }
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);
     if (bad) { drop(t, bad, STEP_NOTE); continue; }
-    out.nextSteps.push(t);
+    // V1.4: a next step is a practical suggestion; a REQUIREMENT ("you must submit ...") cites the document that states
+    // it, in a sentence -- a next step cannot, so a mandatory checklist is never invented there.
+    // (Asking the insurer what is required -- "ask which documents are required" -- is a suggestion, not a requirement.)
+    if (/\b(?:must|mandatory|required|requirement|have to|has to|need to (?:submit|provide|send|produce|file|furnish)|are needed|is needed)\b/i.test(t) && !/\b(?:ask|check|find out|confirm|enquire|inquire)\b[^.;]*\b(?:what|which|whether|if)\b/i.test(t)) { drop(t, "a next step states a requirement; what a document requires is stated with its citation", STEP_NOTE); continue; }
+    // V1.4: paperwork a next step names (medical records, a police report, translations ...) is a policy requirement only
+    // when the person's documents print it. Otherwise the step is DearPolicy's general suggestion and says so.
+    stepText = labelUnsupportedPaperwork(stepText, paperworkSourceText(ctx, out.subjectId, relevantPolicies));
+    out.nextSteps.push(stepText);
   }
   settleAnswer(out, drops, conditioned, ctx);
   return out;

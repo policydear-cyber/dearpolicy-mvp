@@ -13,11 +13,14 @@ import { tokens } from "./search";
 import { amendmentRemovals, loadDocs, loadLinks, loadMembers, loadPages, type DocRow, type LinkRow } from "./store";
 import type { AmendmentRemoval } from "@/lib/claims/person";
 import { AMENDS, isoDate, printedEffectiveDate } from "./tables";
+import { endorsementScope } from "./endorsement-scope";
 
 export type CoverRole = "insured" | "recorded_insured" | "owner_only" | "nominee" | "assignee" | "beneficiary" | "not_named";
 export type InsuredKind = "person" | "motor" | "home" | "pet" | "property";
 export type InForce = { status: "in_force" | "not_started" | "expired" | "lapsed" | "unknown"; from: string | null; to: string | null; basis: string; evidence: EvidenceRef | null };
-export type Amendment = { policyId: string; productName: string | null; effectiveDate: string | null; inForce: boolean | null; evidence: EvidenceRef | null };
+export type Amendment = { policyId: string; productName: string | null; effectiveDate: string | null; inForce: boolean | null; evidence: EvidenceRef | null;
+  /** V1.4: whom it applies to (lib/rag2/endorsement-scope.ts): "applies" to this person, or "unresolved" (it does not say). */
+  scope?: "applies" | "unresolved"; scopeBasis?: string };
 export type PolicyCoverage = {
   policyId: string; productName: string | null; insurer: string | null; policyNumber: string | null; documentRole: string | null;
   role: CoverRole; insures: InsuredKind; covered: boolean | null; tier: string | null; topicMatch: boolean | null;
@@ -173,19 +176,28 @@ export async function policiesFor(args: { accountId: string; subjectId: string; 
       if (inForce.status === "unknown") und.push(`${d.productName ?? "the document"}: ${inForce.basis}`);
       if (covered && (inForce.status === "expired" || inForce.status === "lapsed" || inForce.status === "not_started")) reasons.push(inForce.status === "not_started" ? `cover starts on ${inForce.from}` : inForce.status === "expired" ? `cover ended on ${inForce.to}` : `the policy is ${d.status}`);
 
-      const amendments: Amendment[] = group.filter((g) => g !== d && isEndorsement(g)).map((g) => {
+      // V1.4: an endorsement of the same policy number amends THIS person's cover only when its scope includes them
+      // (its amending clause names them, it is scheme-wide, or it has no person-specific clause). One whose amending clause
+      // names only another member is not theirs: it is left out entirely, so it supports no amendment, caveat or conflict for this person.
+      const household = members.map((m) => ({ id: m.id, names: [m.displayName, m.preferredName].filter((n): n is string => !!n && n.trim().length >= 2) }));
+      const scopeOf = (g: DocRow) => endorsementScope({ text: textOf(g.id), subjectId: subject.id, household });
+      const amendments: Amendment[] = group.filter((g) => g !== d && isEndorsement(g) && scopeOf(g).scope !== "other").map((g) => {
+        const sc = scopeOf(g);
         const gp = pagesOf(g.id);
         let eff = g.effectiveDate ?? g.documentDate ?? null, evx: EvidenceRef | null = null;
         for (const [page, t] of gp) { const pe = printedEffectiveDate(t); if (pe) { eff = eff ?? pe.date; evx = evidenceAt({ policyId: g.id, documentHash: g.fileHash, page, pageText: t, start: pe.start, end: pe.end }); break; } }
-        return { policyId: g.id, productName: g.productName, effectiveDate: eff, inForce: eff ? eff <= asOf : null, evidence: evx };
+        return { policyId: g.id, productName: g.productName, effectiveDate: eff, inForce: eff ? eff <= asOf : null, evidence: evx, scope: sc.scope === "applies" ? "applies" as const : "unresolved" as const, scopeBasis: sc.basis };
       }).sort((a, b) => String(a.effectiveDate).localeCompare(String(b.effectiveDate)));
       for (const a of amendments) if (a.effectiveDate == null) und.push(`an endorsement of ${d.productName ?? "this policy"} prints no effective date`);
       // (A remaining letter that cancels an earlier amendment is not itself an amendment in force.)
       const reversers = new Set((removals.get(d.id) ?? []).flatMap((r) => (r.kind === "amendment_reversed" ? [r.reversedBy] : [])));
-      const live = amendments.filter((a) => a.inForce && !reversers.has(a.policyId));
+      for (const a of amendments) if (a.scope === "unresolved") und.push(`${a.productName ?? "an endorsement"}${a.effectiveDate ? ` (effective ${a.effectiveDate})` : ""} amends this policy number for one insured person but does not establish which household member`);
+      const live = amendments.filter((a) => a.inForce && !reversers.has(a.policyId) && a.scope === "applies");
+      const liveUnresolved = amendments.filter((a) => a.inForce && !reversers.has(a.policyId) && a.scope === "unresolved");
       const removed = (removals.get(d.id) ?? []).filter((r) => r.kind === "amendment_removed");
       const reversed = (removals.get(d.id) ?? []).filter((r) => r.kind === "amendment_reversed");
       const current = live.length ? `the schedule as amended by the endorsement effective ${live[live.length - 1].effectiveDate}`
+        : liveUnresolved.length ? `not established: an endorsement of this policy number (effective ${liveUnresolved.map((a) => a.effectiveDate).join(", ")}) does not establish whom it applies to`
         : removed.length ? "not established: an amendment document for this policy was removed from the library, so the current terms may differ from the schedule as issued"
         : reversed.length ? "the schedule as issued (a remaining document says an earlier amendment was reversed)" : "the schedule as issued";
       for (const r of removed) und.push(r.note);

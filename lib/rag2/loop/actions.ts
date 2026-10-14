@@ -65,4 +65,36 @@ export const FINAL_ANSWER: LoopToolSpec = {
 };
 
 export const LOOP_ACTIONS: LoopToolSpec[] = [NOTE_FACTS, ASK_USER, FINAL_ANSWER];
+
+const ID_KEY = /^\s*[evr]\d+(?:\s*,\s*[evr]\d+)*\s*$/;
+/**
+ * V1.4: a citation written as an object KEY instead of in its field ({"e2": ["e2"]}, {"e8,e9": [...]}), in a sentence
+ * of final_answer / ask_user: unambiguous (the key is nothing but evidence / value / result ids, and its value adds
+ * only the same kind of ids), so the ids are moved into evidence_ids / value_ids / result_ids -- the sentence's text and
+ * every other field untouched, and the ids still checked like any citation. Anything else stays an error. Returns what
+ * was moved (for the trace).
+ */
+export function normalizeCitationKeys(sentences: unknown): string[] {
+  const moved: string[] = [];
+  if (!Array.isArray(sentences)) return moved;
+  const allowed = new Set(Object.keys(SENTENCE.properties ?? {}));
+  for (const x of sentences) {
+    if (!x || typeof x !== "object" || Array.isArray(x)) continue;
+    const o = x as Record<string, unknown>;
+    for (const k of Object.keys(o)) {
+      if (allowed.has(k) || !ID_KEY.test(k)) continue;
+      const v = o[k];
+      const extra = Array.isArray(v) ? v : typeof v === "string" ? [v] : v === true || v == null ? [] : null;
+      if (!extra || !extra.every((e) => typeof e === "string" && ID_KEY.test(e))) continue;
+      const ids = [...new Set([...k.split(","), ...(extra as string[]).flatMap((e) => e.split(","))].map((e) => e.trim()))];
+      const put = (field: string, want: string) => { const add = ids.filter((i) => i.startsWith(want)); if (add.length) o[field] = [...new Set([...((o[field] as string[]) ?? []), ...add])]; };
+      put("evidence_ids", "e"); put("value_ids", "v");
+      const r = ids.filter((i) => i.startsWith("r"));
+      if (r.length === 1 && !o.result_id) o.result_id = r[0]; else if (r.length) o.result_ids = [...new Set([...((o.result_ids as string[]) ?? []), ...r])];
+      delete o[k];
+      moved.push(`${k} -> citation fields`);
+    }
+  }
+  return moved;
+}
 export const TERMINAL = new Set(["ask_user", "final_answer"]);

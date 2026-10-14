@@ -686,7 +686,7 @@ const fmt = (v: SelectedValue) => v.valueKind === "money" ? `${v.currency} ${v.v
 // ---------------------------------------------------------------------------------------------------------------
 const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/\p{L}+/gu) ?? []).filter((w) => w.length >= 2);
 /** The household member a cell names (all words of one of their names in the cell; the fullest match wins), or null. */
-function memberNamedIn(text: string, household: { id: string; names: string[] }[]): string | null {
+export function memberNamedIn(text: string, household: { id: string; names: string[] }[]): string | null {
   const cell = new Set(nameWords(text));
   let best: { id: string; n: number } | null = null, tie = false;
   const cellWords = nameWords(text);

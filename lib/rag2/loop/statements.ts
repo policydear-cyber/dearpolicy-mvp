@@ -55,8 +55,15 @@ export function withoutInstructions(text: string): string {
   return text.split("\n").filter((l) => !INSTRUCTION.test(l)).join("\n");
 }
 
-const GENERIC = new Set(["you", "cover", "covered", "coverage", "covers", "insur", "insured", "insurance", "policy", "plan", "benefit", "under", "is", "are", "also", "will", "would", "can", "your", "this", "that", "there", "which", "who", "what", "when", "only", "any", "all", "each", "every", "one", "per", "for", "the", "has", "have", "been", "because", "so", "but", "if", "than", "then", "also", "listed", "named", "among", "show", "shown", "includ", "document", "schedule", "certificate", "page", "state", "says", "say", "wording", "here", "what", "next", "would", "should", "need", "needs", "must", "may"].map((w) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "")));
+const GENERIC = new Set(["upload", "uploaded", "document", "documents", "file", "files", "you", "cover", "covered", "coverage", "covers", "insur", "insured", "insurance", "policy", "plan", "benefit", "under", "is", "are", "also", "will", "would", "can", "your", "this", "that", "there", "which", "who", "what", "when", "only", "any", "all", "each", "every", "one", "per", "for", "the", "has", "have", "been", "because", "so", "but", "if", "than", "then", "also", "listed", "named", "among", "show", "shown", "includ", "document", "schedule", "certificate", "page", "state", "says", "say", "wording", "here", "what", "next", "would", "should", "need", "needs", "must", "may"].map((w) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "")));
 const NEGATIVE_SENTENCE = /\b(?:not|never|no longer|isn['’]t|aren['’]t|wasn['’]t|doesn['’]t|don['’]t|won['’]t|cannot|can['’]t)\b[^.]{0,40}\b(?:cover\w*|insured|payable|pa(?:y|id)|eligib\w*|named|listed|included|shown)\b|\bexclu\w+\b|\bno cover\b/i;
+/** V1.4: a clause that says something is NOT KNOWN ("do not establish whether ...", "cannot confirm if ...", "it is
+ * unclear whether ...") -- uncertainty, not a negative (or positive) claim about cover. */
+const UNCERTAINTY = new RegExp(String.raw`(?:\b${NEGATOR}${FILLER}\s+(?:establish|confirm|show|say|state|determine|tell|know|verify|prove|indicate|specify|make clear|settle)\w*\b(?:\s+[\w’']+){0,4}?\s+(?:whether|if)\b|\b(?:it is|it's|it remains|remains)\s+(?:not (?:yet )?(?:clear|known|established|confirmed)|unclear|unknown|uncertain|unconfirmed)\s+(?:whether|if)\b|\b(?:unclear|unknown|uncertain|not known|not established|not confirmed)\s+(?:whether|if)\b)(?:(?!,?\s+(?:but|however|yet|although|though|while)\b)[^.;:!?])*`, "gi");
+export function withoutUncertainty(text: string): string { return String(text ?? "").replace(UNCERTAINTY, " "); }
+/** V1.4: an affirmative claim that cover IS / WAS in force (or active / current). */
+const IN_FORCE_CLAIM = /\b(?:is|was|were|are|remains?|remained|has been|had been)\s+(?:still\s+|then\s+)?(?:in force|in effect|active|current)\b/i;
+const VALIDITY_PASSAGE = /\bperiod of (?:insurance|cover)\b|\bvalid (?:from|until|till|to)\b|\bin force\b|\bexpir\w*\b|\brenew\w*\b|\b(?:from|commencing)\s+\d{1,2}[\s\/.-]\w+[\s\/.-]\d{2,4}\s+(?:to|until|-)\s+\d/i;
 const NEGATIVE_PASSAGE = /\bnot\b|\bexclu\w+\b|\bno (?:benefit|cover)\b|\bshall not\b|\bdoes not\b|\bunless\b|\bonly if\b/i;
 const MEMBERSHIP = /\b(?:named|listed|included|shown|among|on the (?:list|schedule|certificate))\b/i;
 /** A list of the people a document insures. */
@@ -99,19 +106,23 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   // V1.1: evidence read once for one member and reused for another is still theirs when the passage itself names them.
   const inPassage = (p: { names: string[] }) => p.names.some((n) => n && n.length >= 3 && new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(all));
   for (const p of named) if (readFor.size && !readFor.has(p.id) && !inPassage(p) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
-  // Polarity.
-  if (NEGATIVE_SENTENCE.test(text)) {
+  // Polarity -- of what the sentence ASSERTS: a statement of uncertainty ("the documents do not establish whether the
+  // cover was in force", "it is not clear whether ...") asserts neither cover nor its absence, so its clause is set
+  // aside first (V1.4).
+  const asserted = withoutUncertainty(text);
+  if (IN_FORCE_CLAIM.test(asserted) && !VALIDITY_PASSAGE.test(all)) return "it states that cover was / is in force, but its evidence prints no period or status that establishes it (a dated amount is not proof of cover on a later date)";
+  if (NEGATIVE_SENTENCE.test(asserted)) {
     const membership = MEMBERSHIP.test(text);
     const absent = membership && named.length > 0 && named.every((p) => !p.names.some((n) => n && lower.includes(n.toLowerCase())));
     if (!NEGATIVE_PASSAGE.test(all) && !absent) return "it says something is not covered / not included, but its evidence says nothing of the kind";
-  } else if (POSITIVE_COVER.test(text)) {
+  } else if (POSITIVE_COVER.test(asserted)) {
     if (!COVER_PASSAGE.test(all)) return "it states cover, but its evidence is not about cover";
     for (const p of named) if (INSURED_LIST.test(all) && !p.names.some((n) => n && lower.includes(n.toLowerCase()))) return `it says ${p.names[0]} is covered, but the cited list of insured persons does not name them`;
   }
   // Benefit / topic: the passage mentions what the sentence is about.
   const nameWords = new Set(ctx.people.flatMap((p) => p.names.flatMap((n) => contentWords(n))));
   const productWords = new Set([...ctx.policyNames.values()].flatMap((n) => contentWords(n)));
-  const specific = contentWords(text).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
+  const specific = contentWords(asserted).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
   if (specific.length) {
     const face = [...new Set(cited.map((c) => c.policyId))].map((id) => ctx.docFacts?.get(id) ?? "").join(" ");
     const have = new Set([...contentWords(all), ...contentWords(face)]);

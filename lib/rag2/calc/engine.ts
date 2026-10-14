@@ -509,6 +509,18 @@ export function waitingNotReached(a: { subjectId: string; who: string; benefit: 
   return "refused" in out ? null : out;
 }
 
+/** V1.4: what a lump-sum benefit is paid on, from its own label and printed condition: a death, an illness, or an
+ * injury / disability. A benefit that pays on death (Accidental Death, Death Benefit, "dies as a result of") is "death"
+ * even when its condition also names an accident. */
+export function benefitEvent(benefit: string, condition: string): "death" | "illness" | "injury" {
+  const t = `${benefit} ${condition}`;
+  const DEATH = /\b(?:death|dies|died|die|deceased|fatal)\b/i;
+  if (DEATH.test(condition) && !/\b(?:loss of|dismember\w*|disab\w*|fracture|burns?)\b/i.test(condition)) return "death";
+  if (DEATH.test(benefit) && !/\b(?:dismember\w*|disab\w*|fracture|burns?)\b/i.test(t)) return "death";
+  if (/\b(?:illness|disease|cancer|diagnos\w*|sickness|critical)\b/i.test(t)) return "illness";
+  return "injury";
+}
+
 export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null; proportion?: DocValue | null; proportionWhen?: string | null;
   /** V1.3: what the printed percentage is OF, as its own wording states it: the general sum insured (default) or a
    * fixed benefit limit / sub-limit printed in the wording. The base operand is recorded under that identity. */
@@ -523,11 +535,19 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   const printed = [a.sumInsured, ...(a.percent ? [a.percent] : []), ...(a.proportion ? [a.proportion] : []), ...(a.cap ? [a.cap] : [])].map((v) => printedOf(v, a.subjectId));
   // The claim workflow requires a reviewed decision that the medical evidence meets the policy's own definition
   // (CIDefinitionMatch / DisabilityDefinitionMatch / cause-of-death match, by an authorised reviewer). Never waived here.
-  const conds: CalcCondition[] = [{ id: "c_definition", kind: "definition", text: `${a.condition} must meet ${product}’s own definition, confirmed by a reviewed medical decision.`, status: "unresolved", basis: "none", needs: `a reviewed decision that ${a.who}’s diagnosis meets ${product}’s definition of ${a.condition} (the insurer’s medical assessment)` }];
+  // V1.4: the explanation is built from the selected benefit and its printed condition. A death benefit is decided on the
+  // death and its cause as the wording states them -- never on a "diagnosis" or a "medical assessment" (that wording is
+  // for illness and injury benefits, kept for them).
+  const event = benefitEvent(a.benefit, a.condition);
+  const conds: CalcCondition[] = [event === "death"
+    ? { id: "c_definition", kind: "definition", text: `The insurer decides whether ${a.who}’s death meets ${product}’s wording: ${a.condition}.`, status: "unresolved", basis: "none", needs: `the insurer’s decision that ${a.who}’s death meets ${product}’s wording (${a.condition})` }
+    : { id: "c_definition", kind: "definition", text: `${a.condition} must meet ${product}’s own definition, confirmed by a reviewed medical decision.`, status: "unresolved", basis: "none", needs: `a reviewed decision that ${a.who}’s diagnosis meets ${product}’s definition of ${a.condition} (the insurer’s medical assessment)` }];
   // V1.2: the wording pays only a share of the printed percentage in a stated case ("For a simple (closed) fracture 50%
   // of the percentage shown is payable"): the illustration is for that case, which stays unresolved until known.
   if (a.proportion) conds.push({ id: "c_case", kind: "eligibility", text: `${a.proportionWhen?.trim() || "the case the wording names"}: ${a.proportion.operand.ppm! / 10_000}% of the percentage shown is payable.`, status: "unresolved", basis: "document", passage: { policyId: a.proportion.operand.evidence.policyId, pageStart: a.proportion.operand.evidence.page.start, pageEnd: a.proportion.operand.evidence.page.end, text: a.proportion.operand.evidence.passage.text } });
-  const evidenceRequirements = ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
+  // General suggestions (not requirements printed in the policy): none for a death -- the documents a death claim needs
+  // are what the person's own documents state, or what the insurer asks for.
+  const evidenceRequirements = event === "death" ? [] : ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
   const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: printed.map((p) => p.evidence), evidenceRequirements, who: a.who, product };
   // V1.1: a lump sum is only ever a conditional illustration (the definition is the insurer's to confirm) -- for a
   // what-if, or for an event the household reported, with their own words as the stated assumption.
