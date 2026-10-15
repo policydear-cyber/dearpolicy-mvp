@@ -10,12 +10,12 @@ export const runDir = (prefix: string) => { const base = "docs/rag-migration/liv
 /** The recorded model calls of each turn: the trace's tool calls (not the ones the product made itself, marked `by`),
  * grouped by the relay's per-call tool-call names. */
 type RecCall = { name: string; arguments: Record<string, unknown>; rec?: { evidenceIds: string[]; valueId: string | null } };
-export function recordedTurns(dir: string, scenario = "S47"): { user: string; steps: RecCall[][] }[] {
+export function recordedTurns(dir: string, scenario = "S47", relayOffset = 0): { user: string; steps: RecCall[][] }[] {
   const run = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8"));
   const conv = run.conversations.find((c: any) => c.scenario === scenario);
   const relay = fs.readFileSync(path.join(dir, "relay.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).filter((l: any) => l.status === 200);
   const out: { user: string; steps: RecCall[][] }[] = [];
-  let r = 0;
+  let r = relayOffset;
   for (const t of conv.loaded.turns) {
     const calls: any[] = (t.trace?.toolCalls ?? []).filter((x: any) => x.name !== "model" && !x.args?.by);
     const steps: RecCall[][] = [];
@@ -29,6 +29,18 @@ export function recordedTurns(dir: string, scenario = "S47"): { user: string; st
     out.push({ user: t.user, steps });
   }
   return out;
+}
+
+/** Every conversation of a multi-conversation run, in run order: the relay log is one sequence across conversations,
+ * so each conversation's model calls start where the previous conversation's ended. */
+export function recordedRun(dir: string): { scenario: string; turns: ReturnType<typeof recordedTurns> }[] {
+  const run = JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8"));
+  let offset = 0;
+  return run.conversations.map((c: any) => {
+    const turns = recordedTurns(dir, c.scenario, offset);
+    offset += turns.reduce((n, t) => n + t.steps.length, 0);
+    return { scenario: c.scenario as string, turns };
+  });
 }
 
 /**

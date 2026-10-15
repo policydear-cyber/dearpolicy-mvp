@@ -1,0 +1,316 @@
+{
+  "verdict": "FAIL",
+  "checks": [
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "no model-use-limit dead end (the turn was not ended by a limit)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "no unrelated Living Care / Living Care Plus figure",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "no 365-day condition borrowed from Permanent Dismemberment for death",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "no promised payment or approval",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "Term Life S$1,000,000 and PA S$600,000, each with its product, and the certificate date",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "both amounts saved bound to Adrian's own certificate row and product",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "a useful death explanation: the Death Benefit or Accidental Death wording",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "at most one question, and a relevant next question or practical next step (not a dead end)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 1,
+      "name": "no other household's amount (S$2,000,000)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "both supplied dates are used (3 and 5 October 2026)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "neither date is asked for again",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "the benefits are explained: Term Life and Personal Accident (Accidental Death) both named",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52A",
+      "turn": 2,
+      "name": "next steps are given",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "Adrian's Term Life S$1,000,000 and PA S$600,000 separately, with the certificate date",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 1,
+      "name": "both bound to Adrian",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "switches to Cheryl and states her PA S$600,000 (bound to Cheryl)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "does not confirm the wrong premise (PA S$1,000,000)",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52B",
+      "turn": 2,
+      "name": "no Adrian-only figure stated as Cheryl's",
+      "ok": true,
+      "kind": "correctness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "the unreadable upload is included (IMG_0042.jpg, could not be read)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52C",
+      "turn": 1,
+      "name": "every readable upload is listed",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "conditional S$2,500 from 50% of the S$5,000 Simple Fracture Benefit Limit",
+      "ok": false,
+      "kind": "usefulness",
+      "detail": "For Adrian, the Simple Fracture section lists a S$5,000 benefit limit and 50% for a leg, ankle, knee, jaw or pelvis fracture—so the printed calculation is 50% of that limit for a leg fracture, provided it is a Simple Fracture caused by an Accident.\nThe wording defines a Simple Fracture as a closed fracture where the skin is not broken, and defines Other Fracture as a fracture that is not a Simple Fracture, including a compound (open) fracture.\nFor comparison, the Other Fracture table lists 50% of the Sum Insured for a leg, ankle, knee, jaw or pelvis fracture, rather than 50% of the Simple Frac"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "the S$2,500 is a saved, re-runnable calculation record (not model arithmetic)",
+      "ok": false,
+      "kind": "correctness",
+      "detail": "[]"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "Other Fracture is distinguished (a percentage of the Sum Insured)",
+      "ok": true,
+      "kind": "usefulness"
+    },
+    {
+      "conv": "S52D",
+      "turn": 1,
+      "name": "no other base used (no S$300,000 / S$600,000-based fracture amount)",
+      "ok": true,
+      "kind": "correctness"
+    }
+  ],
+  "incomplete": null
+}

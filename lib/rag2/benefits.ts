@@ -232,6 +232,11 @@ export type HouseholdBenefits = {
   /** V1.4: each member's view of each endorsement document (lib/rag2/endorsement-scope.ts): whether it applies to
    * them, belongs to another member, or does not state whom it applies to. */
   endorsementsByMember: Map<string, { policyId: string; product: string | null; scope: "applies" | "other" | "unresolved"; basis: string; namedIds: string[] }[]>;
+  /** V1.5: other names the SAME insurer goes by for a document: the insurer recorded on another document of the same
+   * policy number, about a product this document prints, with the identity corroborated in the documents' own text (a
+   * certificate stored under the insurer's registered name whose scheme summary is stored under its brand name and
+   * prints the registered name). Never a shared number alone, never a name-similarity guess. */
+  insurerAliases: Map<string, string[]>;
 };
 export async function householdBenefits(accountId: string): Promise<HouseholdBenefits> {
   const [members, docs] = await Promise.all([loadMembers(accountId), loadDocs(accountId)]);
@@ -256,7 +261,23 @@ export async function householdBenefits(accountId: string): Promise<HouseholdBen
     const sc = endorsementScope({ text: pages.filter((x) => x.policyId === d.id).map((x) => x.text).join("\n"), subjectId: m.id, household });
     return { policyId: d.id, product: d.productName, ...sc };
   })]));
-  return { byMember, labelsByPolicy, policiesByMember, insurers, endorsementsByMember };
+  // V1.5 (tightened): N is another name of d's insurer only when ALL of these hold --
+  //  1. a document f of the SAME policy (policy number) records N as its insurer (a shared number alone is not enough);
+  //  2. f is about a product d itself prints (f's product name contains one of d's product headings, or the reverse);
+  //  3. the identity is corroborated in the documents' own text: d prints N, or f prints d's recorded insurer.
+  // A travel or pet insurer (another policy number) can never qualify.
+  const textOf = (id: string) => pages.filter((x) => x.policyId === id).map((x) => x.text).join("\n").toLowerCase();
+  const prints = (text: string, name: string) => name.trim().length >= 4 && new RegExp(`(?<![a-z0-9])${name.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`).test(text);
+  const productsOf = (d: DocRow) => [...(labelsByPolicy.get(d.id) ?? []), d.productName ?? ""].map((x) => x.toLowerCase().replace(/\s+/g, " ").trim()).filter((x) => x.split(" ").length >= 2);
+  const related = (a: DocRow, b: DocRow) => { const pa = productsOf(a), pb = productsOf(b), na = (a.productName ?? "").toLowerCase(), nb = (b.productName ?? "").toLowerCase(); return pa.some((x) => nb.includes(x)) || pb.some((x) => na.includes(x)); };
+  const insurerAliases = new Map<string, string[]>();
+  for (const d of docs) {
+    const own = (d.insurer ?? "").trim();
+    const td = textOf(d.id);
+    const names = policyFamily(docs, d).filter((f) => f.id !== d.id && (f.insurer ?? "").trim() && (f.insurer ?? "").trim() !== own && related(d, f) && (prints(td, f.insurer ?? "") || (own && prints(textOf(f.id), own)))).map((f) => (f.insurer ?? "").trim());
+    insurerAliases.set(d.id, [...new Set(names)]);
+  }
+  return { byMember, labelsByPolicy, policiesByMember, insurers, endorsementsByMember, insurerAliases };
 }
 
 /** V1.4: a person's own documented row as a table value (for a roster the table parser does not read -- one cell per

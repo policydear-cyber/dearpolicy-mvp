@@ -10,13 +10,17 @@
  * break the conversation rules (a second question, a fact already known, a question no evidence makes relevant).
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
+import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
-import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
+import { evidenceAt, refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
+import type { TableValueOperand } from "../compute";
+import type { SelectedValue } from "../tables";
 import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
 import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
+import { choosePercentRow, percentTables } from "../calc/pct-rows";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
@@ -217,7 +221,7 @@ const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)
 const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_passages"]);
 
 /** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
-export const INVENTORY_QUESTION = /\b(?:what|which|list|show)\b[^?.!]*\b(?:polic(?:y|ies)|documents?|uploads?|files?|plans?)\b[^?.!]*\b(?:have|has|got|hold|holds|on file|uploaded)\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have)\b/i;
+export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|submit|provide|bring|send|attach)\b)[^]*(?:\b(?:what|which|list|show|tell me|give me)\b[^?.!]*\b(?:policies|documents|uploads|files|plans|(?:every|all|each|any) (?:of (?:the|our|my) )?(?:polic(?:y|ies)|documents?|files?|uploads?))\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have|does \w+ have)\b|\b(?:our|my|the household'?s?) (?:document )?library\b|\bwhat plans? does\b)/i;
 
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
@@ -228,6 +232,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (!state.subjectId && input.initialSubjectId) state.subjectId = input.initialSubjectId;
   const householdIds = new Set(input.people.map((p) => p.id));
   const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
+  ctx.topicText = [...state.history.map((h) => h.user), input.message].join(" ");
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
   const computeCalls = new Map<string, ComputeCall>();
@@ -237,6 +242,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // V1.1 (grounded negatives): the full stored text of every readable document of this household, so a sentence that
   // says something is NOT in a document (or in the library) is checked against the whole document, never a passage.
   const libraryText = await loadLibraryText(input.accountId).catch(() => undefined);
+  const libraryPages = await loadLibraryPages(input.accountId).catch(() => undefined);
   // V1.4: each member's documented benefits with explicit identities (lib/rag2/benefits.ts): which product / benefit a
   // printed figure is, and which insurers a statement about a member may name.
   const benefitView = await householdBenefits(input.accountId).catch(() => null);
@@ -404,7 +410,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, libraryPages, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -877,9 +883,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * conversation, still current (same document version), retrieved for this person, and printed by the calculation's
    * own document; the tool then validates the quote on that page as for any quoted input. */
   const tableRest = new Map<string, EvidenceRef>();
+  /** V1.5: the stored page a proportion's passage is printed on (for the table-row reconstruction, pct-rows.ts). */
+  const proportionPages = new Map<string, string>();
   const readTableRest = async (call: ToolCall) => {
     const id = (call.arguments.proportion as Record<string, unknown> | undefined)?.evidence_id;
     const e = typeof id === "string" ? state.evidence[id] : undefined;
+    if (e && !proportionPages.has(e.id)) {
+      const pg = (await pageMap(input.accountId, e.policyId).catch(() => new Map<number, string>())).get(e.passage.onPage);
+      if (pg != null && pg.slice(e.passage.start, e.passage.end) === e.passage.text) proportionPages.set(e.id, pg);
+    }
     if (!e || tableRest.has(e.id)) return;
     const ROW = /\S(?:\t+| {3,})\S/;
     const last = e.passage.text.split(/\n/).filter((l) => l.trim()).at(-1) ?? "";
@@ -892,6 +904,27 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (!rows.length) return;
     const text = e.passage.text + "\n" + rows.join("\n");
     tableRest.set(e.id, { ...e, passage: { ...e.passage, text, end: e.passage.start + text.length } } as EvidenceRef);
+  };
+  /** V1.5: the row of the reconstructed percentage table (pct-rows.ts) that the condition names, on the proportion
+   * passage's own page and table; otherwise an actionable refusal naming each row of that table with a value id. */
+  const rowFromPage = (e: EvidenceEntry, appliesWhen: string, condition: string, benefit: string, subject: string | null): { quote: string; percent: number; label: string } | string => {
+    const page = proportionPages.get(e.id);
+    if (page == null) return "Its page could not be re-read.";
+    const tables = percentTables(page).filter((t) => t.start < e.passage.end && t.end > e.passage.start);
+    if (!tables.length) return "No percentage table is printed in or right after that passage.";
+    const choice = choosePercentRow(tables, benefit, `${appliesWhen} ${condition}`);
+    if ("row" in choice && !("unresolved" in choice)) return { quote: choice.row.text, percent: choice.row.percents[0], label: choice.row.label };
+    // (A conflicting or incomplete row is never offered as a choice: only a tie, or no row named, lists the rows.)
+    const listed = ("ambiguous" in choice ? choice.ambiguous : "none" in choice ? choice.none : []).filter((x) => x.row.percents.length === 1);
+    const ids = subject ? listed.map((x) => {
+      const id = "v" + ++ctx.seq;
+      const evidence = evidenceAt({ policyId: e.policyId, documentHash: e.documentHash ?? null, page: e.passage.onPage, pageText: page, start: x.row.start, end: x.row.end, subjectId: subject });
+      const operand = { kind: "table_value", benefit: x.row.label, valueKind: "percent", cents: null, ppm: Math.round(x.row.percents[0] * 10_000), count: null, currency: null, period: null, evidence } as TableValueOperand;
+      ctx.values.set(id, { selected: { status: "ok", benefit: x.row.label, rowLabel: x.row.label, valueKind: "percent", ppm: operand.ppm, cents: null, currency: null, period: null, evidence, related: [] } as unknown as SelectedValue, subjectId: subject, operand });
+      return `${id} = “${x.row.label}” ${x.row.percents[0]}% (${x.table.header.replace(/\s{2,}/g, " ")}${x.table.name ? `, ${x.table.name}` : ""})`;
+    }) : [];
+    const why = "unresolved" in choice ? `${choice.unresolved}, so it is not used.` : "ambiguous" in choice ? `The condition names more than one row (${choice.ambiguous.map((x) => `“${x.row.label}”`).join(", ")}), so none is chosen.` : "The condition names no row of that table.";
+    return `${why}${ids.length ? ` Rows of that table, page ${e.passage.onPage}: ${ids.join("; ")}. If one of them is the case, call calculate again with that id as percent_value_id and without proportion.` : ""}`;
   };
   const resolveEvidenceInputs = (call: ToolCall): string | null => {
     const a: Record<string, unknown> = { ...call.arguments };
@@ -919,7 +952,17 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       // rows, up to the first line that is not a row) -- the same stored page, so the row's page and quote still hold.
       const more = tableRest.get(e.id);
       if (typeof f === "string" && more) { const g = figureFromEvidence(more, want); if (typeof g !== "string") f = g; }
-      if (typeof f === "string") return `proportion.evidence_id: ${f}`;
+      // V1.5 (s52-live-1): the passage stopped above the row the condition names, or the row is wrapped over two lines.
+      // The percentage table on the passage's own stored page is reconstructed (heading, header naming the base,
+      // continuation lines, exact span) and the ONE row the condition's words name is used. A tie, no row named, a
+      // row printing no single percentage or printed twice differently stays refused -- with the rows' value ids, so
+      // the next call can name one (percent_value_id) instead of ending the turn.
+      if (typeof f === "string") {
+        const row = rowFromPage(e, String(pr.applies_when ?? ""), typeof a.condition === "string" ? a.condition : "", String(a.benefit ?? ""), subject);
+        if (typeof row === "string") return `proportion.evidence_id: ${f}. ${row}`;
+        if (typeof pr.percent === "number" && Math.abs(pr.percent - row.percent) > 1e-9) return `proportion.evidence_id: the row “${row.label}” prints ${row.percent}%, not ${pr.percent}%`;
+        f = { page: e.passage.onPage, quote: row.quote, percent: row.percent };
+      }
       a.proportion = { page: f.page, quote: f.quote, percent: f.percent, applies_when: pr.applies_when }; changed = true;
     }
     if (Array.isArray(a.passage_limits) && (a.passage_limits as Record<string, unknown>[]).some((x) => x?.evidence_id != null)) {
@@ -1014,10 +1057,26 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
 
   /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
   const partialAnswer = (): Composed | null => {
-    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)));
+    // V1.5 (live verification, 14 Oct): only figures RELEVANT to what the household asked -- their label, product and
+    // printed conditions (and the wording of the same product, e.g. a Term Life summary's Death Benefit) share a topic
+    // word with the conversation. A verified figure about something else (Living Care Plus for a death or a fracture
+    // question) is never shown just because it was read; most relevant first, then the latest read.
+    const said = topicStems(userTexts.join(" "));
+    const relevance = (policyId: string, label: string, subject: string) => {
+      const parts = [label, policyNames.get(policyId) ?? ""];
+      const lw = [...topicStems(label)];
+      for (const b of benefitView?.byMember.get(subject)?.benefits ?? []) {
+        if (b.policy.id === policyId && b.benefit.label.toLowerCase() === label.toLowerCase()) parts.push(...b.conditions);
+        if (b.applicability === "shared_wording" && lw.length && lw.every((w) => topicStems(b.policy.product ?? "").has(w))) parts.push(b.benefit.label, ...b.conditions);
+      }
+      return sharedTopic(said, topicStems(parts.join(" "))).length;
+    };
+    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)))
+      .map(([id, v], i) => ({ id, v, i, score: relevance(v.operand.evidence.policyId, v.operand.benefit, v.subjectId) }))
+      .filter((x) => x.score > 0).sort((a, b) => a.score - b.score || a.i - b.i).map((x) => [x.id, x.v] as const);
     const seenRows = new Set<string>();
     const sentences: Record<string, unknown>[] = [];
-    for (const [valueId, v] of read.reverse()) {
+    for (const [valueId, v] of [...read].reverse()) {
       const e = v.operand.evidence, t = e.table;
       const rowKey = `${e.policyId}|${t?.rowLabel ?? v.operand.benefit}|${t?.columnHeader ?? ""}`;
       if (seenRows.has(rowKey) || sentences.length >= 3) continue;
@@ -1027,6 +1086,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const label = rowLabelOf(v.operand.benefit, e.passage.text, cell);
       const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your policy";
       sentences.unshift({ text: `${product} prints “${label}” as ${cell}${t?.columnHeader ? ` in its ${t.columnHeader} column` : ""}.`, value_ids: [valueId], subject_id: v.subjectId });
+    }
+    // Nothing relevant read this turn: what the conversation already established about the question (stated, cited
+    // and bound in an earlier turn), re-checked by the same composer and gate.
+    if (!sentences.length) for (const e of (state.established ?? []).filter((x) => !state.subjectId || x.subjectId === state.subjectId).slice(-3)) {
+      if (sharedTopic(said, topicStems(`${e.text} ${e.benefit ?? ""}`)).length) sentences.push({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), ...(e.subjectId ? { subject_id: e.subjectId } : {}) });
     }
     if (!sentences.length) return null;
     const composed = composeFinal({ sentences, subjectId: state.subjectId }, composeCtx());
@@ -1327,8 +1391,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
-    const named = (d: InventoryDoc) => said.includes(d.name.toLowerCase()) || said.includes(d.filename.toLowerCase());
-    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return r;
+    // (An empty name names nothing: an unreadable upload has no product name, only its file name and status.)
+    const has = (t: string | null | undefined) => !!t && t.trim().length > 0 && said.includes(t.toLowerCase());
+    const named = (d: InventoryDoc) => (d.readable === "ready" ? has(d.name) || has(d.filename) : has(d.filename));
+    // V1.5 (s52-live-1): an inventory answer that lists the library answers the question -- the generic "couldn't confirm
+    // an answer" note (added because some model sentences were taken out) is not shown under it.
+    const answered = (notes: string[]) => notes.filter((n) => n !== DROPPED_NOTE);
+    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
+    // V1.5 (live verification, 14 Oct): a reply that names every readable document but leaves out a file that could not
+    // be read keeps what it says and gains that file's status line from the lookup -- the household asked for it, and a
+    // status fact needs no page citation (it is the library's own record).
+    const statusMissing = docs.filter((d) => d.readable !== "ready" && !named(d));
+    if (statusMissing.length && docs.filter((d) => d.readable === "ready").every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) {
+      const owner = (d: InventoryDoc) => inv.people.find((p) => p.documents.includes(d))?.short ?? null;
+      const lines = statusMissing.map((d) => ({ text: `${d.filename}: its contents could not be read (${d.reason ?? "it could not be read"}), so nothing in it can be used${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
+      return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), sentences: [...r.composed.sentences, ...lines], libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
+    }
     // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
     // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
     const bindingsOf = (text: string) => r.composed.figureBindings.filter((b) => !!b.sentence && (text.includes(b.sentence) || b.sentence.includes(text)));
@@ -1337,7 +1415,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const keptBindings = keep.filter(boundFigures).flatMap((x) => bindingsOf(x.text));
     const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
     trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
-    const composed: Composed = { ...r.composed, sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    const composed: Composed = { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean), sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
   /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's
@@ -1349,12 +1427,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (!r || r.kind !== "final" || state.pending || !benefitView) return r;
     const subject = r.composed.subjectId ?? state.claim?.subjectId ?? state.subjectId ?? null;
     if (!subject) return r;
-    const STEM_SYN: [RegExp, string][] = [[/^(?:die|dies|died|dying|death|deaths|dead|deceased|killed|fatal|fatally)$/, "death"], [/^(?:accident|accidents|accidental|accidentally|crash|crashed|collision)$/, "accident"], [/^(?:injury|injuries|injured|injure)$/, "injury"], [/^(?:diagnosis|diagnosed)$/, "diagnosis"]];
-    const GEN = new Set(["insured", "person", "result", "within", "days", "day", "benefit", "payable", "sum", "that", "this", "with", "from", "will", "shall", "pay", "policy", "the", "and", "for", "group", "public", "service"]);
-    const stems = (t: string) => new Set((t.toLowerCase().replace(/\bpass(?:ed|es)? away\b/g, "died").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !GEN.has(w)).map((w) => STEM_SYN.find(([re]) => re.test(w))?.[1] ?? w.replace(/(?:ies|es|s|ed|ing|al|ly)$/, "").slice(0, 6)));
+    const STEM_SYN = TOPIC_SYN;
+    const stems = topicStems;
     const said = stems(userTexts.join(" "));
     const DATE_GIVEN = /\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s+\d{4})?\b|\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b(?:yesterday|today|last (?:night|week|month))\b/i;
-    const WINDOW = /within\s+(\d+)\s+(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(accident|injury|onset|diagnosis|event)/i;
+    const WINDOW = /within\s+(\d+)\s+(?:calendar\s+)?(days?|months?|years?)\s+(?:of|from|after)\s+(?:the\s+|that\s+|an?\s+)?(?:(?:date|day)\s+of\s+(?:the\s+|that\s+|an?\s+)?|occurrence\s+of\s+(?:the\s+|that\s+)?)?(accident|injury|onset|diagnosis|event)/i;
     for (const b of benefitView.byMember.get(subject)?.benefits ?? []) {
       const cond = b.conditions.find((c) => WINDOW.test(c));
       if (!cond) continue;
@@ -1553,6 +1630,12 @@ export function personNames(label: string): string[] {
  * household's readable documents. Also returns the readable documents' product names (for statement checks).
  */
 /** Every readable document's stored pages, joined in page order (household-scoped; readable documents only). */
+/** V1.5: each readable document's stored pages and file hash (compose cites a document's own currency statement). */
+export async function loadLibraryPages(accountId: string): Promise<Map<string, { hash: string | null; pages: { page: number; text: string }[] }>> {
+  const docs = await loadDocs(accountId);
+  const pages = await loadPages(accountId, docs.map((d) => d.id));
+  return new Map(docs.map((d) => [d.id, { hash: d.fileHash ?? null, pages: pages.filter((p) => p.policyId === d.id).sort((a, b) => a.page - b.page).map((p) => ({ page: p.page, text: p.text })) }]));
+}
 export async function loadLibraryText(accountId: string): Promise<Map<string, string>> {
   const docs = await loadDocs(accountId);
   const pages = await loadPages(accountId, docs.map((d) => d.id));

@@ -379,6 +379,10 @@ export type ChatAnswer = {
   composition?:ClaimCompositionView|null;
   /** Gate R17: per-sentence binding of every figure the answer's text states (lib/chat/answer-verification.ts). */
   figureBindings?:BoundFigure[];
+  /** V1.5: file and document names quoted from the household's own library record (an inventory answer). They are
+   * names, not figures: "Claim S$5,000 receipt.pdf could not be read" states no amount, so the figure gate does not
+   * read money inside them (lib/chat/answer-verification.ts). Set only by the server from the library lookup. */
+  libraryNames?:string[];
   /** Gate R17: explicit records of every computed figure the answer's text states. */
   computations?:ComputationRecord[];
   /** Agent K: verified benefit calculations (illustrations / indicative estimates), one per stated result. */

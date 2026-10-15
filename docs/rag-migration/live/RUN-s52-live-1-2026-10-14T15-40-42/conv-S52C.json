@@ -1,0 +1,942 @@
+{
+  "scenario": "S52C",
+  "title": "V1.5 report turn 5: library inventory including unreadable files",
+  "conversationId": "c298961d-6c13-46d4-b1d3-2daa036b4587",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "List all our uploaded documents and their roles, including any files that could not be read.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).\nCheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nNot linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them.\nI couldn’t confirm an answer to that from your documents.",
+      "timings": {
+        "acceptedMs": 12,
+        "firstAssistantPersistedMs": 7107,
+        "answerSeenMs": 7215,
+        "modelMs": 5996,
+        "upstreamMs": 5950,
+        "relayMs": 5952
+      },
+      "calls": [
+        {
+          "seq": 12,
+          "at": "2026-10-14T15:41:29.694Z",
+          "estInputTokens": 14909,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024909,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 2,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7235,
+            "output": 14,
+            "cached": 7087
+          },
+          "latencyMs": 2718,
+          "upstreamMs": 2718,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 13,
+          "at": "2026-10-14T15:41:32.429Z",
+          "estInputTokens": 16875,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026875,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 4,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8497,
+            "output": 229,
+            "cached": 7109
+          },
+          "latencyMs": 3278,
+          "upstreamMs": 3278,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 12,
+          "at": "2026-10-14T15:41:29.700Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15124,
+          "reservedUsd": 0.0025124,
+          "chargedUsd": 0.00009267,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "68f5f5da86806bc5",
+          "kind": "loop",
+          "upstreamMs": 2717,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOcJVdSItH2x2CaRDJs1LcLK6z0",
+          "usage": {
+            "input": 7235,
+            "output": 14,
+            "cached": 7087,
+            "reasoning": 0
+          },
+          "scenario": "S52C",
+          "turn": 1
+        },
+        {
+          "seq": 13,
+          "at": "2026-10-14T15:41:32.435Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 17093,
+          "reservedUsd": 0.0027093,
+          "chargedUsd": 0.00032439,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "68f5f5da86806bc5",
+          "kind": "loop",
+          "upstreamMs": 3238,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EYvOf7EivN3BB2DxF4K4u5ZV45tT3",
+          "usage": {
+            "input": 8497,
+            "output": 229,
+            "cached": 7109,
+            "reasoning": 0
+          },
+          "scenario": "S52C",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-14T15:41:29Z",
+          "t": 1791992489.701,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 2714,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOcJVdSItH2x2CaRDJs1LcLK6z0",
+          "usage": {
+            "prompt_tokens": 7235,
+            "completion_tokens": 14,
+            "total_tokens": 7249,
+            "cached_tokens": 7087,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "household_documents"
+          ],
+          "status": 200,
+          "relay_ms": 2715
+        },
+        {
+          "at": "2026-10-14T15:41:32Z",
+          "t": 1791992492.436,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 3236,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EYvOf7EivN3BB2DxF4K4u5ZV45tT3",
+          "usage": {
+            "prompt_tokens": 8497,
+            "completion_tokens": 229,
+            "total_tokens": 8726,
+            "cached_tokens": 7109,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3237
+        }
+      ],
+      "tokens": {
+        "input": 15732,
+        "output": 243
+      },
+      "costUsd": {
+        "charged": 0.00041705999999999997,
+        "reserved": 0.0052217,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          12,
+          13
+        ],
+        "guardUsd": 0.00041705999999999997,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 7220,
+  "firstUsefulResponseMs": 7107,
+  "tokens": {
+    "input": 15732,
+    "output": 243
+  },
+  "costUsd": 0.00041705999999999997,
+  "calls": 2,
+  "loaded": {
+    "conversationId": "c298961d-6c13-46d4-b1d3-2daa036b4587",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 0,
+        "turn": 1,
+        "claim": null,
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7235,
+                "output": 14,
+                "attempt": 1,
+                "costUsd": 0.00009267,
+                "latencyMs": 2723
+              },
+              {
+                "ok": true,
+                "input": 8497,
+                "output": 229,
+                "attempt": 1,
+                "costUsd": 0.00032439,
+                "latencyMs": 3283
+              }
+            ],
+            "limit": null,
+            "steps": 2,
+            "usage": {
+              "input": 15732,
+              "output": 243
+            },
+            "dropped": [
+              {
+                "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+                "sentence": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule)."
+              },
+              {
+                "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+                "sentence": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary)."
+              },
+              {
+                "reason": "states cover or a figure without citing evidence",
+                "sentence": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason."
+              }
+            ],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).",
+              "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+              "Not linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them."
+            ],
+            "latencyMs": 6027,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {},
+                "name": "household_documents",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule).",
+                      "evidence_ids": [
+                        "e1",
+                        "e2",
+                        "e3",
+                        "e4"
+                      ]
+                    },
+                    {
+                      "text": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary).",
+                      "evidence_ids": [
+                        "e1",
+                        "e2",
+                        "e3"
+                      ]
+                    },
+                    {
+                      "text": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason.",
+                      "evidence_ids": []
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "incomplete": [
+              "the inventory was stated from the household's document lookup"
+            ],
+            "userMessage": "List all our uploaded documents and their roles, including any files that could not be read.",
+            "evidenceChosen": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          }
+        ],
+        "history": [
+          {
+            "user": "List all our uploaded documents and their roles, including any files that could not be read.",
+            "assistant": "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document). Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document). Not linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them. I couldn’t confirm an answer to that from your documents."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7e600000-0000-4000-8000-000000000101": "Public Officers Group Insurance Scheme - Certificate",
+          "7e600000-0000-4000-8000-000000000103": "Public Officers Group Personal Accident - Policy Wording",
+          "7e600000-0000-4000-8000-000000000104": "Public Officers Group Term Life - Product Summary",
+          "7e600000-0000-4000-8000-000000000105": "Single Trip Travel Insurance - Policy Schedule"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 30,
+              "text": "CERTIFICATE OF GROUP INSURANCE",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 30,
+              "text": "CERTIFICATE OF GROUP INSURANCE",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:livelib-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 102,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-2207)",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 93,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:livelib-wording"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 68,
+              "text": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 68,
+              "text": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000104",
+            "subjectId": null,
+            "documentHash": "sha256:livelib-gtl"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 63,
+              "text": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 63,
+              "text": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e600000-0000-4000-8000-000000000105",
+            "subjectId": null,
+            "documentHash": "sha256:livelib-travel"
+          }
+        },
+        "speakerId": "7e600000-0000-4000-8000-000000000001",
+        "subjectId": null,
+        "recentSubjectIds": []
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "List all our uploaded documents and their roles, including any files that could not be read.",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Not linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them.",
+            "I couldn’t confirm an answer to that from your documents."
+          ],
+          "summary": "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).",
+          "citations": [
+            {
+              "chunkId": "rag2:e1",
+              "excerpt": "CERTIFICATE OF GROUP INSURANCE",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000103",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Personal Accident - Policy Wording",
+              "documentRole": "policy_wording"
+            },
+            {
+              "chunkId": "rag2:e3",
+              "excerpt": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000104",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Term Life - Product Summary",
+              "documentRole": "product_summary"
+            },
+            {
+              "chunkId": "rag2:e4",
+              "excerpt": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+              "insurer": "Falcon General",
+              "pageEnd": 1,
+              "policyId": "7e600000-0000-4000-8000-000000000105",
+              "pageStart": 1,
+              "policyName": "Single Trip Travel Insurance - Policy Schedule",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "libraryNames": [
+            "Public Officers Group Insurance Scheme - Certificate",
+            "synthetic-dptest-livelib-cert.pdf",
+            "Public Officers Group Personal Accident - Summary of Benefits",
+            "synthetic-dptest-livelib-summary.pdf",
+            "Public Officers Group Personal Accident - Policy Wording",
+            "synthetic-dptest-livelib-wording.pdf",
+            "Public Officers Group Term Life - Product Summary",
+            "synthetic-dptest-livelib-gtl_sum.pdf",
+            "Single Trip Travel Insurance - Policy Schedule",
+            "synthetic-dptest-livelib-travel.pdf",
+            "Public Officers Group Insurance Scheme - Certificate",
+            "synthetic-dptest-livelib-cert.pdf",
+            "Public Officers Group Personal Accident - Summary of Benefits",
+            "synthetic-dptest-livelib-summary.pdf",
+            "Public Officers Group Personal Accident - Policy Wording",
+            "synthetic-dptest-livelib-wording.pdf",
+            "Public Officers Group Term Life - Product Summary",
+            "synthetic-dptest-livelib-gtl_sum.pdf",
+            "IMG 0042",
+            "IMG_0042.jpg"
+          ],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "c298961d-6c13-46d4-b1d3-2daa036b4587",
+          "figureBindings": [],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": []
+        },
+        "content": "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).",
+        "visible": "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).\nCheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nNot linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them.\nI couldn’t confirm an answer to that from your documents.",
+        "questions": [],
+        "userAt": "2026-10-14T15:41:35.726Z",
+        "assistantAt": "2026-10-14T15:41:35.726Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7235,
+              "output": 14,
+              "attempt": 1,
+              "costUsd": 0.00009267,
+              "latencyMs": 2723
+            },
+            {
+              "ok": true,
+              "input": 8497,
+              "output": 229,
+              "attempt": 1,
+              "costUsd": 0.00032439,
+              "latencyMs": 3283
+            }
+          ],
+          "limit": null,
+          "steps": 2,
+          "usage": {
+            "input": 15732,
+            "output": 243
+          },
+          "dropped": [
+            {
+              "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+              "sentence": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule)."
+            },
+            {
+              "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+              "sentence": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary)."
+            },
+            {
+              "reason": "states cover or a figure without citing evidence",
+              "sentence": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason."
+            }
+          ],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Single Trip Travel Insurance - Policy Schedule (Falcon General, a personal policy document).",
+            "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document); Public Officers Group Term Life - Product Summary (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Not linked to anyone in the household: IMG_0042.jpg (could not be read) -- link it to a person so it can be used for them."
+          ],
+          "latencyMs": 6027,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {},
+              "name": "household_documents",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "text": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule).",
+                    "evidence_ids": [
+                      "e1",
+                      "e2",
+                      "e3",
+                      "e4"
+                    ]
+                  },
+                  {
+                    "text": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary).",
+                    "evidence_ids": [
+                      "e1",
+                      "e2",
+                      "e3"
+                    ]
+                  },
+                  {
+                    "text": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason.",
+                    "evidence_ids": []
+                  }
+                ]
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "incomplete": [
+            "the inventory was stated from the household's document lookup"
+          ],
+          "userMessage": "List all our uploaded documents and their roles, including any files that could not be read.",
+          "evidenceChosen": [
+            "e1",
+            "e2",
+            "e3",
+            "e4"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "S52C",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "7e600000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 15732,
+          "output": 243
+        },
+        "latencyMs": 6027,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {},
+            "name": "household_documents",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule).",
+                  "evidence_ids": [
+                    "e1",
+                    "e2",
+                    "e3",
+                    "e4"
+                  ]
+                },
+                {
+                  "text": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary).",
+                  "evidence_ids": [
+                    "e1",
+                    "e2",
+                    "e3"
+                  ]
+                },
+                {
+                  "text": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason.",
+                  "evidence_ids": []
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e1",
+          "e2",
+          "e3",
+          "e4"
+        ],
+        "dropped": [
+          {
+            "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+            "sentence": "For Adrian, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), the Public Officers Group Term Life - Product Summary (reference product summary), and the Single Trip Travel Insurance - Policy Schedule (personal schedule)."
+          },
+          {
+            "reason": "not supported by its evidence: its evidence does not mention what it is about (reference, reference, reference)",
+            "sentence": "For Cheryl, the uploaded documents are the Public Officers Group Insurance Scheme - Certificate (personal schedule), the Public Officers Group Personal Accident - Summary of Benefits (reference benefit summary), the Public Officers Group Personal Accident - Policy Wording (reference wording), and the Public Officers Group Term Life - Product Summary (reference product summary)."
+          },
+          {
+            "reason": "states cover or a figure without citing evidence",
+            "sentence": "IMG_0042.jpg (“IMG 0042”) is not linked to anyone and could not be read; the document list gives no reason."
+          }
+        ],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 30,
+          "text": "CERTIFICATE OF GROUP INSURANCE",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 30,
+          "text": "CERTIFICATE OF GROUP INSURANCE",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:livelib-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 102,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-2207)",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 93,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:livelib-wording"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 68,
+          "text": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 68,
+          "text": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:livelib-gtl"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 63,
+          "text": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 63,
+          "text": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e600000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:livelib-travel"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [
+          {
+            "chunkId": "rag2:e1",
+            "excerpt": "CERTIFICATE OF GROUP INSURANCE",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000103",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Personal Accident - Policy Wording",
+            "documentRole": "policy_wording"
+          },
+          {
+            "chunkId": "rag2:e3",
+            "excerpt": "Kestrel Life Ltd - Public Officers Group Term Life - Product Summary",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000104",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Term Life - Product Summary",
+            "documentRole": "product_summary"
+          },
+          {
+            "chunkId": "rag2:e4",
+            "excerpt": "Falcon General - Single Trip Travel Insurance - Policy Schedule",
+            "insurer": "Falcon General",
+            "pageEnd": 1,
+            "policyId": "7e600000-0000-4000-8000-000000000105",
+            "pageStart": 1,
+            "policyName": "Single Trip Travel Insurance - Policy Schedule",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

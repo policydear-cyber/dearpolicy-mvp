@@ -14,6 +14,7 @@ import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, waitingNotReached, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
 import { isCalendarDate } from "@/lib/claims/day-count";
 import { amendmentDayEdges, applyAmendmentDayEdges, readBenefitTerms } from "./terms";
+import { benefitRowProblem, ownTables, percentTables, rowAt } from "./pct-rows";
 
 const outcomes = new WeakMap<ToolContext, Map<string, CalcOutcome>>();
 /** The calculations made in this tool context (calc id -> outcome). */
@@ -139,6 +140,20 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     out = billReimbursement({ subjectId, who, benefit, terms, bill, subLimits: subs, limits: lims, deductible: ded as DocValue | null, coInsurance: co as DocValue | null, coInsuranceCap: coCap as DocValue | null, settled, whatIf });
   } else if (a.calculator === "lump_sum") {
     let pct = value("percent_value_id", "percent"); const cap = value("cap_value_id", "money");
+    let recoveredNote: string | null = null;
+    // V1.5 (live verification: percent_value_id pointed at a printed amount, the call was refused and the turn ran out
+    // of budget): the wrong value type is still never used as a percentage. The ONE bounded recovery is the percentage
+    // this document prints for the benefit row named -- the same server read as leaving percent_value_id out. If there
+    // is none, the refusal names the percentages already read for this person on this policy.
+    if (typeof pct === "string" && /is a printed money, not a percent$/.test(pct)) {
+      const wrong = ctx.values.get(String(a.percent_value_id));
+      const read = await printedPercent(ctx, policyId, subjectId, benefit);
+      if (read) { recoveredNote = `percent_value_id ${String(a.percent_value_id)} is a printed amount (${wrong?.operand.benefit ?? "an amount"}), not a percentage, so it was not used; the percentage printed for “${read.operand.benefit}” was read instead`; pct = read; }
+      else {
+        const pcts = [...ctx.values.entries()].filter(([, v]) => v.subjectId === subjectId && v.operand.valueKind === "percent" && ofPolicy(v.operand.evidence)).map(([id, v]) => `${id} (${v.operand.benefit}: ${(v.operand.ppm ?? 0) / 10_000}%)`);
+        return fail(`${pct}. ${pcts.length ? `Percentages already read for this person on this policy: ${pcts.join("; ")}.` : "No percentage has been read for this person on this policy yet."} Pass one of those as percent_value_id, or leave percent_value_id out and name the table row (as printed) in benefit -- the server reads the percentage printed for it.`);
+      }
+    }
     if (typeof pct === "string") return fail(pct); if (typeof cap === "string") return fail(cap);
     // V1.2: no percentage passed -- the percentage this document prints for the benefit named, for this person, read
     // by the server with the select_table_value rules (one row, this person's column; anything ambiguous is not used).
@@ -148,7 +163,8 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     let shareIsPercent = false;
     if (a.proportion) {
       const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>);
-      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim());
+      // (A row wrapped over two lines -- its percentage on the line below its label -- is one row: pct-rows.ts.)
+      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim().replace(/[ \t]*\n[ \t]*/g, "   "));
       if (typeof v !== "string" && tableRow && await percentBaseOf(ctx, v)) {
         if (pct && pct.operand.ppm !== v.operand.ppm) return fail("proportion: the quoted line is a row of the percentage table (a percentage of the benefit's base), not a share of another percentage -- pass that row as the percentage only");
         if (!pct) pct = v;
@@ -156,6 +172,13 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
       }
     }
     if (!pct && typeof a.condition === "string" && a.condition.trim()) pct = await printedPercent(ctx, policyId, subjectId, a.condition);
+    // V1.5: a percentage row printed in ANOTHER benefit's table on the same page (the Other Fracture table below the
+    // Simple Fracture table) is never used for this benefit, whichever way it was selected.
+    if (pct) {
+      const ev = pct.operand.evidence, page = (await pageMap(ctx.accountId, ev.policyId)).get(ev.passage.onPage) ?? "";
+      const tables = percentTables(page), at = rowAt(tables, ev.passage.start);
+      if (at && at.table.name && !ownTables(tables, benefit).includes(at.table) && ownTables(tables, benefit).length < tables.length) return fail(`lump_sum: the percentage “${at.row.label}” is printed in the ${at.table.name} table, not in the table for ${benefit}`);
+    }
     // V1.3: what the percentage is OF is read from its own wording (the table header / the sentence above it), never
     // assumed to be the certificate's general sum insured. A fixed benefit limit or sub-limit is read from the same
     // document by the server; a sum insured passed for a percentage of a benefit limit is not used.
@@ -192,7 +215,7 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     if (a.proportion && !shareIsPercent) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
     out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
       base: pctBase && pctBase.kind !== "sum_insured" && (pctBase.kind !== "referenced_amount" || pctBase.printed) ? { kind: pctBase.kind === "referenced_amount" ? "benefit_limit" : pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
-    if (!("refused" in out) && baseNote) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote];
+    if (!("refused" in out) && (baseNote || recoveredNote)) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote, recoveredNote].filter((x): x is string => !!x);
   } else return fail(`unknown calculator ${String(a.calculator)}`);
   if ("refused" in out) return fail(out.refused);
   calcOutcomes(ctx).set(out.calcId, { ...out, purpose } as CalcOutcome & { purpose: string });
@@ -374,6 +397,10 @@ async function printedLimit(ctx: ToolContext, policyId: string, name: string, ki
 async function printedPercent(ctx: ToolContext, policyId: string, subjectId: string, benefit: string): Promise<DocValue | null> {
   const r = await selectTableValue({ accountId: ctx.accountId, policyId, benefit, subject: { memberId: subjectId }, want: "percent", asOf: ctx.asOf }).catch(() => null);
   if (!r || r.status !== "ok" || r.valueKind !== "percent") return null;
+  // V1.5: on a page whose percentage tables are reconstructed (pct-rows.ts), the row read must be the one the benefit
+  // name singles out in the benefit's own table -- never a row of an adjacent table, never the first of several.
+  const page = (await pageMap(ctx.accountId, r.evidence.policyId)).get(r.evidence.passage.onPage) ?? "";
+  if (benefitRowProblem(page, r.evidence.passage.start, benefit)) return null;
   const id = "v" + ++ctx.seq;
   const operand: TableValueOperand = { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: "percent", cents: r.cents, ppm: r.ppm, count: null, currency: r.currency, period: r.period, evidence: r.evidence };
   ctx.values.set(id, { selected: r, subjectId, operand });

@@ -16,11 +16,13 @@ import { assertLocalDatabase } from "../../e2e/support/seed-rag2-live";
 import * as SCENARIO from "../fixtures/rag2-scenario/household";
 import * as STRESS from "../fixtures/rag2-stress/household";
 import * as BINDING from "../fixtures/rag2-binding/household";
+import * as LIVELIB from "../fixtures/rag2-livelib/household";
 import type { Scenario } from "./scenarios";
 
 export const SCENARIO_ACCOUNT = SCENARIO.ACCOUNT;
 export const STRESS_ACCOUNT = STRESS.ACCOUNT;
 export const BINDING_ACCOUNT = BINDING.ACCOUNT;
+export const LIVELIB_ACCOUNT = LIVELIB.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
   "Desmond broke his leg.",
   "He fell down the stairs.",
@@ -63,8 +65,26 @@ export const S50: Scenario = { id: "S50", title: "V1.4 cell-per-line certificate
 /** The binding household with the certificate's text layer one cell per line (same people, products and amounts). */
 export const BINDING_CELLS = { ...BINDING, DOCS: BINDING.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING.certLayout("cells") } : d)) };
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : SCENARIO) as unknown as typeof SCENARIO;
+/** V1.5: the live verification report's six turns in its four conversations, on the live-library household
+ * (scripts/fixtures/rag2-livelib; RAG2_LIVE_HOUSEHOLD=livelib). Pre-registered before s52-live-1; graded by
+ * scripts/rag2-live/livelib-check.ts. The death conversation is explicitly hypothetical, as in the report. */
+export const S52A: Scenario = { id: "S52A", title: "V1.5 report turns 1-2: hypothetical death in a car accident in Japan, then both dates", why: "live verification turns 1-2", turns: [
+  "Hypothetically, Adrian died in a car accident in Japan. What can I do?",
+  "Hypothetically, the accident happened on 3 October 2026 and Adrian died on 5 October 2026. Please explain the benefits and the next steps.",
+].map((user) => ({ user, expect: {} })) };
+export const S52B: Scenario = { id: "S52B", title: "V1.5 report turns 3-4: direct amounts and certificate date, then switch person and challenge a wrong PA amount", why: "live verification turns 3-4", turns: [
+  "What are Adrian's Term Life and Personal Accident amounts, and what date is the certificate?",
+  "And Cheryl? Her Personal Accident cover is S$1,000,000, right?",
+].map((user) => ({ user, expect: {} })) };
+export const S52C: Scenario = { id: "S52C", title: "V1.5 report turn 5: library inventory including unreadable files", why: "live verification turn 5", turns: [
+  "List all our uploaded documents and their roles, including any files that could not be read.",
+].map((user) => ({ user, expect: {} })) };
+export const S52D: Scenario = { id: "S52D", title: "V1.5 report turn 6: conditional Simple Fracture arithmetic and Other Fracture", why: "live verification turn 6", turns: [
+  "Hypothetically, if Adrian had a simple (closed) fracture of the leg, what would the Simple Fracture benefit be? How is that different from Other Fracture?",
+].map((user) => ({ user, expect: {} })) };
+
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -73,7 +93,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

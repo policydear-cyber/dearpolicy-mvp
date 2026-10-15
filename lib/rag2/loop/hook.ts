@@ -64,7 +64,11 @@ function plainBenefit(label: string): string {
   return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s;
 }
 function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null, whoOf: (id: string | null | undefined) => string | null = () => null): void {
-  const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && s.includes(p.figure)); });
+  // (V1.5: a figure is matched outside the library names an inventory line quotes -- a file named "Claim S$5,000.pdf"
+  // is not the rejected figure S$5,000.)
+  const names = [...(answer.libraryNames ?? [])].sort((a, b) => b.length - a.length);
+  const unnamed = (s: string) => names.reduce((t, n) => t.split(n).join(" "), s);
+  const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && unnamed(s).includes(p.figure)); });
   const lostSentences: string[] = [];
   const keep = (field: string): string => sentencesOf(field).filter((s) => { if (!rejected(s)) return true; lostSentences.push(s); return false; }).join(" ");
   answer.summary = keep(answer.summary);
@@ -239,6 +243,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     answer.nextSteps = c.nextSteps;
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;
+    if (c.libraryNames?.length) answer.libraryNames = c.libraryNames;
     // Agent K: verified benefit calculations, and the claim record only when the household is pursuing a claim.
     if (c.calculations.length) answer.calculations = c.calculations;
     if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }

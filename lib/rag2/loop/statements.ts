@@ -59,7 +59,9 @@ const GENERIC = new Set(["upload", "uploaded", "document", "documents", "file", 
 const NEGATIVE_SENTENCE = /\b(?:not|never|no longer|isn['’]t|aren['’]t|wasn['’]t|doesn['’]t|don['’]t|won['’]t|cannot|can['’]t)\b[^.]{0,40}\b(?:cover\w*|insured|payable|pa(?:y|id)|eligib\w*|named|listed|included|shown)\b|\bexclu\w+\b|\bno cover\b/i;
 /** V1.4: a clause that says something is NOT KNOWN ("do not establish whether ...", "cannot confirm if ...", "it is
  * unclear whether ...") -- uncertainty, not a negative (or positive) claim about cover. */
-const UNCERTAINTY = new RegExp(String.raw`(?:\b${NEGATOR}${FILLER}\s+(?:establish|confirm|show|say|state|determine|tell|know|verify|prove|indicate|specify|make clear|settle)\w*\b(?:\s+[\w’']+){0,4}?\s+(?:whether|if)\b|\b(?:it is|it's|it remains|remains)\s+(?:not (?:yet )?(?:clear|known|established|confirmed)|unclear|unknown|uncertain|unconfirmed)\s+(?:whether|if)\b|\b(?:unclear|unknown|uncertain|not known|not established|not confirmed)\s+(?:whether|if)\b)(?:(?!,?\s+(?:but|however|yet|although|though|while)\b)[^.;:!?])*`, "gi");
+const UNCERTAINTY = new RegExp(String.raw`(?:\b${NEGATOR}${FILLER}\s+(?:establish|confirm|show|say|state|determine|tell|know|verify|prove|indicate|specify|make clear|settle)\w*\b(?:\s+[\w’']+){0,4}?\s+(?:whether|if)\b|\b(?:it is|it's|it remains|remains)\s+(?:not (?:yet )?(?:clear|known|established|confirmed)|unclear|unknown|uncertain|unconfirmed)\s+(?:whether|if)\b|\b(?:unclear|unknown|uncertain|not known|not established|not confirmed)\s+(?:whether|if)\b|\b(?:does|do|did)\s+not\s+(?:document|show|establish|evidence|record|prove)\s+(?:any\s+)?(?:[\w’']+\s+){0,2}?cover(?:age)?\b)(?:(?!,?\s+(?:but|however|yet|although|though|while)\b)[^.;:!?])*`, "gi");
+// V1.5 (review of the s52 travel conclusion): "does not document / show cover for X" says cover is NOT PROVEN -- an
+// uncertainty, not an exclusion -- and is set aside like "does not establish whether".
 export function withoutUncertainty(text: string): string { return String(text ?? "").replace(UNCERTAINTY, " "); }
 /** V1.4: an affirmative claim that cover IS / WAS in force (or active / current). */
 const IN_FORCE_CLAIM = /\b(?:is|was|were|are|remains?|remained|has been|had been)\s+(?:still\s+|then\s+)?(?:in force|in effect|active|current)\b/i;
@@ -81,6 +83,9 @@ export type StatementCtx = {
   docFacts?: Map<string, string>;
   /** Who the sentence is about (resolved), when known. */
   subjectId: string | null;
+  /** V1.5: a trip conclusion ("does not cover a trip to Japan in October 2026") already checked against the person's
+   * own cited schedule -- a printed exclusion naming the place, or a printed period the trip falls outside. */
+  negativeVerified?: boolean;
 };
 const tokensOf = (name: string) => (name.match(/[A-Za-z][A-Za-z'-]{2,}/g) ?? []);
 /** The distinctive word of a product name ("KidSafe" in "KidSafe Family Accident Plan"). */
@@ -111,7 +116,7 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   // aside first (V1.4).
   const asserted = withoutUncertainty(text);
   if (IN_FORCE_CLAIM.test(asserted) && !VALIDITY_PASSAGE.test(all)) return "it states that cover was / is in force, but its evidence prints no period or status that establishes it (a dated amount is not proof of cover on a later date)";
-  if (NEGATIVE_SENTENCE.test(asserted)) {
+  if (NEGATIVE_SENTENCE.test(asserted) && !ctx.negativeVerified) {
     const membership = MEMBERSHIP.test(text);
     const absent = membership && named.length > 0 && named.every((p) => !p.names.some((n) => n && lower.includes(n.toLowerCase())));
     if (!NEGATIVE_PASSAGE.test(all) && !absent) return "it says something is not covered / not included, but its evidence says nothing of the kind";
@@ -123,7 +128,8 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   const nameWords = new Set(ctx.people.flatMap((p) => p.names.flatMap((n) => contentWords(n))));
   const productWords = new Set([...ctx.policyNames.values()].flatMap((n) => contentWords(n)));
   const specific = contentWords(asserted).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
-  if (specific.length) {
+  // (A verified trip conclusion's place and month are the trip asked about, already checked against the schedule.)
+  if (specific.length && !ctx.negativeVerified) {
     const face = [...new Set(cited.map((c) => c.policyId))].map((id) => ctx.docFacts?.get(id) ?? "").join(" ");
     const have = new Set([...contentWords(all), ...contentWords(face)]);
     const hit = specific.filter((w) => have.has(w) || lower.includes(w) || face.toLowerCase().includes(w));

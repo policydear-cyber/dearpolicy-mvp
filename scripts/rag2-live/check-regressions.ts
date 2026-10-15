@@ -9,6 +9,8 @@ import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
 import { blobSha, checkProvenance } from "./provenance";
+import { borrowed365, gradeLivelib } from "./livelib-check";
+import { M as LM, doc as ldoc } from "../fixtures/rag2-livelib/household";
 import os from "node:os";
 import { gradeBindingV4, inventedPaperwork, TERM_LIFE_AS_PA_V1, TERM_LIFE_AS_PA_V2, dateAsked, days365Conclusions, gradeBindingV3, unidentifiedAmounts, wrongIdentity } from "./binding-check";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
@@ -340,6 +342,35 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
     assert.ok(bad4(mk4(good + "\nNot linked to anyone in the household: PawSafe Pet Insurance - Policy Wording (Lumen General).", good)).some((n) => /inventory/.test(n)));
     assert.ok(bad4(mk4(good, good + " Whether Darren's death meets the definition must be confirmed through the insurer's medical assessment.")).some((n) => /injury/.test(n)));
     assert.ok(bad4(mk4(good, good + "\n[next] Provide the death certificate and relevant medical records.")).some((n) => /paperwork/.test(n)));
+  });
+}
+
+// V1.5: the s52 grader (written before s52-live-1), with independent controls.
+{
+  const A = LM.adrian.id, C = LM.cheryl.id, CERT = ldoc("CERT").id;
+  const b = (value: number, benefit: string, who: string) => ({ value, benefit, subjectId: who, policyId: CERT, rowPerson: who === A ? "Wong Jia Hui, Adrian" : "Lim Pei Shan, Cheryl" });
+  const turn = (visible: string, o: Record<string, unknown> = {}) => ({ visible, questions: [], answer: { figureBindings: [], nextSteps: [], calculations: [] }, trace: { limit: null }, ...o });
+  const good = () => [
+    { scenario: "S52A", loaded: { turns: [
+      turn("Adrian’s certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 6 October 2022. The summary pays Accidental Death at 100% of the Sum Insured.", { questions: ["Was the death a result of the accident itself?"], answer: { figureBindings: [b(1000000, "Group Term Life", A), b(600000, "Group Personal Accident", A)] } }),
+      turn("You told me the accident happened on 3 October 2026 and Adrian died on 5 October 2026. Group Term Life pays the Sum Assured on death; Accidental Death under Personal Accident pays 100% of the Sum Insured.", { answer: { figureBindings: [], nextSteps: ["Notify Kestrel Life Ltd within 6 months, with the death certificate."] } }),
+    ] } },
+    { scenario: "S52B", loaded: { turns: [
+      turn("Adrian’s certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 06/10/2022.", { answer: { figureBindings: [b(1000000, "Group Term Life", A), b(600000, "Group Personal Accident", A)] } }),
+      turn("No -- Cheryl’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; her Group Term Life is S$1,000,000.", { answer: { figureBindings: [b(600000, "Group Personal Accident", C)] } }),
+    ] } },
+    { scenario: "S52C", loaded: { turns: [turn("Adrian: Public Officers Group Insurance Scheme - Certificate; Public Officers Group Personal Accident - Summary of Benefits; Public Officers Group Personal Accident - Policy Wording; Public Officers Group Term Life - Product Summary; Single Trip Travel Insurance - Policy Schedule. IMG_0042.jpg could not be read.")] } },
+    { scenario: "S52D", loaded: { turns: [turn("If the Simple Fracture benefit applies, the conditional illustration is S$2,500 (50% of the S$5,000 Simple Fracture Benefit Limit). Other Fracture is a percentage of the Sum Insured instead.", { answer: { calculations: [{ result: { value: 2500 } }] } })] } },
+  ];
+  const fails = (c: any[]) => gradeLivelib(c).checks.filter((x) => !x.ok).map((x) => `${x.conv}/${x.turn}: ${x.name}`);
+  t("C51 s52 grader: a correct complete set of six answers passes", () => assert.deepEqual(fails(good()), []));
+  t("C52 s52 grader: Living Care Plus, a borrowed 365-day death condition, a limit dead end, a missing unreadable upload and an unsaved S$2,500 each FAIL", () => {
+    const x = good(); (x[0].loaded.turns[0] as any).visible += " Group Living Care Plus is S$300,000."; assert.ok(fails(x).some((f) => /Living Care/.test(f)));
+    const y = good(); (y[0].loaded.turns[1] as any).visible += " Accidental Death is payable if death occurs within 365 days of the Accident."; assert.ok(fails(y).some((f) => /borrowed/.test(f)));
+    const z = good(); (z[0].loaded.turns[1] as any).trace = { limit: { kind: "turn_tokens" } }; assert.ok(fails(z).some((f) => /limit dead end/.test(f)));
+    const w = good(); (w[2].loaded.turns[0] as any).visible = (w[2].loaded.turns[0] as any).visible.replace(" IMG_0042.jpg could not be read.", ""); assert.ok(fails(w).some((f) => /unreadable upload/.test(f)));
+    const u = good(); (u[3].loaded.turns[0] as any).answer = { calculations: [] }; assert.ok(fails(u).some((f) => /saved, re-runnable/.test(f)));
+    assert.deepEqual(borrowed365("Permanent Dismemberment is payable if the loss occurs within 365 days of the Accident."), []);
   });
 }
 
