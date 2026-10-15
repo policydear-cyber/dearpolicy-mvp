@@ -117,8 +117,17 @@ export const RCW1a: Scenario = { id: "RCW1a", title: "reliable chat: fixed-limit
 export const RCW1b: Scenario = { ...RCW1a, id: "RCW1b", title: "reliable chat: fixed-limit Simple Fracture, attempt 2" };
 export const RCW2: Scenario = { id: "RCW2", title: "reliable chat: death after an accident overseas -- benefits that may apply and what to do first (Wong)", why: "rc-live-1 recorded failure 3 regression", turns: [{ user: "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?", expect: {} }] };
 export const RCW3: Scenario = { id: "RCW3", title: "reliable chat: which uploaded policies to claim under (Wong)", why: "rc-live-1 recorded failure 4 regression", turns: [{ user: "Which of my uploaded policies should I claim under for Adrian's broken wrist from a cycling accident?", expect: {} }] };
-export const RC_TAN = [RCT1a, RCT1b];
-export const RC_WONG = [RCW1a, RCW1b, RCW2, RCW3];
+/** rc-live-2 (docs/rag-migration/reliable-chat/EXPECTED-rc-live-2.md): the two critical fracture journeys, each twice,
+ * in rc-live-1's exact wording (so the fixed failures are tested directly), and one control combining an unlisted case
+ * (a wrist, which neither stored fracture table lists) with the reference-insurer question (the Simple Fracture terms are
+ * in the KestrelOne-branded summary; the claim belongs to Kestrel Life Ltd's certificate). */
+export const RCT2a: Scenario = { ...RCT1a, id: "RCT2a", title: "rc-live-2: the complete Tan conversation, attempt 1", why: "rc-live-2 critical slice" };
+export const RCT2b: Scenario = { ...RCT1a, id: "RCT2b", title: "rc-live-2: the complete Tan conversation, attempt 2", why: "rc-live-2 critical slice" };
+export const RCW4a: Scenario = { ...RCW1a, id: "RCW4a", title: "rc-live-2: fixed-limit Simple Fracture, attempt 1", why: "rc-live-2 critical slice" };
+export const RCW4b: Scenario = { ...RCW1a, id: "RCW4b", title: "rc-live-2: fixed-limit Simple Fracture, attempt 2", why: "rc-live-2 critical slice" };
+export const RCX: Scenario = { id: "RCX", title: "rc-live-2 control: an unlisted case (a wrist) and who to contact", why: "rc-live-2 unlisted-case + reference-insurer control", turns: [{ user: "Adrian fractured his wrist falling off his bicycle. What can we claim for it from his accident cover, and who should I contact?", expect: {} }] };
+export const RC_TAN = [RCT1a, RCT1b, RCT2a, RCT2b];
+export const RC_WONG = [RCW1a, RCW1b, RCW2, RCW3, RCW4a, RCW4b, RCX];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : SCENARIO) as unknown as typeof SCENARIO;

@@ -108,8 +108,23 @@ async function main() {
   const pr50Household = process.env.RAG2_LIVE_HOUSEHOLD === "pr50";
   const bindingHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding" || cellsHousehold;
   const { S47, S48, S49, S49B, S50, S52A, S52B, S52C, S52D, P50C, P50D, P50A, RC_TAN, RC_WONG, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT, BINDING_ACCOUNT, LIVELIB_ACCOUNT, PR50_ACCOUNT, TAN_ACCOUNT } = await import("./scenario-household");
-  const picked = (list: Scenario[]) => list.filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id));
-  const scenarios: Scenario[] = scenarioHousehold ? (tanHousehold ? picked(RC_TAN) : pr50Household ? picked([P50C, P50D, P50A, ...RC_WONG]) : livelibHousehold ? [S52A, S52B, S52C, S52D].filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id)) : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
+  // Reliable chat (after rc-live-1, which ran three unplanned scenarios because the filter was left out): a scenario
+  // household runs ONLY the scenarios named with --scenarios -- required, every id must exist, no duplicates -- and
+  // --dry-run prints exactly what would run and stops before seeding, the server or any model call.
+  const wantedIds = (arg("scenarios") ?? "").split(",").map((y) => y.trim()).filter(Boolean);
+  const picked = (list: Scenario[]) => {
+    if (!wantedIds.length) throw new Error(`--scenarios is required for RAG2_LIVE_HOUSEHOLD=${process.env.RAG2_LIVE_HOUSEHOLD} (available: ${list.map((x) => x.id).join(", ")})`);
+    const unknown = wantedIds.filter((w) => !list.some((x) => x.id === w));
+    if (unknown.length) throw new Error(`unknown scenario id(s) ${unknown.join(", ")} for this household (available: ${list.map((x) => x.id).join(", ")})`);
+    if (new Set(wantedIds).size !== wantedIds.length) throw new Error("a scenario id is named twice in --scenarios");
+    return wantedIds.map((w) => list.find((x) => x.id === w)!);
+  };
+  const scenarios: Scenario[] = scenarioHousehold ? (tanHousehold ? picked(RC_TAN) : pr50Household ? (process.env.RAG2_LIVE_LEGACY_ALL === "1" ? [P50C, P50D, P50A] : picked([P50C, P50D, P50A, ...RC_WONG])) : livelibHousehold ? [S52A, S52B, S52C, S52D].filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id)) : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
+  if (flag("dry-run")) {
+    console.log(`DRY RUN (no seeding, no server, no model call): household ${process.env.RAG2_LIVE_HOUSEHOLD ?? "live"}; run cap US$${safety.capUsd}; ${scenarios.length} scenario(s):\n${scenarios.map((x) => `  ${x.id} -- ${x.turns.length} turn(s): ${x.turns.map((t) => JSON.stringify(t.user)).join(" / ")}`).join("\n")}`);
+    await pool.end().catch(() => undefined);
+    return;
+  }
 
   const started = new Date();
   const stamp = started.toISOString().replace(/[:.]/g, "-").slice(0, 19);

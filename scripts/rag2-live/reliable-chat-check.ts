@@ -48,8 +48,19 @@ function finish(scenario: string, checks: Check[], b: ReturnType<typeof base>): 
   if (b.incomplete && !checks.length) return { scenario, verdict: "INCOMPLETE", checks, note: b.incomplete };
   return { scenario, verdict: checks.every((c) => c.ok) ? "PASS" : "FAIL", checks, note: b.incomplete };
 }
-const universal = (add: (id: string, dim: Check["dim"], name: string, ok: boolean, detail?: string) => void, turns: { v: string; trace: any }[], prefix = "") => {
+/** Grader v2 (after rc-live-1, whose v1 grades passed answers that were not useful): questions the household cannot
+ * answer, and contact / claim advice naming an insurer that is not behind one of the person's own policies. */
+export const GRADER_VERSION = "v2";
+const INSURER_REVIEW_Q = /\b(?:has|have|did)\s+the\s+insurer\b|\binsurer(?:['’]s)?\s+(?:decision|review|reviewed|approv\w*|assessment|confirmation)\b|\breviewed medical (?:decision|record)\b/i;
+const ACT = /\b(?:contact|call|phone|email|write to|notify|inform|report (?:it|the \w+) to|claim (?:from|under|with)|submit (?:a claim )?to|ask)\b/i;
+const INSURERS = /\b(?:Aurora Assurance(?: Pte\.? Ltd\.?)?|Kestrel Life Ltd|KestrelOne|Harbourline General Insurance(?: Pte\.? Ltd\.?)?|Harbourline)\b/g;
+const questionsOf = (a: any) => ((a?.questions ?? []) as any[]).map((q) => String(q.text ?? ""));
+const universal = (add: (id: string, dim: Check["dim"], name: string, ok: boolean, detail?: string) => void, turns: { v: string; trace: any; answer?: any }[], prefix = "", allowedInsurers: string[] = []) => {
   turns.forEach((t, i) => {
+    const review = questionsOf(t.answer).filter((q) => INSURER_REVIEW_Q.test(q));
+    add(`${prefix}R${i + 1}`, "U", `turn ${i + 1}: no question the household cannot answer (what the insurer has reviewed or decided)`, !review.length, review.join(" | "));
+    const bad = t.v.split("\n").filter((l) => ACT.test(l)).flatMap((l) => [...l.matchAll(INSURERS)].map((m) => m[0]).filter((n) => !allowedInsurers.some((a) => n.startsWith(a) || a.startsWith(n))).map((n) => `${n}: ${l}`));
+    if (allowedInsurers.length) add(`${prefix}IN${i + 1}`, "C", `turn ${i + 1}: contact / claim advice names only the insurer of the person's own policy (${allowedInsurers.join(", ")})`, !bad.length, bad.join(" | "));
     const orphan = t.v.split("\n").filter((l) => ORPHAN.test(l.trim()) && !/\?\s*$/.test(l)); // (a question is not a fragment)
     add(`${prefix}O${i + 1}`, "U", `turn ${i + 1}: no orphaned fragment (no line starting mid-sentence or with a dependent clause)`, !orphan.length, orphan.join(" | "));
     const promises = t.v.split(/(?<=[.?!])\s+|\n/).filter((x) => PROMISE.test(x) && !/\b(?:not|no|never|cannot|can['’]t|isn['’]t|won['’]t|without)\b/i.test(x));
@@ -81,7 +92,9 @@ export function gradeRCT1(id: string, conv: any): Graded {
   add("T3C", "C", "turn 3: the corrected illustration S$20,000 (thigh bone 20% x S$100,000); S$10,000 not presented as current", !!t3 && money(t3.v).includes(20000) && !/illustration is S\$10,000/.test(t3.v) && never(t3.v), t3?.v ?? "");
   add("T3S", "S", "turn 3: from a saved calculation that recomputes to S$20,000", !!r3 && recomputes(r3, 2_000_000), JSON.stringify(r3 ?? null).slice(0, 900));
   add("T3U", "U", "turn 3: the correction is acknowledged and the earlier estimate withdrawn (said, or recorded as withdrawn)", !!t3 && (/no longer applies|instead of|updated|corrected|rather than/i.test(t3.v) || calcs.some((c) => c.withdrawn)), t3?.v ?? "");
-  universal(add, b.turns);
+  // v2: a complete supported answer is the end of the turn -- no further question once the illustration is shown
+  add("T3Q", "U", "turn 3 (v2): the corrected illustration ends the turn -- no further question; the withdrawal is SAID on the page", !!t3 && !(t3.answer?.questions ?? []).length && /no longer applies|instead of|rather than|replaces/i.test(t3.v), t3?.v ?? "");
+  universal(add, b.turns, "", ["Aurora Assurance"]);
   return finish(id, checks, b);
 }
 
@@ -96,7 +109,7 @@ export function gradeRCW1(id: string, conv: any): Graded {
   add("W1K", "K", "the terms: 50% of the Simple Fracture Benefit Limit of S$5,000", /50%/.test(t.v) && /S\$5,000/.test(t.v) && /Simple Fracture/i.test(t.v), t.v);
   add("W1S", "S", "from a saved calculation that recomputes to S$2,500 with 50% and S$5,000 bound to the Summary of Benefits", !!rec && recomputes(rec, 250_000) && docOps(rec).some((o) => o.value === 50 && o.binding?.policyId === SUM) && docOps(rec).some((o) => o.value === 5000 && o.binding?.policyId === SUM), JSON.stringify(rec ?? null).slice(0, 900));
   add("W1U", "U", "answers without 'couldn't confirm' and without a question (the case is given)", !NOT_CONFIRMED.test(t.v) && !(t.answer?.questions ?? []).length, t.v);
-  universal(add, b.turns);
+  universal(add, b.turns, "", ["Kestrel Life Ltd"]);
   return finish(id, checks, b);
 }
 
@@ -110,12 +123,31 @@ export function gradeRCW2(id: string, conv: any): Graded {
   const dimOf: Record<string, Check["dim"]> = { R1: "S", R2: "U", R3: "C", R4: "C", R5: "C", R6: "C", R7: "U" };
   for (const c of g.checks) add("D" + c.id, dimOf[c.id] ?? "C", c.name, c.ok, c.detail ?? "");
   add("DK", "K", "the Accidental Death benefit (100% of the Sum Insured) is explained", /Accidental Death/i.test(b.turns[0].v) && /100%/.test(b.turns[0].v), b.turns[0].v);
-  universal(add, b.turns);
+  universal(add, b.turns, "", ["Kestrel Life Ltd"]);
   if (g.verdict === "BLOCKED") return { scenario: id, verdict: "BLOCKED", checks, note: g.note };
   return finish(id, checks, b);
 }
 
 /** RCW3 (household Wong): "which of my uploaded policies should I claim under" -- an event question, not an inventory. */
+/** RCX (household Wong, v2 control): a wrist -- which no listed fracture case covers -- and who to contact. Unlisted case
+ * and reference insurer in one conversation: no illustration, no question offering unrelated cases, the unlisted case
+ * said, and contact advice naming the certificate's insurer (Kestrel Life Ltd) -- never the summary's brand (KestrelOne)
+ * alone and never the travel insurer. */
+export function gradeRCX(id: string, conv: any): Graded {
+  const b = base(conv); const checks: Check[] = [];
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  if (b.blocked || !b.turns.length) return finish(id, checks, b);
+  const t = b.turns[0];
+  const amounts = money(t.v).filter((x) => ![5000, 600000, 1000000].includes(x));
+  add("X1", "C", "no fracture illustration for a wrist (no amount other than the printed limits / dated sums)", !amounts.length && !calcsOf(t.answer).length, JSON.stringify(amounts) + "\n" + t.v);
+  add("X2", "K", "says the documents list no fracture case for a wrist, with the cases they do list", /wrist/i.test(t.v) && /\b(?:no (?:listed )?case|not (?:one of the )?listed|does(?: not|n['’]t) list|not listed|lists no|isn['’]t listed|no case for)\b/i.test(t.v) && /\d+%/.test(t.v), t.v);
+  add("X3", "U", "no question offering the listed cases (or any question): the answer is that a wrist is not listed", !questionsOf(t.answer).length, questionsOf(t.answer).join(" | "));
+  add("X4", "U", "a contact step naming the certificate's insurer (Kestrel Life Ltd) or the scheme administrator / employer", t.v.split("\n").some((l) => ACT.test(l) && /Kestrel Life Ltd|scheme administrator|employer/i.test(l)), t.v);
+  add("X5", "U", "no inventory and no 'couldn't confirm'", !INVENTORY_LINE.test(t.v) && !/could not be read|Photo of letter|Ethan/i.test(t.v) && !NOT_CONFIRMED.test(t.v), t.v);
+  universal(add, b.turns, "", ["Kestrel Life Ltd"]);
+  return finish(id, checks, b);
+}
+
 export function gradeRCW3(id: string, conv: any): Graded {
   const b = base(conv); const checks: Check[] = [];
   const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
@@ -128,11 +160,30 @@ export function gradeRCW3(id: string, conv: any): Graded {
   const rec = calcsOf(t.answer)[0];
   add("I4", "S", "any illustrated amount comes from a saved calculation that recomputes (S$2,000 for the Simple Fracture wrist row)", !amounts.length || (!!rec && amounts.every((x) => recomputes(rec, Math.round(x * 100)))), JSON.stringify({ amounts, rec: rec ? recomputeCalculation(rec) : null }));
   add("I5", "U", "answers the question (no 'couldn't confirm')", !NOT_CONFIRMED.test(t.v), t.v);
-  universal(add, b.turns);
+  universal(add, b.turns, "", ["Kestrel Life Ltd"]);
   return finish(id, checks, b);
 }
 
-export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3 };
+export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
+  // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
+  RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
+
+/** v2 controls on the ACTUAL rc-live-1 transcripts (committed): answers the v1 grader passed that were not useful now
+ * fail on the intended check. The v1 grades themselves are kept as they were (live/rc-live-1-grade.md). */
+function liveControls(): [string, Graded, Verdict, string | null][] {
+  const dir = "docs/rag-migration/reliable-chat/live";
+  const conv = (run: string, sc: string) => { const d = fs.readdirSync(dir).find((x) => x.startsWith(run)); return d ? JSON.parse(fs.readFileSync(path.join(dir, d, `conv-${sc}.json`), "utf8")) : null; };
+  const t1b = conv("RUN-rc-live-1-tan", "RCT1b"), w3 = conv("RUN-rc-live-1-wong", "RCW3"), w1a = conv("RUN-rc-live-1-wong", "RCW1a"), p50a = conv("RUN-rc-live-1-wong", "P50A");
+  if (!t1b || !w3 || !w1a || !p50a) return [["the rc-live-1 transcripts are present", { scenario: "-", verdict: "INCOMPLETE", checks: [], note: null }, "PASS", null]];
+  const p50aAsX = gradeRCX("P50A", p50a); // only its insurer check matters here
+  return [
+    ["live RCT1b (v1 PASS): ends with an insurer-review question", gradeRCT1("RCT1b", t1b), "FAIL", "R3"],
+    ["live RCT1b (v1 PASS): a question after the corrected illustration", gradeRCT1("RCT1b", t1b), "FAIL", "T3Q"],
+    ["live RCW3 graded as the wrist control: asks the household to choose neck / hip / leg", gradeRCX("RCX", w3), "FAIL", "X3"],
+    ["live P50A: contact advice naming the travel insurer (Harbourline)", p50aAsX, "FAIL", "IN1"],
+    ["live RCW1a (v1 PASS, correct and useful) still passes", gradeRCW1("RCW1a", w1a), "PASS", null],
+  ];
+}
 
 function controls() {
   // The grader's own controls: a synthetic perfect answer passes; known-bad variants fail on the intended check.
@@ -144,6 +195,11 @@ function controls() {
     ["RCW1 no record", gradeRCW1("RCW1a", conv([{ summary: "Simple Fracture pays 50% of the S$5,000 limit for a leg: S$2,500 as an illustration.", details: [] }])), "FAIL", "W1S"],
     ["RCT1 promise", gradeRCT1("RCT1a", conv([{ summary: "The Fracture Benefit pays 20% or 10% of Jun's sum insured of S$100,000.", questions: [{ text: "Was it the thigh bone (femur) or below the knee?" }] }, { summary: "The insurer will pay S$10,000 (illustration)." }, { summary: "S$20,000 instead of S$10,000." }])), "FAIL", "P2"],
     ["budget refusal", gradeRCW1("RCW1a", conv([{ summary: "I stopped: the model-use budget set for this test run is used up." }])), "BLOCKED", null],
+    ["v2 incomplete: the wrist control without contact advice", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%." }])), "FAIL", "X4"],
+    ["v2 unsupported insurer: claim advice naming KestrelOne (the summary's brand) alone", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%.", nextSteps: ["Contact KestrelOne to make a claim."] }])), "FAIL", "IN1"],
+    ["v2 good wrist control", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%.", nextSteps: ["Contact Kestrel Life Ltd (through the employer or scheme administrator) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."] }])), "PASS", null],
+    ["v2 incomplete correction: S$20,000 without saying the earlier estimate no longer applies", gradeRCT1("RCT1a", conv([{ summary: "The Fracture Benefit pays a percentage of Jun's sum insured of S$100,000: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%.", questions: [{ text: "Was it the thigh bone (femur) or below the knee (tibia or fibula)?" }] }, { summary: "If it applies, the conditional illustration is S$10,000." }, { summary: "If it applies, the conditional illustration is S$20,000." }])), "FAIL", "T3Q"],
+    ...liveControls(),
   ];
   let ok = true;
   for (const [name, g, want, failing] of cases) {
@@ -171,8 +227,11 @@ if (process.argv[1]?.endsWith("reliable-chat-check.ts")) {
           "Visible answers:", "", ...((conv.loaded?.turns ?? []) as any[]).flatMap((t: any, i: number) => [`- **${conv.turns?.[i]?.user ?? "turn " + (i + 1)}**`, "", "```", visibleOf(t.answer), "```", ""]));
       }
     }
-    const head = [`# rc-live-1 grade (reliable-chat-check.ts, pre-registered)`, "", `| scenario | verdict |`, `|---|---|`, ...all.map((g) => `| ${g.scenario} | ${g.verdict} |`), ""];
-    const out = path.join(dirs[0], "..", "rc-live-1-grade.md");
+    const batch = path.basename(dirs[0]).replace(/^RUN-/, "").replace(/-(?:tan|wong)-\d{4}-.*$/, "");
+    const name = process.env.GRADE_NAME ?? `${batch}-grade`;
+    const head = [`# ${batch} grade (reliable-chat-check.ts, grader ${GRADER_VERSION})`, "", `| scenario | verdict |`, `|---|---|`, ...all.map((g) => `| ${g.scenario} | ${g.verdict} |`), ""];
+    const out = path.join(dirs[0], "..", `${name}.md`);
+    if (fs.existsSync(out) && !process.env.GRADE_OVERWRITE) { console.error(`${out} exists: grades are kept as written (set GRADE_NAME for another file)`); process.exit(2); }
     fs.writeFileSync(out, [...head, ...rows].join("\n") + "\n");
     fs.writeFileSync(out.replace(/\.md$/, ".json"), JSON.stringify(all, null, 2));
     console.log(head.join("\n")); console.log(`wrote ${out}`);

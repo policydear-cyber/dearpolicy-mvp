@@ -16,6 +16,7 @@ import type { SelectedValue } from "./tables";
 import { selectedFromBenefit, type PersonBenefit } from "./benefits";
 import { selectTableValue } from "./tables";
 import { choosePercentRow } from "./calc/pct-rows";
+import { caseFor, partLabel, rowConsistent } from "./calc/case-terms";
 import { runCalculate } from "./calc/tool";
 import { formatMoney, recordForModel, resolveBenefitRecords, type BenefitRecord, type ScheduleRow } from "./benefit-records";
 
@@ -63,26 +64,43 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
 
   if (rec.kind === "percentage_schedule" && rec.schedule) {
     const s = rec.schedule;
-    // 1. the case: an option id the household's words identify, else the household's own words for it
+    // 1. the case: an option id, else the household's own words for it -- and either way, the case must be the one the
+    //    household's recorded words name (a valid option id never overrides what they reported).
     let row: ScheduleRow | null = null;
     const optionId = typeof a.option_id === "string" ? a.option_id.trim() : "";
     if (optionId) { row = s.rows.find((r) => r.id === optionId) ?? null; if (!row) return fail(`option_id ${optionId} is not one of ${rec.benefit}'s listed cases; the cases are: ${s.rows.map((r) => `${r.id} = ${r.label} ${r.percent}%`).join("; ")}`); }
     const caseWords = typeof a.case === "string" ? a.case.trim() : "";
+    const reported = ctx.reported?.get(subjectId) ?? [];
+    const printed = s.rows.map((r) => `${r.label} ${r.percent}%`).join("; ");
+    const pct_of = summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of;
+    const unlisted = (parts: string[]) => (ctx.unlisted ??= new Map()).set(`${subjectId}|${rec.id}`, parts.map(partLabel)) && ok({ status: "unlisted_case", benefit: rec.benefit, benefit_id: rec.id, named: parts.map(partLabel), listed_cases: printed, percentage_of: pct_of,
+      note: `What the household reported (${parts.map(partLabel).join(", ")}) is not one of ${rec.benefit}'s listed cases in this document. Say that, with the cases it does list (a statement of kind benefit_terms citing benefit_id), and suggest asking the insurer whether anything else applies. Do not ask the household to choose one of these cases.` }, [rec.source.evidence]);
+    const ambiguous = (cases: ScheduleRow[], parts: string[]) => ok({ status: "needs_facts", reason: "ambiguous", benefit: rec.benefit, benefit_id: rec.id, need: `${parts.map(partLabel).join(", ")} could be more than one listed case`,
+      ask: `Which of these cases is it: ${cases.map((r) => r.label).join(" or ")}?`, options: caseOptions(cases), percentage_of: pct_of,
+      note: "State the benefit's printed terms (kind benefit_terms), then ask which of THESE cases it is (one question, in plain words); do not choose one for them. Then call evaluate_benefit again with that option_id." }, [rec.source.evidence]);
     if (!row && caseWords) {
-      const choice = choosePercentRow([s.table], rec.benefit, caseWords);
-      if ("row" in choice && !("unresolved" in choice)) row = s.rows.find((r) => r.evidence.passage.start === choice.row.start) ?? null;
+      const c = caseFor(s.rows, caseWords);
+      if (c.kind === "row") row = s.rows.find((r) => r.id === c.row.id) ?? null;
+      else if (c.kind === "ambiguous") return ambiguous(s.rows.filter((r) => c.rows.some((x) => x.id === r.id)), c.parts);
+      else if (c.kind === "unlisted") return unlisted(c.parts);
       else {
-        const named = "ambiguous" in choice ? choice.ambiguous.map((x) => s.rows.find((r) => r.evidence.passage.start === x.row.start)).filter((r): r is ScheduleRow => !!r) : [];
-        return ok({ status: "needs_facts", benefit: rec.benefit, benefit_id: rec.id, need: named.length ? `“${caseWords}” matches more than one listed case` : `“${caseWords}” is not one of the listed cases`,
-          ask: `Which of ${rec.benefit}'s listed cases applies?`, options: caseOptions(named.length ? named : s.rows), percentage_of: summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of,
-          note: named.length ? "Ask the household which case it is (one question, offering these cases in plain words); do not choose one for them. Then call evaluate_benefit again with that option_id."
-            // Reliable chat (rc-live-1, RCW3: "broken wrist" against a table listing no wrist -> the household was asked to pick
-            // neck / hip / leg): a specific part their words name that no listed case names is an answer, not a question.
-            : "Their words name none of these cases. If they name a specific part or kind (a wrist, an organ) that no listed case names, say this document lists no such case (its printed cases are these) and do not ask them to choose one of these cases; suggest asking the insurer. Ask which case applies only when their words are general (\"an injury\")." }, [rec.source.evidence]);
+        // no body part named: the printed labels' own words (schedules of other kinds -- "Loss of one eye")
+        const choice = choosePercentRow([s.table], rec.benefit, caseWords);
+        if ("row" in choice && !("unresolved" in choice)) row = s.rows.find((r) => r.evidence.passage.start === choice.row.start) ?? null;
+        else if ("ambiguous" in choice) return ambiguous(choice.ambiguous.map((x) => s.rows.find((r) => r.evidence.passage.start === x.row.start)).filter((r): r is ScheduleRow => !!r), []);
       }
     }
-    if (!row) return ok({ status: "needs_facts", benefit: rec.benefit, benefit_id: rec.id, need: "which listed case applies", ask: `Which of ${rec.benefit}'s listed cases applies?`, options: caseOptions(s.rows),
-      percentage_of: summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of, conditions: rec.conditions, note: "State the benefit's printed terms first, then ask which case applies, unless the household's words already identify exactly one case." }, [rec.source.evidence]);
+    if (row && reported.length) {
+      const consistent = rowConsistent(s.rows, row, reported);
+      if (!consistent.ok) {
+        const c = caseFor(s.rows, reported.join(" ; "));
+        if (c.kind === "unlisted") return unlisted(c.parts);
+        return ok({ status: "case_conflict", benefit: rec.benefit, benefit_id: rec.id, chosen: row.label, reported: consistent.parts.map(partLabel), matching_cases: c.kind === "row" ? [c.row.label] : c.kind === "ambiguous" ? c.rows.map((r) => r.label) : [],
+          note: `“${row.label}” is not the case the household reported (${consistent.parts.map(partLabel).join(", ")}). Use the case their words name${c.kind === "row" ? ` (option ${c.row.id})` : ""}; never a different one.` }, [rec.source.evidence]);
+      }
+    }
+    if (!row) return ok({ status: "needs_facts", reason: "missing", benefit: rec.benefit, benefit_id: rec.id, need: "which listed case applies", ask: `Which of ${rec.benefit}'s listed cases applies?`, options: caseOptions(s.rows),
+      percentage_of: pct_of, conditions: rec.conditions, note: "The household has not said which case it is. State the benefit's printed terms first (kind benefit_terms), then ask which case applies." }, [rec.source.evidence]);
     // 2. the base, as the table's own header names it
     if (s.base.kind === "unresolved") return ok({ status: "unresolved_evidence", benefit: rec.benefit, benefit_id: rec.id, case: row.label, percent: row.percent, why: s.base.why,
       note: "Say the case's printed percentage and what it is a percentage of, and that the amount it is a percentage of could not be established -- never assume another amount." }, [row.evidence, rec.source.evidence]);

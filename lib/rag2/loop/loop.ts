@@ -429,6 +429,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): failed runs of each tool this turn; a tool that failed twice is not run again. */
   const failures = new Map<string, number>();
   const noteFailure = (name: string) => failures.set(name, (failures.get(name) ?? 0) + 1);
+  /** Reliable chat: benefits this turn found the household's reported case is not one of (per person). */
+  const unlistedNow = new Map<string, { benefit: string; labels: string[] }>();
   let budgetWarned = false;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
@@ -806,6 +808,17 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       let key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
+      // Reliable chat (rc-live-1, RCW3): when the household's reported part is not one of a benefit's listed cases, a
+      // question asking them to choose one of those cases is irrelevant -- the answer is that the document lists no such case.
+      {
+        const un = unlistedNow.get(String(a.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? ""));
+        const q = `${String(a.question ?? "")} ${Array.isArray(a.options) ? (a.options as unknown[]).map(String).join(" ") : ""}`.toLowerCase();
+        const named = un ? un.labels.filter((l) => { const w = (l.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((x) => !["the", "and", "full", "break", "other", "fracture"].includes(x)); return w.length && w.some((x) => q.includes(x)); }) : [];
+        if (un && (named.length >= 2 || /\b(?:which|what)\b[^?]*\b(?:listed )?(?:fracture )?cases?\b/.test(q))) {
+          noteFailure("ask_user");
+          return { result: { ok: false, error: `the household reported a case ${un.benefit} does not list; do not ask them to choose one of its listed cases. Say the document lists no such case (benefit_terms with its listed cases) and suggest asking the insurer; end with final_answer.` } };
+        }
+      }
       // Reliable chat (rc-live-1, RCT1a / RCT1b turn 3: "Has the insurer made a reviewed medical decision that Jun's
       // diagnosis meets the policy's definition ...?"): what the insurer has decided or reviewed is not a fact the
       // household can give; it is the insurer's step, said once as a next step.
@@ -1082,6 +1095,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // stated assumption and the save-time gate rightly refused it as not the household's what-if): an evaluation's
     // assumption is always the household's own words -- the recorded words of the facts it rests on, else its case words
     // when they quote the household, else this message as they wrote it.
+    if (call.name === "evaluate_benefit") {
+      const subj = String(call.arguments.subject_id ?? "");
+      const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+      (ctx.reported ??= new Map()).set(subj, Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim()));
+    }
     if (call.name === "evaluate_benefit" && !(typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim())) {
       const subj = String(call.arguments.subject_id ?? "");
       const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
@@ -1375,6 +1393,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       // Reliable chat: what an evaluation's case rests on -- the facts the model names (fact_keys), else the facts the
       // household gave for this person this turn -- so a correction withdraws exactly the results built on it.
+      if (res.ok && call.name === "evaluate_benefit" && (res.data as { status?: string }).status === "unlisted_case") {
+        const d = res.data as { listed_cases?: string; benefit?: string };
+        unlistedNow.set(String(call.arguments.subject_id ?? ""), { benefit: d.benefit ?? "", labels: String(d.listed_cases ?? "").split("; ").map((x) => x.replace(/\s+\d+(?:\.\d+)?%$/, "").trim()).filter(Boolean) });
+      }
       if (res.ok && call.name === "evaluate_benefit") {
         const rid = (res.data as { result_id?: string }).result_id; const k = rid ? calcOutcomes(ctx).get(rid) : undefined;
         const subj = String(call.arguments.subject_id ?? "");

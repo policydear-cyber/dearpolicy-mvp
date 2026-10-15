@@ -92,7 +92,7 @@ async function main() {
     ] }]);
     const ev3 = (w3[0].trace.toolCalls ?? []).find((c: any) => c.name === "evaluate_benefit");
     const r3 = JSON.stringify(ev3?.summary ?? ev3 ?? {});
-    check("RCW3 recorded call: \"broken wrist\" names none of the Simple Fracture cases -> the result says not to ask the household to choose one of them", ev3?.ok === true && /do not ask them to choose one of these cases/.test(note3) && !(w3[0].answer.questions ?? []).length, w3[0].v + "\n" + note3 + "\n" + r3.slice(0, 400));
+    check("RCW3 recorded call: \"broken wrist\" names none of the Simple Fracture cases -> unlisted_case (no options to choose from); the server's terms say it lists no case for a wrist; no question", ev3?.ok === true && /Do not ask the household to choose/.test(note3) && /lists no case for a wrist/.test(w3[0].v) && !(w3[0].answer.questions ?? []).length, w3[0].v + "\n" + note3 + "\n" + r3.slice(0, 400));
     // P50A (an unplanned extra of the same run): the model's contact steps for the certificate, the PA wording and the
     // travel wording filed under Adrian but linked to nobody.
     const doc = (k: string) => W.DOCS.find((d) => d.key === k)!.id;

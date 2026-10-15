@@ -14,7 +14,7 @@ import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
 import { formatMoney, type BenefitRecord } from "../benefit-records";
-import { loadDocs, loadLinks } from "../store";
+import { loadDocs, loadLinks, type DocRow, type LinkRow } from "../store";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -48,7 +48,10 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
     if (b.kind === "fixed_limit") ev.push(d.evidenceId(b.evidence));
     if (b.kind === "sum_insured") { const v = await personAmountValue(d.ctx, b.from, r.memberName, r.memberId); if (v) vals.push(v); }
     const cases = s.rows.map((x) => `${x.label} ${x.percent}%`).join("; ");
-    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.`, evidence_ids: ev, value_ids: vals };
+    // (an evaluation this turn found the household's reported part among none of these cases: said with the terms)
+    const un = d.ctx.unlisted?.get(`${r.memberId}|${r.id}`);
+    const none = un?.length ? ` It lists no case for ${un.length > 1 ? un.slice(0, -1).join(", ") + " or " + un.at(-1) : `a ${un[0]}`}.` : "";
+    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}`, evidence_ids: ev, value_ids: vals };
   }
   const p = r.printed;
   if (p?.kind === "money") {
@@ -112,18 +115,16 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
     const docs = (args.next_steps as unknown[]).some((x) => typeof x === "string" && CONTACT.test(x)) ? await loadDocs(d.ctx.accountId) : [];
     const subject = typeof args.subject_id === "string" ? args.subject_id : d.state.subjectId ?? null;
     const links = docs.length ? await loadLinks(d.ctx.accountId, docs.map((x) => x.id)) : [];
-    // (linked to the person -- a policy_members row, as the household's library shows it: an upload filed under them but
-    // linked to nobody is "not linked to anyone" there, rc-live-1 P50A's travel wording, and gets no contact step)
-    const theirs = (id: string) => subject ? links.some((l) => l.policyId === id && l.memberId === subject) : links.some((l) => l.policyId === id);
     const insurersSaid = new Set<string>();
     args.next_steps = (args.next_steps as unknown[]).map((x, i) => {
       const m = typeof x === "string" ? CONTACT.exec(x) : null;
       if (!m) return x;
-      const doc = docs.find((p) => p.id === m[1]);
-      if (!doc || !doc.insurer || !theirs(doc.id)) { problems.push(`next step ${i + 1}: contact:<policy_id> needs the policy_id of one of this person's documents with an insurer`); return null; }
+      const t = contactTarget(docs, links, subject, m[1]);
+      if ("refused" in t) { problems.push(`next step ${i + 1}: ${t.refused}`); return null; }
+      const doc = t.doc;
       // one contact step per insurer (two documents of one scheme are one call to make)
-      if (insurersSaid.has(doc.insurer.trim().toLowerCase())) return null;
-      insurersSaid.add(doc.insurer.trim().toLowerCase());
+      if (insurersSaid.has(doc.insurer!.trim().toLowerCase())) return null;
+      insurersSaid.add(doc.insurer!.trim().toLowerCase());
       const group = /\bgroup\b|\bscheme\b/i.test(`${doc.productName ?? ""} ${doc.policyType ?? ""}`);
       const step = `Contact ${doc.insurer}${group ? " (through the employer or scheme administrator, for this group scheme)" : ""} about the ${doc.productName ?? "policy"} to ask what it needs for a claim.`;
       RENDERED_STEPS.add(step);
@@ -131,4 +132,25 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
     }).filter((x) => x != null);
   }
   return problems;
+}
+
+/**
+ * Reliable chat: the document a contact step may name, for this person. Only a PERSONAL policy document linked to them
+ * (their certificate / schedule), or a reference document (wording, benefit summary) linked to them that belongs to one
+ * of those personal policies -- the same policy or group policy number -- in which case the step names the personal
+ * policy's insurer and product. Never: a document linked to nobody, a reference document with no personal policy of
+ * theirs behind it (linked but unconfirmed), an unrelated product, or another person's policy.
+ */
+export function contactTarget(docs: DocRow[], links: LinkRow[], subject: string | null, docId: string): { doc: DocRow; via: "personal" | "reference" } | { refused: string } {
+  const doc = docs.find((p) => p.id === docId);
+  if (!doc) return { refused: `contact:${docId} is not one of the household's current documents` };
+  if (!subject) return { refused: "contact:<policy_id> needs the person the step is for (subject_id)" };
+  const linked = (id: string) => links.some((l) => l.policyId === id && l.memberId === subject);
+  if (!linked(doc.id)) return { refused: `contact:<policy_id> must be a document linked to this person; ${doc.productName ?? "that document"} is not` };
+  const personal = docs.filter((p) => p.personalCoverageConfirmed && linked(p.id) && !!p.insurer?.trim());
+  if (doc.personalCoverageConfirmed && doc.insurer?.trim()) return { doc, via: "personal" };
+  const num = (v: string | null) => (v ?? "").replace(/\s+/g, "").toUpperCase();
+  const owner = personal.find((p) => (num(p.policyNumber) && num(p.policyNumber) === num(doc.policyNumber)) || (num(p.groupPolicyNumber) && (num(p.groupPolicyNumber) === num(doc.groupPolicyNumber) || num(p.groupPolicyNumber) === num(doc.policyNumber))));
+  if (owner) return { doc: owner, via: "reference" };
+  return { refused: `contact:<policy_id> must be this person's own policy document, or wording that belongs to it (the same policy number); ${doc.productName ?? "that document"} is reference wording with no personal policy of theirs behind it -- do not suggest contacting its insurer` };
 }

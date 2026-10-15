@@ -71,3 +71,16 @@ test("RC1: benefit -> terms -> question -> server evaluation -> correction, then
   expect(reopened).toContain("S$20,000");
   expect(reopened).toMatch(/no longer applies/);
 });
+
+test("RC2: a part no listed case covers is said with the listed cases and a contact step; no question reaches the page", async ({ page, request }) => {
+  const [u] = await scenario(request, "RC2");
+  await page.goto("/chat"); await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
+  const a = await send(page, u);
+  console.log(`--- RC2 click to visible answer ${a.visibleMs} ms`);
+  const s = await sameAsSaved(request, a.shown, "RC2");
+  expect(a.shown).toMatch(/lists no case for a collarbone/);
+  expect(a.shown).toMatch(/thigh bone \(femur\) 20%/);
+  expect(a.shown).toMatch(/Contact Aurora Assurance/);
+  expect(s.saved.questions ?? []).toHaveLength(0);
+  expect(a.shown).not.toMatch(/Which listed fracture case/);
+});

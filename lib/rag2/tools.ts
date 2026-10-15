@@ -42,6 +42,11 @@ export type ToolContext = {
   /** Reliable chat: the benefit records shown to the model this turn (benefit id -> record), for server-rendered
    * statements. Evaluation never trusts this cache: evaluate_benefit re-resolves the records every time. */
   benefitRecords?: Map<string, BenefitRecord>;
+  /** Reliable chat: the household's own recorded words per person (the loop's facts), so evaluate_benefit's case is
+   * checked against what they reported -- never only against the model's case words or option id. */
+  reported?: Map<string, string[]>;
+  /** Reliable chat: per `${memberId}|${benefitId}`, the reported parts an evaluation found none of the listed cases covers. */
+  unlisted?: Map<string, string[]>;
 };
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };
@@ -180,7 +185,7 @@ export const RAG_TOOLS: ToolDef[] = [
   },
   {
     name: "evaluate_benefit",
-    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation.",
+    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation. Results: needs_facts (reason missing: they have not said which case; ambiguous: their words fit more than one listed case -- ask which of THOSE), unlisted_case (what they reported is not a listed case: say so, ask nothing about the cases), case_conflict (the option is not what they reported).",
     parameters: { type: "object", properties: {
       benefit_id: str("The benefit, as person_benefits identified it (b...)."),
       subject_id: str("The household member."),
