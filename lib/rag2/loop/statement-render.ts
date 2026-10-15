@@ -23,7 +23,14 @@ export const RENDERED_STEPS = new Set<string>();
 export const STATEMENT_KINDS = ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status"] as const;
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const fmtDate = (iso: string | null) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? ""); return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : iso; };
-const pretty = (label: string) => { const s = label.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim(); return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s; };
+/** A printed label as a reader expects it: an ALL-CAPS roster label takes the casing the household's own document names
+ * use for the same words ("FAMILYGUARD PERSONAL ACCIDENT" -> "FamilyGuard Personal Accident"), else title case. */
+const pretty = (label: string, known: (string | null | undefined)[] = []) => {
+  const s = label.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
+  if (!(s === s.toUpperCase() && /[A-Z]{3}/.test(s))) return s;
+  for (const k of known) { const i = (k ?? "").toLowerCase().indexOf(s.toLowerCase()); if (k && i >= 0) return k.slice(i, i + s.length); }
+  return s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+};
 const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.test(r.policy.product ?? "") ? "certificate" : r.policy.product ?? "document");
 
 type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef) => string; nameOf: (id: string | null | undefined) => string | null };
@@ -62,7 +69,7 @@ export function renderCalculation(resultId: string, d: Deps): string | null {
   if (c.kind === "conditional_illustration" && c.calculator === "lump_sum" && c.amount != null) {
     const ops = (c.record?.operands ?? []).filter((o) => o.source === "document");
     const pct = ops.find((o) => o.unit === "percent"), base = ops.find((o) => o.unit === "money");
-    const baseText = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)} (${pretty(base.label)})` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
+    const baseText = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)} (${pretty(base.label, [...(d.ctx.benefitRecords?.values() ?? [])].map((r) => r.policy.product))})` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
     const assumption = c.record?.assumption?.trim() ?? "";
     // the household's own words are said back only when they are a description, not merely the case they picked
     const said = assumption && assumption.split(/\s+/).length >= 4 && !/^(?:the listed case|if)\b/i.test(assumption) ? ` (as you described: “${assumption.replace(/[“”"]/g, "")}”)` : "";
