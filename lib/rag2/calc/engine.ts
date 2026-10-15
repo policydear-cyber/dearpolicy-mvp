@@ -40,6 +40,9 @@ export type CalcOutcome = {
   record: Omit<CalculationRecord, "sentence"> | null;
   steps: string[];
   unresolvedText: string;
+  /** Reliable chat: the household facts (note_facts keys) a server evaluation's selection rests on -- the case they
+   * identified -- so correcting one of them withdraws this result. */
+  dependsOn?: string[];
   /** Why the benefit pays nothing for these facts (not_payable), stated from the wording. */
   reason?: string | null;
   evidence: EvidenceRef[];

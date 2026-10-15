@@ -25,6 +25,9 @@ export function setEnv(household: HarnessHousehold = DEFAULT_HOUSEHOLD) {
   process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-test-not-used";
   delete process.env.PINECONE_API_KEY;
   delete process.env.DEARPOLICY_RAG_TOOLS;
+  // Reliable chat (stage 2): suites written for the earlier operand-assembly calculate keep that contract until they are
+  // ported; suites of the migrated path set DEARPOLICY_CHAT_CONTRACT=benefits before calling setEnv.
+  process.env.DEARPOLICY_CHAT_CONTRACT ??= "legacy-operands";
 }
 
 export type Harness = { db: any; networkCalls: string[]; send: (question: string, conv?: { id?: string; rev?: number }, member?: string | null) => Promise<ChatAnswer>; savedAnswer: (conversationId: string) => Promise<{ summary: string; answer: ChatAnswer; state: any }> };

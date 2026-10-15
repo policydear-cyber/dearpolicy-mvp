@@ -122,7 +122,7 @@ async function packetOf(accountId: string, id: string): Promise<ClaimDecisionPac
 }
 
 /** Agent G: the facts a calculation rests on -- the recorded household facts its household operands quote. */
-export function calcFactKeys(c: Pick<CalcOutcome, "record">, claim: LoopClaim | null | undefined): string[] {
+export function calcFactKeys(c: Pick<CalcOutcome, "record"> & { dependsOn?: string[] }, claim: LoopClaim | null | undefined): string[] {
   const norm = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
   const keys = new Set<string>();
   for (const o of c.record?.operands ?? []) {
@@ -135,6 +135,7 @@ export function calcFactKeys(c: Pick<CalcOutcome, "record">, claim: LoopClaim | 
       if (sameWords || (sameRole && numbersIn(String(f.value)).some((n) => numbersIn(String(o.value)).includes(n)))) keys.add(k);
     }
   }
+  for (const k of (c as { dependsOn?: string[] }).dependsOn ?? []) if (claim?.facts?.[k]) keys.add(k);
   return [...keys];
 }
 /** Agent G: what to remember about one calculation of the claim. */
