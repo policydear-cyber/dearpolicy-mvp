@@ -39,7 +39,12 @@ export function percentTables(page: string): PctTable[] {
     // a plain-text header is a short column-header line (no sentence ending) immediately followed by a plain row
     const nextText = lines.slice(i + 1).find((l) => l.text.trim())?.text ?? "";
     const plain = !gapped && h.text.trim().length <= 100 && !/[.;!?]$/.test(h.text.trim()) && !!plainRow(nextText);
-    if (!gapped && !plain) continue;
+    // V1.5 (PR #51 review: the ACTUAL stored page 13): a column header wrapped over two lines -- "Schedule<TAB>Compensation"
+    // then "(% of S$5,000)" on its own line. The "% of" line has no cell gap and the line with the cells has no "% of",
+    // so neither alone was a header and the table was never found. The "% of" line continues the cell line above it.
+    const prev = i > 0 ? lines[i - 1].text : "";
+    const wrapped = !gapped && (CELL_GAP.test(prev) || prev.includes("\t")) && !/\d/.test(prev) && /^\(?\s*(?:%|per ?cent(?:age)?)\s+of\b/i.test(h.text.trim());
+    if (!gapped && !plain && !wrapped) continue;
     const above = lines.slice(floor, i).filter((l) => l.text.trim()).slice(-4);
     const sectionLine = [...above].reverse().find((l) => SECTION.test(l.text));
     const rows: PctRow[] = [];
@@ -74,7 +79,7 @@ export function percentTables(page: string): PctTable[] {
     }
     if (!rows.length) continue;
     const end = rows[rows.length - 1].end;
-    out.push({ name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: h.start, start: h.start, end, rows });
+    out.push({ name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: (wrapped ? prev.split(/\t+| {3,}/).map((c) => c.trim()).filter(Boolean).join(" ") + " " : "") + h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: wrapped ? lines[i - 1].start : h.start, start: wrapped ? lines[i - 1].start : h.start, end, rows });
     floor = j;
     i = j - 1;
   }

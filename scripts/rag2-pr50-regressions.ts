@@ -29,10 +29,10 @@ async function main() {
   const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
   const run = async (turns: { user: string; steps: ((v: ScriptView) => any[])[] }[]) => {
     installLoopModel(new ScriptedLoopModel(turns as any));
-    const out: { v: string; returned: string; answer: any; trace: any; ms: number }[] = [];
+    const out: { v: string; returned: string; answer: any; trace: any; state: any; ms: number }[] = [];
     try {
       let c: { id?: string; rev?: number } = {};
-      for (const t of turns) { const t0 = Date.now(); const a = await h.send(t.user, c); const ms = Date.now() - t0; c = { id: a.conversationId, rev: a.conversationRevision }; const s = await h.savedAnswer(c.id!); out.push({ v: visibleOf(s.answer), returned: visibleOf(a), answer: s.answer, trace: s.state.ragLoop.turns.at(-1), ms }); if (process.env.PR50_SHOW) console.log(`\n=== VISIBLE [${t.user.slice(0, 60)}]\n${visibleOf(s.answer)}\n===${s.answer.calculations?.length ? "\nSAVED CALCULATION " + JSON.stringify(s.answer.calculations) : ""}`); }
+      for (const t of turns) { const t0 = Date.now(); const a = await h.send(t.user, c); const ms = Date.now() - t0; c = { id: a.conversationId, rev: a.conversationRevision }; const s = await h.savedAnswer(c.id!); out.push({ v: visibleOf(s.answer), returned: visibleOf(a), answer: s.answer, trace: s.state.ragLoop.turns.at(-1), state: s.state, ms }); if (process.env.PR50_SHOW) console.log(`\n=== VISIBLE [${t.user.slice(0, 60)}]\n${visibleOf(s.answer)}\n===${s.answer.calculations?.length ? "\nSAVED CALCULATION " + JSON.stringify(s.answer.calculations) : ""}`); }
     } finally { installLoopModel(null); }
     return out;
   };
@@ -52,7 +52,7 @@ async function main() {
       () => [call("person_benefits", { subject_id: A, topic: "simple fracture leg" })],
       (v: ScriptView) => { v1 = vidOf(v, /Term Life/); return [call("search_passages", { query: "Simple Fracture Benefit Limit leg percentage", policy_ids: [SUM], subject_id: A })]; },
       // the recorded first call: proportion e15, applies_when Leg, an empty base_value_id
-      (v: ScriptView) => { e15 = hitOf(v, /Compensation \(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "Leg", proportion: { evidence_id: e15, applies_when: "Leg" }, base_value_id: "", assumption_words: "If that provision applies" })]; },
+      (v: ScriptView) => { e15 = hitOf(v, /\(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "Leg", proportion: { evidence_id: e15, applies_when: "Leg" }, base_value_id: "", assumption_words: "If that provision applies" })]; },
       // the recorded second call: the same, with base_value_id v1 (Adrian's Group Term Life S$1,000,000)
       (v: ScriptView) => [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "Leg", proportion: { evidence_id: e15, applies_when: "Leg" }, base_value_id: secondBase(v), assumption_words: "If that provision applies" })],
       (v: ScriptView) => { const ok = [...v.turn].reverse().find((o) => o.name === "calculate" && o.ok); return [call("final_answer", { subject_id: A, sentences: ok ? [
@@ -65,6 +65,22 @@ async function main() {
     ] });
     const [d1] = await run([fractureTurn(() => v1)]);
     const [first, second] = calcs(d1);
+    await check(`D0 [${P.PAGE}] the retrieved passage e15 is the stored page's own span (page 13, exact offsets) and holds the limit, the "% of S$5,000" header and the leg row; its support excerpt is narrower`, () => {
+      const ev = d1.state?.ragLoop?.evidence?.[e15];
+      const hit = (d1.trace.toolCalls as any[]).find((c) => c.name === "search_passages");
+      assert.ok(hit?.evidenceIds?.includes(e15), JSON.stringify(hit));
+      const e = ev; assert.ok(e, "e15 is stored in the conversation state");
+      {
+        const page = (P.PAGE === "plain" ? P.SUM_P13_PLAIN : P.SUM_P13_TABS);
+        assert.equal(page.slice(e.passage.start, e.passage.end), e.passage.text, "offsets are the page's own");
+        if (P.PAGE === "tabs") {
+          // the report's e15: limit, "(% of S$5,000)", Neck/Skull 100%, Hip 75%, Leg 50% -- and a support excerpt of the limit line only
+          assert.ok(e.passage.text.startsWith("Simple Fracture Benefit Limit: S$5,000") && /\(% of S\$5,000\)/.test(e.passage.text) && /Hip\t75%/.test(e.passage.text) && e.passage.text.endsWith("Jaw, Pelvis, Leg^, Ankle or Knee\t50%"), e.passage.text);
+          assert.equal(e.support?.text, "Simple Fracture Benefit Limit: S$5,000");
+        }
+        if (process.env.PR50_SHOW) console.log("E15", JSON.stringify({ page: e.passage.onPage, start: e.passage.start, end: e.passage.end, text: e.passage.text, support: e.support ?? null }));
+      }
+    });
     await check("D1 the recorded calls on the plain-text page 13 (proportion e15, applies_when \"Leg\"): the first call resolves the leg row (50%) and the S$5,000 limit within the Simple Fracture section", () => {
       assert.notEqual(e15, "none", "search_passages returned the page-13 passage");
       assert.ok(first?.ok, JSON.stringify(first));
@@ -78,7 +94,7 @@ async function main() {
       assert.match(d1.v, /conditional illustration is S\$2,500/, d1.v + "\n" + JSON.stringify(d1.trace.gate));
       assert.equal(d1.v, d1.returned);
       const ops = docOps(d1);
-      assert.ok(ops.some((o: any) => o.value === 50 && o.binding?.policyId === SUM && o.binding?.pageStart === 13 && /Jaw, Pelvis, Leg, Ankle or Knee 50%/.test(o.row)), JSON.stringify(ops));
+      assert.ok(ops.some((o: any) => o.value === 50 && o.binding?.policyId === SUM && o.binding?.pageStart === 13 && /Jaw, Pelvis, Leg\^?, Ankle or Knee\s+50%/.test(o.row)), JSON.stringify(ops));
       assert.ok(ops.some((o: any) => o.value === 5000 && o.binding?.policyId === SUM && /Simple Fracture Benefit Limit: S\$5,000/.test(o.row)), JSON.stringify(ops));
       const { recomputeCalculation } = await import("@/lib/claims/calc-record");
       const re = recomputeCalculation(d1.answer.calculations[0]); assert.ok(re.ok && re.resultMinor === 250000, JSON.stringify(re));
@@ -94,7 +110,7 @@ async function main() {
     const amb = { user: D, steps: [
       () => [call("person_benefits", { subject_id: A, topic: "simple fracture leg" })],
       (v: ScriptView) => { sfLimit = vidOf(v, /Simple Fracture/); return [call("search_passages", { query: "Simple Fracture Benefit Limit leg percentage", policy_ids: [SUM], subject_id: A })]; },
-      (v: ScriptView) => { e15 = hitOf(v, /Compensation \(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "leg or arm", proportion: { evidence_id: e15, applies_when: "leg or arm" }, assumption_words: "If that provision applies" })]; },
+      (v: ScriptView) => { e15 = hitOf(v, /\(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "leg or hip", proportion: { evidence_id: e15, applies_when: "leg or hip" }, assumption_words: "If that provision applies" })]; },
       (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], ...(sfLimit ? { value_ids: [sfLimit] } : {}), subject_id: A }] })],
     ] };
     const [d5] = await run([amb]);
@@ -103,12 +119,12 @@ async function main() {
       assert.ok(!/S\$2,500/.test(d5.v), "no unverified S$2,500: " + d5.v);
       assert.match(d5.v, /Simple Fracture/, d5.v);
       const err = String(calcs(d5)[0]?.result?.error ?? calcs(d5)[0]?.error ?? "");
-      assert.match(err, /v\d+ = “Jaw, Pelvis, Leg, Ankle or Knee” 50%/, "the refusal offers the rows as value ids: " + err);
+      assert.match(err, /v\d+ = “Jaw, Pelvis, Leg\^?, Ankle or Knee” 50%/, "the refusal offers the rows as value ids: " + err);
     });
     // Negative controls
     const neg = async (args: (v: ScriptView) => Record<string, unknown>, user = D, subject = A) => (await run([{ user, steps: [
       () => [call("person_benefits", { subject_id: A }), call("search_passages", { query: "Simple Fracture Benefit Limit leg percentage", policy_ids: [SUM], subject_id: A }), call("read_page", { policy_id: P.doc("WORDING").id, page: 1 })],
-      (v: ScriptView) => { e15 = hitOf(v, /Compensation \(% of S\$5,000\)/); v1 = vidOf(v, /Term Life/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: subject, policy_id: SUM, benefit: "Simple Fracture", condition: "Leg", assumption_words: "If that provision applies", ...args(v) })]; },
+      (v: ScriptView) => { e15 = hitOf(v, /\(% of S\$5,000\)/); v1 = vidOf(v, /Term Life/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: subject, policy_id: SUM, benefit: "Simple Fracture", condition: "Leg", assumption_words: "If that provision applies", ...args(v) })]; },
       () => [call("final_answer", { subject_id: subject, sentences: [{ text: "I could not work out the Simple Fracture amount.", subject_id: subject }] })],
     ] }]))[0];
     const n1 = await neg((v) => ({ percent_value_id: vidOf(v, /Term Life/), base_value_id: vidOf(v, /Term Life/) }));
@@ -195,7 +211,7 @@ async function main() {
     for (const n of names) assert.ok(a.details[0].includes(n), n);
   });
   const failed = results.filter((r) => !r.ok);
-  console.log(`\npr50 [${NAMES}] ${results.length - failed.length}/${results.length} passed`);
+  console.log(`\npr50 [${NAMES} names, ${P.PAGE} page 13] ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

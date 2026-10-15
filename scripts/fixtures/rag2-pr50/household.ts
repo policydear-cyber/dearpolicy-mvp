@@ -58,8 +58,22 @@ export const SUM_P9 = [
   "• Death due to Illness\tS$1,500",
   "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
 ].join("\n");
-/** The live page as plain text: single spaces between a row's label and its percentage. */
-export const SUM_P13 = [
+/** V1.5 (PR #51 review): the ACTUAL stored representation of page 13 as the report gives it -- the column header
+ * wrapped over two lines ("Schedule<TAB>Compensation" / "(% of S$5,000)"), each row's percentage after a TAB, "Leg^"
+ * with its footnote mark, and no section heading line above the table. */
+export const SUM_P13_TABS = [
+  "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+  // (a blank line: the stored passage e15 begins at the limit line and ends at the leg row -- six lines, as reported)
+  "",
+  "Simple Fracture Benefit Limit: S$5,000",
+  "Schedule\tCompensation",
+  "(% of S$5,000)",
+  "Neck, Skull or Spine (Full Break)\t100%",
+  "Hip\t75%",
+  "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+].join("\n");
+/** A single-space plain-text variant of the same page (a second extraction shape; not the report's representation). */
+export const SUM_P13_PLAIN = [
   "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
   "Section D - Simple Fracture",
   "Simple Fracture Benefit Limit: S$5,000",
@@ -100,6 +114,9 @@ export const TRAVEL_S1 = [
 ].join("\n");
 
 /** File names: the report does not give them. `names(\"plain\" | \"snake\" | \"uuid\")` -- the hypothesis variants. */
+/** PR50_PAGE=tabs (default: the report's stored representation) | plain (single-space variant). */
+export type PageVariant = "tabs" | "plain";
+export const PAGE: PageVariant = (process.env.PR50_PAGE as PageVariant) === "plain" ? "plain" : "tabs";
 export type NameVariant = "plain" | "snake" | "uuid" | "digits";
 export const FILES: Record<NameVariant, { travelWording: string; travelSummary: string; scan: string }> = {
   plain: { travelWording: "Travel Wording.pdf", travelSummary: "Travel Benefit Summary.pdf", scan: "Photo of letter.jpg" },
@@ -113,7 +130,7 @@ export function docsFor(v: NameVariant): FxDoc[] {
   const f = FILES[v];
   return [
     { key: "CERT", id: id(101), owner: M.adrian.id, members: both, insurer: "Kestrel Life Ltd", product: "Public Officers Group Insurance Scheme - Certificate", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:pr50-cert", effective: "2022-10-06", documentDate: "2022-10-06", pages: { 1: CERT_P1 } },
-    { key: "SUMMARY", id: id(102), owner: M.adrian.id, members: both, insurer: "KestrelOne", product: "Public Officers Group Personal Accident - Summary of Benefits", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "benefit_summary", personal: false, hash: "sha256:pr50-summary", pages: { 9: SUM_P9, 13: SUM_P13 } },
+    { key: "SUMMARY", id: id(102), owner: M.adrian.id, members: both, insurer: "KestrelOne", product: "Public Officers Group Personal Accident - Summary of Benefits", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "benefit_summary", personal: false, hash: "sha256:pr50-summary", pages: { 9: SUM_P9, 13: PAGE === "plain" ? SUM_P13_PLAIN : SUM_P13_TABS } },
     { key: "WORDING", id: id(103), owner: M.adrian.id, members: both, insurer: "Kestrel Life Ltd", product: "Public Officers Group Personal Accident - Policy Wording", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "policy_wording", personal: false, hash: "sha256:pr50-wording", pages: { 1: WORD_P1, 2: WORD_P2 } },
     { key: "TRAVEL_WORDING", id: id(104), owner: M.adrian.id, members: [], insurer: "Harbourline General Insurance Pte. Ltd.", product: "Travel Insurance - Policy Wording", policyNumber: null, policyType: "Travel", role: "policy_wording", personal: false, hash: "sha256:pr50-travel-wording", filename: f.travelWording, pages: { 1: TRAVEL_W1 } },
     { key: "TRAVEL_SUMMARY", id: id(105), owner: M.adrian.id, members: [], insurer: "Harbourline General Insurance Pte. Ltd.", product: "Travel Insurance - Benefit Summary", policyNumber: null, policyType: "Travel", role: "benefit_summary", personal: false, hash: "sha256:pr50-travel-summary", filename: f.travelSummary, pages: { 1: TRAVEL_S1 } },
