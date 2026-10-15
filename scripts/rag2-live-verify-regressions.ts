@@ -14,15 +14,16 @@ import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as RH from "./fixtures/rag2-stress/report-household";
 import * as BH from "./fixtures/rag2-binding/household";
 import * as LH from "./fixtures/rag2-livelib/household";
+import * as LHM from "./fixtures/rag2-livelib/multiline";
 import type { ScriptView } from "@/lib/rag2/loop/scripted-model";
 
-const PART = process.env.PART === "binding" || process.argv.includes("--binding") ? "binding" : process.env.PART === "livelib" || process.argv.includes("--livelib") ? "livelib" : "report";
+const PART = process.env.PART === "binding" || process.argv.includes("--binding") ? "binding" : process.env.PART === "livelib" || process.argv.includes("--livelib") ? "livelib" : process.env.PART === "multiline" || process.argv.includes("--multiline") ? "multiline" : "report";
 const MK = RH.M.marcus.id, D = BH.M.darren.id;
 // The report household as the live library holds it: five readable uploads linked to a person, the unreadable upload
 // linked to nobody.
 const REPORT = { ...RH, DOCS: RH.DOCS.map((d) => (d.key === "SCAN" ? { ...d, members: [] } : d.key.startsWith("PET") ? { ...d, members: [{ id: MK }] } : d)) } as any;
 const BINDING = { ...BH, DOCS: BH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BH.certLayout("cells") } : d)) } as any;
-const HOUSEHOLD = PART === "report" ? REPORT : PART === "livelib" ? (LH as any) : BINDING;
+const HOUSEHOLD = PART === "report" ? REPORT : PART === "livelib" ? (LH as any) : PART === "multiline" ? (LHM as any) : BINDING;
 setEnv(HOUSEHOLD);
 const call = (name: string, args: Record<string, unknown>) => ({ name, arguments: args });
 const results: { name: string; ok: boolean }[] = [];
@@ -272,6 +273,68 @@ async function main() {
     await check("RECOVERY a benefit that names no single row (\"Simple Fracture\": six rows) is refused, never the first row", () => {
       assert.equal(c2?.ok, false, JSON.stringify(c2)); assert.ok(!/S\$2,500|S\$5,000 \(/.test(ambCalc.v), ambCalc.v);
     });
+    // ------------------------------------------------ 5. s52-live-1's exact calculate call on the live layout
+    // (the search passage stops at the table's first row; the leg row is the next line of the same page)
+    const S52D = "Hypothetically, if Adrian had a simple (closed) fracture of the leg, what would the Simple Fracture benefit be? How is that different from Other Fracture?";
+    const cutOff = (v: ScriptView) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const hit = ((o.result?.data?.hits ?? []) as any[]).find((x) => /Section D - Simple Fracture/.test(JSON.stringify(x)) && /Skull/.test(JSON.stringify(x)) && !/Jaw, Pelvis, Leg/.test(JSON.stringify(x))); if (hit) return hit.evidence.evidence_id as string; } return "none"; };
+    let cutId = "none";
+    const [live52] = await run([{ user: S52D, steps: [
+      () => [call("person_benefits", { subject_id: A, topic: "simple closed fracture of leg; Simple Fracture and Other Fracture benefits" })],
+      () => [call("search_passages", { k: 10, query: "Simple Fracture benefit leg simple closed fracture percentage of benefit limit conditions definition Other Fracture", policy_ids: [LH.doc("SUMMARY").id, LH.doc("WORDING").id], subject_id: A })],
+      (v: ScriptView) => { cutId = cutOff(v); return [call("calculate", { benefit: "Simple Fracture", purpose: "what_if", condition: "simple (closed) fracture of the leg", policy_id: LH.doc("SUMMARY").id, calculator: "lump_sum", proportion: { evidence_id: cutId, applies_when: "simple (closed) fracture" }, subject_id: A, base_value_id: "v?", assumption_words: "Hypothetically, if Adrian had a simple (closed) fracture of the leg" })]; },
+      (v: ScriptView) => { const c = [...v.turn].reverse().find((o) => o.name === "calculate"); return [call("final_answer", { subject_id: A, sentences: c?.ok && c.result.data.amount != null ? [{ text: `If the Simple Fracture benefit applies, the conditional illustration is S$${Number(c.result.data.amount).toLocaleString("en-SG")}; it is not an approved payment.`, result_id: c.result.data.calc_id, subject_id: A }] : [{ text: "I couldn't work out the Simple Fracture amount.", subject_id: A }] })]; },
+    ] }]);
+    const lc = (live52.trace.toolCalls as any[]).find((x) => x.name === "calculate");
+    await check("MULTILINE s52-live-1's exact calculate call (proportion on the search passage that stops above the leg row): the leg row is read from the same page -- 50% x S$5,000 = S$2,500 conditional, saved, and the saved record re-verifies", async () => {
+      assert.notEqual(cutId, "none", "the cut-off passage is returned by the live query");
+      assert.ok(lc?.ok, JSON.stringify(lc));
+      assert.match(live52.v, /conditional illustration is S\$2,500;/, live52.v);
+      const rec = (live52.answer.calculations ?? [])[0]; assert.ok(rec, "no saved calculation");
+      assert.deepEqual(rec.operands.filter((o: any) => o.source === "document").map((o: any) => o.value).sort((a: number, b: number) => a - b), [50, 5000]);
+      const { recomputeCalculation } = await import("@/lib/claims/calc-record");
+      const re = recomputeCalculation(rec); assert.ok(re.ok && re.resultMinor === 250000, JSON.stringify(re));
+      const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
+      assert.deepEqual(await verifyAnswerFigures(JSON.parse(JSON.stringify(live52.answer)), { accountId: LH.ACCOUNT, userText: S52D }), []);
+      assert.equal(live52.v, live52.returned);
+    });
+    // ------------------------------------------------ 6. the four s52 defects: controls beside the saved-output replay
+    const hitOf = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if ((o.name === "search_passages" || o.name === "read_page") && o.ok) { const ids = (JSON.stringify(o.result).match(/"evidence_id":"e\d+"/g) ?? []).map((x) => x.slice(15, -1)); const hits = ((o.result?.data?.hits ?? []) as any[]); const hit = hits.find((x) => re.test(JSON.stringify(x))); if (hit) return [hit.evidence.evidence_id as string]; if (o.name === "read_page" && re.test(JSON.stringify(o.result))) return ids.slice(0, 1); } return [] as string[]; };
+    const wordId = LH.doc("WORDING").id;
+    const wp3 = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=3", [wordId])).rows[0].text as string;
+    const REPAT = "the policy wording says reasonable costs of returning the remains to Singapore are reimbursed up to S$2,000";
+    const repatTurn = { user: DEATH, steps: [() => [call("read_page", { policy_id: wordId, page: 3 }), call("read_page", { policy_id: LH.doc("SUMMARY").id, page: 9 })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: `The summary lists Repatriation of Mortal Remains of S$2,000 if death occurs outside Singapore as a result of an Accident, and ${REPAT}.`, evidence_ids: [...hitOf(v, /up to \$2,000/), ...hitOf(v, /Repatriation of Mortal Remains: S\$2,000/)], subject_id: A }] })]] };
+    const [bare1] = await run([repatTurn]);
+    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=3", [wordId, wp3 + "\nSection 9 - Currency\nAll amounts in this Policy are in Singapore Dollars."]);
+    const [bare2] = await run([repatTurn]);
+    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=3", [wordId, wp3]);
+    await check("CURRENCY a bare $2,000 restated as S$2,000 from the policy wording: without the wording's own currency statement that clause is taken out (the summary's S$2,000 is kept); with the statement on file, the clause is kept and the statement is quoted and cited with the amount", () => {
+      assert.ok(!bare1.v.includes("reimbursed up to S$2,000"), bare1.v); assert.match(bare1.v, /lists Repatriation of Mortal Remains of S\$2,000/, bare1.v);
+      assert.ok((bare1.trace.dropped ?? []).some((d: any) => /bare \$ and does not state its currency/.test(d.reason)), JSON.stringify(bare1.trace.dropped));
+      assert.match(bare2.v, /reimbursed up to S\$2,000 \(Public Officers Group Personal Accident - Policy Wording prints this amount without a currency sign and states: “All amounts in this Policy are in Singapore Dollars”\)\./, bare2.v);
+      assert.ok((bare2.answer.citations ?? []).some((c: any) => c.policyId === wordId && /All amounts in this Policy are in Singapore Dollars/.test(c.excerpt ?? "")), JSON.stringify(bare2.answer.citations));
+    });
+    const gtl = LH.doc("GTL_SUM").id;
+    const sixTurn = (text: string) => ({ user: DEATH, steps: [() => [call("person_benefits", { subject_id: A }), call("read_page", { policy_id: gtl, page: 1 }), call("read_page", { policy_id: LH.doc("SUMMARY").id, page: 9 })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [...amounts(v), { text, evidence_ids: [...hitOf(v, /within 6 months/), ...hitOf(v, /Accidental Death: 100%/)], subject_id: A }] })]] });
+    const [six1] = await run([sixTurn("The Group Term Life product summary says its Death Benefit is the Sum Assured and says to notify Kestrel Life Ltd of a death within 6 months, with the death certificate.")]);
+    const [six2] = await run([sixTurn("The Personal Accident summary pays Accidental Death at 100% of the Sum Insured if the claim is notified within 6 months.")]);
+    await check("NOTICE the six-month notification printed under the Group Term Life summary's Claims heading is kept for that policy's Death Benefit, and taken out when attached to the Personal Accident policy's Accidental Death", () => {
+      assert.match(six1.v, /notify Kestrel Life Ltd of a death within 6 months/, six1.v + JSON.stringify(six1.trace.dropped) + JSON.stringify(six1.trace.toolCalls.map((x: any) => [x.name, x.ok, x.error])));
+      assert.ok(!/within 6 months/.test(six2.v), six2.v);
+      assert.ok((six2.trace.dropped ?? []).some((d: any) => /only under Claims of Public Officers Group Term Life/.test(d.reason)), JSON.stringify(six2.trace.dropped));
+    });
+    const tr = LH.doc("TRAVEL").id;
+    const travelTurn = (text: string) => ({ user: DEATH, steps: [() => [call("read_page", { policy_id: tr, page: 1 })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text, evidence_ids: hitOf(v, /Destination: Indonesia/), subject_id: A }] })]] });
+    const [tv1] = await run([travelTurn("The travel policy schedule is for a trip to Indonesia, so it does not cover a trip to Japan.")]);
+    const [tv2] = await run([travelTurn("The travel policy schedule is for a trip to Indonesia, so it does not show cover for a trip to Japan.")]);
+    const tp1 = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=1", [tr])).rows[0].text as string;
+    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [tr, tp1 + "\nExclusions: travel to Japan is excluded."]);
+    const [tv3] = await run([travelTurn("The travel policy schedule excludes travel to Japan, so it does not cover a trip to Japan.")]);
+    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [tr, tp1]);
+    await check("TRAVEL \"does not cover this trip\" is an exclusion: on a schedule for another trip it is reworded to \"does not show cover for\" (not proven); \"does not show cover\" is kept; with a printed exclusion naming Japan the exclusion stands", () => {
+      assert.match(tv1.v, /does not show cover for a trip to Japan\./, tv1.v); assert.ok(!/does not cover a trip/.test(tv1.v), tv1.v);
+      assert.match(tv2.v, /does not show cover for a trip to Japan\./, tv2.v);
+      assert.match(tv3.v, /does not cover a trip to Japan\./, tv3.v);
+    });
     const stuck = (user: string) => ({ user, steps: [() => [call("person_benefits", { subject_id: A })], () => [call("search_passages", { query: "x", subject_id: A })], () => [call("search_passages", { query: "y", subject_id: A })]] });
     const [l1] = await run([stuck(DEATH)], { DEARPOLICY_RAG_LOOP_MAX_STEPS: "2" });
     const [l2] = await run([stuck(FR)], { DEARPOLICY_RAG_LOOP_MAX_STEPS: "2" });
@@ -280,6 +343,72 @@ async function main() {
       assert.match(l1.v, /S\$1,000,000|S\$600,000/, l1.v);
     });
     void C;
+  }
+  if (PART === "multiline") {
+    const A = LHM.M.adrian.id;
+    const { percentTables, choosePercentRow } = await import("@/lib/rag2/calc/pct-rows");
+    await check("ROWS the page's percentage tables are reconstructed with their own heading, base and continuation lines: the leg row wrapped over two lines and the arm row's percentage on its own line are ONE row each; the Other Fracture table below is a separate table of the Sum Insured", () => {
+      const t = percentTables(LHM.SUM_P13_MULTILINE);
+      assert.deepEqual(t.map((x) => [x.name, x.base, x.rows.map((r) => [r.label, r.percents, r.lines])]), [
+        ["Simple Fracture", "S$5,000", [["Skull", [100], 1], ["Jaw, Pelvis, Leg, Ankle or Knee", [50], 2], ["Arm, Wrist or Elbow", [40], 2], ["Collarbone or Rib", [20], 1]]],
+        ["Other Fracture", "Sum Insured", [["Skull (Other Fracture)", [100], 1], ["Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)", [60], 1], ["Arm, Wrist or Elbow (Other Fracture)", [25], 1]]],
+      ]);
+      const leg = choosePercentRow(t, "Simple Fracture", "simple (closed) fracture of the leg") as any;
+      assert.equal(leg.row.label, "Jaw, Pelvis, Leg, Ankle or Knee"); assert.equal(leg.table.base, "S$5,000");
+      assert.ok(LHM.SUM_P13_MULTILINE.slice(leg.row.start, leg.row.end) === leg.row.text && /Jaw, Pelvis, Leg,\nAnkle or Knee\s+50%$/.test(leg.row.text), JSON.stringify(leg.row));
+      const other = choosePercentRow(t, "Other Fracture", "compound (open) fracture of the leg") as any;
+      assert.equal(other.row.label, "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)"); assert.equal(other.table.base, "Sum Insured");
+      assert.ok("ambiguous" in (choosePercentRow(t, "Simple Fracture", "a fracture of the leg or the arm") as any));
+      assert.ok("none" in (choosePercentRow(t, "Simple Fracture", "a simple fracture") as any));
+      const d = percentTables(LHM.SUM_P14_DISLOCATION);
+      assert.match((choosePercentRow(d, "Dislocation", "dislocated shoulder") as any).unresolved, /printed more than once with different percentages \(20%, 30%\)/);
+      assert.match((choosePercentRow(d, "Dislocation", "dislocated hip") as any).unresolved, /prints no percentage/);
+    });
+    const FRM = "Hypothetically, if Adrian had a simple (closed) fracture of the leg, what would the Simple Fracture benefit be? How is that different from Other Fracture?";
+    const SUM = LHM.doc("SUMMARY").id;
+    const pageEv = (v: ScriptView, page: number) => { const o = [...v.turn].reverse().find((x) => x.name === "read_page" && x.args.page === page && x.ok); return (JSON.stringify(o?.result ?? {}).match(/"evidence_id":"(e\d+)"/) ?? [])[1] ?? "none"; };
+    const calcArgs = (v: ScriptView, page: number, benefit: string, condition: string, extra: Record<string, unknown> = {}) => ({ benefit, purpose: "what_if", condition, policy_id: SUM, calculator: "lump_sum", proportion: { evidence_id: pageEv(v, page), applies_when: condition }, subject_id: A, base_value_id: "v?", assumption_words: "Hypothetically, if Adrian had a simple (closed) fracture of the leg", ...extra });
+    const answerWith = (v: ScriptView) => { const c = [...v.turn].reverse().find((o) => o.name === "calculate"); return [call("final_answer", { subject_id: A, sentences: c?.ok && c.result.data.amount != null ? [{ text: `If the ${String(c.args.benefit)} benefit applies, the conditional illustration is S$${Number(c.result.data.amount).toLocaleString("en-SG")}; it is not an approved payment.`, result_id: c.result.data.calc_id, subject_id: A }] : [{ text: "I couldn't work out that amount from the table.", subject_id: A }] })]; };
+    const calcs = (x: any) => (x.trace.toolCalls as any[]).filter((c) => c.name === "calculate");
+    const docOps = (x: any) => ((x.answer.calculations ?? [])[0]?.operands ?? []).filter((o: any) => o.source === "document").map((o: any) => o.value).sort((a: number, b: number) => a - b);
+    const [m1] = await run([{ user: FRM, steps: [() => [call("read_page", { policy_id: SUM, page: 13 })], (v: ScriptView) => [call("calculate", calcArgs(v, 13, "Simple Fracture", "simple (closed) fracture of the leg"))], answerWith] }]);
+    await check("MULTILINE the wrapped leg row, cited as the whole page (both tables on it): 50% x S$5,000 = S$2,500, saved with its own row and base, and the saved record re-verifies -- the adjacent Other Fracture row (60%) and the Sum Insured are not used", async () => {
+      assert.ok(calcs(m1)[0]?.ok, JSON.stringify(calcs(m1)));
+      assert.match(m1.v, /conditional illustration is S\$2,500;/, m1.v + "\n" + JSON.stringify({ composed: m1.trace.composed, gate: m1.trace.gate }));
+      assert.deepEqual(docOps(m1), [50, 5000]);
+      const rec = m1.answer.calculations[0];
+      assert.ok(rec.operands.some((o: any) => o.source === "document" && o.value === 50 && /^Jaw, Pelvis, Leg,\nAnkle or Knee\s+50%$/.test(o.row) && o.binding.pageStart === 13 && o.binding.documentHash === "sha256:livelib-summary-multiline"), JSON.stringify(rec.operands));
+      assert.ok(rec.operands.some((o: any) => o.source === "document" && o.value === 5000 && o.role === "limit" && /Simple Fracture Benefit Limit: S\$5,000/.test(o.row)), "the base is the table's own heading limit");
+      const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
+      const { recomputeCalculation } = await import("@/lib/claims/calc-record");
+      const re = recomputeCalculation(rec); assert.ok(re.ok && re.resultMinor === 250000, JSON.stringify(re));
+      assert.deepEqual(await verifyAnswerFigures(JSON.parse(JSON.stringify(m1.answer)), { accountId: LHM.ACCOUNT, userText: FRM }), []);
+      assert.equal(m1.v, m1.returned);
+    });
+    const CERTV = (v: ScriptView) => { const o = [...v.turn].reverse().find((x) => x.name === "select_table_value"); return o?.result?.data?.valueId as string | undefined; };
+    const [m2] = await run([{ user: "Hypothetically, if Adrian had a compound (open) fracture of the leg, what would the Other Fracture benefit be?", steps: [() => [call("read_page", { policy_id: SUM, page: 13 }), call("select_table_value", { policy_id: LHM.doc("CERT").id, benefit: "Group Personal Accident", subject_id: A, want: "amount" })], (v: ScriptView) => [call("calculate", calcArgs(v, 13, "Other Fracture", "compound (open) fracture of the leg", { base_value_id: undefined, sum_insured_value_id: CERTV(v) }))], answerWith] }]);
+    await check("ADJACENT the Other Fracture table on the same page supplies only its OWN row and base: its leg row (60%) of the Sum Insured (S$600,000) = S$360,000 -- the Simple Fracture row and its S$5,000 limit are not used for it, and vice versa", () => {
+      assert.ok(calcs(m2)[0]?.ok, JSON.stringify(calcs(m2)));
+      assert.deepEqual(docOps(m2), [60, 600000]);
+      assert.match(m2.v, /S\$360,000/, m2.v);
+    });
+    let ambErr = "";
+    const [m3] = await run([{ user: FRM, steps: [() => [call("read_page", { policy_id: SUM, page: 13 })], (v: ScriptView) => [call("calculate", calcArgs(v, 13, "Simple Fracture", "a fracture of the leg or the arm"))],
+      (v: ScriptView) => { const c = [...v.turn].reverse().find((o) => o.name === "calculate"); ambErr = String(c?.result?.error ?? ""); const id = (/(v\d+) = “Jaw, Pelvis, Leg, Ankle or Knee” 50%/.exec(ambErr) ?? [])[1]; return [call("calculate", { benefit: "Simple Fracture", purpose: "what_if", condition: "simple (closed) fracture of the leg", policy_id: SUM, calculator: "lump_sum", subject_id: A, percent_value_id: id ?? "none", assumption_words: "Hypothetically, if Adrian had a simple (closed) fracture of the leg" })]; }, answerWith] }]);
+    await check("AMBIGUOUS a condition naming two rows (leg or arm) is refused -- never the first or the larger -- with an actionable error listing each row of the selected table with a valid value id; the next call naming the leg row's id gives S$2,500 on the same base", () => {
+      const [first, second] = calcs(m3);
+      assert.equal(first.ok, false); assert.match(ambErr, /names more than one row/); assert.match(ambErr, /v\d+ = “Arm, Wrist or Elbow” 40%/); assert.match(ambErr, /percent_value_id and without proportion/);
+      assert.ok(!/Other Fracture/.test(ambErr), "the other table's rows are not offered: " + ambErr);
+      assert.ok(second?.ok, JSON.stringify(second)); assert.deepEqual(docOps(m3), [50, 5000]); assert.match(m3.v, /S\$2,500/);
+    });
+    const dis = async (cond: string) => (await run([{ user: `Hypothetically, if Adrian had a ${cond}, what would the Dislocation benefit be?`, steps: [() => [call("read_page", { policy_id: SUM, page: 14 })], (v: ScriptView) => [call("calculate", calcArgs(v, 14, "Dislocation", cond))], answerWith] }]))[0];
+    const [m4, m5] = [await dis("dislocated shoulder"), await dis("dislocated hip")];
+    await check("CONFLICT / INCOMPLETE a row printed twice with different percentages (Shoulder 20% and 30%) and a row printing no percentage (Hip: see Note 2) stay unresolved: refused, no value id offered for them, no figure and no saved calculation", () => {
+      const e4 = String(calcs(m4)[0]?.result?.error ?? calcs(m4)[0]?.error ?? ""), e5 = String(calcs(m5)[0]?.result?.error ?? calcs(m5)[0]?.error ?? "");
+      assert.equal(calcs(m4)[0].ok, false); assert.match(e4, /printed more than once with different percentages \(20%, 30%\)/); assert.ok(!/v\d+ =/.test(e4), e4);
+      assert.equal(calcs(m5)[0].ok, false); assert.match(e5, /prints no percentage/); assert.ok(!/v\d+ =/.test(e5), e5);
+      for (const x of [m4, m5]) { assert.ok(!/S\$\d/.test(x.v), x.v); assert.deepEqual(x.answer.calculations ?? [], []); }
+    });
   }
   const failed = results.filter((r) => !r.ok);
   console.log(`\nlive-verify ${PART} ${results.length - failed.length}/${results.length} passed`);

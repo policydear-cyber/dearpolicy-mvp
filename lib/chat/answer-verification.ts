@@ -816,6 +816,12 @@ export function documentCurrency(text: string): "SGD" | null {
   if (/\b(?:US|A|NZ|HK|C)\$\s?\d|\b(?:USD|AUD|EUR|GBP|MYR|HKD|JPY|CNY|RM)\s?\d|[€£¥]\s?\d/.test(text)) return null;
   return "SGD";
 }
+/** V1.5: the line of a document that declares its bare "$" amounts to be Singapore dollars (documentCurrency's own
+ * patterns), when the document declares that and prints no other explicit currency; null otherwise. */
+export function currencyDeclarationLine(text: string): string | null {
+  if (documentCurrency(text) !== "SGD") return null;
+  return text.split(/\n+/).map((l) => l.trim()).find((l) => DECLARES_SGD.some((re) => re.test(l))) ?? null;
+}
 /** Rule 2: is `value` in `currency` grounded by `b` (and, when `sentence` is given, for that sentence)? Null when it is. */
 /** "the same benefit lists S$150,000", "that benefit is S$80": a sentence that refers back to the benefit named just before. */
 const BENEFIT_BACK_REFERENCE = /\b(?:the same|that|this)\s+(?:benefit|item|row|cover)\b/i;
@@ -1116,7 +1122,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
   if (r.kind !== "indicative_estimate" && r.kind !== "conditional_illustration") return "the calculation’s kind is not an illustration or an indicative estimate";
   if (!r.subjectId || !r.policyId || !r.benefit) return "the calculation does not name its person, policy and benefit";
   // Wording.
-  if (CALC_PAYOUT.test(sentence.replace(CALC_NEGATED_PAYOUT, " "))) return "a calculated benefit is stated as a payout";
+  // (A verbatim policy quote the sentence carries -- “We will pay the percentage ...” -- is the policy's wording, not the
+  // answer promising a payout.)
+  if (CALC_PAYOUT.test(sentence.replace(/“[^”]*”/g, " ").replace(CALC_NEGATED_PAYOUT, " "))) return "a calculated benefit is stated as a payout";
   if (r.kind === "indicative_estimate") {
     if (!/\bindicative estimate\b/i.test(sentence)) return "an indicative estimate is not labelled as one";
     if (CALC_TOTAL.test(sentence)) return "an indicative estimate is stated as (part of) a total";

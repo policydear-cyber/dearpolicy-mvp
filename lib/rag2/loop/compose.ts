@@ -13,11 +13,11 @@ import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRec
 import { calcOutcomes } from "../calc/tool";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
-import { documentCurrency, moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { currencyDeclarationLine, documentCurrency, moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { benefitWords, namesBenefit, printedPeriodsOf } from "@/lib/chat/assertions";
 import type { HouseholdBenefits } from "../benefits";
-import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
+import { evidenceFor, evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import { parseTables } from "../tables";
 import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
@@ -145,6 +145,118 @@ export function withoutEndorsementClauses(text: string): string | null {
   return t.split(/\s+/).length >= 4 ? t : null;
 }
 const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
+const CLAUSE_SPLIT = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though|whereas)\b))/;
+/** The clauses of a sentence (the split withoutEndorsementClauses uses). */
+export function clausesOf(text: string): string[] { return text.split(CLAUSE_SPLIT).filter((_, k) => k % 2 === 0); }
+/** The sentence without the clauses `dropIt` selects; null when nothing (or only a connective) is left. */
+export function withoutClausesWhere(text: string, dropIt: (body: string) => boolean): string | null {
+  const bits = text.split(CLAUSE_SPLIT);
+  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
+  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
+  const keep = clauses.filter((c) => !dropIt(c.body));
+  if (keep.length === clauses.length) return text;
+  if (!keep.length) return null;
+  let t = keep.map((c, k) => (k ? c.sep + c.body : c.body)).join("").trim();
+  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though|whereas)\s+/i, "");
+  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
+  if (!/[.!?]$/.test(t)) t += ".";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  return t.split(/\s+/).length >= 4 ? t : null;
+}
+const CUR_AT = /(S\$|SGD\s?|US\$|USD\s?|HK\$|RM\s?|(?<![A-Za-z$])\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
+/** How a line prints `value`: with S$ / SGD ("explicit"), with a bare "$" ("bare"), in another currency, or not at all. */
+function printedForm(line: string, value: number): "explicit" | "bare" | "other" | null {
+  let out: "bare" | "other" | null = null;
+  for (const m of line.matchAll(CUR_AT)) {
+    if (Math.abs(Number(m[2].replace(/,/g, "")) - value) > 1e-9) continue;
+    const sym = m[1].trim();
+    if (/^(?:S\$|SGD)$/.test(sym)) return "explicit";
+    out = out ?? (sym === "$" ? "bare" : "other");
+  }
+  return out;
+}
+const CLAUSE_NEUTRAL = new Set(["that", "this", "with", "from", "their", "there", "which", "says", "lists", "list", "states", "state", "under", "wording", "policy", "summary", "document", "group", "also", "shows", "prints"]);
+const clauseStems = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !CLAUSE_NEUTRAL.has(w)).map((w) => w.slice(0, 5)));
+/**
+ * V1.5 (s52-live-1: "the policy wording says ... reimbursed up to S$2,000", where the policy wording prints "$2,000"):
+ * a clause stating an S$ amount whose own source line -- the cited line it restates, by its words -- prints that amount
+ * with a bare "$". A bare "$" becomes S$ only on the same document's own currency statement (documentCurrency); that
+ * statement is then cited and quoted with the amount. Without one, the clause is taken out (another document printing
+ * S$ for a similar line is not that document's currency). Null when no clause does this.
+ */
+export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state">): { kept: string; reason: string; basis: EvidenceRef | null } | { dropped: string } | null {
+  for (const clause of clausesOf(text)) for (const f of moneyFiguresIn(clause)) {
+    if (f.currency !== "SGD") continue;
+    const lines = cited.flatMap((e) => evidenceTextOf(e).split(/\n+|(?<=\.)\s+(?=[A-Z])/).map((line) => ({ e, line, form: printedForm(line, f.value) }))).filter((x) => x.form);
+    if (!lines.some((x) => x.form === "bare")) continue;
+    const want = clauseStems(clause);
+    const scored = lines.map((x) => ({ ...x, score: [...clauseStems(x.line)].filter((w) => want.has(w)).length }));
+    const best = Math.max(...scored.map((x) => x.score));
+    const top = scored.filter((x) => x.score === best);
+    if (best === 0 || top.some((x) => x.form !== "bare")) continue;
+    const src = top[0];
+    const docName = ctx.policyNames?.get(src.e.policyId) ?? ctx.state.docNames?.[src.e.policyId] ?? "the cited document";
+    const decl = currencyDeclarationLine(ctx.libraryText?.get(src.e.policyId) ?? "");
+    if (decl) {
+      const lib = ctx.libraryPages?.get(src.e.policyId);
+      const pg = lib?.pages.find((x) => x.text.includes(decl));
+      const basis = pg ? evidenceFor({ policyId: src.e.policyId, documentHash: lib!.hash, page: pg.page, pageText: pg.text, passage: decl, subjectId: null }) : null;
+      if (!basis) return { dropped: `states ${f.raw} from ${docName}, which prints that amount without a currency sign; its currency statement could not be cited` };
+      if (text.includes(decl.replace(/[.\s]+$/, ""))) return null;
+      return { kept: text.replace(/[.!?]?\s*$/, "") + ` (${docName} prints this amount without a currency sign and states: “${decl.replace(/[.\s]+$/, "")}”).`, reason: "", basis };
+    }
+    const reason = `states ${f.raw} from ${docName}, which prints that amount with a bare $ and does not state its currency`;
+    const rest = withoutClausesWhere(text, (b) => b === clause);
+    return rest && rest !== text ? { kept: rest, reason, basis: null } : { dropped: reason };
+  }
+  return null;
+}
+const AMOUNT_ABSENT = [
+  /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t)\s+(?:provide|state|show|list|give|include|print|specify|mention|contain|establish|confirm)\b[^.;]{0,80}?\b(?:sum insured|sum assured|insured amount|amount of cover|cover amount|coverage amount)\b/i,
+  /\b(?:sum insured|sum assured)\b[^.;]{0,60}?\b(?:is|are|was|were)\s+not\s+(?:stated|provided|shown|given|listed|printed|specified)\b/i,
+];
+const DATED_LIMITATION = /\b(?:in force|on the (?:\w+ )?date|on \d|as at|at the time|currently|current|now|today|future|hypothetical|applicable on|that applies on|on that date|then)\b/i;
+/**
+ * V1.5 (s52-live-1: "The uploaded documents do not provide Adrian’s Group Personal Accident Sum Insured", while his
+ * certificate prints his Group Personal Accident row): a sentence saying a person's sum insured for a product is not in
+ * the documents, when that person's own certificate / schedule row for the product prints it. A dated limitation ("do
+ * not establish the Sum Insured in force on 3 October 2026") is a different statement and is not touched.
+ */
+export function amountAbsenceContradiction(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits" | "people" | "policyNames">): string | null {
+  const m = AMOUNT_ABSENT.map((re) => re.exec(text)).find(Boolean);
+  if (!m || !subjectId || !ctx.benefits) return null;
+  if (DATED_LIMITATION.test(text.slice(m.index, m.index + m[0].length + 60))) return null;
+  const lower = text.toLowerCase();
+  const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.printed.kind === "money");
+  const hit = rows.find((b) => { const w = docWordsOf(b.benefit.label); return w.length > 0 && w.every((x) => lower.includes(x)); });
+  if (!hit || hit.printed.kind !== "money") return null;
+  const who = ctx.people?.find((p) => p.id === subjectId)?.names[0] ?? "this person";
+  const amount = hit.printed.currency === "SGD" ? `S$${hit.printed.amount.toLocaleString("en-US")}` : `${hit.printed.currency} ${hit.printed.amount.toLocaleString("en-US")}`;
+  return `says the documents do not give ${who}'s ${hit.benefit.label} amount, but ${who}'s ${hit.policy.product ?? "certificate"} lists ${amount}${hit.asOf ? ` as of ${hit.asOf}` : ""} (page ${hit.source.page})`;
+}
+const TRIP_NOT_COVERED = /\b(?:does not|do not|doesn['’]t|don['’]t|would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b|\b(?:is|are|was|were|would be)\s+not\s+(?:covered|insured)\b|\bisn['’]t covered\b|\bno cover(?:age)? (?:for|on|during)\b|\bexclud(?:es|ed)\b/i;
+const TRIP_WORDS = /\b(?:trip|travel|journey|holiday|overseas|abroad|destination)\b/i;
+/**
+ * V1.5 (review of the s52 travel conclusion): "not proven to cover this trip" and "does not cover this trip" are
+ * different conclusions. A sentence saying a trip is NOT covered stands only when its own evidence prints an exclusion
+ * or territorial limit naming that place; a schedule for another trip, a reference booklet or a missing certificate
+ * shows only that cover is not documented, and the sentence is reworded to say exactly that. Null when nothing changes.
+ */
+export function tripOverstatement(text: string, cited: string[]): string | null {
+  if (!TRIP_WORDS.test(text) || !TRIP_NOT_COVERED.test(text)) return null;
+  const places = [...text.matchAll(/\b(?:to|in|for|of)\s+((?:[A-Z][a-z]+)(?:\s+[A-Z][a-z]+)?)\b/g)].map((m) => m[1]).filter((p) => !/^(?:The|This|That|Adrian|Singapore)$/.test(p));
+  const passage = cited.join("\n");
+  const printedExclusion = places.some((p) => new RegExp(`(?:exclu\\w+|not (?:covered|insured|apply)|territor\\w*|except)[^.\\n]{0,120}\\b${p}\\b|\\b${p}\\b[^.\\n]{0,80}(?:exclu\\w+|not covered|is excluded)`, "i").test(passage));
+  if (printedExclusion) return null;
+  const t = text
+    .replace(/\b(does not|do not|doesn['’]t|don['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, (_m, v: string) => `${/^do\b|^don/i.test(v) ? "do" : "does"} not show cover for`)
+    .replace(/\b(would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, "is not shown to cover")
+    .replace(/\b(is|are|was|were|would be)\s+not\s+(?:covered|insured)\b/i, (_m, v: string) => `${v} not shown to be covered`)
+    .replace(/\bisn['’]t covered\b/i, "is not shown to be covered")
+    .replace(/\bno cover(?:age)? (for|on|during)\b/i, (_m, p: string) => `no documented cover ${p}`)
+    .replace(/\bexclud(es|ed)\b/i, (_m, x: string) => (x === "es" ? "does not show cover for" : "not shown to be covered"));
+  return t !== text ? t : null;
+}
 const WINDOW_CLAUSE = /\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b/gi;
 const OWN_LABEL = /^\s*([A-Za-z][A-Za-z ()'’/&,-]{2,80}?)\s*(?::|\t| {2,}|\s[–—-]\s)/;
 /** The benefit label each line of a passage belongs to: its own "Label:" (or first table cell), else the label of the
@@ -154,22 +266,36 @@ function lineOwners(passage: string): { line: string; owner: string | null }[] {
   return passage.split(/\n+/).map((line) => { const m = OWN_LABEL.exec(line); if (m && /[a-z]/i.test(m[1]) && m[1].trim().split(/\s+/).length <= 8) cur = m[1].trim(); return { line, owner: cur }; });
 }
 const ownWords = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["benefit", "benefits", "group", "cover", "insured", "with", "from", "that", "this", "payable"].includes(w)));
+/** A heading whose lines govern the whole document's policy, not one benefit ("Claims: notify ... within 6 months"). */
+const POLICY_WIDE = /^(?:claims?|how to (?:make a )?claim|making a claim|claims? procedures?|notice of claims?|notification(?: of claims?)?|general conditions?|general provisions?|conditions)$/i;
+const DOC_GENERIC = new Set(["public", "officers", "group", "product", "summary", "policy", "wording", "certificate", "scheme", "insurance", "benefits", "benefit", "schedule", "document", "plan", "single"]);
+const docWordsOf = (name: string) => [...new Set((name.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !DOC_GENERIC.has(w)))];
 /** A sentence stating a time-window condition ("within 365 days") that its cited wording prints ONLY under another
  * benefit's own line than the benefit(s) the sentence names. Null when the window is printed under a benefit the
  * sentence names, when the sentence names no benefit of the passage, or when nothing is cited. A window the cited
- * wording does not print at all is not stated either. */
-export function borrowedCondition(text: string, passages: string[]): string | null {
+ * wording does not print at all is not stated either.
+ * V1.5 (s52-live-1): a window printed under a heading that governs the whole policy ("Claims: notify ... within 6
+ * months") is that policy's condition: it is kept for any benefit of the SAME document the sentence names, and taken
+ * out when the sentence attaches it to another document's benefit or product. */
+export function borrowedCondition(text: string, passages: (string | { text: string; doc?: string | null })[]): string | null {
   const windows = [...text.matchAll(WINDOW_CLAUSE)].map((m) => m[0].toLowerCase().replace(/\s+/g, " "));
   if (!windows.length || !passages.length) return null;
-  const said = ownWords(text);
+  const said = ownWords(text), lower = text.toLowerCase();
+  const P = passages.map((p) => (typeof p === "string" ? { text: p, doc: null as string | null } : { text: p.text, doc: p.doc ?? null }));
+  const all = P.flatMap((p) => lineOwners(p.text).map((x) => ({ ...x, doc: p.doc })));
   for (const w of windows) {
-    const owners = passages.flatMap((p) => lineOwners(p)).filter((x) => x.line.toLowerCase().replace(/\s+/g, " ").includes(w));
+    const owners = all.filter((x) => x.line.toLowerCase().replace(/\s+/g, " ").includes(w));
     if (!owners.length) return `states “${w}”, which its cited wording does not print`;
-    const labels = [...new Set(passages.flatMap((p) => lineOwners(p)).map((x) => x.owner).filter((x): x is string => !!x))];
+    const labels = [...new Set(all.map((x) => x.owner).filter((x): x is string => !!x && !POLICY_WIDE.test(x)))];
     const named = labels.filter((l) => [...ownWords(l)].some((x) => said.has(x)));
+    // The documents the sentence is about: those printing a benefit it names, and those whose product it names.
+    // (A product the sentence names outright decides; otherwise the documents printing a benefit it names.)
+    const byProduct = P.map((p) => p.doc).filter((d): d is string => !!d && docWordsOf(d).length > 0 && docWordsOf(d).every((x) => lower.includes(x)));
+    const aboutDocs = new Set(byProduct.length ? byProduct : all.filter((x) => x.owner && named.includes(x.owner) && x.doc).map((x) => x.doc as string));
+    if (owners.some((o) => o.owner && POLICY_WIDE.test(o.owner) && (!aboutDocs.size || (o.doc != null && aboutDocs.has(o.doc))))) continue;
     if (!named.length) continue;
     const underNamed = owners.some((o) => o.owner && named.includes(o.owner));
-    if (!underNamed) return `states “${w}” for ${named.join(" / ")}, but the cited wording prints it only under ${[...new Set(owners.map((o) => o.owner ?? "another line"))].join(" / ")}`;
+    if (!underNamed) return `states “${w}” for ${named.join(" / ")}, but the cited wording prints it only under ${[...new Set(owners.map((o) => (o.owner ?? "another line") + (o.owner && POLICY_WIDE.test(o.owner) && o.doc ? ` of ${o.doc}` : "")))].join(" / ")}`;
   }
   return null;
 }
@@ -508,6 +634,8 @@ type Ctx = {
   libraryText?: Map<string, string>;
   /** V1.4: each member's documented benefits and each document's benefit identities (lib/rag2/benefits.ts). */
   benefits?: HouseholdBenefits | null;
+  /** V1.5: each readable document's stored pages and file hash (to cite a document's own currency statement). */
+  libraryPages?: Map<string, { hash: string | null; pages: { page: number; text: string }[] }>;
 };
 
 const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
@@ -711,8 +839,21 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // uncertain). Person / policy / version binding applies to statements without figures too.
     // V1.5: a condition is stated only for the benefit whose own wording prints it -- a "within 365 days" printed under
     // Permanent Dismemberment is never borrowed for Accidental Death because the two lines are adjacent in the passage.
-    const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => evidenceTextOf(e)));
+    const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => ({ text: evidenceTextOf(e), doc: ctx.policyNames?.get(e.policyId) ?? ctx.state.docNames?.[e.policyId] ?? null })));
     if (borrowed) { const kept = withoutWindowClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: borrowed + " (that condition was taken out)" }); text = kept; } else { drop(text, borrowed); continue; } }
+    // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
+    // statement (cited and quoted with it); otherwise that clause is taken out.
+    {
+      let bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+      for (let n = 0; bare && !("dropped" in bare) && n < 3; n++) {
+        if (bare.basis) { evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, bare.basis, "compose")])]; text = bare.kept; bare = null; break; }
+        out.dropped.push({ sentence: text, reason: bare.reason + " (that clause was taken out)" }); text = bare.kept;
+        bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+      }
+      if (bare && "dropped" in bare) { drop(text, bare.dropped); continue; }
+    }
+    // V1.5: "does not cover this trip" only on a printed exclusion naming it; otherwise "does not show cover for".
+    { const reworded = tripOverstatement(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => evidenceTextOf(e))); if (reworded) { out.dropped.push({ sentence: text, reason: "stated a trip as not covered, but its evidence prints no exclusion naming it -- only that cover is not documented (reworded)" }); text = reworded; } }
     const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
     if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
@@ -737,6 +878,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // something its evidence contradicts.
     const absentDate = dateAbsenceClaim(text) ? printedDateIn([...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), ...values.map((v) => JSON.stringify(v))].join("\n")) : null;
     if (absentDate) { drop(text, `${DATE_ABSENCE_REASON} -- its cited evidence prints “${absentDate}”`); continue; }
+    // V1.5: "the documents do not provide X's <product> Sum Insured" while X's own certificate row prints it.
+    const absentAmount = amountAbsenceContradiction(text, subjectId, ctx);
+    if (absentAmount) { drop(text, absentAmount); continue; }
     // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
     // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
     // own; the sentence is kept only if every one of them is.

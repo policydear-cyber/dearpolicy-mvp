@@ -14,6 +14,7 @@ import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, waitingNotReached, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
 import { isCalendarDate } from "@/lib/claims/day-count";
 import { amendmentDayEdges, applyAmendmentDayEdges, readBenefitTerms } from "./terms";
+import { benefitRowProblem, ownTables, percentTables, rowAt } from "./pct-rows";
 
 const outcomes = new WeakMap<ToolContext, Map<string, CalcOutcome>>();
 /** The calculations made in this tool context (calc id -> outcome). */
@@ -162,7 +163,8 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     let shareIsPercent = false;
     if (a.proportion) {
       const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>);
-      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim());
+      // (A row wrapped over two lines -- its percentage on the line below its label -- is one row: pct-rows.ts.)
+      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim().replace(/[ \t]*\n[ \t]*/g, "   "));
       if (typeof v !== "string" && tableRow && await percentBaseOf(ctx, v)) {
         if (pct && pct.operand.ppm !== v.operand.ppm) return fail("proportion: the quoted line is a row of the percentage table (a percentage of the benefit's base), not a share of another percentage -- pass that row as the percentage only");
         if (!pct) pct = v;
@@ -170,6 +172,13 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
       }
     }
     if (!pct && typeof a.condition === "string" && a.condition.trim()) pct = await printedPercent(ctx, policyId, subjectId, a.condition);
+    // V1.5: a percentage row printed in ANOTHER benefit's table on the same page (the Other Fracture table below the
+    // Simple Fracture table) is never used for this benefit, whichever way it was selected.
+    if (pct) {
+      const ev = pct.operand.evidence, page = (await pageMap(ctx.accountId, ev.policyId)).get(ev.passage.onPage) ?? "";
+      const tables = percentTables(page), at = rowAt(tables, ev.passage.start);
+      if (at && at.table.name && !ownTables(tables, benefit).includes(at.table) && ownTables(tables, benefit).length < tables.length) return fail(`lump_sum: the percentage “${at.row.label}” is printed in the ${at.table.name} table, not in the table for ${benefit}`);
+    }
     // V1.3: what the percentage is OF is read from its own wording (the table header / the sentence above it), never
     // assumed to be the certificate's general sum insured. A fixed benefit limit or sub-limit is read from the same
     // document by the server; a sum insured passed for a percentage of a benefit limit is not used.
@@ -388,6 +397,10 @@ async function printedLimit(ctx: ToolContext, policyId: string, name: string, ki
 async function printedPercent(ctx: ToolContext, policyId: string, subjectId: string, benefit: string): Promise<DocValue | null> {
   const r = await selectTableValue({ accountId: ctx.accountId, policyId, benefit, subject: { memberId: subjectId }, want: "percent", asOf: ctx.asOf }).catch(() => null);
   if (!r || r.status !== "ok" || r.valueKind !== "percent") return null;
+  // V1.5: on a page whose percentage tables are reconstructed (pct-rows.ts), the row read must be the one the benefit
+  // name singles out in the benefit's own table -- never a row of an adjacent table, never the first of several.
+  const page = (await pageMap(ctx.accountId, r.evidence.policyId)).get(r.evidence.passage.onPage) ?? "";
+  if (benefitRowProblem(page, r.evidence.passage.start, benefit)) return null;
   const id = "v" + ++ctx.seq;
   const operand: TableValueOperand = { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: "percent", cents: r.cents, ppm: r.ppm, count: null, currency: r.currency, period: r.period, evidence: r.evidence };
   ctx.values.set(id, { selected: r, subjectId, operand });
