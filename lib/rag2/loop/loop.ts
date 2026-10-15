@@ -742,10 +742,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const withdrawn = claim.derived.filter((d) => hit(d.factKeys)).map((d) => d.sentence);
           claim.derived = claim.derived.filter((d) => !hit(d.factKeys));
           // Every calculation worked out from the old value is withdrawn (and marked so on the claim record).
-          for (const r of Object.values(claim.calcs ?? {})) if (!r.withdrawn && hit(r.factKeys)) r.withdrawn = { cause: "fact", key, reason: `${key.replace(/_/g, " ")} was corrected (from ${String(old.value)} to ${value})`, turn: state.turn };
+          // (rc-live-2 RCT2b: a calculation shown in a turn that ended with a question has no "derived" sentence, so the
+          // withdrawal was recorded but not said; every calculation withdrawn here now counts for the note)
+          const calcsWithdrawn: string[] = [];
+          for (const [cid, r] of Object.entries(claim.calcs ?? {})) if (!r.withdrawn && hit(r.factKeys)) { r.withdrawn = { cause: "fact", key, reason: `${key.replace(/_/g, " ")} was corrected (from ${String(old.value)} to ${value})`, turn: state.turn }; calcsWithdrawn.push(cid); }
           if (oldKey && oldKey !== key) delete claim.facts[oldKey];
           claim.facts[key] = { ...entry, previous: [...(old.previous ?? []), { value: old.value, words: old.words, turn: old.turn, source: old.source, basis: old.basis }] };
-          corrected.push({ key, from: old.value, to: value, withdrawn });
+          corrected.push({ key, from: old.value, to: value, withdrawn: [...withdrawn, ...calcsWithdrawn.filter(() => !withdrawn.length)] });
           if (withdrawn.length) scrubWithdrawn(withdrawn);
         } else if (!old || (old.basis === "paraphrased" && chk.basis === "stated")) claim.facts[key] = old ? { ...entry, previous: old.previous } : entry;
         recorded.push(key);

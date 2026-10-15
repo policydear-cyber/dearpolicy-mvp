@@ -68,6 +68,21 @@ async function main() {
     check("RCT1a recorded calls: the invented id b1 is refused with the person's benefit ids; case \"shin bone\" now resolves to \"Leg - below the knee (tibia or fibula)\" -> S$10,000", e2[0]?.ok === false && /bcf3fd4916c/.test(e2[0]?.error ?? "") && /S\$10,000/.test(out[1].v) && /below the knee/.test(out[1].v), out[1].v + "\n" + JSON.stringify(e2.map((c: any) => [c.ok, (c.error ?? "").slice(0, 200)])));
     const a3 = (out[2].trace.toolCalls ?? []).find((c: any) => c.name === "ask_user");
     check("RCT1a turn 3 recorded question about the insurer's review is refused; the turn ends with the corrected S$20,000 and no question", a3?.ok === false && /not a fact the household can give/.test(a3?.error ?? "") && !(out[2].answer.questions ?? []).length && /S\$20,000/.test(out[2].v), out[2].v + "\n" + JSON.stringify(a3));
+    // rc-live-2 RCT2b: the S$10,000 shown with the X-ray question (turn 2 ends with ask_user), then the bone corrected.
+    const t1 = turns[0];
+    const b = await run([t1,
+      { user: "The doctor said it was the shin bone.", steps: [
+        () => [call("note_facts", { facts: [{ key: "fracture_bone", value: "shin bone", words: "The doctor said it was the shin bone." }], subject_id: J })],
+        () => [call("evaluate_benefit", { case: "shin bone", purpose: "claim", fact_keys: ["fracture_bone"], benefit_id: SCHED, subject_id: J }), call("search_passages", { query: "Fracture Benefit caused by an Accident confirmed by X-ray", policy_ids: [T.doc("WORDING").id], subject_id: J })],
+        (v: ScriptView) => { const hits = (v.find("search_passages")?.result?.data?.hits ?? []) as any[]; const sev = hits.find((x) => /X-ray/.test(JSON.stringify(x)))?.evidence?.evidence_id; return [call("ask_user", { kind: "fact", fact_key: "fracture_xray_confirmed", question: "Was Jun’s fracture confirmed by X-ray?", statements: [{ kind: "calculation", text: "-", result_id: evalOf(v).result_id }], subject_id: J, because_evidence_ids: sev ? [sev] : [] })]; },
+      ] },
+      { user: "Sorry, I got that wrong - the X-ray shows it was his thigh bone.", steps: [
+        () => [call("note_facts", { facts: [{ key: "fracture_bone", value: "thigh bone", words: "the X-ray shows it was his thigh bone" }, { key: "fracture_xray_confirmed", value: "yes", words: "the X-ray shows it was his thigh bone" }], subject_id: J })],
+        () => [call("evaluate_benefit", { case: "thigh bone", purpose: "claim", fact_keys: ["fracture_bone", "fracture_xray_confirmed", "how_it_happened"], option_id: SCHED + "r1", benefit_id: SCHED, subject_id: J })],
+        (v: ScriptView) => [call("final_answer", { subject_id: J, sentences: [{ kind: "calculation", result_id: evalOf(v).result_id, text: "-" }] })],
+      ] }]);
+    if (process.env.SHOW) console.log(JSON.stringify((b[1].trace.toolCalls ?? []).map((c: any) => [c.name, c.ok, (c.error ?? "").slice(0, 300)])));
+    check("RCT2b recorded shape: an illustration shown beside a question, then corrected -> the withdrawal is SAID (\"no longer applies\") and S$20,000 shown", /S\$10,000/.test(b[1].v) && /no longer applies/.test(b[2].v) && /S\$20,000/.test(b[2].v), b.map((x: any) => x.v).join("\n---\n"));
     const g = gradeRCT1("RCT1a", { turns: [{}, {}, {}], loaded: { turns: out.map((x) => ({ answer: x.answer })), state: out[2].state }, saved: { traces: out.map((x) => x.trace) } });
     check("RCT1a: the pre-registered grader passes the replayed conversation", g.verdict === "PASS", JSON.stringify(g.checks.filter((c) => !c.ok)));
   } else {
