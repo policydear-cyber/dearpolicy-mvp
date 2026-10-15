@@ -131,26 +131,8 @@ export function withoutUnconfirmedAddress(text: string, people: { id: string; na
   if (t === text) return text;
   return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
 }
-/** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */
-export function withoutEndorsementClauses(text: string): string | null {
-  // clauses with the separator that introduces each (kept as written, so the remaining connectives read as before)
-  const re = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though)\b))/;
-  const bits = text.split(re);
-  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
-  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
-  const keep = clauses.filter((c) => !ENDORSEMENT_WORDS_RE().test(c.body));
-  if (keep.length === clauses.length) return text;
-  if (!keep.length) return null;
-  let t = keep.map((c, k) => (k ? c.sep + c.body.replace(k === 0 ? /^$/ : /^$/, "") : c.body)).join("").trim();
-  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though)\s+/i, "");
-  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
-  if (!/[.!?]$/.test(t)) t += ".";
-  t = t.charAt(0).toUpperCase() + t.slice(1);
-  return t.split(/\s+/).length >= 4 ? t : null;
-}
-const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
 const CLAUSE_SPLIT = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though|whereas)\b))/;
-/** The clauses of a sentence (the split withoutEndorsementClauses uses). */
+/** The clauses of a sentence. */
 export function clausesOf(text: string): string[] { return text.split(CLAUSE_SPLIT).filter((_, k) => k % 2 === 0); }
 /** Reliable chat (contract C): a statement's INDEPENDENT claims -- clauses that stand alone with their own subject
  * (an imperative step, or a clause opening with its own noun phrase) -- as separate statements carrying the same
@@ -171,21 +153,6 @@ export function independentStatements(x: Record<string, unknown>): Record<string
   if (parts.length < 2) return [x];
   const tidy = (t: string) => { const u = t.trim().replace(/[;,\s]+$/, ""); return u.charAt(0).toUpperCase() + u.slice(1) + (/[.!?]$/.test(u) ? "" : "."); };
   return parts.map((t) => ({ ...x, text: tidy(t), _split: true }));
-}
-/** The sentence without the clauses `dropIt` selects; null when nothing (or only a connective) is left. */
-export function withoutClausesWhere(text: string, dropIt: (body: string) => boolean): string | null {
-  const bits = text.split(CLAUSE_SPLIT);
-  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
-  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
-  const keep = clauses.filter((c) => !dropIt(c.body));
-  if (keep.length === clauses.length) return text;
-  if (!keep.length) return null;
-  let t = keep.map((c, k) => (k ? c.sep + c.body : c.body)).join("").trim();
-  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though|whereas)\s+/i, "");
-  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
-  if (!/[.!?]$/.test(t)) t += ".";
-  t = t.charAt(0).toUpperCase() + t.slice(1);
-  return t.split(/\s+/).length >= 4 ? t : null;
 }
 const CUR_AT = /(S\$|SGD\s?|US\$|USD\s?|HK\$|RM\s?|(?<![A-Za-z$])\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
 /** How a line prints `value`: with S$ / SGD ("explicit"), with a bare "$" ("bare"), in another currency, or not at all. */
@@ -230,8 +197,7 @@ export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<
       return { kept: text.replace(/[.!?]?\s*$/, "") + ` (${docName} prints this amount without a currency sign and states: “${decl.replace(/[.\s]+$/, "")}”).`, reason: "", basis };
     }
     const reason = `states ${f.raw} from ${docName}, which prints that amount with a bare $ and does not state its currency`;
-    const rest = withoutClausesWhere(text, (b) => b === clause);
-    return rest && rest !== text ? { kept: rest, reason, basis: null } : { dropped: reason };
+    return { dropped: reason };
   }
   return null;
 }
@@ -363,14 +329,6 @@ export function borrowedCondition(text: string, passages: (string | { text: stri
     if (!underNamed) return `states “${w}” for ${named.join(" / ")}, but the cited wording prints it only under ${[...new Set(owners.map((o) => (o.owner ?? "another line") + (o.owner && POLICY_WIDE.test(o.owner) && o.doc ? ` of ${o.doc}` : "")))].join(" / ")}`;
   }
   return null;
-}
-/** The sentence without its time-window clauses (", if … within 365 days of the Accident"); null when nothing is left. */
-export function withoutWindowClauses(text: string): string | null {
-  let t = text.replace(/,?\s*(?:but\s+)?(?:only\s+)?(?:if|provided(?: that)?|when|where)\b[^.;]*?\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b[^.;]*/gi, "");
-  t = t.replace(/\s*\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b(?:\s+(?:of|from|after)\s+[^.;,]*)?/gi, "");
-  t = t.replace(/\s{2,}/g, " ").replace(/\s+([.;,])/g, "$1").trim();
-  if (!/[.!?]$/.test(t)) t += ".";
-  return t.split(/\s+/).length >= 5 ? t : null;
 }
 const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
 /** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
@@ -522,34 +480,6 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
   }
   return null;
 }
-/** V1.4: the statement with an insurer the person has no document from taken out of a list of insurers ("contact
- * Meridian Life and Lumen General" -> "contact Meridian Life"), when what remains still names one of the person's own
- * insurers; null when it cannot be (the sentence is then left out). */
-export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, relevant?: Set<string> | null): string | null {
-  const hb = ctx.benefits;
-  if (!hb || !subjectId) return null;
-  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).flatMap((p) => [p.insurer ?? "", ...(hb.insurerAliases?.get(p.policyId) ?? [])]).map((n) => n.trim()).filter(Boolean));
-  let t = text;
-  for (const ins of hb.insurers) {
-    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true, relevant)) continue;
-    const esc = ins.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+(?:Ltd|Limited|Pte\.? Ltd|Insurance)\.?$/i, "");
-    const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
-    const before = t;
-    t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
-    if (t === before) {
-      // V1.5 (pr50-live A: "Contact <own insurer> ... to report the death, and ask <other insurer> whether ..." lost the
-      // supported contact step with the unrelated clause): the clauses that name the other insurer are taken out on
-      // their own; what remains must still stand (and is checked below like any other remainder).
-      if (!insurerNotFor(t, subjectId, ctx, true, relevant)) continue; // nothing of another insurer is left to take out
-      const kept = withoutClausesWhere(t, (body) => !!insurerNotFor(body, subjectId, ctx, true, relevant));
-      if (!kept || kept === t) return null;
-      t = kept;
-    }
-  }
-  t = t.replace(/\s{2,}/g, " ").trim();
-  if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
-  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true, relevant) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
-}
 /** V1.4: the benefits a document prints -- its product headings and benefit labels, from the shared benefit view.
  * Never a household member's name, an address, a date or a letter line. (Without the view: the document's own label
  * lines, less any naming a household member or printing a digit.) */
@@ -596,29 +526,6 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   if (!namesBenefit(clause, pick)) return better ? { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` } : null;
   if (better) return { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` };
   return { label: pick };
-}
-/** V1.3: a sentence whose figure could not be verified, cut into parts that can each be checked on their own: its
- * clauses at "; ", or -- for one clause -- the part before the comma-delimited phrase stating that figure (the
- * document, insurer, person and date facts). Null when no self-standing part remains. */
-function verifiableParts(text: string, failedRaw: string | null): string[] | null {
-  const tidy = (x: string) => { const t = x.trim().replace(/[,;:\s]+$/, ""); return t ? t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : ""; };
-  const enough = (x: string) => (x.match(/[A-Za-z]{2,}/g) ?? []).length >= 4;
-  if (/;\s+/.test(text)) {
-    const raw = text.split(/;\s+/);
-    const at = failedRaw ? raw.findIndex((x) => x.includes(failedRaw)) : -1;
-    // A later clause pointing back at the unsupported figure ("... that this is the current amount") is not kept alone.
-    const BACK = /\b(?:this|that|it|these|those)\s+(?:is|was|are|were|amount|figure|sum|cover)\b/i;
-    const parts = raw.filter((x, k) => !(at >= 0 && k > at && BACK.test(x))).map(tidy).filter(enough);
-    return parts.length >= 2 || (parts.length === 1 && at >= 0 && !parts[0].includes(failedRaw!)) ? parts : null;
-  }
-  if (!failedRaw) return null;
-  const segs = text.split(/,\s+/);
-  const at = segs.findIndex((x) => x.includes(failedRaw));
-  if (at <= 0) return null;
-  const head = tidy(segs.slice(0, at).join(", "));
-  // A head that is the reason given for the dropped figure ("Nothing on file amends it, so ... is S$80") is not kept alone.
-  if (/^(?:so|and so|therefore|thus|hence|which means|meaning|because|as)\b/i.test(segs[at].trim())) return null;
-  return enough(head) && !/\b(?:if|unless|when|provided|subject to)\b/i.test(segs.slice(at).join(" ")) ? [head] : null;
 }
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
 function lineCarries(text: string, words: string[]): boolean {

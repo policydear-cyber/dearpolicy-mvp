@@ -10,6 +10,7 @@
  *
  * Every scenario's visible conversation is printed (RELEASE_TRANSCRIPT=1) so baseline and candidate can be compared.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";

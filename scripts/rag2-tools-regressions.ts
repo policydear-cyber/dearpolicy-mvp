@@ -20,6 +20,7 @@
  *  R  registry: schemas, household scoping, value ids only from this context.
  * Every check runs; exit 1 if any failed.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -530,7 +531,7 @@ async function main() {
     const names = R.RAG_TOOLS.map((t) => t.name);
     assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "person_benefits", "evaluate_benefit", "policies_for", "select_table_value", "compute", "calculate"]);
     for (const t of R.RAG_TOOLS) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 20); assert.ok(!JSON.stringify(t.parameters).includes("account")); }
-    assert.equal(R.toolSpecs().length, 9);
+    assert.equal(R.toolSpecs().length, 10);
   });
   await check("R2 a conversation through the registry: person -> value -> compute, all with evidence", async () => {
     const ctx = R.createToolContext({ accountId: ACCOUNT, speakerId: M.darren.id, asOf: ASOF });

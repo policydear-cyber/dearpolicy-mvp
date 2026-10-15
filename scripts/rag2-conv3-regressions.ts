@@ -12,6 +12,7 @@
  *  I  internal evidence / value / result ids never reach visible text; the citation mapping is kept.
  * REPRO=1 prints the visible text of the L3 / L4 replays (what the chat page shows).
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

@@ -15,6 +15,7 @@
  *  X  a deleted / superseded source invalidates only what it alone supported.
  * Positive and negative checks; exit 1 if any check failed.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

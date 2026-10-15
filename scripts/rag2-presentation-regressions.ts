@@ -14,6 +14,7 @@
  * INTEGRATION (PGlite, real chat route, DEARPOLICY_RAG_LOOP=1, TEST-ONLY scripted model) plus pure-function checks.
  * Filter with RAG2_PRES_ONLY=<regex>. Exit 1 if any check failed.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setAdvEnv, startAdvHarness, type AdvHarness } from "./fixtures/rag2-adv/harness";

@@ -16,6 +16,7 @@
  *     allowance, plan hard stop, run budget, timeout and cancellation -- each stopping with an honest reply.
  * Every check runs; exit 1 if any failed.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setConvEnv, startConvHarness } from "./fixtures/rag2-conv/harness";
@@ -282,7 +283,7 @@ async function main() {
     assert.equal(u1.trace.outcome, "final_answer"); assert.equal(u1.answer.summary, "Happy to help with your household's documents.");
     assert.equal(u1.fk.count(), 2); assert.equal(u1.trace.calls.length, 2); assert.deepEqual(u1.trace.usage, { input: 2000, output: 100 });
     assert.equal(u1.newRows.length, 2);
-    for (const r of u1.newRows) { assert.deepEqual([r.status, r.operation, r.prompt_version, Number(r.input_tokens), Number(r.output_tokens)], ["succeeded", "rag_answer", "rag2-loop-v14", 1000, 50]); }
+    for (const r of u1.newRows) { assert.deepEqual([r.status, r.operation, r.prompt_version, Number(r.input_tokens), Number(r.output_tokens)], ["succeeded", "rag_answer", "rag2-loop-v15-benefits", 1000, 50]); }
     assert.equal((await usageRows()).length, 2);
     assert.equal(U.loopRunUsage().calls, 2);
   });

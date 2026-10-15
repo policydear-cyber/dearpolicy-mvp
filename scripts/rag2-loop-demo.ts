@@ -14,6 +14,7 @@
  *  (e) a correction ("actually it was 3 nights, not 2") updating the facts and withdrawing what was derived
  *  (f) the grounded final answer: cited printed limits and labelled indicative estimates
  */
+import "./fixtures/legacy-contract";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";

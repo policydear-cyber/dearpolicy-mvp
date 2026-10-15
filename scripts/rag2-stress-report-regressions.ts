@@ -8,6 +8,7 @@
  * correctly withheld figure passes safety and is still reported as an incomplete answer.
  *   STRESS_TRANSCRIPT=1 prints every conversation; STRESS_TRANSCRIPT_FILE=<path> writes them.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";

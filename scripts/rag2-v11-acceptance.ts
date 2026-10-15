@@ -17,6 +17,7 @@
  *
  * RELEASE_TRANSCRIPT=1 prints every visible conversation.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";

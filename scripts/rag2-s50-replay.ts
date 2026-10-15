@@ -9,6 +9,7 @@
  *                                                              whose wording requires an X-ray, through the same note path)
  * Evidence class: REPLAY of recorded model output, not a new model result.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";

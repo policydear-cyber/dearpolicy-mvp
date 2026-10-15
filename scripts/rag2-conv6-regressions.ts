@@ -11,6 +11,7 @@
  *   H  "exactly 3 days" under an hours-based rule: why the times matter, a what-if only from a calculate what_if with the
  *      assumed times marked (never as the amount for their stay), and the question for the real dates and times.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";

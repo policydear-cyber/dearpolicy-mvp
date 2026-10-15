@@ -7,6 +7,7 @@
  * Evidence class: REPLAY of recorded model output, not a new model result. A product change that would make the model
  * act differently (e.g. use a calculation that now succeeds) is NOT shown by a replay: the recorded next step is played.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";

@@ -8,6 +8,7 @@
  * (the file-name variants are a hypothesis: the report does not give the live file names). Plumbing evidence, not
  * model results.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as P from "./fixtures/rag2-pr50/household";

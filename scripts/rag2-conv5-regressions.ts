@@ -12,6 +12,7 @@
  *      specific statement of what could not be confirmed, is shown -- and the rejected figure never is.
  *   R  figure presence is checked against the evidence's whole row (an earlier value printed beside the cell).
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";

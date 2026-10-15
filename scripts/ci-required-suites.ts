@@ -105,6 +105,8 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "verify:assertions-test",
   "verify:gate-test",
   "rag2:tools-test",
+  "reliable-chat:slice-test",
+  "reliable-chat:stage3-test",
   "rag2:loop-test",
   "rag2:conv-test",
   "rag2:calc-test",

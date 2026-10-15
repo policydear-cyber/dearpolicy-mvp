@@ -5,6 +5,7 @@
  * changing the implementation to suit them (results retained as they come, failures included). Same harness and
  * synthetic household as scripts/rag2-release-acceptance.ts; expected facts read off the fixture pages by hand.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";

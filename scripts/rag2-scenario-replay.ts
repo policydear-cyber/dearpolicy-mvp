@@ -8,6 +8,7 @@
  *   node --import tsx scripts/rag2-scenario-replay.ts            (npm run rag2:scenario-replay-test)
  * Evidence class: REPLAY of recorded model output (not a new model result) + scripted CONTROLS.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";

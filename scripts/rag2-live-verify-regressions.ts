@@ -9,6 +9,7 @@
  *   node --import tsx scripts/rag2-live-verify-regressions.ts   (npm run rag2:live-verify-test)
  *   PART=binding node --import tsx scripts/rag2-live-verify-regressions.ts
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as RH from "./fixtures/rag2-stress/report-household";

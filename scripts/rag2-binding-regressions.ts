@@ -7,6 +7,7 @@
  * the REAL chat route (PGlite); PLUMBING / CONTROL evidence, not model results. The live conversation was not
  * readable from this session, so this reproduces the structure, not the household's own internal trace.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";
 import * as HH from "./fixtures/rag2-binding/household";
