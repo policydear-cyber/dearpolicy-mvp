@@ -154,6 +154,18 @@ async function main() {
       ] })],
     ] }]);
     controls.P50A = a1;
+    // Grader control for pr50a-live-2 (the death next-steps prompt alone, both dates in one message): a compliant answer
+    // produced by the full scripted pipeline -- dated amounts, an uncertainty about cover on the event date, a contact step.
+    const DEATH_DATED = "Hypothetical test: Adrian died in a car accident in Japan. The accident happened on 3 October 2026 and he died on 5 October 2026. Based on my uploaded documents, explain which death benefits may apply and what I should do next.";
+    const [a2] = await run([{ user: DEATH_DATED, steps: [
+      () => [call("person_benefits", { subject_id: A, topic: "death after an accident" }), call("search_passages", { query: "certificate Group Personal Accident Group Term Life", policy_ids: [P.doc("CERT").id], subject_id: A })],
+      (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [
+        amounts(v)[0],
+        { text: "The same certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; the documents do not establish whether that cover was still in force on 5 October 2026.", value_ids: [vidOf(v, /^Group Personal Accident$/)], subject_id: A },
+      ], next_steps: ["Contact Kestrel Life Ltd through the scheme administrator to report the death and ask what it needs for a claim."] })],
+    ] }]);
+    controls.P50A2 = a2;
+    if (process.env.PR50_SHOW) console.log("A2CTL", a2.v, JSON.stringify(a2.trace.dropped));
     await check("A1 an uncertainty about enrolment (\"do not establish that Adrian is enrolled\") is kept -- not treated as an exclusion", () => {
       assert.match(a1.v, /do not establish that Adrian is enrolled for the Compassionate Death Allowance/, a1.v + JSON.stringify(a1.trace.dropped));
     });
@@ -275,7 +287,7 @@ async function main() {
   // run-record shape, are graded by the same grader (PR50_CONTROL_OUT=<file>).
   if (process.env.PR50_CONTROL_OUT && controls.P50D && controls.P50A) {
     const conv = (id: string, x: any) => ({ scenario: id, costUsd: 0, loaded: { turns: [{ answer: x.answer }] }, saved: { traces: [x.trace] } });
-    (await import("node:fs")).writeFileSync(process.env.PR50_CONTROL_OUT, JSON.stringify({ conversations: [conv("P50C", c1), conv("P50D", controls.P50D), conv("P50A", controls.P50A)] }));
+    (await import("node:fs")).writeFileSync(process.env.PR50_CONTROL_OUT, JSON.stringify({ conversations: [conv("P50C", c1), conv("P50D", controls.P50D), conv("P50A", controls.P50A2 ?? controls.P50A)] }));
   }
   const failed = results.filter((r) => !r.ok);
   console.log(`\npr50 [${NAMES} names, ${P.PAGE} page 13] ${results.length - failed.length}/${results.length} passed`);
