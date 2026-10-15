@@ -76,6 +76,15 @@ async function main() {
       return { C: /S\$20,000/.test(v3.v) && !/is S\$10,000/.test(v3.v), K: /thigh/.test(v3.v), S: re.ok && re.resultMinor === 2_000_000,
         U: calcs.some((c) => c.withdrawn) && /no longer applies/i.test(v3.v), note: why(v3) + "\nclaim calcs: " + JSON.stringify(calcs.map((c) => [c.amount ?? c.sentence, c.withdrawn])) };
     });
+    // The pre-registered real-model grader (scripts/rag2-live/reliable-chat-check.ts) accepts this scripted conversation:
+    // it is calibrated on a correct answer, not only on its own controls.
+    await grade("RC grader: the rc-live-1 grader passes the scripted RC1 conversation", async () => {
+      const { gradeRCT1 } = await import("./rag2-live/reliable-chat-check");
+      const conv = { turns: [{}, {}, {}], loaded: { turns: [v1, v2, v3].map((x) => ({ answer: x.answer })), state: v3.state }, saved: { traces: [v1, v2, v3].map((x) => x.trace) } };
+      const g = gradeRCT1("RCT1a", conv);
+      const bad = g.checks.filter((c) => !c.ok);
+      return { C: g.verdict === "PASS", K: true, S: true, U: true, note: JSON.stringify(bad) };
+    });
     // G1 person switch, G3 missing input, G4 isolation / lifecycle
     const [g1] = await run([{ user: "And what would Mei Ling's be for a broken wrist?", steps: [
       () => [call("resolve_person", { mention: "Mei Ling" })],
@@ -117,6 +126,20 @@ async function main() {
           U: !/sum insured.*pass|couldn['’]t confirm/i.test(x.v), note: why(x) };
       });
     }
+  }
+  if (HH !== T) {
+    // (Wong) the pre-registered rc-live-1 grader accepts a correct fixed-limit fracture answer, run fresh
+    const A = W.M.adrian.id;
+    const [w] = await run([{ user: "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.", steps: [
+      () => [call("person_benefits", { subject_id: A, topic: "simple fracture leg" })],
+      (v: ScriptView) => [call("evaluate_benefit", { benefit_id: scheduleOf(v, /Simple Fracture/)?.benefit_id, subject_id: A, purpose: "what_if", case: "leg", assumption_words: "Adrian broke his leg in a fall" })],
+      (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ kind: "calculation", result_id: evalOf(v).result_id, text: "-", subject_id: A }] })],
+    ] }]);
+    await grade("RC grader: the rc-live-1 grader passes a correct RCW1 answer", async () => {
+      const { gradeRCW1 } = await import("./rag2-live/reliable-chat-check");
+      const g = gradeRCW1("RCW1a", { turns: [{}], loaded: { turns: [{ answer: w.answer }], state: w.state }, saved: { traces: [w.trace] } });
+      return { C: g.verdict === "PASS", K: true, S: true, U: true, note: w.v + "\n" + JSON.stringify(g.checks.filter((c) => !c.ok)) };
+    });
   }
   const failed = results.filter((r) => !(r.g.C && r.g.K && r.g.S && r.g.U));
   console.log(`\nreliable-chat slice [${HH === T ? "tan" : "wong"}] ${results.length - failed.length}/${results.length} passed`);

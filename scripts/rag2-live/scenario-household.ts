@@ -18,6 +18,7 @@ import * as STRESS from "../fixtures/rag2-stress/household";
 import * as BINDING from "../fixtures/rag2-binding/household";
 import * as LIVELIB from "../fixtures/rag2-livelib/household";
 import * as PR50 from "../fixtures/rag2-pr50/household";
+import * as TAN from "../fixtures/reliable-chat/tan";
 import type { Scenario } from "./scenarios";
 
 export const SCENARIO_ACCOUNT = SCENARIO.ACCOUNT;
@@ -25,6 +26,7 @@ export const STRESS_ACCOUNT = STRESS.ACCOUNT;
 export const BINDING_ACCOUNT = BINDING.ACCOUNT;
 export const LIVELIB_ACCOUNT = LIVELIB.ACCOUNT;
 export const PR50_ACCOUNT = PR50.ACCOUNT;
+export const TAN_ACCOUNT = TAN.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
   "Desmond broke his leg.",
   "He fell down the stairs.",
@@ -98,8 +100,28 @@ export const P50A: Scenario = { id: "P50A", title: "PR #50 report A: hypothetica
   "Hypothetical test: Adrian died in a car accident in Japan. The accident happened on 3 October 2026 and he died on 5 October 2026. Based on my uploaded documents, explain which death benefits may apply and what I should do next.",
 ].map((user) => ({ user, expect: {} })) };
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : SCENARIO) as unknown as typeof SCENARIO;
+/** Reliable chat: the pre-registered real-model batch rc-live-1 (docs/rag-migration/reliable-chat/EXPECTED-rc-live-1.md;
+ * graded by scripts/rag2-live/reliable-chat-check.ts, written before the run). Fresh wording, not the scripted tests'.
+ * Household Tan (RAG2_LIVE_HOUSEHOLD=tan): the complete conversation, twice (RCT1a / RCT1b, identical turns).
+ * Household Wong (RAG2_LIVE_HOUSEHOLD=pr50): the fixed-limit fracture twice (RCW1a / RCW1b), death next steps (RCW2) and
+ * the claim-selection question (RCW3). */
+const RCT1_TURNS = [
+  "My son Jun fractured his leg at football training. What could his personal accident policy pay?",
+  "The doctor said it was the shin bone.",
+  "Sorry, I got that wrong - the X-ray shows it was his thigh bone.",
+];
+export const RCT1a: Scenario = { id: "RCT1a", title: "reliable chat: benefit -> terms -> question -> server evaluation -> correction (Tan, attempt 1)", why: "rc-live-1 critical slice", turns: RCT1_TURNS.map((user) => ({ user, expect: {} })) };
+export const RCT1b: Scenario = { ...RCT1a, id: "RCT1b", title: "reliable chat: the same conversation, attempt 2" };
+const RCW1_TURN = "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.";
+export const RCW1a: Scenario = { id: "RCW1a", title: "reliable chat: fixed-limit Simple Fracture, fresh wording (Wong, attempt 1)", why: "rc-live-1 recorded failure 1/2 regression", turns: [{ user: RCW1_TURN, expect: {} }] };
+export const RCW1b: Scenario = { ...RCW1a, id: "RCW1b", title: "reliable chat: fixed-limit Simple Fracture, attempt 2" };
+export const RCW2: Scenario = { id: "RCW2", title: "reliable chat: death after an accident overseas -- benefits that may apply and what to do first (Wong)", why: "rc-live-1 recorded failure 3 regression", turns: [{ user: "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?", expect: {} }] };
+export const RCW3: Scenario = { id: "RCW3", title: "reliable chat: which uploaded policies to claim under (Wong)", why: "rc-live-1 recorded failure 4 regression", turns: [{ user: "Which of my uploaded policies should I claim under for Adrian's broken wrist from a cycling accident?", expect: {} }] };
+export const RC_TAN = [RCT1a, RCT1b];
+export const RC_WONG = [RCW1a, RCW1b, RCW2, RCW3];
+
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -108,7 +130,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

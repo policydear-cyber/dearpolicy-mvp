@@ -729,7 +729,6 @@ function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem
     if (!hit) return { keys, problem: `the estimate uses ${h.label} = ${want}, which is not a fact the household has given (or it has since been corrected, or the words it is attributed to are not the ones recorded for it)` };
     keys.push(hit[0]);
   }
-  for (const k of c.dependsOn ?? []) if (facts[k] && !keys.includes(k)) keys.push(k);
   return { keys, problem: null };
 }
 
@@ -1158,6 +1157,9 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
     if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact the household has given (or it has since been corrected)` };
     keys.push(hit[0]);
   }
+  // Reliable chat: the facts a server evaluation's case rests on (evaluate_benefit fact_keys), so correcting one
+  // withdraws the result built on it.
+  for (const k of c.dependsOn ?? []) if (facts[k] && !keys.includes(k)) keys.push(k);
   return { keys, problem: null };
 }
 /** Integration (S7): an estimate sentence that states the household's own bill figure says it is theirs ("the S$1,500
