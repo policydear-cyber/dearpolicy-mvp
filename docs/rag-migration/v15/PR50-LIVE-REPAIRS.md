@@ -204,3 +204,12 @@ Anonymised with its clause structure and source (the wording's Compassionate Dea
 - P50D took 52 s and 6 model calls, against 27 s in the live report.
 - The household is synthetic and anonymised; the live library was not accessed.
 - Hosted CI is blocked by billing.
+
+---
+
+## Final round (15 Oct, after 15:56 SGT)
+
+- **pr50a-live-2:** the death next-steps prompt alone, pre-registered with R1–R7 and grader controls passing 10/10, run once on `004d25e`, whose product code is identical to `371ba7d`. The result was **BLOCKED**: the run-cap guard refused the sixth call after US$0.002322 had been spent. See `LIVE-RESULT-pr50a-live-2.md`.
+- **Release SHA** (product code `371ba7d`; later commits are records and test scripts only): see the PR description.
+- **Local checks** on the final product code: all completed and passing. They are listed in the review round above, and `rag2:pr50-regressions` was rerun on `004d25e`.
+- **Hosted checks:** GitHub Actions jobs were not started because of a billing or spending-limit block. They are not a gate for this PR.

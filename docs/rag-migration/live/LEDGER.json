@@ -367,6 +367,19 @@
       "calls": 11,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "pr50a-live-2",
+      "tested_code_sha": "004d25e96ef0921370daa3ad23becb5e51295c4b",
+      "request_sha": "004d25e96ef0921370daa3ad23becb5e51295c4b",
+      "at": "2026-10-15T08:01:57.181Z",
+      "preflight": false,
+      "run_cap_usd": 0.006,
+      "spent_usd": 0.002322,
+      "reserved_unsettled_usd": 0,
+      "calls": 5,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

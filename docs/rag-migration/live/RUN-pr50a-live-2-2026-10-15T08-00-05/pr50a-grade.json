@@ -1,0 +1,8 @@
+{
+  "verdict": "BLOCKED",
+  "checks": [],
+  "note": "the run-cap guard refused a model call: run ledger: US$0.002322 spent + US$0.000000 reserved of US$0.006; the next call may cost up to US$0.003905",
+  "visible": "I couldn’t look that up: the model-use budget set for this test run is used up, so no model was called.",
+  "figureBindings": [],
+  "costUsd": 0.00232153
+}
