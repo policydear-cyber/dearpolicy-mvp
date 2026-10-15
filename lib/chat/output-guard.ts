@@ -103,7 +103,7 @@ export function scrub(text: string): string {
 export const guardInterventions: { before: string; after: string }[] = [];
 
 /** V1.5: the library names an answer may show verbatim -- ChatAnswer.libraryNames, which ONLY the server sets, from the
- * household's own authorised, lifecycle-filtered inventory (lib/rag2/inventory.ts via loop.ts). Even from there, a
+ * household's own authorised, lifecycle-filtered inventory (the loop's household_documents lookup). Even from there, a
  * value shaped like something other than a document or file name never gains the exemption: a storage path, a key or
  * token, a bare id, an over-long value, or one of the answer's own record ids. */
 const BARE_ID = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;

@@ -21,6 +21,7 @@ const results: { name: string; ok: boolean }[] = [];
 async function check(name: string, fn: () => Promise<void> | void) { try { await fn(); results.push({ name, ok: true }); console.log("PASS " + name); } catch (e) { results.push({ name, ok: false }); console.log("FAIL " + name + "\n     " + (e instanceof Error ? e.message : String(e)).split("\n").slice(0, 14).join("\n     ")); } }
 const visibleOf = (a: any) => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...uniqueSteps(a.nextSteps)].filter(Boolean).join("\n");
 const NAMES = (process.env.PR50_NAMES as P.NameVariant) || "plain";
+const controls: Record<string, any> = {};
 
 async function main() {
   const h = await startHarness(HOUSEHOLD);
@@ -43,7 +44,7 @@ async function main() {
   const calcs = (x: any) => (x.trace.toolCalls as any[]).filter((c) => c.name === "calculate");
   const docOps = (x: any) => ((x.answer.calculations ?? [])[0]?.operands ?? []).filter((o: any) => o.source === "document");
 
-  if (NAMES === "plain") {
+  if (NAMES === "plain" || process.env.PR50_CONTROL_OUT) {
     // ------------------------------------------------ D: the fixed-limit fracture illustration (report conversation D)
     const D = "Hypothetical document-arithmetic test for Adrian: in the uploaded Summary of Benefits, Simple Fracture has a S$5,000 limit and a Leg row of 50%. If that provision applies, what is the illustration? Distinguish this from the separate Other Fracture provision and do not promise a payment.";
     const SUM = P.doc("SUMMARY").id;
@@ -63,7 +64,7 @@ async function main() {
         { text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], subject_id: A },
       ] })]; },
     ] });
-    const [d1] = await run([fractureTurn(() => v1)]);
+    const [d1] = await run([fractureTurn(() => v1)]); controls.P50D = d1;
     const [first, second] = calcs(d1);
     await check(`D0 [${P.PAGE}] the retrieved passage e15 is the stored page's own span (page 13, exact offsets) and holds the limit, the "% of S$5,000" header and the leg row; its support excerpt is narrower`, () => {
       const ev = d1.state?.ragLoop?.evidence?.[e15];
@@ -152,6 +153,7 @@ async function main() {
         "Contact Harbourline General to claim the travel benefit.",
       ] })],
     ] }]);
+    controls.P50A = a1;
     await check("A1 an uncertainty about enrolment (\"do not establish that Adrian is enrolled\") is kept -- not treated as an exclusion", () => {
       assert.match(a1.v, /do not establish that Adrian is enrolled for the Compassionate Death Allowance/, a1.v + JSON.stringify(a1.trace.dropped));
     });
@@ -269,6 +271,12 @@ async function main() {
     for (const k of P.ELIGIBLE) { const d = P.doc(k); if (d.filename && d.key !== "CERT" && !d.product) assert.ok(c3.v.includes(d.filename), `${d.filename} not shown exactly:\n${c3.v}`); }
     assert.ok(c3.v.includes(P.doc("SCAN").filename!), c3.v);
   });
+  // Grader controls for the pre-registered live run (scripts/rag2-live/pr50-check.ts): these scripted turns, saved in the
+  // run-record shape, are graded by the same grader (PR50_CONTROL_OUT=<file>).
+  if (process.env.PR50_CONTROL_OUT && controls.P50D && controls.P50A) {
+    const conv = (id: string, x: any) => ({ scenario: id, costUsd: 0, loaded: { turns: [{ answer: x.answer }] }, saved: { traces: [x.trace] } });
+    (await import("node:fs")).writeFileSync(process.env.PR50_CONTROL_OUT, JSON.stringify({ conversations: [conv("P50C", c1), conv("P50D", controls.P50D), conv("P50A", controls.P50A)] }));
+  }
   const failed = results.filter((r) => !r.ok);
   console.log(`\npr50 [${NAMES} names, ${P.PAGE} page 13] ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

@@ -17,12 +17,14 @@ import * as SCENARIO from "../fixtures/rag2-scenario/household";
 import * as STRESS from "../fixtures/rag2-stress/household";
 import * as BINDING from "../fixtures/rag2-binding/household";
 import * as LIVELIB from "../fixtures/rag2-livelib/household";
+import * as PR50 from "../fixtures/rag2-pr50/household";
 import type { Scenario } from "./scenarios";
 
 export const SCENARIO_ACCOUNT = SCENARIO.ACCOUNT;
 export const STRESS_ACCOUNT = STRESS.ACCOUNT;
 export const BINDING_ACCOUNT = BINDING.ACCOUNT;
 export const LIVELIB_ACCOUNT = LIVELIB.ACCOUNT;
+export const PR50_ACCOUNT = PR50.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
   "Desmond broke his leg.",
   "He fell down the stairs.",
@@ -83,8 +85,21 @@ export const S52D: Scenario = { id: "S52D", title: "V1.5 report turn 6: conditio
   "Hypothetically, if Adrian had a simple (closed) fracture of the leg, what would the Simple Fracture benefit be? How is that different from Other Fracture?",
 ].map((user) => ({ user, expect: {} })) };
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : SCENARIO) as unknown as typeof SCENARIO;
+/** V1.5 (PR #51): the three prompts of the live verification after PR #50 that failed, on the anonymised PR #50
+ * household (scripts/fixtures/rag2-pr50; RAG2_LIVE_HOUSEHOLD=pr50, PR50_NAMES=snake, page 13 as stored with tabs).
+ * Pre-registered in docs/rag-migration/v15/EXPECTED-pr50-live-1.md; graded by scripts/rag2-live/pr50-check.ts. */
+export const P50C: Scenario = { id: "P50C", title: "PR #50 report C: full document inventory by person, insurer and product, including unreadable files", why: "live verification after PR #50, conversation C", turns: [
+  "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+].map((user) => ({ user, expect: {} })) };
+export const P50D: Scenario = { id: "P50D", title: "PR #50 report D: fixed-limit Simple Fracture illustration (50% x S$5,000)", why: "live verification after PR #50, conversation D", turns: [
+  "Hypothetical document-arithmetic test for Adrian: in the uploaded Summary of Benefits, Simple Fracture has a S$5,000 limit and a Leg row of 50%. If that provision applies, what is the illustration? Distinguish this from the separate Other Fracture provision and do not promise a payment.",
+].map((user) => ({ user, expect: {} })) };
+export const P50A: Scenario = { id: "P50A", title: "PR #50 report A: hypothetical death with both dates -- which death benefits may apply and the next steps", why: "live verification after PR #50, conversation A (both turns in one message, to stay within the cap)", turns: [
+  "Hypothetical test: Adrian died in a car accident in Japan. The accident happened on 3 October 2026 and he died on 5 October 2026. Based on my uploaded documents, explain which death benefits may apply and what I should do next.",
+].map((user) => ({ user, expect: {} })) };
+
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -93,14 +108,14 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {
     const acct = d.account ?? ACCOUNT;
     await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,superseded_at,file_hash,effective_date,renewal_or_expiry_date,document_date)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$17,$11,$11,'scan_clean','active',$12,$13,$14,$15,$16)`,
-      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, (d as { filename?: string }).filename ?? `synthetic-dptest-${which}-` + d.key.toLowerCase() + ".pdf", d.superseded ? new Date().toISOString() : null, d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, (d as { processing?: string }).processing ?? "ready"]);
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$17,$11,$11,'scan_clean',$18,$12,$13,$14,$15,$16)`,
+      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, (d as { filename?: string }).filename ?? `synthetic-dptest-${which}-` + d.key.toLowerCase() + ".pdf", d.superseded ? new Date().toISOString() : null, d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, (d as { processing?: string }).processing ?? "ready", (d as { lifecycle?: string }).lifecycle ?? "active"]);
     if ((d as { processingError?: string }).processingError) await pool.query("UPDATE policies SET processing_error=$2 WHERE id=$1", [d.id, (d as { processingError?: string }).processingError]);
     for (const m of d.members) await pool.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await pool.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);

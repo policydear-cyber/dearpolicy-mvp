@@ -1000,7 +1000,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // (A labelled list -- "Adrian: <document>; <document>" -- is items of one statement, not independent claims.)
       const parts = /^[^;:.]{1,80}:\s/.test(text) ? [text] : clausesOf(text);
       if (parts.length > 1) {
-        const failing = parts.map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
+        // (An absence clause -- "it does not list X" -- names what is missing from its evidence by design; it is judged
+        // with the sentence it belongs to, as before.)
+        const failing = parts.filter((c) => !ABSENCE.test(c) && !NOT_STATED.test(c.trim())).map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
         if (failing.length && failing.length < parts.length) {
           const kept = withoutClausesWhere(text, (body) => failing.some((f) => f.c === body));
           if (kept && !checkCitedStatement(kept, citedEv, stmtCtx)) { out.dropped.push({ sentence: text, reason: `a clause is not supported by its evidence and was taken out (“${failing[0].c.trim()}”: ${failing[0].why})` }); text = kept; }
