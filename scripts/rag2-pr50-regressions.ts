@@ -240,6 +240,35 @@ async function main() {
     assert.equal(a.details.length, 1, JSON.stringify(a.details));
     for (const n of names) assert.ok(a.details[0].includes(n), n);
   });
+  // V1.5 (PR #51 review): the exemption is narrow. Only the server's own inventory names reach libraryNames, and even a
+  // value there is protected only as a whole name and only when it is shaped like a document or file name.
+  await check(`G2 [${NAMES}] a storage path, a key, a bare id, the answer's own record id, or a name that is only part of a longer identifier never gains the exemption`, async () => {
+    const { guardChatAnswer } = await import("@/lib/chat/output-guard");
+    const real = P.doc("TRAVEL_WORDING").filename!;
+    const pid = P.doc("SCAN").id;
+    const bad = [`accounts/${P.ACCOUNT}/policies/${pid}/scan_raw.pdf`, "sk_live_51Habcdefghijklmnopqrstu", pid, "7e800000-0000-4000-8000-000000000999", "summary"];
+    const a: any = guardChatAnswer({ summary: "Here are your documents.", citations: [{ policyId: pid }], libraryNames: [real, ...bad], details: [
+      `On file: ${real}.`,
+      `Stored at ${bad[0]}.`, `Key ${bad[1]} was used.`, `Record ${bad[2]} is the scan.`, `Row ${bad[3]} exists.`, "The summary_internal_table holds it.",
+    ] } as any);
+    assert.deepEqual(a.details, [`On file: ${real}.`], JSON.stringify(a.details));
+  });
+  // end to end: names the model writes that are not the server's inventory names (another household's, a deleted upload's,
+  // an invented one) gain nothing, and the household's own file names keep their exact case.
+  const [c3] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], (v: ScriptView) => [call("final_answer", { sentences: [
+    ...modelLines(v),
+    { text: `${P.DOCS.find((d) => d.key === "OTHER")!.filename} is also on file.` },
+    { text: `${P.DOCS.find((d) => d.key === "DELETED")!.filename} is also on file.` },
+    { text: "invented_policy_schedule.pdf is linked to Adrian." },
+  ] })]] }]);
+  await check(`G3 [${NAMES}] another household's file name, a deleted upload's file name and a model-invented file name never reach the saved answer or its libraryNames; real names keep their case`, () => {
+    for (const n of ["other_household_certificate.pdf", "old_benefit_summary_deleted.pdf", "invented_policy_schedule.pdf"]) {
+      assert.ok(!c3.v.includes(n), `${n} shown:\n${c3.v}`);
+      assert.ok(!(c3.answer.libraryNames ?? []).includes(n), `${n} in libraryNames`);
+    }
+    for (const k of P.ELIGIBLE) { const d = P.doc(k); if (d.filename && d.key !== "CERT" && !d.product) assert.ok(c3.v.includes(d.filename), `${d.filename} not shown exactly:\n${c3.v}`); }
+    assert.ok(c3.v.includes(P.doc("SCAN").filename!), c3.v);
+  });
   const failed = results.filter((r) => !r.ok);
   console.log(`\npr50 [${NAMES} names, ${P.PAGE} page 13] ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

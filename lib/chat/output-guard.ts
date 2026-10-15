@@ -18,8 +18,11 @@ import type { ChatAnswer } from "@/types";
 
 export const GUARD_FALLBACK_SUMMARY = "Sorry, I couldn’t put that answer together properly. Please ask again, or ask about one policy or one person at a time.";
 
+// V1.5: a key, token or credential-shaped value (prefixed API keys, JWTs, PEM blocks, long mixed-case random strings).
+const KEYLIKE = /\b(?:sk|pk|rk|ghp|gho|ghs|xox[abp]|AKIA)[-_](?:(?:live|test|proj)[-_])?[A-Za-z0-9]{12,}|\beyJ[\w-]{8,}\.|-----BEGIN|\b(?=[A-Za-z0-9+/=]*\d)(?=[A-Za-z0-9+/=]*[A-Z])(?=[A-Za-z0-9+/=]*[a-z])[A-Za-z0-9+/=]{32,}/;
 // Things a household must never read.
 const LEAKS: RegExp[] = [
+  KEYLIKE,
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i, // ids
   /\b(?:undefined|NaN|\[object Object\])\b|\bnull\b(?=\s*(?:[.,;:]|$))/, // debug tokens
   /\{\{?\s*[a-zA-Z_][\w.]*\s*\}\}?|\$\{[^}]*\}|<\/?[a-z]+[^>]*>/, // template tokens, markup
@@ -39,7 +42,13 @@ function protectedSpans(text: string, names: readonly string[] = []): [number, n
   for (const n of names) {
     if (n.length < 3) continue;
     let at = text.indexOf(n);
-    while (at >= 0) { const end = at + n.length; if (!spans.some(([a, b]) => at < b && end > a)) spans.push([at, end]); at = text.indexOf(n, end); }
+    while (at >= 0) {
+      const end = at + n.length;
+      // only the WHOLE name: never a stretch inside a longer token ("summary" inside "summary_internal_table")
+      const whole = !/[\w-]/.test(text.charAt(at - 1) || " ") && !/[\w-]/.test(text.charAt(end) || " ");
+      if (whole && !spans.some(([a, b]) => at < b && end > a)) spans.push([at, end]);
+      at = text.indexOf(n, end);
+    }
   }
   return spans.sort((x, y) => x[0] - y[0]);
 }
@@ -93,6 +102,19 @@ export function scrub(text: string): string {
  * which requires none: a change here means a root cause still needs fixing). */
 export const guardInterventions: { before: string; after: string }[] = [];
 
+/** V1.5: the library names an answer may show verbatim -- ChatAnswer.libraryNames, which ONLY the server sets, from the
+ * household's own authorised, lifecycle-filtered inventory (lib/rag2/inventory.ts via loop.ts). Even from there, a
+ * value shaped like something other than a document or file name never gains the exemption: a storage path, a key or
+ * token, a bare id, an over-long value, or one of the answer's own record ids. */
+const BARE_ID = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
+export function protectableNames(answer: ChatAnswer): string[] {
+  const ids = new Set<string>([...(answer.citations ?? []).map((c) => (c as { policyId?: string }).policyId ?? ""), (answer as { conversationId?: string }).conversationId ?? ""].filter(Boolean).map((x) => x.toLowerCase()));
+  return [...new Set((answer.libraryNames ?? []).filter((n): n is string => typeof n === "string"))]
+    .map((n) => n.trim())
+    .filter((n) => n.length >= 3 && n.length <= 160 && /[A-Za-z]/.test(n) && !/[\\/]/.test(n) && !KEYLIKE.test(n) && !BARE_ID.test(n) && ![...ids].some((id) => n.toLowerCase().includes(id)))
+    .sort((a, b) => b.length - a.length);
+}
+
 /** Guards an answer in place and returns it. */
 export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
   if (!answer || typeof answer !== "object") return answer;
@@ -105,7 +127,7 @@ export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
 }
 function guardInPlace(answer: ChatAnswer) {
   const seen = new Set<string>();
-  const names = [...new Set((answer.libraryNames ?? []).filter((n): n is string => typeof n === "string" && n.trim().length >= 3))].sort((a, b) => b.length - a.length);
+  const names = protectableNames(answer);
   // A sentence said once is enough: the summary first, then each detail.
   const once = (text: string | null) => {
     if (!text) return text;
