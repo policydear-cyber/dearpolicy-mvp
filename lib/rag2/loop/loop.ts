@@ -239,8 +239,12 @@ const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_pas
 /** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
 export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|submit|provide|bring|send|attach)\b)[^]*(?:\b(?:what|which|list|show|tell me|give me)\b[^?.!]*\b(?:policies|documents|uploads|files|plans|(?:every|all|each|any) (?:of (?:the|our|my) )?(?:polic(?:y|ies)|documents?|files?|uploads?))\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have|does \w+ have)\b|\b(?:our|my|the household'?s?) (?:document )?library\b|\bwhat plans? does\b)/i;
 
-/** A question about an event (a death, an accident, an injury, a stay, an illness) or about claiming for one. */
-export const EVENT_QUESTION = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim (?:under|for|on|from)|should (?:i|we) claim|make a claim)\b/i;
+/** Reliable chat (recorded failure 4): the documents are asked about only to choose which ones to CLAIM under / which
+ * apply or pay ("which of my uploaded policies should I claim under for Adrian's accident?") -- an event question about
+ * benefits, not a request for the library list. A separate inventory clause ("..., and which documents do we have for
+ * him?") is still an inventory side question. */
+const EVENT_WORDS = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim\w*)\b/i;
+export const CLAIM_SELECTION_QUESTION = /\b(?:which|what)\b[^?.!,;]*\b(?:polic(?:y|ies)|documents?|plans?|covers?|insurances?)\b[^?.!,;]*\b(?:claim\w*|apply|applies|cover|covers|pay|pays|payable|use)\b/i;
 
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
@@ -1434,7 +1438,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Reliable chat (recorded failure 4): "which of my uploaded policies should I claim under for Adrian's accident?" is
     // an EVENT question about which benefits may apply, not a request for the library list -- calling the document
     // lookup on the way never turns the answer into an inventory.
-    if (!INVENTORY_QUESTION.test(input.message) || EVENT_QUESTION.test(input.message)) return r;
+    if (!INVENTORY_QUESTION.test(input.message) || CLAIM_SELECTION_QUESTION.test(input.message)) return r;
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
@@ -1499,6 +1503,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return r;
   };
   let reasked: LoopPending | null = null;
+  // Reliable chat (contract C, library_status): an inventory question is answered from the household's own document
+  // lookup even when the model did not call it -- the list never depends on which model sentences survived the checks.
+  // (Only for a plain inventory question -- no event, no figures -- and only when some of the model's own sentences were
+  // taken out: a reply that stood on its own is left as the model wrote it.)
+  const ended = (reply ?? beforeRepair) as LoopReply | null;
+  if (!inventoryNow && INVENTORY_QUESTION.test(input.message) && !CLAIM_SELECTION_QUESTION.test(input.message) && !EVENT_WORDS.test(input.message) && !/\d/.test(input.message) && ended?.kind === "final" && (ended.composed?.dropped.length ?? 0) > 0) {
+    const res = await runTool(ctx, "household_documents", {}, loopToolEnv(env)).catch(() => null);
+    if (res?.ok) { inventoryNow = res.data as Inventory; record("household_documents", { by: "server" }, true, []); }
+  }
   const done = conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null)));
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {

@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as T from "./fixtures/reliable-chat/tan";
+import * as RC from "./fixtures/reliable-chat/conversations";
 import * as W from "./fixtures/rag2-pr50/household";
 import type { ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
@@ -53,29 +54,8 @@ async function main() {
 
   if (HH === T) {
     const J = T.M.jun.id, ML = T.M.meiling.id;
-    const U1 = "Jun broke his leg playing football. What could his accident policy pay?";
-    const U2 = "It was the shin bone.";
-    const U3 = "Sorry, I was wrong - it was his thigh bone, not the shin.";
-    let sched = "";
-    const turn1 = { user: U1, steps: [
-      () => [call("resolve_person", { mention: "Jun" })],
-      () => [call("person_benefits", { subject_id: J, topic: "fracture leg" })],
-      (v: ScriptView) => { sched = scheduleOf(v, /Fracture/)?.benefit_id; return [call("note_facts", { subject_id: J, facts: [{ key: "injury", value: "broke his leg", words: "Jun broke his leg playing football" }, { key: "how_it_happened", value: "playing football", words: "Jun broke his leg playing football" }] }), call("evaluate_benefit", { benefit_id: sched, subject_id: J, purpose: "claim", case: "leg", assumption_words: "Jun broke his leg playing football" })]; },
-      (v: ScriptView) => { const s = scheduleOf(v, /Fracture/) ?? { evidence: {} }; return [call("ask_user", { kind: "fact", subject_id: J, fact_key: "bone",
-        statements: [{ kind: "benefit_terms", benefit_id: sched }, { kind: "fact", text: "The Fracture Benefit is for a Fracture caused by an Accident and confirmed by X-ray.", evidence_ids: [evidOf(s)], subject_id: J }],
-        question: "Which leg bone was it — the thigh bone (femur), or below the knee (tibia or fibula)?", because_evidence_ids: [evidOf(s)] })]; },
-    ] };
-    const turn2 = { user: U2, steps: [
-      () => [call("note_facts", { subject_id: J, facts: [{ key: "bone", value: "shin bone", words: "It was the shin bone." }] }), call("person_benefits", { subject_id: J, topic: "fracture" })],
-      (v: ScriptView) => [call("evaluate_benefit", { benefit_id: scheduleOf(v, /Fracture/)?.benefit_id, subject_id: J, purpose: "claim", option_id: optionOf(v, /below the knee/), assumption_words: "Jun broke his leg playing football", fact_keys: ["bone"] })],
-      (v: ScriptView) => [call("final_answer", { subject_id: J, sentences: [{ kind: "calculation", result_id: evalOf(v).result_id, text: "-", subject_id: J }], next_steps: [`contact:${T.doc("SCHEDULE").id}`] })],
-    ] };
-    const turn3 = { user: U3, steps: [
-      () => [call("note_facts", { subject_id: J, facts: [{ key: "bone", value: "thigh bone", words: "it was his thigh bone, not the shin" }] }), call("person_benefits", { subject_id: J, topic: "fracture" })],
-      (v: ScriptView) => [call("evaluate_benefit", { benefit_id: scheduleOf(v, /Fracture/)?.benefit_id, subject_id: J, purpose: "claim", option_id: optionOf(v, /thigh/), assumption_words: "Jun broke his leg playing football", fact_keys: ["bone"] })],
-      (v: ScriptView) => [call("final_answer", { subject_id: J, sentences: [{ kind: "calculation", result_id: evalOf(v).result_id, text: "-", subject_id: J }] })],
-    ] };
-    const [v1, v2, v3] = await run([turn1, turn2, turn3]);
+    const U2 = RC.TAN_U2;
+    const [v1, v2, v3] = await run(RC.fractureTurns() as any);
     await grade("V1 benefit found, terms explained, one necessary question (which leg bone), no amount yet", () => {
       const v = v1.v;
       return { C: /Fracture Benefit/.test(v) && /S\$100,000/.test(v) && !/S\$10,000|S\$20,000/.test(v), K: /20%/.test(v) && /10%/.test(v) && /X-ray/.test(v), S: (v1.answer.citations ?? []).some((c: any) => c.policyId === T.doc("WORDING").id),

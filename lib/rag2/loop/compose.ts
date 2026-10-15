@@ -134,12 +134,19 @@ export function withoutUnconfirmedAddress(text: string, people: { id: string; na
 const CLAUSE_SPLIT = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though|whereas)\b))/;
 /** The clauses of a sentence. */
 export function clausesOf(text: string): string[] { return text.split(CLAUSE_SPLIT).filter((_, k) => k % 2 === 0); }
-/** Reliable chat (contract C): a statement's INDEPENDENT claims -- clauses that stand alone with their own subject
- * (an imperative step, or a clause opening with its own noun phrase) -- as separate statements carrying the same
- * citations. A clause that depends on the one before ("and says it ...", "which ...", "requiring ...") stays with it.
- * Server-written statements, calculations, value-bound figures and labelled lists are never split. */
-const STANDALONE = /^(?:the|this|these|those|your|his|her|their|our|a|an|each|any|no|none|under|for|if|when|in|on|contact|call|ask|keep|check|report|notify|submit|gather|tell|bring|send|email|write|get|request|confirm|you|[A-Z][a-z]+(?:['’]s)?)\b/;
-const DEPENDENT = /^(?:it|its|they|them|that|which|who|whose|says?|said|states?|requires?|requiring|pays?|paying|covers?|is|are|was|were|can|could|may|might|must|will|would|also|so|then|otherwise|including|except|subject)\b/i;
+/** Reliable chat (contract C): a statement's INDEPENDENT claims as separate statements carrying the same citations --
+ * only three recognisable kinds, so a clause that leans on the one before is never surfaced on its own:
+ *   - an action ("contact ...", "keep ...", "ask ...") -- a step or an instruction;
+ *   - a claim with its own document as subject ("the policy wording says / lists / pays ...");
+ *   - an uncertainty about the documents ("the uploaded documents do not establish ...").
+ * Anything else stays with the clause before it and is checked together with it (a subject that refers back -- "Cai is
+ * not listed" after "the schedule names ..." -- or a qualification -- "your two nights alone do not establish ..." --
+ * is part of the claim it qualifies). Server-written statements, calculations, value-bound figures and labelled lists
+ * are never split. */
+const ACTION_PART = /^(?:contact|call|ask|keep|check|report|notify|submit|gather|tell|bring|send|email|write|get|request|confirm|upload|find out|make sure)\b/i;
+const DOCUMENT_CLAIM_PART = /^the [\w\s’'-]{0,60}?\b(?:wording|summary|schedule|certificate|policy|document|booklet|plan|endorsement|brochure)\b[^,;]{0,30}?\b(?:says|lists|prints|states|pays|provides|shows|defines|describes|covers)\b/i;
+const UNCERTAINTY_PART = /^(?:the (?:uploaded |stored )?documents?|your (?:uploaded )?documents?|these documents|it is (?:not clear|unclear))\b[^;]{0,40}?\b(?:do(?:es)? not|don['’]t|doesn['’]t|cannot|can['’]t|whether)\b/i;
+const LIMITING = /\b(?:alone|only|unless|except|on (?:its|their) own)\b/i;
 export function independentStatements(x: Record<string, unknown>): Record<string, unknown>[] {
   const text = String(x?.text ?? "");
   if (!text || RENDERED.has(x) || x.result_id || x.result_ids || (Array.isArray(x.value_ids) && x.value_ids.length) || /^[^;:.]{1,80}:\s/.test(text)) return [x];
@@ -147,7 +154,7 @@ export function independentStatements(x: Record<string, unknown>): Record<string
   const parts: string[] = [bits[0]];
   for (let k = 1; k < bits.length; k += 2) {
     const body = (bits[k + 1] ?? "").replace(/^(?:and|but|while|whereas)\s+/i, "");
-    if (body.split(/\s+/).length >= 4 && STANDALONE.test(body) && !DEPENDENT.test(body)) parts.push(body);
+    if (body.split(/\s+/).length >= 4 && (ACTION_PART.test(body) || ((DOCUMENT_CLAIM_PART.test(body) || UNCERTAINTY_PART.test(body)) && !LIMITING.test(body)))) parts.push(body);
     else parts[parts.length - 1] += bits[k] + (bits[k + 1] ?? "");
   }
   if (parts.length < 2) return [x];

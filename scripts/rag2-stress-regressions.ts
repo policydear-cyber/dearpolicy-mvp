@@ -361,10 +361,12 @@ async function controls(h: Harness) {
   installLoopModel(new ScriptedLoopModel([{ user: "cover", steps: [() => [call("resolve_person", { mention: "me" })], () => [search("Group Personal Accident Group Term Life sum assured certificate")], (v) => [call("final_answer", { subject_id: I, sentences: sentences(v) })], (v) => [call("final_answer", { subject_id: I, sentences: sentences(v) })]] }] as ScriptTurn[]));
   const a = await h.send("What is my cover?", {}); const sv = await h.savedAnswer(a.conversationId!); installLoopModel(null);
   const v = visible(sv.answer);
-  await check("CONTROL identity binding stays strict: the right figure is kept; another product's figure, another person's, another currency, a superseded version and an unsupported figure are not stated; the supported document fact is kept without the unsupported figure", () => {
+  await check("CONTROL identity binding stays strict: the right figure is kept; another product's figure, another person's, another currency, a superseded version and an unsupported figure are not stated; a statement carrying an unsupported figure is omitted whole", () => {
     assert.match(v, /S\$200,000 as of 1 April 2026/, v);
     assert.ok(!/S\$400,000|US\$|S\$150,000|S\$999,000|Lena's Personal Accident/.test(v), v);
-    assert.match(v, /Ivan is on the Arbor Civil Service Group Scheme certificate\./, v);
+    // Reliable chat (contract C): a statement carrying an unsupported figure is omitted whole -- not trimmed to its
+    // figure-free part (the trimmed sentence was a different statement from the one the model made).
+    assert.ok(!/Ivan is on the Arbor Civil Service Group Scheme certificate/.test(v), v);
     assert.deepEqual(sv.state.ragLoop.turns.at(-1).gate ?? [], []);
   });
   installLoopModel(new ScriptedLoopModel([

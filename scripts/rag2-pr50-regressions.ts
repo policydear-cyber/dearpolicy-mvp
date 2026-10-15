@@ -116,10 +116,13 @@ async function main() {
       (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], ...(sfLimit ? { value_ids: [sfLimit] } : {}), subject_id: A }] })],
     ] };
     const [d5] = await run([amb]);
-    await check("D5 when the calculation is genuinely unresolved, the answer keeps the verified Simple Fracture terms and names the missing piece -- never another benefit's label (\"Death due to Accident\") and never unverified arithmetic", () => {
+    // Reliable chat (contract C): the model's own unverified-arithmetic sentence is omitted WHOLE (it is not trimmed into a
+    // different claim); the verified terms of an unresolved benefit are the server's benefit_terms statement, exercised
+    // on the migrated contract by scripts/reliable-chat-slice.ts (V5 / V6, this household) and stage 3.
+    await check("D5 when the calculation is genuinely unresolved, the unverified arithmetic is omitted whole -- never another benefit's label (\"Death due to Accident\") and never unverified arithmetic -- and the refusal names the rows", () => {
       assert.ok(!/Death due to|Compassionate|•/.test(d5.v), d5.v + "\n(limit value id: " + String(sfLimit) + ")");
       assert.ok(!/S\$2,500/.test(d5.v), "no unverified S$2,500: " + d5.v);
-      assert.match(d5.v, /Simple Fracture/, d5.v);
+      assert.ok((d5.trace.dropped ?? []).some((d: any) => /S\$2,500/.test(d.sentence)), JSON.stringify(d5.trace.dropped));
       const err = String(calcs(d5)[0]?.result?.error ?? calcs(d5)[0]?.error ?? "");
       assert.match(err, /v\d+ = “Jaw, Pelvis, Leg\^?, Ankle or Knee” 50%/, "the refusal offers the rows as value ids: " + err);
     });
@@ -200,10 +203,14 @@ async function main() {
       assert.match(a4.v, /do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit/, why);
       assert.ok(!JSON.stringify(a4.trace.dropped ?? []).match(/exclu/i), why);
     });
-    await check("A5 negative control: a clause the wording does not print (\"payable only to a surviving spouse\") is taken out; the supported clauses and the uncertainty stay", () => {
+    // Reliable chat (contract C): a dependent clause the wording does not print (", and says it is payable only to a
+    // surviving spouse") makes its statement unsupported, and the statement is omitted WHOLE -- the remaining clauses are
+    // not re-stated as if the document said only them. The separate uncertainty statement stays.
+    await check("A5 negative control: a clause the wording does not print (\"payable only to a surviving spouse\") makes its statement omitted whole; the separate uncertainty stays", () => {
       const why = a5.v + "\n" + JSON.stringify(a5.trace.dropped);
       assert.ok(!/surviving spouse/.test(a5.v), why);
-      assert.match(a5.v, /proof of death and relevant documents in the insurer’s prescribed form/, why);
+      assert.ok(!/prescribed form/.test(a5.v), why);
+      assert.ok((a5.trace.dropped ?? []).some((d: any) => /surviving spouse/.test(d.sentence)), why);
       assert.match(a5.v, /do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit/, why);
     });
     // ------------------------------------------------ B: direct amounts and person switching

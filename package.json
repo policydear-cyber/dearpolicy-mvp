@@ -189,6 +189,7 @@
     "rag2:s52-replay": "node --import tsx scripts/rag2-s52-replay.ts",
     "rag2:pr50-regressions": "for v in plain snake uuid digits; do PR50_NAMES=$v node --import tsx scripts/rag2-pr50-regressions.ts || exit 1; done && PR50_PAGE=plain node --import tsx scripts/rag2-pr50-regressions.ts",
     "e2e:rag2-s52-replay": "playwright test -c e2e/support/playwright.rag2-s52-replay.config.ts",
+    "e2e:reliable-chat": "playwright test -c e2e/support/playwright.reliable-chat.config.ts",
     "e2e:rag2-pr50": "playwright test -c e2e/support/playwright.rag2-pr50.config.ts",
     "e2e:rag2-livelib": "playwright test -c e2e/support/playwright.rag2-livelib.config.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",

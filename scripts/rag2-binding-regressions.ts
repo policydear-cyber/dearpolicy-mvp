@@ -108,8 +108,12 @@ async function main() {
     { text: "Darren's Group Term Life sum assured is S$1,000,000 as of 6 October 2022.", evidence_ids: pfEv(v, D), subject_id: D },
     { text: "Contact both Meridian Life Ltd and Lumen General to report the death.", evidence_ids: pfEv(v, D), subject_id: D },
   ], ["Notify Lumen General as well."]);
-  await check("INSURER an insurer is named for Darren only when one of his documents is from it: Lumen General (pet documents linked to nobody) is taken out, Meridian Life is kept", () => {
-    assert.match(I1.v, /Contact Meridian Life Ltd to report the death/); assert.ok(!/Lumen General/.test(I1.v), I1.v);
+  // Reliable chat (contract C): the statement naming an insurer of none of Darren's documents is omitted WHOLE -- never
+  // rewritten into a different instruction ("Contact Meridian Life Ltd to report the death" was a rewrite). Contact advice
+  // for his own documents is the server-rendered `contact:<policy_id>` step (scripts/reliable-chat-stage3.ts).
+  await check("INSURER an insurer is named for Darren only when one of his documents is from it: the statement and the step naming Lumen General (pet documents linked to nobody) are omitted whole, never rewritten", () => {
+    assert.ok(!/Lumen General|Contact both|Contact Meridian Life Ltd to report the death/.test(I1.v), I1.v);
+    assert.ok((I1.trace.dropped ?? []).some((d: any) => d.sentence === "Contact both Meridian Life Ltd and Lumen General to report the death."), JSON.stringify(I1.trace.dropped));
     assert.ok((I1.trace.dropped ?? []).some((d: any) => /Lumen General/.test(d.reason)), JSON.stringify(I1.trace.dropped));
   });
 
@@ -244,7 +248,7 @@ async function main() {
   const { validateArgs } = await import("@/lib/rag2/tools");
   const { FINAL_ANSWER } = await import("@/lib/rag2/loop/actions");
   await check("CALLS any other unknown key is still refused, with the allowed fields named so the model can correct it", () => {
-    assert.match(String(validateArgs(FINAL_ANSWER.parameters, { sentences: [{ text: "x", evidence: ["e1"] }] })), /sentences\[0\]\.evidence is not a parameter of this tool \(allowed here: text, evidence_ids, value_ids/);
+    assert.match(String(validateArgs(FINAL_ANSWER.parameters, { sentences: [{ text: "x", evidence: ["e1"] }] })), /sentences\[0\]\.evidence is not a parameter of this tool \(allowed here: kind, benefit_id, text, evidence_ids, value_ids/);
   });
   const REF = await answer(h, D, (v) => [
     { text: "The Group Personal Accident product summary pays Accidental Death at 100% of the Sum Insured if the Insured Person dies as a result of an Accident within 365 days of that Accident.", evidence_ids: (() => { const o = v.find("policies_for", (o) => o.args.subject_id === D); const c = ((o?.result?.data?.covering ?? []) as any[]).find((x) => x.policyId === HH.doc("GPA_SUM").id); return ((c?.evidence ?? []) as any[]).map((e) => e.evidence_id as string); })(), subject_id: D },
