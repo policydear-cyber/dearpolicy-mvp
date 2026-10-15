@@ -296,6 +296,10 @@ async function main() {
       const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
       assert.deepEqual(await verifyAnswerFigures(JSON.parse(JSON.stringify(live52.answer)), { accountId: LH.ACCOUNT, userText: S52D }), []);
       assert.equal(live52.v, live52.returned);
+      // the pre-registered s52d-live-2 grader (scripts/rag2-live/s52d-check.ts) passes this scripted positive control
+      const { gradeS52d } = await import("./rag2-live/s52d-check");
+      const g = gradeS52d({ loaded: { turns: [{ answer: live52.answer, trace: live52.trace }] } });
+      assert.equal(g.verdict, "PASS", JSON.stringify(g.checks.filter((c) => !c.ok)));
     });
     // ------------------------------------------------ 6. the four s52 defects: controls beside the saved-output replay
     const hitOf = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if ((o.name === "search_passages" || o.name === "read_page") && o.ok) { const ids = (JSON.stringify(o.result).match(/"evidence_id":"e\d+"/g) ?? []).map((x) => x.slice(15, -1)); const hits = ((o.result?.data?.hits ?? []) as any[]); const hit = hits.find((x) => re.test(JSON.stringify(x))); if (hit) return [hit.evidence.evidence_id as string]; if (o.name === "read_page" && re.test(JSON.stringify(o.result))) return ids.slice(0, 1); } return [] as string[]; };

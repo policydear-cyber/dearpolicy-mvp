@@ -15,6 +15,7 @@
  *   node --import tsx scripts/rag2-live/run.ts --plumbing        # PLUMBING TEST against the local fake endpoint
  *   node --import tsx scripts/rag2-live/run.ts --live            # the real model (needs the Composio connection)
  *   options: --scenarios L1,L4  --port 3310  --relay http://127.0.0.1:8787  --out docs/rag-migration/live
+ *            (RAG2_LIVE_HOUSEHOLD=livelib: --scenarios S52D runs only those of S52A-S52D)
  * Output: <out>/RUN-[<run-id>-]<timestamp>[-PLUMBING]/run.json, conv-<id>.json, relay.jsonl, report.md (report.ts).
  *
  * CI (.github/workflows/rag2-live-smoke.yml): RAG2_LIVE_MODE=direct -- no relay; the server calls OpenAI with the
@@ -102,7 +103,7 @@ async function main() {
   const livelibHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "livelib";
   const bindingHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding" || cellsHousehold;
   const { S47, S48, S49, S49B, S50, S52A, S52B, S52C, S52D, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT, BINDING_ACCOUNT, LIVELIB_ACCOUNT } = await import("./scenario-household");
-  const scenarios: Scenario[] = scenarioHousehold ? (livelibHousehold ? [S52A, S52B, S52C, S52D] : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
+  const scenarios: Scenario[] = scenarioHousehold ? (livelibHousehold ? [S52A, S52B, S52C, S52D].filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id)) : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
 
   const started = new Date();
   const stamp = started.toISOString().replace(/[:.]/g, "-").slice(0, 19);
