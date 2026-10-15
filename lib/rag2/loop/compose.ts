@@ -439,7 +439,7 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & 
   return null;
 }
 /** V1.3: a label as the household reads it -- the policy number and other parenthetical detail of a heading left out. */
-const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
+const tidyLabel = (l: string) => l.replace(/^\s*[•▪●◦*–-]\s*/, "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
 /** A line's own label ("Daily Hospital Income: S$150 for ...") or, failing that, the heading it is printed under on its
  * stored page (a certificate roster's product heading). */
 function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
@@ -460,7 +460,9 @@ function documentLabels(text: string): string[] {
     const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim();
     if (own) { out.add(tidyLabel(own)); continue; }
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
-    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
+    // (V1.5: a bullet item -- "• Death due to Accident" under Compassionate Death Allowance -- is a case of the benefit
+    // above it, not a benefit label of its own.)
+    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
   }
   return [...out].filter((x) => benefitWords(x).size > 0);
 }
@@ -510,7 +512,15 @@ export function withoutOtherInsurers(text: string, subjectId: string | null, ctx
     const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
     const before = t;
     t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
-    if (t === before) return null;
+    if (t === before) {
+      // V1.5 (pr50-live A: "Contact <own insurer> ... to report the death, and ask <other insurer> whether ..." lost the
+      // supported contact step with the unrelated clause): the clauses that name the other insurer are taken out on
+      // their own; what remains must still stand (and is checked below like any other remainder).
+      if (!insurerNotFor(t, subjectId, ctx, true, relevant)) continue; // nothing of another insurer is left to take out
+      const kept = withoutClausesWhere(t, (body) => !!insurerNotFor(body, subjectId, ctx, true, relevant));
+      if (!kept || kept === t) return null;
+      t = kept;
+    }
   }
   t = t.replace(/\s{2,}/g, " ").trim();
   if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
@@ -526,7 +536,11 @@ function labelsOf(ctx: Pick<Ctx, "benefits" | "libraryText" | "people">, policyI
   const namesPerson = (l: string) => people.some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)));
   return documentLabels(ctx.libraryText?.get(policyId) ?? fallbackText ?? "").filter((l) => !namesPerson(l) && !/\d/.test(l));
 }
-const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
+// V1.5 (pr50-live D: "Simple Fracture Benefit Limit" scored 0 against a clause naming Simple Fracture -- the label's words
+// were stemmed by benefitWords ("simpl", "fractur") and the clause's by contentWords ("simple", "fracture") -- so a bullet
+// item elsewhere in the document sharing only "Accident" ("• Death due to Accident") won as the "better" label): both
+// sides are read with the same words.
+const wordScore = (clause: string, label: string) => { const have = benefitWords(clause); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
 /**
  * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
  * "Label:" or the heading it is printed under) -- never by the model reproducing that label word for word. The
@@ -542,6 +556,10 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   const declared = documentCurrency(ctx.libraryText?.get(ref.policyId) ?? "");
   const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && (m.currency === currency || (m.currency === "$" && declared === currency))));
   if (all.length && !lines.length) return { conflict: `printed in another currency than the sentence states` };
+  // V1.5 (pr50-live D): a column header naming the amount as a table's base ("Compensation (% of S$5,000)") restates the
+  // limit printed above it; it is not a second line printing that amount under another label.
+  const asBase = (l: string) => /(?:%|per ?cent(?:age)?)\s+of\s+(?:the\s+)?\S*\d/i.test(l) && moneyFiguresIn(l).length === 1;
+  if (lines.some((l) => !asBase(l))) lines.splice(0, lines.length, ...lines.filter((l) => !asBase(l)));
   // A row printing several amounts (one per column, person or tier) is bound by its column, not by its label.
   if (lines.some((l) => moneyFiguresIn(l).length > 1)) return null;
   const labels = [...new Set(lines.map((l) => lineLabel(ref.policyId, l, ctx)).filter((x): x is string => !!x).map(tidyLabel).filter((x) => benefitWords(x).size > 0))];

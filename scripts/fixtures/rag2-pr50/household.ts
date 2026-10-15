@@ -14,7 +14,7 @@
  *  S$5,000; \"(% of S$5,000)\"; Skull 100%, Hip 75%,       read from a PDF): the limit line, the \"% of S$5,000\" header,
  *  Jaw, Pelvis, Leg, Ankle or Knee 50%                   Skull 100%, Hip 75%, Leg row 50%, ...
  *  a \"• Death due to Accident\" label in the summary     SUMMARY p9: a Compassionate Death Allowance section listing
- *                                                        \"• Death due to Accident\" / \"• Death due to Illness\"
+ *                                                        \"• Death due to Accident\" / \"• Death due to Illness\" rows
  *  the travel insurer's wording: a 90-day condition      TRAVEL_WORDING p1
  *  the uploads' file names (not in the report)           HYPOTHESIS variants: snake_case and UUID-style file names
  *                                                        (the shapes phones and download tools produce)
@@ -53,9 +53,9 @@ export const SUM_P9 = [
   "Accidental Death: 100% of the Sum Insured.",
   "Permanent Dismemberment: up to 100% of the Sum Insured according to the Scale of Compensation, if the loss occurs within 365 days of the Accident.",
   "Section B - Compassionate Death Allowance",
-  "Compassionate Death Allowance: S$3,000 per enrolled Insured Person, payable on",
-  "• Death due to Accident",
-  "• Death due to Illness",
+  "Compassionate Death Allowance (per enrolled Insured Person)",
+  "• Death due to Accident\tS$3,000",
+  "• Death due to Illness\tS$1,500",
   "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
 ].join("\n");
 /** The live page as plain text: single spaces between a row's label and its percentage. */

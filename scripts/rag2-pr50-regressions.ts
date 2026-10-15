@@ -89,14 +89,17 @@ async function main() {
       assert.ok(!/Death due to|Compassionate|Term Life|•/.test(d1.v), d1.v);
     });
     // The live failure state: the calculation does NOT succeed (an ambiguous condition); the fallback stays on topic.
+    // As live: person_benefits first (its value ids are what the model cites with the limit), then the passage.
+    let sfLimit: string | undefined;
     const amb = { user: D, steps: [
-      () => [call("search_passages", { query: "Simple Fracture Benefit Limit leg percentage", policy_ids: [SUM], subject_id: A })],
+      () => [call("person_benefits", { subject_id: A, topic: "simple fracture leg" })],
+      (v: ScriptView) => { sfLimit = vidOf(v, /Simple Fracture/); return [call("search_passages", { query: "Simple Fracture Benefit Limit leg percentage", policy_ids: [SUM], subject_id: A })]; },
       (v: ScriptView) => { e15 = hitOf(v, /Compensation \(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "leg or arm", proportion: { evidence_id: e15, applies_when: "leg or arm" }, assumption_words: "If that provision applies" })]; },
-      (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], subject_id: A }] })],
+      (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], ...(sfLimit ? { value_ids: [sfLimit] } : {}), subject_id: A }] })],
     ] };
-    const [d5] = await run([amb]);
+    const [d5] = await run([amb]); if (process.env.PR50_DUMP) (await import("node:fs")).writeFileSync("/tmp/d5.json", JSON.stringify({ trace: d5.trace, answer: d5.answer, sfLimit }, null, 1));
     await check("D5 when the calculation is genuinely unresolved, the answer keeps the verified Simple Fracture terms and names the missing piece -- never another benefit's label (\"Death due to Accident\") and never unverified arithmetic", () => {
-      assert.ok(!/Death due to|Compassionate|•/.test(d5.v), d5.v);
+      assert.ok(!/Death due to|Compassionate|•/.test(d5.v), d5.v + "\n(limit value id: " + String(sfLimit) + ")");
       assert.ok(!/S\$2,500/.test(d5.v), "no unverified S$2,500: " + d5.v);
       assert.match(d5.v, /Simple Fracture/, d5.v);
       const err = String(calcs(d5)[0]?.result?.error ?? calcs(d5)[0]?.error ?? "");
