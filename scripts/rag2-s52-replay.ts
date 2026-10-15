@@ -17,7 +17,9 @@ import { recordedRun, replayScript, runDir } from "./fixtures/rag2-live-replay";
 
 const HOUSEHOLD = LH as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
-const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? []).map((q) => q.text), ...(a.nextSteps ?? [])].join("\n");
+// What the chat page shows (app/chat/page.tsx): summary, details, questions, and -- when there is no question -- the
+// FIRST next step only.
+const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? []).map((q) => q.text), ...((a.questions ?? []).length ? [] : (a.nextSteps ?? []).slice(0, 1))].filter(Boolean).join("\n");
 const results: { name: string; ok: boolean }[] = [];
 async function check(name: string, fn: () => Promise<void> | void) { try { await fn(); results.push({ name, ok: true }); console.log("PASS " + name); } catch (e) { results.push({ name, ok: false }); console.log("FAIL " + name + "\n     " + (e instanceof Error ? e.message : String(e)).split("\n").slice(0, 14).join("\n     ")); } }
 
@@ -61,7 +63,7 @@ async function main() {
 async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>>) {
   void h;
   const T = (sc: string, n = 0) => saved.filter((s) => s.scenario === sc)[n];
-  const asLive = visible; // the complete visible answer: summary, details, questions and next steps (live: run.json's saved answer)
+  const asLive = visible; // the complete visible answer as the page shows it (live: run.json's saved answer, same rule)
   const tools = (t: any) => (t?.toolCalls ?? []).filter((x: any) => !x.args?.by).map((x: any) => `${x.name}:${x.ok}`);
   await check("the saved answer is what the chat route returned (the browser renders the returned answer), for all six turns", () => {
     assert.equal(saved.length, 6);
@@ -115,7 +117,7 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
     for (const s of saved) { const v = visible(s.answer); assert.ok(!/Living Care|S\$300,000/.test(v), v); assert.ok(!/(?:Accidental )?Death[^.\n]*365/.test(v), v); assert.ok(!s.trace?.limit, JSON.stringify(s.trace?.limit)); }
     assert.deepEqual(T("S52A", 1).answer.questions ?? [], []);
   });
-  await check("the differences from the live answers (the complete saved answers in run.json, next steps included) are exactly the fixes above", () => {
+  await check("the differences from the live answers (run.json's saved answers, shown as the page shows them) are exactly the fixes above", () => {
     const expected: Record<string, { removed: RegExp[]; added: RegExp[] }> = {
       "S52A#0": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd with the death certificate/], added: [/^The group accident wording lists S\$2,000 for Repatriation of Mortal Remains if death occurs outside Singapore as a result of an Accident\.$/, /says to notify Kestrel Life Ltd within 6 months with the death certificate/] },
       "S52A#1": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd of a death and provide/], added: [/^For Adrian, the group accident wording provides Repatriation of Mortal Remains of S\$2,000 if death occurs outside Singapore as a result of an Accident\.$/, /notify Kestrel Life Ltd of a death within 6 months/, /does not document travel cover for Japan/] },

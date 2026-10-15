@@ -24,7 +24,8 @@ async function send(page: Page, text: string) {
   return (await answers.last().innerText()).trim();
 }
 const norm = (t: string) => t.replace(/[\s ]+/g, " ").trim();
-const savedLines = (a: any): string[] => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...(a.nextSteps ?? [])].filter(Boolean).flatMap((t: string) => String(t).split("\n")).map(norm).filter(Boolean);
+// The page shows summary, details, questions and -- when there is no question -- the FIRST next step (app/chat/page.tsx).
+const savedLines = (a: any): string[] => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...((a.questions ?? []).length ? [] : (a.nextSteps ?? []).slice(0, 1))].filter(Boolean).flatMap((t: string) => String(t).split("\n")).map(norm).filter(Boolean);
 test.describe.configure({ mode: "serial" });
 
 const shownBy: Record<string, string[]> = {};
