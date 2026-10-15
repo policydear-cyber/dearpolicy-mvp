@@ -32,7 +32,7 @@ async function main() {
     const out: { v: string; returned: string; answer: any; trace: any; ms: number }[] = [];
     try {
       let c: { id?: string; rev?: number } = {};
-      for (const t of turns) { const t0 = Date.now(); const a = await h.send(t.user, c); const ms = Date.now() - t0; c = { id: a.conversationId, rev: a.conversationRevision }; const s = await h.savedAnswer(c.id!); out.push({ v: visibleOf(s.answer), returned: visibleOf(a), answer: s.answer, trace: s.state.ragLoop.turns.at(-1), ms }); }
+      for (const t of turns) { const t0 = Date.now(); const a = await h.send(t.user, c); const ms = Date.now() - t0; c = { id: a.conversationId, rev: a.conversationRevision }; const s = await h.savedAnswer(c.id!); out.push({ v: visibleOf(s.answer), returned: visibleOf(a), answer: s.answer, trace: s.state.ragLoop.turns.at(-1), ms }); if (process.env.PR50_SHOW) console.log(`\n=== VISIBLE [${t.user.slice(0, 60)}]\n${visibleOf(s.answer)}\n===${s.answer.calculations?.length ? "\nSAVED CALCULATION " + JSON.stringify(s.answer.calculations) : ""}`); }
     } finally { installLoopModel(null); }
     return out;
   };
