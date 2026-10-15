@@ -27,8 +27,10 @@ const fmtDate = (iso: string | null) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.e
  * use for the same words ("FAMILYGUARD PERSONAL ACCIDENT" -> "FamilyGuard Personal Accident"), else title case. */
 const pretty = (label: string, known: (string | null | undefined)[] = []) => {
   const s = label.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
+  // (the same words in a document name of the household's: that name's casing -- also for a label already title-cased
+  // from a roster heading, "Familyguard Personal Accident")
+  for (const k of known) { const i = (k ?? "").toLowerCase().indexOf(s.toLowerCase()); if (k && s.length >= 4 && i >= 0) return k.slice(i, i + s.length); }
   if (!(s === s.toUpperCase() && /[A-Z]{3}/.test(s))) return s;
-  for (const k of known) { const i = (k ?? "").toLowerCase().indexOf(s.toLowerCase()); if (k && i >= 0) return k.slice(i, i + s.length); }
   return s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
 };
 const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.test(r.policy.product ?? "") ? "certificate" : r.policy.product ?? "document");
