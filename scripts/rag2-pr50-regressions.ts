@@ -162,6 +162,35 @@ async function main() {
     await check("A3 the dated Term Life and PA amounts stay, each bound to Adrian's own certificate row", () => {
       assert.match(a1.v, /Group Term Life of S\$1,000,000 as of 6 October 2022/); assert.match(a1.v, /Group Personal Accident of S\$600,000 as of 6 October 2022/);
     });
+    // A, turn 2 (dates given): the live model's rejected sentence, anonymised with its clause structure and sources --
+    // a description of the wording's benefit, its proof requirement, the two schemes, and an uncertainty about this
+    // person's Sum Insured and enrolment. Expectations written before any change.
+    const DATES = "For this hypothetical, the accident happened on 3 October 2026 and he died on 5 October 2026. Explain which death benefits may apply and what I should do next.";
+    const CDA = "The Public Officers wording also describes a Compassionate Death Allowance Benefit for accidental death, requiring proof of death and relevant documents in the insurer’s prescribed form, and says it can be claimed under either the Core Scheme or Voluntary Scheme; the uploaded documents do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit.";
+    // negative control: the same sentence with one clause the wording does not print
+    const CDA_BAD = "The Public Officers wording also describes a Compassionate Death Allowance Benefit for accidental death, requiring proof of death and relevant documents in the insurer’s prescribed form, and says it is payable only to a surviving spouse; the uploaded documents do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit.";
+    const cdaTurn = (text: string) => ({ user: DATES, steps: [
+      () => [call("search_passages", { query: "Compassionate Death Allowance Benefit proof of death prescribed form Core Scheme Voluntary Scheme", policy_ids: [P.doc("WORDING").id], subject_id: A })],
+      (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text, evidence_ids: [hitOf(v, /Compassionate Death Allowance Benefit/)], subject_id: A }] })],
+    ] });
+    const deathTurn1 = { user: DEATH, steps: [() => [call("person_benefits", { subject_id: A, topic: "death after an accident" })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: amounts(v) })]] };
+    const [, a4] = await run([deathTurn1, cdaTurn(CDA)]);
+    const [, a5] = await run([deathTurn1, cdaTurn(CDA_BAD)]);
+    if (process.env.PR50_SHOW) console.log("A4 dropped", JSON.stringify(a4.trace.dropped), "\nA5 dropped", JSON.stringify(a5.trace.dropped));
+    await check("A4 the live uncertainty sentence: each clause is checked on its own -- the benefit, its proof requirement and the two schemes (printed in the wording) and the uncertainty about Adrian's Sum Insured and enrolment are all kept; nothing is called an exclusion", () => {
+      const why = a4.v + "\n" + JSON.stringify(a4.trace.dropped);
+      assert.match(a4.v, /Compassionate Death Allowance Benefit for accidental death/, why);
+      assert.match(a4.v, /proof of death and relevant documents in the insurer’s prescribed form/, why);
+      assert.match(a4.v, /either the Core Scheme or Voluntary Scheme/, why);
+      assert.match(a4.v, /do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit/, why);
+      assert.ok(!JSON.stringify(a4.trace.dropped ?? []).match(/exclu/i), why);
+    });
+    await check("A5 negative control: a clause the wording does not print (\"payable only to a surviving spouse\") is taken out; the supported clauses and the uncertainty stay", () => {
+      const why = a5.v + "\n" + JSON.stringify(a5.trace.dropped);
+      assert.ok(!/surviving spouse/.test(a5.v), why);
+      assert.match(a5.v, /proof of death and relevant documents in the insurer’s prescribed form/, why);
+      assert.match(a5.v, /do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit/, why);
+    });
     // ------------------------------------------------ B: direct amounts and person switching
     const [b1, b2] = await run([
       { user: "What are Adrian's Group Term Life and Group Personal Accident sum assured amounts in his uploaded certificate? Keep the products separate and give the certificate date.", steps: [() => [call("person_benefits", { subject_id: A })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: amounts(v) })]] },
@@ -194,6 +223,7 @@ async function main() {
   const [c2] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], () => [call("final_answer", { sentences: [{ text: "Here are the documents on file for your household." }] })]] }]);
   const shownFor = (d: (typeof P.DOCS)[number]) => [d.product, d.filename, d.filename?.replace(/\.[a-z0-9]+$/i, "")].filter((x): x is string => !!x && x.trim().length > 0);
   for (const [label, x] of [["model's own lines", c1], ["inventory lines", c2]] as const) await check(`C [${NAMES} file names, ${label}] every eligible upload survives to the saved and returned answer by document identity (five readable, the failed one with its status); deleted and other-household documents are absent; reference wording is not presented as personal cover`, () => {
+    if (process.env.PR50_SHOW) console.log("C dropped", label, JSON.stringify(x.trace.dropped));
     const missing = P.ELIGIBLE.map((k) => P.doc(k)).filter((d) => !shownFor(d).some((n) => x.v.includes(n)));
     assert.deepEqual(missing.map((d) => d.key), [], `missing: ${missing.map((d) => d.key)}\nsaved:\n${x.v}\ncomposed:\n${(x.trace.composed ?? []).join("\n")}`);
     assert.equal(x.v, x.returned);

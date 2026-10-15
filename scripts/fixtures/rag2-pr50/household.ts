@@ -101,6 +101,13 @@ export const WORD_P2 = [
   "Simple Fracture means a closed fracture where the skin is not broken.",
   "Sum Insured means the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
 ].join("\n");
+/** The wording's Compassionate Death Allowance Benefit (the source of the live turn's rejected uncertainty sentence):
+ * the benefit, its proof requirement and the two schemes it may be claimed under -- no amount, no enrolment list. */
+export const WORD_P3 = [
+  "Section 4 - Compassionate Death Allowance Benefit",
+  "If an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.",
+  "The Compassionate Death Allowance Benefit may be claimed under either the Core Scheme or the Voluntary Scheme.",
+].join("\n");
 export const TRAVEL_W1 = [
   "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Policy Wording",
   "Section 1 - Accidental Death",
@@ -131,7 +138,7 @@ export function docsFor(v: NameVariant): FxDoc[] {
   return [
     { key: "CERT", id: id(101), owner: M.adrian.id, members: both, insurer: "Kestrel Life Ltd", product: "Public Officers Group Insurance Scheme - Certificate", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:pr50-cert", effective: "2022-10-06", documentDate: "2022-10-06", pages: { 1: CERT_P1 } },
     { key: "SUMMARY", id: id(102), owner: M.adrian.id, members: both, insurer: "KestrelOne", product: "Public Officers Group Personal Accident - Summary of Benefits", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "benefit_summary", personal: false, hash: "sha256:pr50-summary", pages: { 9: SUM_P9, 13: PAGE === "plain" ? SUM_P13_PLAIN : SUM_P13_TABS } },
-    { key: "WORDING", id: id(103), owner: M.adrian.id, members: both, insurer: "Kestrel Life Ltd", product: "Public Officers Group Personal Accident - Policy Wording", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "policy_wording", personal: false, hash: "sha256:pr50-wording", pages: { 1: WORD_P1, 2: WORD_P2 } },
+    { key: "WORDING", id: id(103), owner: M.adrian.id, members: both, insurer: "Kestrel Life Ltd", product: "Public Officers Group Personal Accident - Policy Wording", policyNumber: "KPA-520012", groupPolicyNumber: "KP-4410", policyType: "Personal accident", role: "policy_wording", personal: false, hash: "sha256:pr50-wording", pages: { 1: WORD_P1, 2: WORD_P2, 3: WORD_P3 } },
     { key: "TRAVEL_WORDING", id: id(104), owner: M.adrian.id, members: [], insurer: "Harbourline General Insurance Pte. Ltd.", product: "Travel Insurance - Policy Wording", policyNumber: null, policyType: "Travel", role: "policy_wording", personal: false, hash: "sha256:pr50-travel-wording", filename: f.travelWording, pages: { 1: TRAVEL_W1 } },
     { key: "TRAVEL_SUMMARY", id: id(105), owner: M.adrian.id, members: [], insurer: "Harbourline General Insurance Pte. Ltd.", product: "Travel Insurance - Benefit Summary", policyNumber: null, policyType: "Travel", role: "benefit_summary", personal: false, hash: "sha256:pr50-travel-summary", filename: f.travelSummary, pages: { 1: TRAVEL_S1 } },
     { key: "SCAN", id: id(106), owner: M.adrian.id, members: [], insurer: "", product: "", policyNumber: null, policyType: "", role: "", personal: false, hash: "sha256:pr50-scan", processing: "failed", processingError: UNREADABLE_PHOTO_MESSAGE, filename: f.scan, pages: {} },

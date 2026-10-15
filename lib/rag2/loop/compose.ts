@@ -991,7 +991,22 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified });
+      const citedEv = evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") }));
+      const stmtCtx = { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified };
+      // V1.5 (PR #51 review, the live death turn 2): a sentence joining independently stated claims ("describes the
+      // benefit, requiring proof ..., and says it can be claimed under either scheme; the documents do not establish
+      // <person>'s Sum Insured or enrolment") is checked clause by clause: an unsupported clause is taken out and the
+      // supported ones stay -- never the whole sentence for one clause, never an unsupported clause for the rest.
+      // (A labelled list -- "Adrian: <document>; <document>" -- is items of one statement, not independent claims.)
+      const parts = /^[^;:.]{1,80}:\s/.test(text) ? [text] : clausesOf(text);
+      if (parts.length > 1) {
+        const failing = parts.map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
+        if (failing.length && failing.length < parts.length) {
+          const kept = withoutClausesWhere(text, (body) => failing.some((f) => f.c === body));
+          if (kept && !checkCitedStatement(kept, citedEv, stmtCtx)) { out.dropped.push({ sentence: text, reason: `a clause is not supported by its evidence and was taken out (“${failing[0].c.trim()}”: ${failing[0].why})` }); text = kept; }
+        }
+      }
+      const why = checkCitedStatement(text, citedEv, stmtCtx);
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
     }
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total
