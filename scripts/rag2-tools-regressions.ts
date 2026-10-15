@@ -122,7 +122,7 @@ async function main() {
     const offenders: string[] = [];
     for (const f of files) {
       const rel = path.relative(path.resolve("."), f);
-      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/") || rel.startsWith("scripts/fixtures/rag2-stress/") || rel.startsWith("scripts/fixtures/rag2-binding/") || rel.startsWith("scripts/fixtures/rag2-livelib/") || rel.startsWith("scripts/fixtures/rag2-pr50/") || rel === "scripts/fixtures/rag2-live-replay.ts") continue;
+      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/") || rel.startsWith("scripts/fixtures/rag2-adv/") || rel.startsWith("scripts/fixtures/rag2-release/") || rel.startsWith("scripts/fixtures/rag2-scenario/") || rel.startsWith("scripts/fixtures/rag2-stress/") || rel.startsWith("scripts/fixtures/rag2-binding/") || rel.startsWith("scripts/fixtures/rag2-livelib/") || rel.startsWith("scripts/fixtures/rag2-pr50/") || rel.startsWith("scripts/fixtures/reliable-chat/") || /^scripts\/reliable-chat-/.test(rel) || rel === "scripts/fixtures/rag2-live-replay.ts") continue;
       const text = await readFile(f, "utf8").catch(() => "");
       // Prompt 2: the one flagged hook -- lib/chat/workflow.ts imports only the loop's flag, and loads the loop's hook
       // only behind ragLoopEnabled() (DEARPOLICY_RAG_LOOP, default off).
@@ -528,7 +528,7 @@ async function main() {
   const ON = { DEARPOLICY_RAG_TOOLS: "1", NODE_ENV: "test" } as unknown as NodeJS.ProcessEnv;
   await check("R1 registry: every tool has a name, description and object schema; no tool takes an account id", () => {
     const names = R.RAG_TOOLS.map((t) => t.name);
-    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "person_benefits", "policies_for", "select_table_value", "compute", "calculate"]);
+    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "household_documents", "person_benefits", "evaluate_benefit", "policies_for", "select_table_value", "compute", "calculate"]);
     for (const t of R.RAG_TOOLS) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 20); assert.ok(!JSON.stringify(t.parameters).includes("account")); }
     assert.equal(R.toolSpecs().length, 9);
   });

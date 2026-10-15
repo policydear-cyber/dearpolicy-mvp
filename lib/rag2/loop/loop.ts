@@ -239,6 +239,9 @@ const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_pas
 /** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
 export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|submit|provide|bring|send|attach)\b)[^]*(?:\b(?:what|which|list|show|tell me|give me)\b[^?.!]*\b(?:policies|documents|uploads|files|plans|(?:every|all|each|any) (?:of (?:the|our|my) )?(?:polic(?:y|ies)|documents?|files?|uploads?))\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have|does \w+ have)\b|\b(?:our|my|the household'?s?) (?:document )?library\b|\bwhat plans? does\b)/i;
 
+/** A question about an event (a death, an accident, an injury, a stay, an illness) or about claiming for one. */
+export const EVENT_QUESTION = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim (?:under|for|on|from)|should (?:i|we) claim|make a claim)\b/i;
+
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
@@ -1428,7 +1431,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // looks the documents up while answering something else (a death claim) keeps its own verified, bound answer: the
     // inventory rule removes every sentence with a figure and every binding, so applying it to any turn that called
     // household_documents silently dropped verified amounts (s50-live-1 turn 1).
-    if (!INVENTORY_QUESTION.test(input.message)) return r;
+    // Reliable chat (recorded failure 4): "which of my uploaded policies should I claim under for Adrian's accident?" is
+    // an EVENT question about which benefits may apply, not a request for the library list -- calling the document
+    // lookup on the way never turns the answer into an inventory.
+    if (!INVENTORY_QUESTION.test(input.message) || EVENT_QUESTION.test(input.message)) return r;
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();

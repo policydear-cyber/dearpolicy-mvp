@@ -42,6 +42,9 @@ export const WORDING_P2 = [
   "Section 5 - Hospital Income",
   "Hospital Income: S$100 per day, for each complete period of 24 hours in hospital following an Accident, up to 30 days per Accident.",
   "",
+  "Section 6 - Child Education Benefit",
+  "Child Education Benefit: $5,000 per child, payable only for a child of the Insured Person who is under 18 when the Insured Person dies in an Accident.",
+  "",
   "Section 1 - Accidental Death",
   "Accidental Death: 100% of the Sum Insured, if death occurs within 12 months of the Accident.",
 ].join("\n");
