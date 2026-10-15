@@ -112,12 +112,18 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
     const docs = (args.next_steps as unknown[]).some((x) => typeof x === "string" && CONTACT.test(x)) ? await loadDocs(d.ctx.accountId) : [];
     const subject = typeof args.subject_id === "string" ? args.subject_id : d.state.subjectId ?? null;
     const links = docs.length ? await loadLinks(d.ctx.accountId, docs.map((x) => x.id)) : [];
-    const theirs = (id: string) => !subject || docs.some((x) => x.id === id && x.ownerId === subject) || links.some((l) => l.policyId === id && l.memberId === subject);
+    // (linked to the person -- a policy_members row, as the household's library shows it: an upload filed under them but
+    // linked to nobody is "not linked to anyone" there, rc-live-1 P50A's travel wording, and gets no contact step)
+    const theirs = (id: string) => subject ? links.some((l) => l.policyId === id && l.memberId === subject) : links.some((l) => l.policyId === id);
+    const insurersSaid = new Set<string>();
     args.next_steps = (args.next_steps as unknown[]).map((x, i) => {
       const m = typeof x === "string" ? CONTACT.exec(x) : null;
       if (!m) return x;
       const doc = docs.find((p) => p.id === m[1]);
       if (!doc || !doc.insurer || !theirs(doc.id)) { problems.push(`next step ${i + 1}: contact:<policy_id> needs the policy_id of one of this person's documents with an insurer`); return null; }
+      // one contact step per insurer (two documents of one scheme are one call to make)
+      if (insurersSaid.has(doc.insurer.trim().toLowerCase())) return null;
+      insurersSaid.add(doc.insurer.trim().toLowerCase());
       const group = /\bgroup\b|\bscheme\b/i.test(`${doc.productName ?? ""} ${doc.policyType ?? ""}`);
       const step = `Contact ${doc.insurer}${group ? " (through the employer or scheme administrator, for this group scheme)" : ""} about the ${doc.productName ?? "policy"} to ask what it needs for a claim.`;
       RENDERED_STEPS.add(step);

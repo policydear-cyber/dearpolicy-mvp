@@ -141,6 +141,7 @@
     "verify:assertions-test": "node --import tsx scripts/verify-assertions-regressions.ts",
     "verify:gate-test": "node --import tsx scripts/verify-gate-regressions.ts",
     "reliable-chat:slice-test": "node --import tsx scripts/reliable-chat-slice.ts && HH=wong node --import tsx scripts/reliable-chat-slice.ts",
+    "reliable-chat:live-regressions-test": "node --import tsx scripts/reliable-chat-live-regressions.ts && HH=wong node --import tsx scripts/reliable-chat-live-regressions.ts",
     "reliable-chat:stage3-test": "node --import tsx scripts/reliable-chat-stage3.ts && HH=tan node --import tsx scripts/reliable-chat-stage3.ts",
     "rag2:tools-test": "node --import tsx scripts/rag2-tools-regressions.ts",
     "rag2:loop-test": "node --import tsx scripts/rag2-loop-regressions.ts",

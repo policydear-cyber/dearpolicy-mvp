@@ -1,0 +1,98 @@
+{
+  "verdict": "FAIL",
+  "scenarios": {
+    "P50C": {
+      "checks": [
+        {
+          "id": "C1",
+          "name": "all six eligible uploads are displayed by identity (product name, or the exact file name with its case)",
+          "ok": true
+        },
+        {
+          "id": "C2",
+          "name": "each displayed upload is in the saved record (a citation of its document id, or its library name)",
+          "ok": true
+        },
+        {
+          "id": "C3",
+          "name": "the failed upload is stated as unreadable (on the line naming it); nothing is quoted from it",
+          "ok": true
+        },
+        {
+          "id": "C4",
+          "name": "the deleted upload and the other household's upload are absent (by name and by id)",
+          "ok": true
+        },
+        {
+          "id": "C5",
+          "name": "the travel insurer's documents are not presented as personal cover",
+          "ok": true
+        },
+        {
+          "id": "C6",
+          "name": "no token-limit / unfinished fallback",
+          "ok": true
+        }
+      ],
+      "visible": "Two readable, unlinked travel documents are uploaded: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary; the library does not link them to a household member.\nAdrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nCheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nEthan: no documents on file.\nNot linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.\nNot linked to anyone in the household, and its contents could not be read: Photo of letter.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully."
+    },
+    "P50D": {
+      "checks": [
+        {
+          "id": "D1",
+          "name": "a conditional S$2,500 is visible, and every sentence stating it is conditional / an illustration, not a payment",
+          "ok": true
+        },
+        {
+          "id": "D2",
+          "name": "a saved calculation: 50% from the \"Jaw, Pelvis, Leg^, Ankle or Knee\" row and S$5,000 from \"Simple Fracture Benefit Limit: S$5,000\", both Summary of Benefits page 13; result S$2,500 SGD; re-computes; Term Life S$1,000,000 is not an operand",
+          "ok": true
+        },
+        {
+          "id": "D3",
+          "name": "Simple and Other Fracture kept separate; no unrelated benefit label (Death due to Accident, Compassionate Death Allowance, Term Life) and no figure other than S$5,000 / S$2,500",
+          "ok": true
+        },
+        {
+          "id": "D4",
+          "name": "no token-limit / unfinished fallback and no generic 'left out an amount' note in place of the illustration",
+          "ok": true
+        }
+      ],
+      "visible": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe Summary of Benefits’ Simple Fracture schedule lists 50% for the “Jaw, Pelvis, Leg^, Ankle or Knee” row, as a percentage of the Simple Fracture Benefit Limit.\nOther Fracture is a separate provision, with its 50% Leg row calculated as a percentage of Adrian’s Group Personal Accident sum insured, not the Simple Fracture Benefit Limit."
+    },
+    "P50A": {
+      "checks": [
+        {
+          "id": "A1",
+          "name": "supported contact advice is visible: a step to contact / notify the person's own insurer (Kestrel) or the scheme administrator",
+          "ok": true
+        },
+        {
+          "id": "A2",
+          "name": "no instruction to contact or claim from the unrelated travel insurer (Harbourline), and its wording is not presented as Adrian's cover",
+          "ok": false,
+          "detail": "Contact Harbourline General Insurance Pte."
+        },
+        {
+          "id": "A3",
+          "name": "every amount shown is one the documents print for Adrian's scheme (Term Life S$1,000,000, PA S$600,000, the allowance S$3,000 / S$1,500)",
+          "ok": true
+        },
+        {
+          "id": "A4",
+          "name": "no unsupported exclusion (an uncertainty about enrolment is not said as 'not enrolled' / 'not covered')",
+          "ok": true
+        },
+        {
+          "id": "A5",
+          "name": "no token-limit / unfinished fallback",
+          "ok": true
+        }
+      ],
+      "visible": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount on that date, not confirmation of cover on the hypothetical death date.\nThe Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.\nAdrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; the uploaded documents do not establish that this amount remained in force on 5 October 2026.\nThe group summary lists a separate Death due to Accident allowance of S$3,000 only for insured persons enrolled for that optional cover, and Adrian’s enrollment is not established in the uploaded documents.\nThe group policy wording says its Compassionate Death Allowance Benefit applies when an insured person dies as a result of an Accident, on receipt of proof of death and the relevant documents in the prescribed form; Adrian’s enrollment and the allowance amount are not established in the uploaded documents.\nThe travel wording provides an Accidental Death benefit only for a journey shown in a schedule issued to the insured person, and if death occurs within 90 days of an accident during that journey; Adrian’s personal travel schedule and confirmed cover are not in the uploaded documents.\nThe uploaded documents do not establish whether Adrian’s group cover was in force on 5 October 2026 or whether the optional death allowance applied.\nContact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim.\nContact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Personal Accident - Policy Wording to ask what it needs for a claim.\nContact Harbourline General Insurance Pte. Ltd. about the Travel Insurance - Policy Wording to ask what it needs for a claim."
+    }
+  },
+  "incomplete": null,
+  "costUsd": 0.010862600000000002
+}

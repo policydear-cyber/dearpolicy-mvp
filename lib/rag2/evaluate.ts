@@ -75,7 +75,10 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
         const named = "ambiguous" in choice ? choice.ambiguous.map((x) => s.rows.find((r) => r.evidence.passage.start === x.row.start)).filter((r): r is ScheduleRow => !!r) : [];
         return ok({ status: "needs_facts", benefit: rec.benefit, benefit_id: rec.id, need: named.length ? `“${caseWords}” matches more than one listed case` : `“${caseWords}” is not one of the listed cases`,
           ask: `Which of ${rec.benefit}'s listed cases applies?`, options: caseOptions(named.length ? named : s.rows), percentage_of: summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of,
-          note: "Ask the household which case it is (one question, offering these cases in plain words); do not choose one for them. Then call evaluate_benefit again with that option_id." }, [rec.source.evidence]);
+          note: named.length ? "Ask the household which case it is (one question, offering these cases in plain words); do not choose one for them. Then call evaluate_benefit again with that option_id."
+            // Reliable chat (rc-live-1, RCW3: "broken wrist" against a table listing no wrist -> the household was asked to pick
+            // neck / hip / leg): a specific part their words name that no listed case names is an answer, not a question.
+            : "Their words name none of these cases. If they name a specific part or kind (a wrist, an organ) that no listed case names, say this document lists no such case (its printed cases are these) and do not ask them to choose one of these cases; suggest asking the insurer. Ask which case applies only when their words are general (\"an injury\")." }, [rec.source.evidence]);
       }
     }
     if (!row) return ok({ status: "needs_facts", benefit: rec.benefit, benefit_id: rec.id, need: "which listed case applies", ask: `Which of ${rec.benefit}'s listed cases applies?`, options: caseOptions(s.rows),

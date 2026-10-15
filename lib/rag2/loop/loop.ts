@@ -806,6 +806,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       let key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
+      // Reliable chat (rc-live-1, RCT1a / RCT1b turn 3: "Has the insurer made a reviewed medical decision that Jun's
+      // diagnosis meets the policy's definition ...?"): what the insurer has decided or reviewed is not a fact the
+      // household can give; it is the insurer's step, said once as a next step.
+      if (/insurer/i.test(key) || /\b(?:has|have|did)\s+the\s+insurer\b|\binsurer(?:['’]s)?\s+(?:decision|review|reviewed|approv\w*|assessment|confirmation)\b|\breviewed medical (?:decision|record)\b/i.test(String(a.question ?? ""))) {
+        noteFailure("ask_user");
+        return { result: { ok: false, error: "what the insurer has decided, reviewed or confirmed is not a fact the household can give: do not ask it. Say the insurer's review once (a next step, e.g. contact:<policy_id>) and end with final_answer." } };
+      }
       const subject = (a.subject_id as string) ?? state.claim?.subjectId ?? state.subjectId;
       const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
       // Agent F (D15): the same fact under another key (admitted_at / admission_time, how_it_happened / cause) is known.
@@ -1070,6 +1077,18 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if ((call.name === "calculate" || call.name === "evaluate_benefit") && call.arguments.purpose !== "what_if" && typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim() && !quotedFrom(call.arguments.assumption_words, userTexts)) {
       if (!recordedNow.length) return "assumption_words must quote the household's own words verbatim (from their messages)";
       call.arguments = { ...call.arguments, assumption_words: input.message.replace(/\s+/g, " ").trim() };
+    }
+    // Reliable chat (rc-live-1, RCW1b: case "closed fracture of his leg", the model's paraphrase, became the illustration's
+    // stated assumption and the save-time gate rightly refused it as not the household's what-if): an evaluation's
+    // assumption is always the household's own words -- the recorded words of the facts it rests on, else its case words
+    // when they quote the household, else this message as they wrote it.
+    if (call.name === "evaluate_benefit" && !(typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim())) {
+      const subj = String(call.arguments.subject_id ?? "");
+      const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+      const keys = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String) : [];
+      const fromFacts = keys.map((k) => facts[k]?.words).find((w): w is string => typeof w === "string" && !!w.trim() && quotedFrom(w, userTexts));
+      const caseWords = typeof call.arguments.case === "string" && call.arguments.case.trim() && quotedFrom(call.arguments.case, userTexts) ? call.arguments.case : null;
+      call.arguments = { ...call.arguments, assumption_words: fromFacts ?? caseWords ?? input.message.replace(/\s+/g, " ").trim() };
     }
     if (call.name === "calculate") { const bad = resolveEvidenceInputs(call); if (bad) return bad; }
     const sig = call.name + " " + JSON.stringify(call.arguments);
