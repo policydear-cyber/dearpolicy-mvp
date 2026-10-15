@@ -125,6 +125,9 @@ export function withoutUnconfirmedAddress(text: string, people: { id: string; na
   t = t.replace(new RegExp(`(\\b(?:your loss|sorry|condolences|sympathies|hi|hello|dear|thank you|thanks))\\s*,?\\s+(?:${alt})(?=\\s*[;,.!?:—–-])`, "gi"), "$1");
   // at the start, before what is said to them: "Michelle, I'm so sorry…"
   t = t.replace(new RegExp(`^(?:${alt}),\\s+(?=(?:I|I’m|I'm|I am|we|sorry|thank|please|here|my)\\b)`, "i"), "");
+  // V1.5 (pr50-live C, file-name variant): only a sentence this changed is re-capitalised -- a sentence that begins with
+  // a file name ("scan_20241003_153045.jpg could not be read.") keeps the name exactly as the library records it.
+  if (t === text) return text;
   return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
 }
 /** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */

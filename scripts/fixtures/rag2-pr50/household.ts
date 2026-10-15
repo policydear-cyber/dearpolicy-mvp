@@ -100,10 +100,12 @@ export const TRAVEL_S1 = [
 ].join("\n");
 
 /** File names: the report does not give them. `names(\"plain\" | \"snake\" | \"uuid\")` -- the hypothesis variants. */
-export type NameVariant = "plain" | "snake" | "uuid";
+export type NameVariant = "plain" | "snake" | "uuid" | "digits";
 export const FILES: Record<NameVariant, { travelWording: string; travelSummary: string; scan: string }> = {
   plain: { travelWording: "Travel Wording.pdf", travelSummary: "Travel Benefit Summary.pdf", scan: "Photo of letter.jpg" },
   snake: { travelWording: "travel_policy_wording_2024.pdf", travelSummary: "travel_benefit_summary.pdf", scan: "scan_20241003_153045.jpg" },
+  // long digit strings (dates, timestamps, phone-export numbers): never to be read as amounts
+  digits: { travelWording: "2024100315304512.pdf", travelSummary: "8801234567890.pdf", scan: "20241003_153045.jpg" },
   uuid: { travelWording: "3f2b8c1e-9a7d-4c2e-8b1a-1234567890ab.pdf", travelSummary: "77c0e2d4-1b3a-4f5e-9c8d-aa00bb11cc22.pdf", scan: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d.jpg" },
 };
 const both = [{ id: M.adrian.id }, { id: M.cheryl.id }];

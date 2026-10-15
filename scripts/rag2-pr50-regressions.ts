@@ -4,7 +4,7 @@
  * report's description of the stored evidence, and the model moves are the report's recorded tool calls (scripted).
  * Every check reads the SAVED answer and what the chat route returned -- the full path tool -> calculation ->
  * composition -> save-time verification -> output guard -> saved answer.
- *   PR50_NAMES=plain|snake|uuid node --import tsx scripts/rag2-pr50-regressions.ts
+ *   PR50_NAMES=plain|snake|uuid|digits node --import tsx scripts/rag2-pr50-regressions.ts
  * (the file-name variants are a hypothesis: the report does not give the live file names). Plumbing evidence, not
  * model results.
  */
@@ -97,7 +97,7 @@ async function main() {
       (v: ScriptView) => { e15 = hitOf(v, /Compensation \(% of S\$5,000\)/); return [call("calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: A, policy_id: SUM, benefit: "Simple Fracture", condition: "leg or arm", proportion: { evidence_id: e15, applies_when: "leg or arm" }, assumption_words: "If that provision applies" })]; },
       (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ text: "If the Simple Fracture provision applies to a leg fracture due to an Accident, the illustration would be 50% of the S$5,000 limit, which is S$2,500.", evidence_ids: [e15], ...(sfLimit ? { value_ids: [sfLimit] } : {}), subject_id: A }] })],
     ] };
-    const [d5] = await run([amb]); if (process.env.PR50_DUMP) (await import("node:fs")).writeFileSync("/tmp/d5.json", JSON.stringify({ trace: d5.trace, answer: d5.answer, sfLimit }, null, 1));
+    const [d5] = await run([amb]);
     await check("D5 when the calculation is genuinely unresolved, the answer keeps the verified Simple Fracture terms and names the missing piece -- never another benefit's label (\"Death due to Accident\") and never unverified arithmetic", () => {
       assert.ok(!/Death due to|Compassionate|•/.test(d5.v), d5.v + "\n(limit value id: " + String(sfLimit) + ")");
       assert.ok(!/S\$2,500/.test(d5.v), "no unverified S$2,500: " + d5.v);
@@ -185,6 +185,14 @@ async function main() {
     assert.match(x.v, /could not be read/);
     for (const k of ["TRAVEL_WORDING", "TRAVEL_SUMMARY"]) { const d = P.doc(k); const line = x.v.split("\n").find((l) => shownFor(d).some((n) => l.includes(n))) ?? ""; assert.ok(!/personal (?:policy document|certificate)/.test(line.split(";").find((s) => shownFor(d).some((n) => s.includes(n))) ?? ""), line); }
     assert.ok((x.answer.citations ?? []).length > 0);
+  });
+  // Negative control for the output-guard repair: only the household's own library names are protected.
+  await check(`G [${NAMES}] the output guard still drops an internal identifier or id that is not one of the answer's library names`, async () => {
+    const { guardChatAnswer } = await import("@/lib/chat/output-guard");
+    const names = P.ELIGIBLE.map((k) => P.doc(k)).flatMap((d) => [d.product, d.filename]).filter((x): x is string => !!x);
+    const a: any = guardChatAnswer({ summary: "Here are your documents.", details: [`Linked to nobody: ${names.filter(Boolean).join("; ")}.`, "Stored in policy_benefits as row 7e800000-0000-4000-8000-000000000102.", "travel_secret_table holds it."], libraryNames: names } as any);
+    assert.equal(a.details.length, 1, JSON.stringify(a.details));
+    for (const n of names) assert.ok(a.details[0].includes(n), n);
   });
   const failed = results.filter((r) => !r.ok);
   console.log(`\npr50 [${NAMES}] ${results.length - failed.length}/${results.length} passed`);

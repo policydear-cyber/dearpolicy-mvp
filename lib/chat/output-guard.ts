@@ -29,23 +29,31 @@ const LEAKS: RegExp[] = [
   /\b(?:row|chunk|job|batch) (?:id|#)\s*\d+|\bchunk_?id\b|\bjob (?:state|status)[: ]+(?:queued|running|failed|succeeded)\b/i,
 ];
 
-/** Spans the guard must not edit: “quoted” and "quoted" text. */
-function protectedSpans(text: string): [number, number][] {
+/** Spans the guard must not edit: “quoted” and "quoted" text, and -- V1.5 (pr50-live C: an inventory line naming an
+ * upload by its file name, "scan_20240611_0932.jpg", was dropped at save time as a snake_case identifier, after
+ * composition and verification had kept it) -- the household's own document and file names the answer lists
+ * (ChatAnswer.libraryNames, set by the server from the library record, never by the model). */
+function protectedSpans(text: string, names: readonly string[] = []): [number, number][] {
   const spans: [number, number][] = [];
   for (const m of text.matchAll(/“[^”]*”|"[^"]*"/g)) spans.push([m.index!, m.index! + m[0].length]);
-  return spans;
+  for (const n of names) {
+    if (n.length < 3) continue;
+    let at = text.indexOf(n);
+    while (at >= 0) { const end = at + n.length; if (!spans.some(([a, b]) => at < b && end > a)) spans.push([at, end]); at = text.indexOf(n, end); }
+  }
+  return spans.sort((x, y) => x[0] - y[0]);
 }
-function outsideQuotes(text: string): string {
+function outsideQuotes(text: string, names: readonly string[] = []): string {
   let out = "", at = 0;
-  for (const [a, b] of protectedSpans(text)) { out += text.slice(at, a) + " ".repeat(b - a); at = b; }
+  for (const [a, b] of protectedSpans(text, names)) { out += text.slice(at, a) + " ".repeat(b - a); at = b; }
   return out + text.slice(at);
 }
 const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/);
 
 /** Mechanical repairs outside quotes: doubled words, spacing, punctuation. */
-export function repairText(text: string): string {
+export function repairText(text: string, names: readonly string[] = []): string {
   if (!text) return text;
-  const spans = protectedSpans(text);
+  const spans = protectedSpans(text, names);
   if (spans.length) {
     // Repair each unquoted stretch on its own.
     let out = "", at = 0;
@@ -67,10 +75,10 @@ function repairPlain(text: string): string {
 }
 
 /** Drops each sentence that leaks internals; repairs the rest. Returns null when nothing is left. */
-export function guardText(text: string): string | null {
+export function guardText(text: string, names: readonly string[] = []): string | null {
   if (typeof text !== "string" || !text.trim()) return text;
-  const kept = sentencesOf(text).filter((s) => !LEAKS.some((re) => re.test(outsideQuotes(s))));
-  const joined = repairText(kept.join(" "));
+  const kept = sentencesOf(text).filter((s) => !LEAKS.some((re) => re.test(outsideQuotes(s, names))));
+  const joined = repairText(kept.join(" "), names);
   return joined.trim() ? joined : null;
 }
 
@@ -97,6 +105,7 @@ export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
 }
 function guardInPlace(answer: ChatAnswer) {
   const seen = new Set<string>();
+  const names = [...new Set((answer.libraryNames ?? []).filter((n): n is string => typeof n === "string" && n.trim().length >= 3))].sort((a, b) => b.length - a.length);
   // A sentence said once is enough: the summary first, then each detail.
   const once = (text: string | null) => {
     if (!text) return text;
@@ -109,9 +118,9 @@ function guardInPlace(answer: ChatAnswer) {
     });
     return parts.join(" ").trim() || null;
   };
-  const summary = once(guardText(answer.summary ?? ""));
+  const summary = once(guardText(answer.summary ?? "", names));
   answer.summary = summary && summary.trim() ? summary : (answer.questions?.length ? "I need one more detail first." : GUARD_FALLBACK_SUMMARY);
-  answer.details = (answer.details ?? []).map((d) => once(guardText(d))).filter((d): d is string => !!d);
+  answer.details = (answer.details ?? []).map((d) => once(guardText(d, names))).filter((d): d is string => !!d);
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
     q.text = guardText(q.text) ?? scrub(q.text);
