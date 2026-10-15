@@ -36,6 +36,8 @@ import { BINDING_SCENARIOS } from "../../scripts/fixtures/rag2-binding/conversat
 import { recordedRun, recordedTurns, replayScript, runDir } from "../../scripts/fixtures/rag2-live-replay";
 import { ACCOUNT as ACCOUNT_LL } from "../../scripts/fixtures/rag2-livelib/household";
 import { LIVELIB_SCENARIOS } from "../../scripts/fixtures/rag2-livelib/conversations";
+import { ACCOUNT as ACCOUNT_P50 } from "../../scripts/fixtures/rag2-pr50/household";
+import { PR50_SCENARIOS } from "../../scripts/fixtures/rag2-pr50/conversations";
 import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
 import { installFetchGuard } from "./rag2-live-fetch-guard";
@@ -58,6 +60,7 @@ const fetchGuard = live && runLedger ? installFetchGuard({ ledger: runLedger, pr
 process.env.DEV_AUTH_ENABLED = "1";
 // PR #47 reproduction: RAG2_LIVE_HOUSEHOLD=scenario signs in as the scenario-completion suite's synthetic household.
 // V1.3: RAG2_LIVE_HOUSEHOLD=stress signs in as the stress-test structures' synthetic household.
+// V1.5: E2E_RAG2_HOUSEHOLD=pr50 serves P50D/P50C/P50A (the live failures after PR #50; PR50_NAMES picks the file names).
 // V1.3: E2E_RAG2_HOUSEHOLD=report (scripted, never live) signs in as the report-layout household
 // (scripts/fixtures/rag2-stress/report-household.ts, seeded by e2e/support/seed-rag2-stress-report.ts); its scripted
 // conversations are chosen per test by POST /__rag2stress/scenario {"id":"R1"} and read back by GET /__rag2stress/last.
@@ -68,7 +71,7 @@ process.env.DEV_AUTH_ENABLED = "1";
 // scenario per recorded conversation, replayed verbatim (no model call).
 const S52_REPLAY = () => recordedRun(runDir("RUN-s52-live-1-")).map((c) => ({ id: "R" + c.scenario.slice(1), title: `replay of s52-live-1 ${c.scenario}`, messages: c.turns.map((t) => t.user), turns: replayScript(c.turns) }));
 const S50_REPLAY = () => { const turns = recordedTurns(runDir("RUN-s50-live-2-"), "S50"); return [{ id: "R50", title: "replay of s50-live-2", messages: turns.map((t) => t.user), turns: replayScript(turns) }]; };
-const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding-cells" ? { account: ACCOUNT_B, scenarios: S50_REPLAY() } : process.env.E2E_RAG2_HOUSEHOLD === "livelib" ? { account: ACCOUNT_LL, scenarios: [...LIVELIB_SCENARIOS, ...S52_REPLAY()] } : null;
+const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding-cells" ? { account: ACCOUNT_B, scenarios: S50_REPLAY() } : process.env.E2E_RAG2_HOUSEHOLD === "livelib" ? { account: ACCOUNT_LL, scenarios: [...LIVELIB_SCENARIOS, ...S52_REPLAY()] } : process.env.E2E_RAG2_HOUSEHOLD === "pr50" ? { account: ACCOUNT_P50, scenarios: PR50_SCENARIOS } : null;
 const REPORT = !!SCRIPTED_HH;
 process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD === "livelib" ? ACCOUNT_LL : process.env.RAG2_LIVE_HOUSEHOLD?.startsWith("binding") ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";

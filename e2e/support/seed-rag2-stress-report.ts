@@ -9,6 +9,7 @@ import { pool } from "@/lib/db/client";
 import * as REPORT_HH from "../../scripts/fixtures/rag2-stress/report-household";
 import * as BINDING_HH from "../../scripts/fixtures/rag2-binding/household";
 import * as LIVELIB_HH from "../../scripts/fixtures/rag2-livelib/household";
+import * as PR50_HH from "../../scripts/fixtures/rag2-pr50/household";
 
 // V1.4: `--household binding` seeds the binding household (scripts/fixtures/rag2-binding) instead.
 // `--household binding-cells` seeds it with the certificate one cell per line (the s50 live runs' layout).
@@ -16,7 +17,8 @@ const CELLS = process.argv.includes("binding-cells");
 // `--household livelib` seeds the live-library household; `--scan-name <name>` renames its unreadable upload.
 const SCAN_NAME = process.argv.includes("--scan-name") ? process.argv[process.argv.indexOf("--scan-name") + 1] : null;
 const LIVELIB = process.argv.includes("livelib") ? { ...LIVELIB_HH, DOCS: LIVELIB_HH.DOCS.map((d) => (d.key === "SCAN" && SCAN_NAME ? { ...d, filename: SCAN_NAME } : d)) } : null;
-const HH = LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+// `--household pr50` seeds the PR #50 live-failure household (file names from PR50_NAMES).
+const HH = process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];
