@@ -40,8 +40,8 @@ async function main() {
   for (const d of DOCS) {
     const acct = d.account ?? ACCOUNT;
     await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,superseded_at,file_hash,effective_date,renewal_or_expiry_date,document_date,processing_error)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,'scan_clean','active',$18,$13,$14,$15,$16,$17)`,
-      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null]);
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,'scan_clean',$19,$18,$13,$14,$15,$16,$17)`,
+      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null, (d as { lifecycle?: string }).lifecycle ?? "active"]);
     for (const m of d.members) await pool.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await pool.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);
   }

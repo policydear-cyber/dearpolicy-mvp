@@ -62,6 +62,8 @@ for (const id of ["P50D", "P50C", "P50A"]) {
       }
       expect(shown).toMatch(/could not be read/);
       expect(shown).not.toMatch(/Old Benefit Summary|other household/);
+      // the deleted and other-household uploads are absent by identity, not only by name
+      for (const k of ["DELETED", "OTHER"]) { const doc = P.DOCS.find((x) => x.key === k)!; expect((saved.citations ?? []).some((c: any) => c.policyId === doc.id), `${k} cited`).toBeFalsy(); expect(shown).not.toContain(doc.filename ?? "synthetic-dptest-" + k.toLowerCase() + ".pdf"); }
     }
     if (id === "P50A") {
       expect(shown).toMatch(/Contact Kestrel Life Ltd through the scheme administrator to report the death/);
