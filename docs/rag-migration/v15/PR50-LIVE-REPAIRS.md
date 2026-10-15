@@ -100,3 +100,107 @@ Release candidate for review. Before merging:
 2. Optionally run the capped test above.
 
 The enrolment-uncertainty item stays open until its live wording is available.
+
+---
+
+## PR #51 review round (15 Oct, after 14:48 SGT)
+
+### 1. The actual stored representation of page 13
+
+The fixture default is now the report's representation (`SUM_P13_TABS`):
+
+```
+Simple Fracture Benefit Limit: S$5,000
+Schedule<TAB>Compensation
+(% of S$5,000)
+Neck, Skull or Spine (Full Break)<TAB>100%
+Hip<TAB>75%
+Jaw, Pelvis, Leg^, Ankle or Knee<TAB>50%
+```
+
+- The search reproduces the recorded passage: e15 is page 13, offsets 88–247, exactly those six lines. Its support excerpt is 88–126, the limit line only. Check D0 asserts both.
+- The single-space variant is kept as `PR50_PAGE=plain`.
+
+**Why the old parser failed on this representation.** `percentTables` needs one line that is both a `% of …` header and tab or 3+-space separated.
+
+| line | `% of` header | tab / gap |
+|---|---|---|
+| `Schedule<TAB>Compensation` | no | yes |
+| `(% of S$5,000)` | yes | no |
+
+The header is wrapped over two lines, so neither line qualified and no table was found. That is the live message "No percentage table is printed in or right after that passage."
+
+- On this representation, base `3ded1d9` reproduces both recorded refusals word for word. It also reproduces the exact live visible answer ("…lists separate Simple Fracture Benefit Limit and • Death due to Accident amounts; I couldn’t confirm the • Death due to Accident amount for this answer. / I’ve left out an amount I couldn’t match to your documents.").
+- **Fix:** a `% of` line that directly follows a cell line with no digits continues that header. The header becomes "Schedule Compensation (% of S$5,000)".
+- The tabbed rows are cells as before. `Leg^` is read as "leg".
+- The label fix (shared stemming in `wordScore`) is what removes "Death due to Accident" on this page. The `% of` binding fix was only needed for the single-space variant.
+
+### 2. The complete uncertainty sentence
+
+Anonymised with its clause structure and source (the wording's Compassionate Death Allowance Benefit, page 3):
+
+> “The Public Officers wording also describes a Compassionate Death Allowance Benefit for accidental death, requiring proof of death and relevant documents in the insurer’s prescribed form, and says it can be claimed under either the Core Scheme or Voluntary Scheme; the uploaded documents do not establish Adrian’s applicable Sum Insured or scheme enrollment for this benefit.”
+
+**Before:** dropped whole, with "it says something is not covered / not included, but its evidence says nothing of the kind".
+
+**Trace** (`lib/rag2/loop/statements.ts`):
+1. `UNCERTAINTY` only set aside "do not establish **whether/if** …" and "… **cover**".
+2. "do not establish Adrian’s applicable **Sum Insured** or scheme enrollment" therefore stayed in the asserted text.
+3. There `NEGATIVE_SENTENCE` read "not … Insured" as an exclusion.
+4. The wording prints no negative, so the whole sentence was rejected.
+
+**Fix:**
+- "do not establish / confirm / specify / determine / prove <object>" is now uncertainty.
+- A cited sentence is checked clause by clause, and an unsupported clause is removed while the supported ones stay.
+- Exceptions: a labelled list such as "Adrian: …; …", an absence clause, and the household's own words said back to them are judged as before.
+
+**Results:**
+- A4: the whole sentence is kept, nothing is dropped, and nothing is called an exclusion.
+- A5 (negative control): the same sentence with "says it is payable only to a surviving spouse" loses only that clause.
+
+### 3. The file-name exception stays narrow
+
+- `ChatAnswer.libraryNames` is set only by the server, from `household_documents`. That lookup is household-scoped and lifecycle-filtered (`activePredicate`, `superseded_at IS NULL`).
+- `protectableNames()` (`lib/chat/output-guard.ts`) accepts a value only if it is shaped like a document or file name. It refuses:
+  - paths and storage keys (`/` or `\`);
+  - key- or token-shaped values;
+  - bare UUIDs;
+  - any value containing one of the answer's own record ids;
+  - values over 160 characters.
+- A name is protected only as a whole token, never as part of a longer identifier.
+- Key-shaped values (prefixed API keys, JWTs, PEM blocks, long mixed-case random strings) are now leaks in their own right. Before, `sk_live_51H…` passed the guard.
+
+**Checks:**
+- G2 (unit): a storage path, a key, the scan's own record id, an unknown id, and "summary" inside `summary_internal_table` are all dropped. The real name stays.
+- G3 (end to end):
+  - another household's `other_household_certificate.pdf`, the deleted upload's `old_benefit_summary_deleted.pdf` and a model-invented `invented_policy_schedule.pdf` never reach the saved answer or its `libraryNames`;
+  - real file names keep their exact case.
+
+### 4. Freeze and verification
+
+**Frozen candidate:** `371ba7d3ec2f298735ec8234a04fa64a70c62ab6`.
+
+**Local checks (completed):**
+- `rag2:pr50-regressions`, both page representations:
+  - names plain 18/18, snake 5/5, uuid 5/5, digits 5/5 (tabs page);
+  - plain 18/18 (plain page).
+- 52 affected suites: rc 0.
+- Typecheck clean. `next build` OK, BUILD_ID `-GqmFKGh4u06esGcA0ela`.
+- Browser (Chromium, real page, local PostgreSQL): `e2e:rag2-pr50` 3/3, `e2e:rag2-s52-replay` 4/4, `e2e:rag2-livelib` 2/2.
+
+**Hosted checks: not run.** Every GitHub Actions job on `e3ae6cc` and `371ba7d` was "not started because recent account payments have failed or your spending limit needs to be increased". This is a billing block, not a test failure. No payment was requested.
+
+**Actual-model run pr50-live-1:** see `LIVE-RESULT-pr50-live-1.md`.
+- Result: **FAIL** overall.
+- P50C inventory passed 6/6: all six document ids are displayed.
+- P50D fracture passed 4/4: the saved, source-bound S$2,500 calculation re-computes.
+- P50A death next steps did not finish. The run-cap guard's worst-case reservation for its fourth call exceeded what was left under the US$0.006 cap, after US$0.003029 had been spent.
+- The run was not repeated.
+
+### Remaining limitations
+
+- P50A, the contact-advice and uncertainty behaviour, has no real-model result yet. A second capped run of P50A alone, at US$0.006, would settle it. That is not authorised, so it was not done.
+- In P50C the model's own unreadable-file sentence was dropped, because digits in its file name counted as a figure in the uncited-sentence check. The server's line replaced it. That check should be narrowed.
+- P50D took 52 s and 6 model calls, against 27 s in the live report.
+- The household is synthetic and anonymised; the live library was not accessed.
+- Hosted CI is blocked by billing.
