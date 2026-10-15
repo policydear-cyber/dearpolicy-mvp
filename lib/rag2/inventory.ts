@@ -67,6 +67,10 @@ export function inventorySentences(inv: Inventory): { text: string; evidence: Ev
     if (!p.documents.length) { out.push({ text: `${p.short}: no documents on file.`, evidence: [] }); continue; }
     out.push({ text: `${p.short}: ${p.documents.map(said).join("; ")}.`, evidence: p.documents.map((d) => d.evidence).filter((e): e is EvidenceRef => !!e) });
   }
-  if (inv.unlinked.length) out.push({ text: `Not linked to anyone in the household: ${inv.unlinked.map((d) => (d.readable === "ready" ? `${d.name}${d.insurer ? ` (${d.insurer})` : ""}` : `${d.filename} (could not be read)`)).join("; ")} -- link it to a person so it can be used for them.`, evidence: inv.unlinked.map((d) => d.evidence).filter((e): e is EvidenceRef => !!e) });
+  // V1.5: a readable document linked to nobody can be used for a person once linked; a file whose contents could not be
+  // read cannot be used at all, linked or not -- linking a file and reading its contents are separate.
+  const readable = inv.unlinked.filter((d) => d.readable === "ready"), unreadable = inv.unlinked.filter((d) => d.readable !== "ready");
+  if (readable.length) out.push({ text: `Not linked to anyone in the household: ${readable.map((d) => `${d.name}${d.insurer ? ` (${d.insurer})` : ""}`).join("; ")} -- link it to a person so it can be used for them.`, evidence: readable.map((d) => d.evidence).filter((e): e is EvidenceRef => !!e) });
+  if (unreadable.length) out.push({ text: `Not linked to anyone in the household, and its contents could not be read: ${unreadable.map((d) => d.filename).join("; ")}. Nothing in ${unreadable.length > 1 ? "these files" : "it"} can be used; linking ${unreadable.length > 1 ? "them" : "it"} to a person would not change that -- ${unreadable.length > 1 ? "they" : "it"} would first have to be read successfully.`, evidence: unreadable.map((d) => d.evidence).filter((e): e is EvidenceRef => !!e) });
   return out;
 }

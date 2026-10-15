@@ -1404,7 +1404,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const statusMissing = docs.filter((d) => d.readable !== "ready" && !named(d));
     if (statusMissing.length && docs.filter((d) => d.readable === "ready").every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) {
       const owner = (d: InventoryDoc) => inv.people.find((p) => p.documents.includes(d))?.short ?? null;
-      const lines = statusMissing.map((d) => ({ text: `${d.filename} could not be read (${d.reason ?? "it could not be read"})${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
+      const lines = statusMissing.map((d) => ({ text: `${d.filename}: its contents could not be read (${d.reason ?? "it could not be read"}), so nothing in it can be used${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
       return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), sentences: [...r.composed.sentences, ...lines], libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
     }
     // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --

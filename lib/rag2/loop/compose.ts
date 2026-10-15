@@ -235,27 +235,68 @@ export function amountAbsenceContradiction(text: string, subjectId: string | nul
   return `says the documents do not give ${who}'s ${hit.benefit.label} amount, but ${who}'s ${hit.policy.product ?? "certificate"} lists ${amount}${hit.asOf ? ` as of ${hit.asOf}` : ""} (page ${hit.source.page})`;
 }
 const TRIP_NOT_COVERED = /\b(?:does not|do not|doesn['’]t|don['’]t|would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b|\b(?:is|are|was|were|would be)\s+not\s+(?:covered|insured)\b|\bisn['’]t covered\b|\bno cover(?:age)? (?:for|on|during)\b|\bexclud(?:es|ed)\b/i;
+const TRIP_NOT_SHOWN = /\b(?:does|do|did)\s+not\s+(?:document|show|establish|evidence|record|prove)\s+(?:any\s+)?(?:[\w’']+\s+){0,2}?cover(?:age)?\b|\bnot shown to (?:be )?cover(?:ed)?\b|\bno documented cover\b/i;
 const TRIP_WORDS = /\b(?:trip|travel|journey|holiday|overseas|abroad|destination)\b/i;
+const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const NOT_PLACES = new Set(["The", "This", "That", "Singapore", ...MONTH_NAMES.map((m) => m[0].toUpperCase() + m.slice(1))]);
+/** The places and the month/year a clause names (\"for a trip to Japan in October 2026\"). */
+function tripTarget(clause: string): { places: string[]; year: number | null; month: number | null } {
+  const places = [...clause.matchAll(/\b(?:to|in|for|of)\s+((?:[A-Z][a-z]+)(?:\s+[A-Z][a-z]+)?)\b/g)].map((m) => m[1].split(/\s+/)[0]).filter((p) => !NOT_PLACES.has(p));
+  const ym = /\b(?:(january|february|march|april|may|june|july|august|september|october|november|december)\s+)?(20\d\d)\b/i.exec(clause);
+  return { places: [...new Set(places)], year: ym ? Number(ym[2]) : null, month: ym?.[1] ? MONTH_NAMES.indexOf(ym[1].toLowerCase()) + 1 : null };
+}
+/** The period a schedule prints (\"Period of Insurance: 10/03/2025 to 17/03/2025\", day first), as [from, to] month indexes. */
+function printedPeriod(text: string): [number, number] | null {
+  const m = /period of (?:insurance|cover)\s*:?\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(?:to|-|–|until)\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i.exec(text);
+  return m ? [Number(m[3]) * 12 + Number(m[2]) - 1, Number(m[6]) * 12 + Number(m[5]) - 1] : null;
+}
 /**
- * V1.5 (review of the s52 travel conclusion): "not proven to cover this trip" and "does not cover this trip" are
- * different conclusions. A sentence saying a trip is NOT covered stands only when its own evidence prints an exclusion
- * or territorial limit naming that place; a schedule for another trip, a reference booklet or a missing certificate
- * shows only that cover is not documented, and the sentence is reworded to say exactly that. Null when nothing changes.
+ * V1.5 (review of the s52 travel conclusion): a sentence concluding that a trip is NOT covered, or that its cover is NOT
+ * SHOWN, is checked against the person, the policy, the dates, the destination and the source it cites -- never
+ * settled by rewording alone.
+ *  - The cited sources must include a document of the person the sentence is about (not another member's policy).
+ *  - \"Does not cover / is excluded\" stands on a printed exclusion or territorial limit naming the place, or on a
+ *    printed period that the trip's stated month/year falls outside. When the person's own schedule only prints ANOTHER
+ *    destination (a different trip), that is reported as not shown, not as an exclusion. Otherwise the sentence is not
+ *    stated at all (a reference booklet or a missing certificate establishes no exclusion).
+ *  - \"Does not show / document cover\" stands unless the person's own cited schedule prints that destination for those
+ *    dates.
+ * Null: nothing to check, or the conclusion holds as written.
  */
-export function tripOverstatement(text: string, cited: string[]): string | null {
-  if (!TRIP_WORDS.test(text) || !TRIP_NOT_COVERED.test(text)) return null;
-  const places = [...text.matchAll(/\b(?:to|in|for|of)\s+((?:[A-Z][a-z]+)(?:\s+[A-Z][a-z]+)?)\b/g)].map((m) => m[1]).filter((p) => !/^(?:The|This|That|Adrian|Singapore)$/.test(p));
-  const passage = cited.join("\n");
-  const printedExclusion = places.some((p) => new RegExp(`(?:exclu\\w+|not (?:covered|insured|apply)|territor\\w*|except)[^.\\n]{0,120}\\b${p}\\b|\\b${p}\\b[^.\\n]{0,80}(?:exclu\\w+|not covered|is excluded)`, "i").test(passage));
-  if (printedExclusion) return null;
-  const t = text
-    .replace(/\b(does not|do not|doesn['’]t|don['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, (_m, v: string) => `${/^do\b|^don/i.test(v) ? "do" : "does"} not show cover for`)
-    .replace(/\b(would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, "is not shown to cover")
-    .replace(/\b(is|are|was|were|would be)\s+not\s+(?:covered|insured)\b/i, (_m, v: string) => `${v} not shown to be covered`)
-    .replace(/\bisn['’]t covered\b/i, "is not shown to be covered")
-    .replace(/\bno cover(?:age)? (for|on|during)\b/i, (_m, p: string) => `no documented cover ${p}`)
-    .replace(/\bexclud(es|ed)\b/i, (_m, x: string) => (x === "es" ? "does not show cover for" : "not shown to be covered"));
-  return t !== text ? t : null;
+export function tripConclusion(text: string, cited: EvidenceRef[], subjectId: string | null, ctx: Pick<Ctx, "benefits">): { reworded: string; reason: string } | { drop: string } | { verified: true } | null {
+  if (!TRIP_WORDS.test(text)) return null;
+  const neg = TRIP_NOT_COVERED.exec(text), shown = TRIP_NOT_SHOWN.exec(text);
+  const hit = shown ?? neg;
+  if (!hit) return null;
+  const target = tripTarget(text.slice(hit.index));
+  if (!target.places.length) return null;
+  const own = subjectId && ctx.benefits ? new Set((ctx.benefits.policiesByMember.get(subjectId) ?? []).map((p) => p.policyId)) : null;
+  const sources = cited.filter((e) => !own || own.has(e.policyId));
+  if (!sources.length) return { drop: "concludes about trip cover from documents that are not this person's" };
+  const passage = sources.map((e) => evidenceTextOf(e)).join("\n");
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const excluded = target.places.some((p) => new RegExp(`(?:exclu\\w+|not (?:covered|insured|apply)|territor\\w*[^.\\n]{0,40}(?:exclud|except|other than))[^.\\n]{0,120}\\b${esc(p)}\\b|\\b${esc(p)}\\b[^.\\n]{0,80}(?:exclu\\w+|not covered|is excluded)`, "i").test(passage));
+  const dest = /\bdestination\s*:\s*([^\n]+)/i.exec(passage)?.[1] ?? null;
+  const period = printedPeriod(passage);
+  const when = target.year != null ? target.year * 12 + ((target.month ?? 1) - 1) : null;
+  const outside = period != null && when != null && (target.month != null ? when < period[0] || when > period[1] : target.year! * 12 + 11 < period[0] || target.year! * 12 > period[1]);
+  const sameDest = dest != null && target.places.some((p) => new RegExp(`\\b${esc(p)}\\b`, "i").test(dest));
+  if (shown && !neg) {
+    if (sameDest && !outside && (when == null || period == null || !outside)) return { drop: `says cover is not shown for ${target.places.join(", ")}, but this person's cited schedule prints that destination${period ? " for a period including those dates" : ""}` };
+    return null;
+  }
+  if (excluded || outside) return { verified: true };
+  if (dest != null && !sameDest) {
+    const t = text
+      .replace(/\b(does not|do not|doesn['’]t|don['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, (_m, v: string) => `${/^do\b|^don/i.test(v) ? "do" : "does"} not show cover for`)
+      .replace(/\b(would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b/i, "is not shown to cover")
+      .replace(/\b(is|are|was|were|would be)\s+not\s+(?:covered|insured)\b/i, (_m, v: string) => `${v} not shown to be covered`)
+      .replace(/\bisn['’]t covered\b/i, "is not shown to be covered")
+      .replace(/\bno cover(?:age)? (for|on|during)\b/i, (_m, p: string) => `no documented cover ${p}`)
+      .replace(/\bexclud(es|ed)\b/i, (_m, x: string) => (x === "es" ? "does not show cover for" : "not shown to be covered"));
+    if (t !== text) return { reworded: t, reason: `stated a trip to ${target.places.join(", ")} as not covered; this person's cited schedule is for another destination (${dest.trim()}) and prints no exclusion naming it -- a different trip is not shown, not excluded (reworded)` };
+  }
+  return { drop: `states a trip to ${target.places.join(", ")} is not covered, but its cited evidence prints no exclusion, territorial limit, period or destination that establishes it` };
 }
 const WINDOW_CLAUSE = /\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b/gi;
 const OWN_LABEL = /^\s*([A-Za-z][A-Za-z ()'’/&,-]{2,80}?)\s*(?::|\t| {2,}|\s[–—-]\s)/;
@@ -852,8 +893,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       }
       if (bare && "dropped" in bare) { drop(text, bare.dropped); continue; }
     }
-    // V1.5: "does not cover this trip" only on a printed exclusion naming it; otherwise "does not show cover for".
-    { const reworded = tripOverstatement(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => evidenceTextOf(e))); if (reworded) { out.dropped.push({ sentence: text, reason: "stated a trip as not covered, but its evidence prints no exclusion naming it -- only that cover is not documented (reworded)" }); text = reworded; } }
+    // V1.5: a trip conclusion (not covered / not shown) is checked against person, policy, dates, destination and source.
+    let tripVerified = false;
+    { const trip = tripConclusion(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), subjectId, ctx); if (trip && "drop" in trip) { drop(text, trip.drop); continue; } if (trip && "verified" in trip) tripVerified = true; else if (trip) { out.dropped.push({ sentence: text, reason: trip.reason }); text = trip.reworded; } }
     const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
     if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
@@ -928,7 +970,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId });
+      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified });
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
     }
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total

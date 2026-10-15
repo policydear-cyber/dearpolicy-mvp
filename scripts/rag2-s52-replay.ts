@@ -14,12 +14,13 @@ import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as LH from "./fixtures/rag2-livelib/household";
 import { recordedRun, replayScript, runDir } from "./fixtures/rag2-live-replay";
+import { uniqueSteps } from "@/components/next-steps";
 
 const HOUSEHOLD = LH as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
-// What the chat page shows (app/chat/page.tsx): summary, details, questions, and -- when there is no question -- the
-// FIRST next step only.
-const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? []).map((q) => q.text), ...((a.questions ?? []).length ? [] : (a.nextSteps ?? []).slice(0, 1))].filter(Boolean).join("\n");
+// What the chat page shows (app/chat/page.tsx): summary, details, questions, and every saved next step in order, each
+// once (components/next-steps.ts).
+const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? []).map((q) => q.text), ...uniqueSteps(a.nextSteps)].filter(Boolean).join("\n");
 const results: { name: string; ok: boolean }[] = [];
 async function check(name: string, fn: () => Promise<void> | void) { try { await fn(); results.push({ name, ok: true }); console.log("PASS " + name); } catch (e) { results.push({ name, ok: false }); console.log("FAIL " + name + "\n     " + (e instanceof Error ? e.message : String(e)).split("\n").slice(0, 14).join("\n     ")); } }
 
@@ -104,10 +105,18 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
     assert.match(visible(T("S52A", 1).answer), /does not document travel cover for Japan in October 2026\./);
     for (const s of saved) assert.ok(!/\b(?:does not|doesn['’]t|do not) cover\b[^.\n]*\b(?:trip|Japan|travel)\b|\bnot covered\b[^.\n]*\b(?:trip|Japan)\b/i.test(visible(s.answer)), visible(s.answer));
   });
+  await check("S52D's Other Fracture statement (50% of the Sum Insured) is checked against ITS OWN table: the live-library policy wording, page 1, prints the leg row at 50% of the Sum Insured, and that page is cited; no Other Fracture amount is stated. (The 60% in PART=multiline is a different, deliberately different synthetic fixture -- scripts/fixtures/rag2-livelib/multiline.ts, Summary of Benefits page 13 -- checked against that table there.)", () => {
+    const s = T("S52D"), v = visible(s.answer);
+    assert.match(v, /Other Fracture table lists 50% of the Sum Insured for a leg, ankle, knee, jaw or pelvis fracture/);
+    const wording = LH.doc("WORDING");
+    assert.match(String((wording.pages as Record<number, string>)[1]), /Compensation \(% of Sum Insured\)[\s\S]*Jaw, Pelvis, Leg, Ankle or Knee \(Other Fracture\)\s*50%/);
+    assert.ok((s.answer.citations ?? []).some((c: any) => c.policyId === wording.id && c.pageStart === 1), JSON.stringify(s.answer.citations));
+    assert.ok(!/Other Fracture[^.\n]*S\$\d/.test(v), v);
+  });
   await check("S52C: the inventory lists every readable upload for each person and the unreadable IMG_0042.jpg, without the generic \"I couldn’t confirm an answer\" line", () => {
     const v = visible(T("S52C").answer);
     for (const d of LH.DOCS.filter((x) => !x.account && x.key !== "SCAN")) assert.ok(v.includes(d.product), d.product);
-    assert.match(v, /IMG_0042\.jpg \(could not be read\)/);
+    assert.match(v, /its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/); assert.ok(!/link it to a person so it can be used/.test(v), v);
     assert.ok(!/couldn’t confirm an answer/.test(v), v);
   });
   await check("S52B is unchanged from live: amounts and certificate date, then Cheryl's PA S$600,000 correcting the S$1,000,000 premise", () => {
@@ -121,7 +130,7 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
     const expected: Record<string, { removed: RegExp[]; added: RegExp[] }> = {
       "S52A#0": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd with the death certificate/], added: [/^The group accident wording lists S\$2,000 for Repatriation of Mortal Remains if death occurs outside Singapore as a result of an Accident\.$/, /says to notify Kestrel Life Ltd within 6 months with the death certificate/] },
       "S52A#1": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd of a death and provide/], added: [/^For Adrian, the group accident wording provides Repatriation of Mortal Remains of S\$2,000 if death occurs outside Singapore as a result of an Accident\.$/, /notify Kestrel Life Ltd of a death within 6 months/, /does not document travel cover for Japan/] },
-      "S52C#0": { removed: [/^I couldn’t confirm an answer to that from your documents\.$/], added: [] },
+      "S52C#0": { removed: [/^I couldn’t confirm an answer to that from your documents\.$/, /IMG_0042\.jpg \(could not be read\) -- link it to a person so it can be used for them\.$/], added: [/its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/] },
       "S52D#0": { removed: [/do not provide Adrian’s Group Personal Accident Sum Insured/], added: [] },
     };
     const seen: Record<string, number> = {};

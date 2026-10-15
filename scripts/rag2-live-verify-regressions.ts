@@ -57,11 +57,11 @@ async function main() {
     const [named] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], (v: ScriptView) => [call("final_answer", { sentences: peopleOf(v).map((p: any) => ({ text: `${p.short}: ${(p.documents as any[]).filter((d) => d.readable === "ready").map((d) => d.name).join("; ")}.`, evidence_ids: (p.documents as any[]).map((d) => d.evidence?.evidence_id).filter(Boolean) })) })]] }]);
     void evOf;
     await check("INVENTORY a request for every document, including unreadable ones, is answered as the inventory: the unreadable upload is listed with its reason, saved and displayed", () => {
-      assert.match(plain.v, /scan-0042\.jpg \(could not be read\)/, plain.v); assert.equal(plain.v, plain.returned);
+      assert.match(plain.v, /Not linked to anyone in the household, and its contents could not be read: scan-0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/, plain.v); assert.ok(!/link it to a person so it can be used/.test(plain.v), "an unreadable file is not presented as usable once linked: " + plain.v); assert.equal(plain.v, plain.returned);
     });
     await check("INVENTORY a reply that names every readable document but omits the unreadable one keeps its sentences and gains that file's status line from the library record (saved = displayed)", () => {
       assert.match(named.v, /^Marcus: Public Officers Group Scheme - Certificate; /m, named.v);
-      assert.match(named.v, /scan-0042\.jpg could not be read \([^)]+\); it is not linked to anyone in the household\./, named.v);
+      assert.match(named.v, /scan-0042\.jpg: its contents could not be read \([^)]+\), so nothing in it can be used; it is not linked to anyone in the household\./, named.v);
       assert.equal(named.v, named.returned);
     });
     const { INVENTORY_QUESTION } = await import("@/lib/rag2/loop/loop");
@@ -330,10 +330,20 @@ async function main() {
     await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [tr, tp1 + "\nExclusions: travel to Japan is excluded."]);
     const [tv3] = await run([travelTurn("The travel policy schedule excludes travel to Japan, so it does not cover a trip to Japan.")]);
     await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [tr, tp1]);
-    await check("TRAVEL \"does not cover this trip\" is an exclusion: on a schedule for another trip it is reworded to \"does not show cover for\" (not proven); \"does not show cover\" is kept; with a printed exclusion naming Japan the exclusion stands", () => {
+    const pa9Turn = (text: string, subject: string) => ({ user: DEATH, steps: [() => [call("read_page", { policy_id: LH.doc("SUMMARY").id, page: 9 }), call("read_page", { policy_id: tr, page: 1 })], (v: ScriptView) => [call("final_answer", { subject_id: subject, sentences: [{ text, evidence_ids: /travel policy/.test(text) ? hitOf(v, /Destination: Indonesia/) : hitOf(v, /Territorial Limits/), subject_id: subject }] })]] });
+    const [tv4] = await run([pa9Turn("The Personal Accident summary does not cover a trip to Japan.", A)]);
+    const [tv5] = await run([pa9Turn("Cheryl's travel policy schedule does not show cover for a trip to Japan.", C)]);
+    const [tv6] = await run([travelTurn("The travel policy schedule does not show cover for a trip to Indonesia in March 2025.")]);
+    const [tv7] = await run([travelTurn("The travel policy schedule does not cover a trip to Japan in October 2026.")]);
+    await check("TRAVEL each trip conclusion is checked against person, policy, dates, destination and source -- never settled by rewording alone: another destination on the person's own schedule is reported as not shown; a printed exclusion stands; an exclusion claim with no printed basis (a summary whose territorial limits are worldwide) is NOT reworded into a missing-evidence statement but left out; another member's schedule supports nothing about Cheryl; \"not shown\" is left out when the schedule prints that destination for those dates; a date outside the printed period establishes the conclusion", () => {
       assert.match(tv1.v, /does not show cover for a trip to Japan\./, tv1.v); assert.ok(!/does not cover a trip/.test(tv1.v), tv1.v);
+      assert.ok((tv1.trace.dropped ?? []).some((d: any) => /another destination \(Indonesia\)/.test(d.reason)), JSON.stringify(tv1.trace.dropped));
       assert.match(tv2.v, /does not show cover for a trip to Japan\./, tv2.v);
       assert.match(tv3.v, /does not cover a trip to Japan\./, tv3.v);
+      assert.ok(!/Japan/.test(tv4.v), tv4.v); assert.ok((tv4.trace.dropped ?? []).some((d: any) => /prints no exclusion, territorial limit, period or destination/.test(d.reason)), JSON.stringify(tv4.trace.dropped));
+      assert.ok(!/Japan/.test(tv5.v), tv5.v); assert.ok((tv5.trace.dropped ?? []).some((d: any) => /not this person's/.test(d.reason)), JSON.stringify(tv5.trace.dropped));
+      assert.ok(!/does not show cover for a trip to Indonesia/.test(tv6.v), tv6.v); assert.ok((tv6.trace.dropped ?? []).some((d: any) => /prints that destination/.test(d.reason)), JSON.stringify(tv6.trace.dropped));
+      assert.match(tv7.v, /does not cover a trip to Japan in October 2026\./, tv7.v + JSON.stringify(tv7.trace.dropped));
     });
     const stuck = (user: string) => ({ user, steps: [() => [call("person_benefits", { subject_id: A })], () => [call("search_passages", { query: "x", subject_id: A })], () => [call("search_passages", { query: "y", subject_id: A })]] });
     const [l1] = await run([stuck(DEATH)], { DEARPOLICY_RAG_LOOP_MAX_STEPS: "2" });
@@ -363,6 +373,12 @@ async function main() {
       const d = percentTables(LHM.SUM_P14_DISLOCATION);
       assert.match((choosePercentRow(d, "Dislocation", "dislocated shoulder") as any).unresolved, /printed more than once with different percentages \(20%, 30%\)/);
       assert.match((choosePercentRow(d, "Dislocation", "dislocated hip") as any).unresolved, /prints no percentage/);
+    });
+    await check("FIXTURES the multiline household differs from the live-library household ON PURPOSE: its Summary of Benefits page 13 adds an Other Fracture table whose leg row is 60% (so a wrong-table pick is visible), while the policy wording page 1 -- what s52-live-1 and its replay cite -- still prints the leg row at 50% of the Sum Insured", () => {
+      assert.match(LHM.SUM_P13_MULTILINE, /Jaw, Pelvis, Leg, Ankle or Knee \(Other Fracture\)\s+60%/);
+      assert.match(String((LH.doc("WORDING").pages as Record<number, string>)[1]), /Jaw, Pelvis, Leg, Ankle or Knee \(Other Fracture\)\s*50%/);
+      assert.equal((LHM.doc("WORDING").pages as Record<number, string>)[1], (LH.doc("WORDING").pages as Record<number, string>)[1]);
+      assert.ok(!/Other Fracture/.test(String((LH.doc("SUMMARY").pages as Record<number, string>)[13])), "the live-library summary page 13 has no Other Fracture table");
     });
     const FRM = "Hypothetically, if Adrian had a simple (closed) fracture of the leg, what would the Simple Fracture benefit be? How is that different from Other Fracture?";
     const SUM = LHM.doc("SUMMARY").id;

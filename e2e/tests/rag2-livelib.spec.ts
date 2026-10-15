@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { uniqueSteps } from "../../components/next-steps";
 
 /**
  * V1.5 BROWSER TEST: the live verification's inventory failure (the composed answer listed the unreadable upload, the
@@ -36,4 +37,16 @@ test("L1 inventory: the unreadable upload's status line is composed, saved verba
   expect(saved).toContain(line);
   expect(norm(shown)).toContain(norm(line!));
   expect(turn?.gate ?? []).toEqual([]);
+});
+
+test("L2 next steps: the full saved list is displayed in order, each step once -- not only the first", async ({ page, request }) => {
+  const [m] = await scenario(request, "L2");
+  await page.goto("/chat"); await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
+  await send(page, m);
+  const saved = ((await last(request)).message!.answer_json.nextSteps ?? []) as string[];
+  const visible = (await page.locator(".message.assistant:not(:has(.thinking))").last().locator("[data-testid=next-step-item]").allInnerTexts()).map(norm);
+  console.log(`saved ${JSON.stringify(saved)}\nvisible ${JSON.stringify(visible)}`);
+  expect(saved.length, "the saved answer keeps every step the composer kept").toBeGreaterThanOrEqual(3);
+  expect(visible).toEqual(uniqueSteps(saved).map(norm));
+  expect(visible.length).toBe(3);
 });

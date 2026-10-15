@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { uniqueSteps } from "../../components/next-steps";
 
 /**
  * V1.5 BROWSER REPLAY: the recorded model output of the pre-registered actual-model run s52-live-1 (scenarios R52A-R52D,
@@ -24,8 +25,8 @@ async function send(page: Page, text: string) {
   return (await answers.last().innerText()).trim();
 }
 const norm = (t: string) => t.replace(/[\s ]+/g, " ").trim();
-// The page shows summary, details, questions and -- when there is no question -- the FIRST next step (app/chat/page.tsx).
-const savedLines = (a: any): string[] => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...((a.questions ?? []).length ? [] : (a.nextSteps ?? []).slice(0, 1))].filter(Boolean).flatMap((t: string) => String(t).split("\n")).map(norm).filter(Boolean);
+// The page shows summary, details, questions and every saved next step in order, each once (components/next-steps.ts).
+const savedLines = (a: any): string[] => [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q.text), ...uniqueSteps(a.nextSteps)].filter(Boolean).flatMap((t: string) => String(t).split("\n")).map(norm).filter(Boolean);
 test.describe.configure({ mode: "serial" });
 
 const shownBy: Record<string, string[]> = {};
@@ -34,7 +35,14 @@ for (const id of ["R52A", "R52B", "R52C", "R52D"]) {
     const msgs = await scenario(request, id);
     await page.goto("/chat"); await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
     const out: { shown: string; saved: any }[] = [];
-    for (const m of msgs) { const shown = await send(page, m); const s = await last(request); out.push({ shown, saved: s.message!.answer_json }); }
+    const stepLists: { visible: string[]; saved: string[] }[] = [];
+    for (const m of msgs) {
+      const shown = await send(page, m); const s = await last(request); out.push({ shown, saved: s.message!.answer_json });
+      const items = page.locator(".message.assistant:not(:has(.thinking))").last().locator("[data-testid=next-step-item]");
+      stepLists.push({ visible: (await items.allInnerTexts()).map(norm), saved: ((s.message!.answer_json.nextSteps ?? []) as string[]).map(norm) });
+    }
+    // V1.5: the FULL saved next-step list is displayed, in order, each once -- not only the first.
+    for (const [i, x] of stepLists.entries()) { console.log(`${id} turn ${i + 1} next steps: saved ${x.saved.length}, visible ${x.visible.length}`); expect(x.visible, `${id} turn ${i + 1}`).toEqual(uniqueSteps(x.saved)); }
     shownBy[id] = out.map((o) => o.shown);
     for (const [i, { shown, saved }] of out.entries()) {
       console.log(`\n--- ${id} turn ${i + 1} DISPLAYED:\n${shown}\n--- ${id} turn ${i + 1} SAVED:\n${savedLines(saved).join("\n")}`);
@@ -48,7 +56,7 @@ for (const id of ["R52A", "R52B", "R52C", "R52D"]) {
       expect(shown).not.toMatch(/do not provide Adrian’s Group Personal Accident Sum Insured/);
       expect(shown).not.toMatch(/\b(?:does not|doesn['’]t) cover\b[^.\n]*\b(?:trip|Japan)\b/i);
     }
-    if (id === "R52A") { expect(out[0].shown).toMatch(/notify Kestrel Life Ltd within 6 months/); expect(out[1].shown).toMatch(/notify Kestrel Life Ltd of a death within 6 months/); expect(out[1].shown).toMatch(/does not document travel cover for Japan/); }
-    if (id === "R52C") expect(out[0].shown).toMatch(/IMG_0042\.jpg \(could not be read\)/);
+    if (id === "R52A") { expect(out[0].shown).toMatch(/notify Kestrel Life Ltd within 6 months/); expect(out[1].shown).toMatch(/notify Kestrel Life Ltd of a death within 6 months/); expect(out[1].shown).toMatch(/does not document travel cover for Japan/); expect(stepLists[1].visible.length).toBe(3); expect(out[1].shown).toMatch(/Contact the group personal accident insurer/); expect(out[1].shown).toMatch(/Ask the employer or scheme administrator for the certificate/); }
+    if (id === "R52C") { expect(out[0].shown).toMatch(/its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used/); expect(out[0].shown).not.toMatch(/link it to a person so it can be used/); }
   });
 }
