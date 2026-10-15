@@ -17,6 +17,12 @@ export type PctTable = { name: string | null; heading: string; header: string; b
 const PCT_HEADER = /(?:%|per ?cent(?:age)?)\s+of\s+([^\n]{2,80}?)\)?\s*$/i;
 const CELL_GAP = /\S(?:\t+| {3,})\S/;
 const SECTION = /^\s*(?:section|part|schedule|table)\s+[\w.]+\s*[-–—:.]\s*(.+?)\s*$/i;
+/** V1.5 (pr50-live D): a table extracted as plain text with single spaces -- "Bone fractured Compensation (% of S$5,000)"
+ * then "Jaw, Pelvis, Leg, Ankle or Knee 50%" -- has no cell gap. Such a row is one label and exactly one percentage at
+ * the END of the line (bullet stripped, no sentence punctuation), so a sentence that merely mentions a percentage never
+ * reads as a row. */
+const PLAIN_ROW = /^(?:[•▪●◦*\-–]\s*)?([^%\d.;:!?][^%;:!?]{0,78}?[^%\s.;:!?])\s+(\d+(?:\.\d+)?)\s*%$/;
+const plainRow = (t: string) => PLAIN_ROW.exec(t.trim());
 const pctsOf = (t: string) => (t.match(/(\d+(?:\.\d+)?)\s*%/g) ?? []).map((m) => Number(m.replace(/[%\s]/g, "")));
 
 export function percentTables(page: string): PctTable[] {
@@ -28,7 +34,17 @@ export function percentTables(page: string): PctTable[] {
   for (let i = 0; i < lines.length; i++) {
     const h = lines[i];
     const hm = PCT_HEADER.exec(h.text.trim());
-    if (!hm || pctsOf(h.text).length || !(CELL_GAP.test(h.text) || h.text.includes("\t"))) continue;
+    if (!hm || pctsOf(h.text).length) continue;
+    const gapped = CELL_GAP.test(h.text) || h.text.includes("\t");
+    // a plain-text header is a short column-header line (no sentence ending) immediately followed by a plain row
+    const nextText = lines.slice(i + 1).find((l) => l.text.trim())?.text ?? "";
+    const plain = !gapped && h.text.trim().length <= 100 && !/[.;!?]$/.test(h.text.trim()) && !!plainRow(nextText);
+    // V1.5 (PR #51 review: the ACTUAL stored page 13): a column header wrapped over two lines -- "Schedule<TAB>Compensation"
+    // then "(% of S$5,000)" on its own line. The "% of" line has no cell gap and the line with the cells has no "% of",
+    // so neither alone was a header and the table was never found. The "% of" line continues the cell line above it.
+    const prev = i > 0 ? lines[i - 1].text : "";
+    const wrapped = !gapped && (CELL_GAP.test(prev) || prev.includes("\t")) && !/\d/.test(prev) && /^\(?\s*(?:%|per ?cent(?:age)?)\s+of\b/i.test(h.text.trim());
+    if (!gapped && !plain && !wrapped) continue;
     const above = lines.slice(floor, i).filter((l) => l.text.trim()).slice(-4);
     const sectionLine = [...above].reverse().find((l) => SECTION.test(l.text));
     const rows: PctRow[] = [];
@@ -39,13 +55,13 @@ export function percentTables(page: string): PctTable[] {
       if (!t) { if (rows.length || frag.length) break; continue; }
       if (PCT_HEADER.test(t) || SECTION.test(t)) break;
       const p = pctsOf(t);
-      const cellLike = CELL_GAP.test(l.text) || l.text.includes("\t");
+      const cellLike = CELL_GAP.test(l.text) || l.text.includes("\t") || (plain && !!plainRow(t));
       const pctOnly = /^\d+(?:\.\d+)?\s*%$/.test(t);
       if (p.length) {
         if (!cellLike && !pctOnly) break; // a sentence that mentions a percentage ends the table
         if (pctOnly && !frag.length) break;
         const first = frag[0] ?? l;
-        const label = [...frag.map((f) => f.text.trim()), t.replace(/(\d+(?:\.\d+)?)\s*%/g, " ").trim()].filter(Boolean).join(" ").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim();
+        const label = [...frag.map((f) => f.text.trim()), t.replace(/^[•▪●◦*\-–]\s*/, "").replace(/(\d+(?:\.\d+)?)\s*%/g, " ").trim()].filter(Boolean).join(" ").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim();
         rows.push({ label, percents: p, start: first.start, end: l.end, text: page.slice(first.start, l.end), lines: frag.length + 1 });
         frag = [];
         continue;
@@ -63,7 +79,7 @@ export function percentTables(page: string): PctTable[] {
     }
     if (!rows.length) continue;
     const end = rows[rows.length - 1].end;
-    out.push({ name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: h.start, start: h.start, end, rows });
+    out.push({ name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: (wrapped ? prev.split(/\t+| {3,}/).map((c) => c.trim()).filter(Boolean).join(" ") + " " : "") + h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: wrapped ? lines[i - 1].start : h.start, start: wrapped ? lines[i - 1].start : h.start, end, rows });
     floor = j;
     i = j - 1;
   }

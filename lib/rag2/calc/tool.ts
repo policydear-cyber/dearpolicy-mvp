@@ -57,7 +57,10 @@ export const CALC_TOOLS: ToolDef[] = [CALCULATE_TOOL];
 
 const fail = (error: string, evidence: EvidenceRef[] = []): ToolResult => ({ ok: false, error, evidence });
 
-export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>): Promise<ToolResult> {
+export async function runCalculate(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
+  // V1.5 (pr50-live D: the first recorded call passed base_value_id "" and was refused as an unknown value id): an empty
+  // id is an id not given, never a lookup.
+  const a = Object.fromEntries(Object.entries(args).filter(([k, v]) => !(/_id$/.test(k) && k !== "subject_id" && k !== "policy_id" && typeof v === "string" && !v.trim())));
   const subjectId = String(a.subject_id), benefit = String(a.benefit).trim();
   const purpose = String(a.purpose) as "question" | "what_if" | "claim";
   const whatIf = purpose === "what_if";
@@ -164,7 +167,10 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     if (a.proportion) {
       const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>);
       // (A row wrapped over two lines -- its percentage on the line below its label -- is one row: pct-rows.ts.)
-      const tableRow = typeof v !== "string" && /\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim().replace(/[ \t]*\n[ \t]*/g, "   "));
+      // V1.5 (pr50-live D): or a row of a percentage table reconstructed on its stored page -- including a table extracted
+      // as plain text with single spaces ("Jaw, Pelvis, Leg, Ankle or Knee 50%" under "Compensation (% of S$5,000)").
+      const rowOnPage = async () => { if (typeof v === "string") return false; const ev = v.operand.evidence; const pg = (await pageMap(ctx.accountId, ev.policyId)).get(ev.passage.onPage) ?? ""; return !!rowAt(percentTables(pg), ev.passage.start); };
+      const tableRow = typeof v !== "string" && (/\S(?:\t+| {3,})\d+(?:\.\d+)?\s*%\s*$/.test(v.operand.evidence.passage.text.trim().replace(/[ \t]*\n[ \t]*/g, "   ")) || await rowOnPage());
       if (typeof v !== "string" && tableRow && await percentBaseOf(ctx, v)) {
         if (pct && pct.operand.ppm !== v.operand.ppm) return fail("proportion: the quoted line is a row of the percentage table (a percentage of the benefit's base), not a share of another percentage -- pass that row as the percentage only");
         if (!pct) pct = v;

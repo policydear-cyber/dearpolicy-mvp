@@ -273,6 +273,19 @@ jobs:
       - name: Run the s52-live-1 browser replay (six recorded turns, no model call; displayed = saved)
         timeout-minutes: 20
         run: npm run e2e:rag2-s52-replay
+      - name: Seed the PR #50 live-failure household (snake_case file names) and restart the server (V1.5)
+        run: |
+          pkill -f "e2e/support/rag2-loop-server.ts" || true
+          sleep 2
+          PR50_NAMES=snake node --import tsx e2e/support/seed-rag2-stress-report.ts --household pr50
+          PR50_NAMES=snake E2E_RAG2_HOUSEHOLD=pr50 PORT=3300 NODE_ENV=test nohup node --import tsx e2e/support/rag2-loop-server.ts > logs/rag2-pr50-server.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3300/api/health && break; sleep 2; done
+          curl -sf -o /dev/null http://localhost:3300/api/health || { echo "not ready"; exit 1; }
+      - name: Run the PR #50 live-failure browser replay (fracture, inventory, death; no model call; displayed = saved)
+        timeout-minutes: 20
+        env:
+          PR50_NAMES: snake
+        run: npm run e2e:rag2-pr50
       - name: Service logs on failure (synthetic data only; no secrets exist in this job)
         if: failure()
         run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done

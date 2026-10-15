@@ -9,6 +9,7 @@ import { pool } from "@/lib/db/client";
 import * as REPORT_HH from "../../scripts/fixtures/rag2-stress/report-household";
 import * as BINDING_HH from "../../scripts/fixtures/rag2-binding/household";
 import * as LIVELIB_HH from "../../scripts/fixtures/rag2-livelib/household";
+import * as PR50_HH from "../../scripts/fixtures/rag2-pr50/household";
 
 // V1.4: `--household binding` seeds the binding household (scripts/fixtures/rag2-binding) instead.
 // `--household binding-cells` seeds it with the certificate one cell per line (the s50 live runs' layout).
@@ -16,7 +17,8 @@ const CELLS = process.argv.includes("binding-cells");
 // `--household livelib` seeds the live-library household; `--scan-name <name>` renames its unreadable upload.
 const SCAN_NAME = process.argv.includes("--scan-name") ? process.argv[process.argv.indexOf("--scan-name") + 1] : null;
 const LIVELIB = process.argv.includes("livelib") ? { ...LIVELIB_HH, DOCS: LIVELIB_HH.DOCS.map((d) => (d.key === "SCAN" && SCAN_NAME ? { ...d, filename: SCAN_NAME } : d)) } : null;
-const HH = LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+// `--household pr50` seeds the PR #50 live-failure household (file names from PR50_NAMES).
+const HH = process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];
@@ -38,8 +40,8 @@ async function main() {
   for (const d of DOCS) {
     const acct = d.account ?? ACCOUNT;
     await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,superseded_at,file_hash,effective_date,renewal_or_expiry_date,document_date,processing_error)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,'scan_clean','active',$18,$13,$14,$15,$16,$17)`,
-      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null]);
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,'scan_clean',$19,$18,$13,$14,$15,$16,$17)`,
+      [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null, (d as { lifecycle?: string }).lifecycle ?? "active"]);
     for (const m of d.members) await pool.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await pool.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);
   }

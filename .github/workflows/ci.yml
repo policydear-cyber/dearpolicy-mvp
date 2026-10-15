@@ -272,6 +272,8 @@ jobs:
         run: npm run rag2:live-verify-test
       - name: "Replay of the actual-model run s52-live-1 on this code (six recorded turns, no model call)"
         run: npm run rag2:s52-replay
+      - name: "Live failures after PR #50: fixed-limit fracture, inventory save path, contact advice (scripted, no model call)"
+        run: npm run rag2:pr50-regressions
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

@@ -1,0 +1,933 @@
+{
+  "scenario": "P50C",
+  "title": "PR #50 report C: full document inventory by person, insurer and product, including unreadable files",
+  "conversationId": "aa37d9be-797c-4e3c-92eb-a5f73844e7ea",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.\nAdrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nCheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nEthan: no documents on file.\nNot linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.\nNot linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully.",
+      "timings": {
+        "acceptedMs": 717,
+        "firstAssistantPersistedMs": 9840,
+        "answerSeenMs": 10130,
+        "modelMs": 8746,
+        "upstreamMs": 8651,
+        "relayMs": 8663
+      },
+      "calls": [
+        {
+          "seq": 1,
+          "at": "2026-10-15T07:31:07.059Z",
+          "estInputTokens": 14971,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024971000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 2,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7280,
+            "output": 14,
+            "cached": 0
+          },
+          "latencyMs": 3670,
+          "upstreamMs": 3667,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-15T07:31:10.756Z",
+          "estInputTokens": 16822,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026821999999999996,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 12,
+          "messages": 4,
+          "systemPromptSha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "toolsSha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8478,
+            "output": 233,
+            "cached": 7154
+          },
+          "latencyMs": 5076,
+          "upstreamMs": 5076,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 1,
+          "at": "2026-10-15T07:31:07.066Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15186,
+          "reservedUsd": 0.0025186,
+          "chargedUsd": 0.000735,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "f63d825833a3f5f9",
+          "kind": "loop",
+          "upstreamMs": 3659,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZADcuDcHdrzocUP1WNnOYYlLNgnq",
+          "usage": {
+            "input": 7280,
+            "output": 14,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "P50C",
+          "turn": 1
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-15T07:31:10.759Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 17040,
+          "reservedUsd": 0.002704,
+          "chargedUsd": 0.00032044,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "f63d825833a3f5f9",
+          "kind": "loop",
+          "upstreamMs": 5032,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZADfkh8xSs0lOKDZQH15OU12aLRD",
+          "usage": {
+            "input": 8478,
+            "output": 233,
+            "cached": 7154,
+            "reasoning": 0
+          },
+          "scenario": "P50C",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-15T07:31:07Z",
+          "t": 1792049467.093,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 3624,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZADcuDcHdrzocUP1WNnOYYlLNgnq",
+          "usage": {
+            "prompt_tokens": 7280,
+            "completion_tokens": 14,
+            "total_tokens": 7294,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "household_documents"
+          ],
+          "status": 200,
+          "relay_ms": 3633
+        },
+        {
+          "at": "2026-10-15T07:31:10Z",
+          "t": 1792049470.763,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 12,
+          "tools_sha256": "0d242cfa9a14656613f1f696f340c8779ce33a3ba31cea4ea57ebb25e3e924ac",
+          "system_prompt_sha256": "756f3a563ade67b129995235a69979bc9a25ee8fb26663cac6361508a8590a59",
+          "upstream_ms": 5027,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZADfkh8xSs0lOKDZQH15OU12aLRD",
+          "usage": {
+            "prompt_tokens": 8478,
+            "completion_tokens": 233,
+            "total_tokens": 8711,
+            "cached_tokens": 7154,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 5030
+        }
+      ],
+      "tokens": {
+        "input": 15758,
+        "output": 247
+      },
+      "costUsd": {
+        "charged": 0.00105544,
+        "reserved": 0.0052226,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          1,
+          2
+        ],
+        "guardUsd": 0.00105544,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 10150,
+  "firstUsefulResponseMs": 9840,
+  "tokens": {
+    "input": 15758,
+    "output": 247
+  },
+  "costUsd": 0.00105544,
+  "calls": 2,
+  "loaded": {
+    "conversationId": "aa37d9be-797c-4e3c-92eb-a5f73844e7ea",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 0,
+        "turn": 1,
+        "claim": null,
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7280,
+                "output": 14,
+                "attempt": 1,
+                "costUsd": 0.000735,
+                "latencyMs": 3672
+              },
+              {
+                "ok": true,
+                "input": 8478,
+                "output": 233,
+                "attempt": 1,
+                "costUsd": 0.00032044,
+                "latencyMs": 5077
+              }
+            ],
+            "limit": null,
+            "steps": 2,
+            "usage": {
+              "input": 15758,
+              "output": 247
+            },
+            "dropped": [
+              {
+                "reason": "states cover or a figure without citing evidence",
+                "sentence": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+              }
+            ],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+              "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+              "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+              "Ethan: no documents on file.",
+              "Not linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.",
+              "Not linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully."
+            ],
+            "latencyMs": 8866,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {},
+                "name": "household_documents",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "Adrian: Kestrel Life Ltd’s Public Officers Group Insurance Scheme certificate is a personal schedule; the Public Officers Group Personal Accident Summary of Benefits (KestrelOne) and Policy Wording (Kestrel Life Ltd) are reference documents.",
+                      "evidence_ids": [
+                        "e1",
+                        "e2"
+                      ]
+                    },
+                    {
+                      "text": "Cheryl: the same Kestrel Life Ltd certificate is a personal schedule, and the same KestrelOne summary and Kestrel Life Ltd policy wording are reference documents.",
+                      "evidence_ids": [
+                        "e1",
+                        "e2"
+                      ]
+                    },
+                    {
+                      "text": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+                      "evidence_ids": [
+                        "e3",
+                        "e4"
+                      ]
+                    },
+                    {
+                      "text": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+                    }
+                  ]
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "incomplete": [
+              "the inventory was stated from the household's document lookup"
+            ],
+            "userMessage": "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+            "evidenceChosen": [
+              "e3",
+              "e4",
+              "e1",
+              "e2"
+            ]
+          }
+        ],
+        "history": [
+          {
+            "user": "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+            "assistant": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household. Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document). Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document). Ethan: no documents on file. Not linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them. Not linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7e800000-0000-4000-8000-000000000101": "Public Officers Group Insurance Scheme - Certificate",
+          "7e800000-0000-4000-8000-000000000103": "Public Officers Group Personal Accident - Policy Wording",
+          "7e800000-0000-4000-8000-000000000104": "Travel Insurance - Policy Wording",
+          "7e800000-0000-4000-8000-000000000105": "Travel Insurance - Benefit Summary"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 30,
+              "text": "CERTIFICATE OF GROUP INSURANCE",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 30,
+              "text": "CERTIFICATE OF GROUP INSURANCE",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 102,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-4410)",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 93,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-wording"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 75,
+              "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Policy Wording",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 75,
+              "text": "Ltd. - Travel Insurance - Policy Wording",
+              "start": 35,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000104",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-travel-wording"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "household_documents",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 76,
+              "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Benefit Summary",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 76,
+              "text": "Ltd. - Travel Insurance - Benefit Summary",
+              "start": 35,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000105",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-travel-summary"
+          }
+        },
+        "speakerId": "7e800000-0000-4000-8000-000000000001",
+        "subjectId": null,
+        "recentSubjectIds": []
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Ethan: no documents on file.",
+            "Not linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.",
+            "Not linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully."
+          ],
+          "summary": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+          "citations": [
+            {
+              "chunkId": "rag2:e3",
+              "excerpt": "Ltd. - Travel Insurance - Policy Wording",
+              "insurer": "Harbourline General Insurance Pte. Ltd.",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000104",
+              "pageStart": 1,
+              "policyName": "Travel Insurance - Policy Wording",
+              "documentRole": "policy_wording"
+            },
+            {
+              "chunkId": "rag2:e4",
+              "excerpt": "Ltd. - Travel Insurance - Benefit Summary",
+              "insurer": "Harbourline General Insurance Pte. Ltd.",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000105",
+              "pageStart": 1,
+              "policyName": "Travel Insurance - Benefit Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e1",
+              "excerpt": "CERTIFICATE OF GROUP INSURANCE",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000103",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Personal Accident - Policy Wording",
+              "documentRole": "policy_wording"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "libraryNames": [
+            "Public Officers Group Insurance Scheme - Certificate",
+            "synthetic-dptest-pr50-cert.pdf",
+            "Public Officers Group Personal Accident - Summary of Benefits",
+            "synthetic-dptest-pr50-summary.pdf",
+            "Public Officers Group Personal Accident - Policy Wording",
+            "synthetic-dptest-pr50-wording.pdf",
+            "Public Officers Group Insurance Scheme - Certificate",
+            "synthetic-dptest-pr50-cert.pdf",
+            "Public Officers Group Personal Accident - Summary of Benefits",
+            "synthetic-dptest-pr50-summary.pdf",
+            "Public Officers Group Personal Accident - Policy Wording",
+            "synthetic-dptest-pr50-wording.pdf",
+            "Travel Insurance - Policy Wording",
+            "travel_policy_wording_2024.pdf",
+            "Travel Insurance - Benefit Summary",
+            "travel_benefit_summary.pdf",
+            "Scan 20241003 153045",
+            "scan_20241003_153045.jpg"
+          ],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "aa37d9be-797c-4e3c-92eb-a5f73844e7ea",
+          "figureBindings": [],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": []
+        },
+        "content": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+        "visible": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.\nAdrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nCheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).\nEthan: no documents on file.\nNot linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.\nNot linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully.",
+        "questions": [],
+        "userAt": "2026-10-15T07:31:15.939Z",
+        "assistantAt": "2026-10-15T07:31:15.939Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7280,
+              "output": 14,
+              "attempt": 1,
+              "costUsd": 0.000735,
+              "latencyMs": 3672
+            },
+            {
+              "ok": true,
+              "input": 8478,
+              "output": 233,
+              "attempt": 1,
+              "costUsd": 0.00032044,
+              "latencyMs": 5077
+            }
+          ],
+          "limit": null,
+          "steps": 2,
+          "usage": {
+            "input": 15758,
+            "output": 247
+          },
+          "dropped": [
+            {
+              "reason": "states cover or a figure without citing evidence",
+              "sentence": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+            }
+          ],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+            "Adrian: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Cheryl: Public Officers Group Insurance Scheme - Certificate (Kestrel Life Ltd, a personal policy document); Public Officers Group Personal Accident - Summary of Benefits (KestrelOne, reference wording for the scheme, not a personal policy document); Public Officers Group Personal Accident - Policy Wording (Kestrel Life Ltd, reference wording for the scheme, not a personal policy document).",
+            "Ethan: no documents on file.",
+            "Not linked to anyone in the household: Travel Insurance - Policy Wording (Harbourline General Insurance Pte. Ltd.); Travel Insurance - Benefit Summary (Harbourline General Insurance Pte. Ltd.) -- link it to a person so it can be used for them.",
+            "Not linked to anyone in the household, and its contents could not be read: scan_20241003_153045.jpg. Nothing in it can be used; linking it to a person would not change that -- it would first have to be read successfully."
+          ],
+          "latencyMs": 8866,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {},
+              "name": "household_documents",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "text": "Adrian: Kestrel Life Ltd’s Public Officers Group Insurance Scheme certificate is a personal schedule; the Public Officers Group Personal Accident Summary of Benefits (KestrelOne) and Policy Wording (Kestrel Life Ltd) are reference documents.",
+                    "evidence_ids": [
+                      "e1",
+                      "e2"
+                    ]
+                  },
+                  {
+                    "text": "Cheryl: the same Kestrel Life Ltd certificate is a personal schedule, and the same KestrelOne summary and Kestrel Life Ltd policy wording are reference documents.",
+                    "evidence_ids": [
+                      "e1",
+                      "e2"
+                    ]
+                  },
+                  {
+                    "text": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+                    "evidence_ids": [
+                      "e3",
+                      "e4"
+                    ]
+                  },
+                  {
+                    "text": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+                  }
+                ]
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "incomplete": [
+            "the inventory was stated from the household's document lookup"
+          ],
+          "userMessage": "What policies does my family have? List my uploaded documents by person, insurer and product. Distinguish personal certificates from reference wording and unreadable files.",
+          "evidenceChosen": [
+            "e3",
+            "e4",
+            "e1",
+            "e2"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "P50C",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "7e800000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 15758,
+          "output": 247
+        },
+        "latencyMs": 8866,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {},
+            "name": "household_documents",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "Adrian: Kestrel Life Ltd’s Public Officers Group Insurance Scheme certificate is a personal schedule; the Public Officers Group Personal Accident Summary of Benefits (KestrelOne) and Policy Wording (Kestrel Life Ltd) are reference documents.",
+                  "evidence_ids": [
+                    "e1",
+                    "e2"
+                  ]
+                },
+                {
+                  "text": "Cheryl: the same Kestrel Life Ltd certificate is a personal schedule, and the same KestrelOne summary and Kestrel Life Ltd policy wording are reference documents.",
+                  "evidence_ids": [
+                    "e1",
+                    "e2"
+                  ]
+                },
+                {
+                  "text": "Unlinked to a person: Harbourline General Insurance Pte. Ltd.’s Travel Insurance Policy Wording and Benefit Summary are readable reference documents, not linked to anyone in the household.",
+                  "evidence_ids": [
+                    "e3",
+                    "e4"
+                  ]
+                },
+                {
+                  "text": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e3",
+          "e4",
+          "e1",
+          "e2"
+        ],
+        "dropped": [
+          {
+            "reason": "states cover or a figure without citing evidence",
+            "sentence": "One unlinked file, “Scan 20241003 153045” (scan_20241003_153045.jpg), is unreadable; the uploaded inventory gives no insurer or product for it."
+          }
+        ],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 30,
+          "text": "CERTIFICATE OF GROUP INSURANCE",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 30,
+          "text": "CERTIFICATE OF GROUP INSURANCE",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 102,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-4410)",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 93,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-wording"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 75,
+          "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Policy Wording",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 75,
+          "text": "Ltd. - Travel Insurance - Policy Wording",
+          "start": 35,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-travel-wording"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "household_documents",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 76,
+          "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Benefit Summary",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 76,
+          "text": "Ltd. - Travel Insurance - Benefit Summary",
+          "start": 35,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-travel-summary"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [
+          {
+            "chunkId": "rag2:e3",
+            "excerpt": "Ltd. - Travel Insurance - Policy Wording",
+            "insurer": "Harbourline General Insurance Pte. Ltd.",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000104",
+            "pageStart": 1,
+            "policyName": "Travel Insurance - Policy Wording",
+            "documentRole": "policy_wording"
+          },
+          {
+            "chunkId": "rag2:e4",
+            "excerpt": "Ltd. - Travel Insurance - Benefit Summary",
+            "insurer": "Harbourline General Insurance Pte. Ltd.",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000105",
+            "pageStart": 1,
+            "policyName": "Travel Insurance - Benefit Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e1",
+            "excerpt": "CERTIFICATE OF GROUP INSURANCE",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Personal Accident - Policy Wording",
+            "documentRole": "policy_wording"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

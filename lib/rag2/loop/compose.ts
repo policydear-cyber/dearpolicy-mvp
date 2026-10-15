@@ -125,6 +125,9 @@ export function withoutUnconfirmedAddress(text: string, people: { id: string; na
   t = t.replace(new RegExp(`(\\b(?:your loss|sorry|condolences|sympathies|hi|hello|dear|thank you|thanks))\\s*,?\\s+(?:${alt})(?=\\s*[;,.!?:—–-])`, "gi"), "$1");
   // at the start, before what is said to them: "Michelle, I'm so sorry…"
   t = t.replace(new RegExp(`^(?:${alt}),\\s+(?=(?:I|I’m|I'm|I am|we|sorry|thank|please|here|my)\\b)`, "i"), "");
+  // V1.5 (pr50-live C, file-name variant): only a sentence this changed is re-capitalised -- a sentence that begins with
+  // a file name ("scan_20241003_153045.jpg could not be read.") keeps the name exactly as the library records it.
+  if (t === text) return text;
   return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
 }
 /** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */
@@ -439,7 +442,7 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & 
   return null;
 }
 /** V1.3: a label as the household reads it -- the policy number and other parenthetical detail of a heading left out. */
-const tidyLabel = (l: string) => l.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
+const tidyLabel = (l: string) => l.replace(/^\s*[•▪●◦*–-]\s*/, "").replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").replace(/^[\d.]+\s+/, "").trim();
 /** A line's own label ("Daily Hospital Income: S$150 for ...") or, failing that, the heading it is printed under on its
  * stored page (a certificate roster's product heading). */
 function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
@@ -460,7 +463,9 @@ function documentLabels(text: string): string[] {
     const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim();
     if (own) { out.add(tidyLabel(own)); continue; }
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
-    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
+    // (V1.5: a bullet item -- "• Death due to Accident" under Compassionate Death Allowance -- is a case of the benefit
+    // above it, not a benefit label of its own.)
+    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
   }
   return [...out].filter((x) => benefitWords(x).size > 0);
 }
@@ -510,7 +515,15 @@ export function withoutOtherInsurers(text: string, subjectId: string | null, ctx
     const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
     const before = t;
     t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
-    if (t === before) return null;
+    if (t === before) {
+      // V1.5 (pr50-live A: "Contact <own insurer> ... to report the death, and ask <other insurer> whether ..." lost the
+      // supported contact step with the unrelated clause): the clauses that name the other insurer are taken out on
+      // their own; what remains must still stand (and is checked below like any other remainder).
+      if (!insurerNotFor(t, subjectId, ctx, true, relevant)) continue; // nothing of another insurer is left to take out
+      const kept = withoutClausesWhere(t, (body) => !!insurerNotFor(body, subjectId, ctx, true, relevant));
+      if (!kept || kept === t) return null;
+      t = kept;
+    }
   }
   t = t.replace(/\s{2,}/g, " ").trim();
   if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
@@ -526,7 +539,11 @@ function labelsOf(ctx: Pick<Ctx, "benefits" | "libraryText" | "people">, policyI
   const namesPerson = (l: string) => people.some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)));
   return documentLabels(ctx.libraryText?.get(policyId) ?? fallbackText ?? "").filter((l) => !namesPerson(l) && !/\d/.test(l));
 }
-const wordScore = (clause: string, label: string) => { const have = new Set(contentWords(clause)); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
+// V1.5 (pr50-live D: "Simple Fracture Benefit Limit" scored 0 against a clause naming Simple Fracture -- the label's words
+// were stemmed by benefitWords ("simpl", "fractur") and the clause's by contentWords ("simple", "fracture") -- so a bullet
+// item elsewhere in the document sharing only "Accident" ("• Death due to Accident") won as the "better" label): both
+// sides are read with the same words.
+const wordScore = (clause: string, label: string) => { const have = benefitWords(clause); return [...benefitWords(label)].filter((w) => have.has(w)).length; };
 /**
  * V1.3: the benefit a passage figure is bound to by the source's own identity -- the label of the line printing it (its
  * "Label:" or the heading it is printed under) -- never by the model reproducing that label word for word. The
@@ -542,6 +559,10 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   const declared = documentCurrency(ctx.libraryText?.get(ref.policyId) ?? "");
   const lines = all.filter((l) => moneyFiguresIn(l).some((m) => same(m.value, value) && (m.currency === currency || (m.currency === "$" && declared === currency))));
   if (all.length && !lines.length) return { conflict: `printed in another currency than the sentence states` };
+  // V1.5 (pr50-live D): a column header naming the amount as a table's base ("Compensation (% of S$5,000)") restates the
+  // limit printed above it; it is not a second line printing that amount under another label.
+  const asBase = (l: string) => /(?:%|per ?cent(?:age)?)\s+of\s+(?:the\s+)?\S*\d/i.test(l) && moneyFiguresIn(l).length === 1;
+  if (lines.some((l) => !asBase(l))) lines.splice(0, lines.length, ...lines.filter((l) => !asBase(l)));
   // A row printing several amounts (one per column, person or tier) is bound by its column, not by its label.
   if (lines.some((l) => moneyFiguresIn(l).length > 1)) return null;
   const labels = [...new Set(lines.map((l) => lineLabel(ref.policyId, l, ctx)).filter((x): x is string => !!x).map(tidyLabel).filter((x) => benefitWords(x).size > 0))];
@@ -970,7 +991,26 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified });
+      const citedEv = evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") }));
+      const stmtCtx = { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified };
+      // V1.5 (PR #51 review, the live death turn 2): a sentence joining independently stated claims ("describes the
+      // benefit, requiring proof ..., and says it can be claimed under either scheme; the documents do not establish
+      // <person>'s Sum Insured or enrolment") is checked clause by clause: an unsupported clause is taken out and the
+      // supported ones stay -- never the whole sentence for one clause, never an unsupported clause for the rest.
+      // (A labelled list -- "Adrian: <document>; <document>" -- is items of one statement, not independent claims.)
+      const parts = /^[^;:.]{1,80}:\s/.test(text) ? [text] : clausesOf(text);
+      if (parts.length > 1) {
+        // (An absence clause -- "it does not list X" -- names what is missing from its evidence by design; it is judged
+        // with the sentence it belongs to, as before.)
+        // (Only a clause that itself states something about cover is judged alone -- not the household's own words said
+        // back to them, "You told me he was warded for two nights".)
+        const failing = parts.filter((c) => COVERISH.test(c) && !/\byou (?:told|said|mentioned|wrote|reported|gave)\b/i.test(c) && !ABSENCE.test(c) && !NOT_STATED.test(c.trim())).map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
+        if (failing.length && failing.length < parts.length) {
+          const kept = withoutClausesWhere(text, (body) => failing.some((f) => f.c === body));
+          if (kept && !checkCitedStatement(kept, citedEv, stmtCtx)) { out.dropped.push({ sentence: text, reason: `a clause is not supported by its evidence and was taken out (“${failing[0].c.trim()}”: ${failing[0].why})` }); text = kept; }
+        }
+      }
+      const why = checkCitedStatement(text, citedEv, stmtCtx);
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
     }
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total

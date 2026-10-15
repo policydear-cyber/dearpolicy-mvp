@@ -354,6 +354,32 @@
       "calls": 4,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "pr50-live-1",
+      "tested_code_sha": "371ba7d3ec2f298735ec8234a04fa64a70c62ab6",
+      "request_sha": "371ba7d3ec2f298735ec8234a04fa64a70c62ab6",
+      "at": "2026-10-15T07:33:31.341Z",
+      "preflight": false,
+      "run_cap_usd": 0.006,
+      "spent_usd": 0.003029,
+      "reserved_unsettled_usd": 0,
+      "calls": 11,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "pr50a-live-2",
+      "tested_code_sha": "004d25e96ef0921370daa3ad23becb5e51295c4b",
+      "request_sha": "004d25e96ef0921370daa3ad23becb5e51295c4b",
+      "at": "2026-10-15T08:01:57.181Z",
+      "preflight": false,
+      "run_cap_usd": 0.006,
+      "spent_usd": 0.002322,
+      "reserved_unsettled_usd": 0,
+      "calls": 5,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

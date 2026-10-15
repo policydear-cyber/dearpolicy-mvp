@@ -18,8 +18,11 @@ import type { ChatAnswer } from "@/types";
 
 export const GUARD_FALLBACK_SUMMARY = "Sorry, I couldn’t put that answer together properly. Please ask again, or ask about one policy or one person at a time.";
 
+// V1.5: a key, token or credential-shaped value (prefixed API keys, JWTs, PEM blocks, long mixed-case random strings).
+const KEYLIKE = /\b(?:sk|pk|rk|ghp|gho|ghs|xox[abp]|AKIA)[-_](?:(?:live|test|proj)[-_])?[A-Za-z0-9]{12,}|\beyJ[\w-]{8,}\.|-----BEGIN|\b(?=[A-Za-z0-9+/=]*\d)(?=[A-Za-z0-9+/=]*[A-Z])(?=[A-Za-z0-9+/=]*[a-z])[A-Za-z0-9+/=]{32,}/;
 // Things a household must never read.
 const LEAKS: RegExp[] = [
+  KEYLIKE,
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i, // ids
   /\b(?:undefined|NaN|\[object Object\])\b|\bnull\b(?=\s*(?:[.,;:]|$))/, // debug tokens
   /\{\{?\s*[a-zA-Z_][\w.]*\s*\}\}?|\$\{[^}]*\}|<\/?[a-z]+[^>]*>/, // template tokens, markup
@@ -29,23 +32,37 @@ const LEAKS: RegExp[] = [
   /\b(?:row|chunk|job|batch) (?:id|#)\s*\d+|\bchunk_?id\b|\bjob (?:state|status)[: ]+(?:queued|running|failed|succeeded)\b/i,
 ];
 
-/** Spans the guard must not edit: “quoted” and "quoted" text. */
-function protectedSpans(text: string): [number, number][] {
+/** Spans the guard must not edit: “quoted” and "quoted" text, and -- V1.5 (pr50-live C: an inventory line naming an
+ * upload by its file name, "scan_20240611_0932.jpg", was dropped at save time as a snake_case identifier, after
+ * composition and verification had kept it) -- the household's own document and file names the answer lists
+ * (ChatAnswer.libraryNames, set by the server from the library record, never by the model). */
+function protectedSpans(text: string, names: readonly string[] = []): [number, number][] {
   const spans: [number, number][] = [];
   for (const m of text.matchAll(/“[^”]*”|"[^"]*"/g)) spans.push([m.index!, m.index! + m[0].length]);
-  return spans;
+  for (const n of names) {
+    if (n.length < 3) continue;
+    let at = text.indexOf(n);
+    while (at >= 0) {
+      const end = at + n.length;
+      // only the WHOLE name: never a stretch inside a longer token ("summary" inside "summary_internal_table")
+      const whole = !/[\w-]/.test(text.charAt(at - 1) || " ") && !/[\w-]/.test(text.charAt(end) || " ");
+      if (whole && !spans.some(([a, b]) => at < b && end > a)) spans.push([at, end]);
+      at = text.indexOf(n, end);
+    }
+  }
+  return spans.sort((x, y) => x[0] - y[0]);
 }
-function outsideQuotes(text: string): string {
+function outsideQuotes(text: string, names: readonly string[] = []): string {
   let out = "", at = 0;
-  for (const [a, b] of protectedSpans(text)) { out += text.slice(at, a) + " ".repeat(b - a); at = b; }
+  for (const [a, b] of protectedSpans(text, names)) { out += text.slice(at, a) + " ".repeat(b - a); at = b; }
   return out + text.slice(at);
 }
 const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/);
 
 /** Mechanical repairs outside quotes: doubled words, spacing, punctuation. */
-export function repairText(text: string): string {
+export function repairText(text: string, names: readonly string[] = []): string {
   if (!text) return text;
-  const spans = protectedSpans(text);
+  const spans = protectedSpans(text, names);
   if (spans.length) {
     // Repair each unquoted stretch on its own.
     let out = "", at = 0;
@@ -67,10 +84,10 @@ function repairPlain(text: string): string {
 }
 
 /** Drops each sentence that leaks internals; repairs the rest. Returns null when nothing is left. */
-export function guardText(text: string): string | null {
+export function guardText(text: string, names: readonly string[] = []): string | null {
   if (typeof text !== "string" || !text.trim()) return text;
-  const kept = sentencesOf(text).filter((s) => !LEAKS.some((re) => re.test(outsideQuotes(s))));
-  const joined = repairText(kept.join(" "));
+  const kept = sentencesOf(text).filter((s) => !LEAKS.some((re) => re.test(outsideQuotes(s, names))));
+  const joined = repairText(kept.join(" "), names);
   return joined.trim() ? joined : null;
 }
 
@@ -85,6 +102,19 @@ export function scrub(text: string): string {
  * which requires none: a change here means a root cause still needs fixing). */
 export const guardInterventions: { before: string; after: string }[] = [];
 
+/** V1.5: the library names an answer may show verbatim -- ChatAnswer.libraryNames, which ONLY the server sets, from the
+ * household's own authorised, lifecycle-filtered inventory (the loop's household_documents lookup). Even from there, a
+ * value shaped like something other than a document or file name never gains the exemption: a storage path, a key or
+ * token, a bare id, an over-long value, or one of the answer's own record ids. */
+const BARE_ID = /^\s*[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*$/i;
+export function protectableNames(answer: ChatAnswer): string[] {
+  const ids = new Set<string>([...(answer.citations ?? []).map((c) => (c as { policyId?: string }).policyId ?? ""), (answer as { conversationId?: string }).conversationId ?? ""].filter(Boolean).map((x) => x.toLowerCase()));
+  return [...new Set((answer.libraryNames ?? []).filter((n): n is string => typeof n === "string"))]
+    .map((n) => n.trim())
+    .filter((n) => n.length >= 3 && n.length <= 160 && /[A-Za-z]/.test(n) && !/[\\/]/.test(n) && !KEYLIKE.test(n) && !BARE_ID.test(n) && ![...ids].some((id) => n.toLowerCase().includes(id)))
+    .sort((a, b) => b.length - a.length);
+}
+
 /** Guards an answer in place and returns it. */
 export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
   if (!answer || typeof answer !== "object") return answer;
@@ -97,6 +127,7 @@ export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
 }
 function guardInPlace(answer: ChatAnswer) {
   const seen = new Set<string>();
+  const names = protectableNames(answer);
   // A sentence said once is enough: the summary first, then each detail.
   const once = (text: string | null) => {
     if (!text) return text;
@@ -109,9 +140,9 @@ function guardInPlace(answer: ChatAnswer) {
     });
     return parts.join(" ").trim() || null;
   };
-  const summary = once(guardText(answer.summary ?? ""));
+  const summary = once(guardText(answer.summary ?? "", names));
   answer.summary = summary && summary.trim() ? summary : (answer.questions?.length ? "I need one more detail first." : GUARD_FALLBACK_SUMMARY);
-  answer.details = (answer.details ?? []).map((d) => once(guardText(d))).filter((d): d is string => !!d);
+  answer.details = (answer.details ?? []).map((d) => once(guardText(d, names))).filter((d): d is string => !!d);
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
     q.text = guardText(q.text) ?? scrub(q.text);
