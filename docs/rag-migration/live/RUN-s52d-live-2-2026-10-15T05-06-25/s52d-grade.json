@@ -1,0 +1,37 @@
+{
+  "verdict": "PASS",
+  "checks": [
+    {
+      "id": "R1",
+      "name": "a conditional S$2,500 from 50% x S$5,000 is visible (the sentence stating it is conditional / an illustration, not a payment)",
+      "ok": true
+    },
+    {
+      "id": "R2",
+      "name": "a saved calculation with source-bound operands: 50% from the leg row and S$5,000 from the Simple Fracture Benefit Limit, both Summary of Benefits page 13; result S$2,500; it re-computes",
+      "ok": true
+    },
+    {
+      "id": "R3",
+      "name": "Simple Fracture and Other Fracture are kept separate (the S$2,500 is not given as Other Fracture's; no Simple Fracture amount on the Sum Insured)",
+      "ok": true
+    },
+    {
+      "id": "R4",
+      "name": "no unsupported Other Fracture amount (any Other Fracture amount is a saved calculation on the wording's Other Fracture row and the certificate's S$600,000 sum insured)",
+      "ok": true
+    },
+    {
+      "id": "R5",
+      "name": "no false statement that the certificate lacks the Group Personal Accident sum insured",
+      "ok": true
+    },
+    {
+      "id": "R6",
+      "name": "no token-limit fallback and no unrelated benefit or figure",
+      "ok": true
+    }
+  ],
+  "incomplete": null,
+  "visible": "If Adrian had a simple (closed) leg fracture, the Simple Fracture table lists 50% of its S$5,000 benefit limit for a leg, giving a conditional illustration of S$2,500; the wording says this benefit applies to a listed simple fracture caused by an Accident, and the diagnosis must meet its definition.\nOther Fracture is a separate benefit for fractures that are not Simple Fractures, including compound (open) fractures; for a leg it lists 50% of the Sum Insured, rather than 50% of the Simple Fracture benefit limit.\nAdrian’s certificate lists Group Personal Accident at S$600,000 as of 6 October 2022, but that dated figure is not confirmation of cover on a later date."
+}

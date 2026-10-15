@@ -341,6 +341,19 @@
       "calls": 18,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s52d-live-2",
+      "tested_code_sha": "5cd0de97a571141f8ad7ed95e876083deab86b13",
+      "request_sha": "5cd0de97a571141f8ad7ed95e876083deab86b13",
+      "at": "2026-10-15T05:08:24.931Z",
+      "preflight": false,
+      "run_cap_usd": 0.006,
+      "spent_usd": 0.00179,
+      "reserved_unsettled_usd": 0,
+      "calls": 4,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
