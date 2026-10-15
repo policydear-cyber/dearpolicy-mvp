@@ -1002,7 +1002,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       if (parts.length > 1) {
         // (An absence clause -- "it does not list X" -- names what is missing from its evidence by design; it is judged
         // with the sentence it belongs to, as before.)
-        const failing = parts.filter((c) => !ABSENCE.test(c) && !NOT_STATED.test(c.trim())).map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
+        // (Only a clause that itself states something about cover is judged alone -- not the household's own words said
+        // back to them, "You told me he was warded for two nights".)
+        const failing = parts.filter((c) => COVERISH.test(c) && !/\byou (?:told|said|mentioned|wrote|reported|gave)\b/i.test(c) && !ABSENCE.test(c) && !NOT_STATED.test(c.trim())).map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
         if (failing.length && failing.length < parts.length) {
           const kept = withoutClausesWhere(text, (body) => failing.some((f) => f.c === body));
           if (kept && !checkCitedStatement(kept, citedEv, stmtCtx)) { out.dropped.push({ sentence: text, reason: `a clause is not supported by its evidence and was taken out (“${failing[0].c.trim()}”: ${failing[0].why})` }); text = kept; }
