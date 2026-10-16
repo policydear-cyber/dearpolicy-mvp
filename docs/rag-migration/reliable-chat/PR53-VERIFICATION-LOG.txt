@@ -1,0 +1,447 @@
+# PR53 verification log excerpts — synthetic data only
+Tested commit: 2964e2a88878e968e081a7f5c578f69729ce8199
+Node 22.23.3
+[{"script": "typecheck", "exit": 0, "seconds": 8.97}, {"script": "reliable-chat:active-route-test", "exit": 0, "seconds": 46.98}, {"script": "rag2:calc-test", "exit": 0, "seconds": 4.95}, {"script": "rag2:facts-test", "exit": 0, "seconds": 0.44}, {"script": "security:import-boundary-test", "exit": 0, "seconds": 1.22}, {"script": "security:ci-workflow-coverage-test", "exit": 0, "seconds": 0.42}]
+## Removed-fix controls
+{"original_selector_exit": 1, "original_pending_exit": 1}
+
+## pr53-route-original-selector
+[telemetry] {"name":"model.execution.recorded","correlationId":"a3c077b3-966a-42c1-be39-359392f77caf","timestamp":"2026-10-16T12:53:29.523Z","status":"success","jobType":null,"processingState":"rag_answer","requestedModel":"scripted:[REDACTED:token]","resolvedModel":"scripted:[REDACTED:token]","promptVersion":"rag2-loop-v16-cases","schemaVersion":null,"householdRef":"cddf4d0f57c[REDACTED:phone]f825cdcc4c918","resourceRef":null,"extra":{"attemptGroupId":"[REDACTED:token]","attemptIndex":2,"verified":true}}
+[telemetry] {"name":"chat.turn.completed","correlationId":"a1bf6b5a-f2f5-42a1-a7ad-7d104c89ee74","timestamp":"2026-10-16T12:53:29.725Z","status":"success","householdRef":"cddf4d0f57c[REDACTED:phone]f825cdcc4c918","extra":{"claimItemCount":0}}
+AssertionError [ERR_ASSERTION]: conflict must save no calculation
+
+1 !== 0
+
+    at main (/workspace/scratch/619f4f38aa9e/pr53-verify/scripts/reliable-chat-conflicts.ts:30:13) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+## pr53-route-original-pending
+[telemetry] {"name":"model.execution.recorded","correlationId":"b206a379-9b0d-471e-a8a3-19fd2e62dec4","timestamp":"2026-10-16T12:53:34.372Z","status":"success","jobType":null,"processingState":"rag_answer","requestedModel":"scripted:[REDACTED:token]","resolvedModel":"scripted:[REDACTED:token]","promptVersion":"rag2-loop-v16-cases","schemaVersion":null,"householdRef":"cddf4d0f57c[REDACTED:phone]f825cdcc4c918","resourceRef":null,"extra":{"attemptGroupId":"[REDACTED:token]","attemptIndex":2,"verified":true}}
+[telemetry] {"name":"chat.turn.completed","correlationId":"ae120bda-e12e-4b11-83cd-50c5c5cb6d7d","timestamp":"2026-10-16T12:53:34.462Z","status":"success","householdRef":"cddf4d0f57c[REDACTED:phone]f825cdcc4c918","extra":{"claimItemCount":0}}
+AssertionError [ERR_ASSERTION]: settled injury must not be asked again
+
+1 !== 0
+
+    at main (/workspace/scratch/619f4f38aa9e/pr53-verify/scripts/reliable-chat-conflicts.ts:39:13) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+## pr53-final-reliable-chat-active-route-test
+
+> dearpolicy-mvp@1.0.0-rc.14 reliable-chat:active-route-test
+> npm run -s reliable-chat:conflicts-test && npm run -s reliable-chat:slice-test && npm run -s reliable-chat:stage3-test && npm run -s reliable-chat:cases-test && npm run -s reliable-chat:live-regressions-test && node --import tsx scripts/rag2-live/reliable-chat-check.ts --controls
+
+PASS positive shin bone
+PASS positive thigh bone
+PASS positive wrist
+PASS positive leg, specifically tibia
+PASS positive closed tibia fracture, no surgery
+PASS positive not the thigh, the shin
+PASS positive It was his shin, not his wrist
+PASS generic leg remains ambiguous
+PASS no arbitrary row: shin and thigh
+PASS no arbitrary row: thigh and shin
+PASS no arbitrary row: tibia or femur
+PASS no arbitrary row: wrist and shin
+PASS no arbitrary row: not the thigh
+PASS no arbitrary row: no wrist fracture
+PASS unlisted part cannot be ignored
+PASS positive shin bone
+PASS positive thigh bone
+PASS positive wrist
+PASS positive leg, specifically tibia
+PASS positive closed tibia fracture, no surgery
+PASS positive not the thigh, the shin
+PASS positive It was his shin, not his wrist
+PASS generic leg remains ambiguous
+PASS no arbitrary row: shin and thigh
+PASS no arbitrary row: thigh and shin
+PASS no arbitrary row: tibia or femur
+PASS no arbitrary row: wrist and shin
+PASS no arbitrary row: not the thigh
+PASS no arbitrary row: no wrist fracture
+PASS unlisted part cannot be ignored
+PASS single generic region covers its specific part
+PASS same compensation row may cover two named parts
+PASS ordinary ambiguity permits a consistent selection
+PASS affirmative correction replaces stale words upstream
+34 checks passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS unresolved Jun fractured his shin and thigh in a fall. What could the fracture benefit pay? The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.
+Which bone should I use for this illustration?
+PASS corrected Jun fractured his shin and thigh in a fall. What could the fracture benefit pay? Updated: injury is now shin bone (you said Jun fractured his shin and thigh in a fall. What could the fracture benefit pay? at first).
+You told me only his shin bone was fractured, not his thigh.
+If the Fracture Benefit applies to Jun's case “Leg - below the knee (tibia or fibula)” (as you described: “only his shin bone was fractured, not his thigh”), the conditional illustration is S$10,000: 10% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+PASS unresolved Jun fractured his tibia or femur in a fall. We are not sure which. The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.
+Which bone should I use for this illustration?
+PASS corrected Jun fractured his tibia or femur in a fall. We are not sure which. Updated: injury is now shin bone (you said Jun fractured his tibia or femur in a fall. We are not sure which. at first).
+You told me only his shin bone was fractured, not his thigh.
+If the Fracture Benefit applies to Jun's case “Leg - below the knee (tibia or fibula)” (as you described: “only his shin bone was fractured, not his thigh”), the conditional illustration is S$10,000: 10% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+PASS unresolved Jun has no thigh fracture after a fall. What could the fracture benefit pay? The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.
+Which bone should I use for this illustration?
+PASS corrected Jun has no thigh fracture after a fall. What could the fracture benefit pay? Updated: injury is now shin bone (you said Jun has no thigh fracture after a fall. What could the fracture benefit pay? at first).
+You told me only his shin bone was fractured, not his thigh.
+If the Fracture Benefit applies to Jun's case “Leg - below the knee (tibia or fibula)” (as you described: “only his shin bone was fractured, not his thigh”), the conditional illustration is S$10,000: 10% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+6 route turns passed; no external calls
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS V1 benefit found, terms explained, one necessary question (which leg bone), no amount yet  C=1 K=1 S=1 U=1
+PASS V2 server evaluation: 10% x Jun's S$100,000 = S$10,000, conditional, source-bound, re-verifies  C=1 K=1 S=1 U=1
+PASS V3 correction: re-evaluated to 20% x S$100,000 = S$20,000; the S$10,000 is withdrawn and not shown as current  C=1 K=1 S=1 U=1
+PASS RC grader: the rc-live-1 grader passes the scripted RC1 conversation  C=1 K=1 S=1 U=1
+PASS G1 person switch: 5% x Mei Ling's S$200,000 = S$10,000; Jun's figures not reused  C=1 K=1 S=1 U=1
+PASS G4 isolation / lifecycle: an unknown id and another household's person are refused; the superseded 15% and the other household's S$300,000 never appear  C=1 K=1 S=1 U=1
+
+reliable-chat slice [tan] 6/6 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS V5 recorded malformed call 1 (Term Life money as base, PA money as percentage): refused toward evaluate_benefit with the benefit ids, then S$2,500 = 50% x the fixed S$5,000 limit  C=1 K=1 S=1 U=1
+PASS V6 recorded malformed call 2 (the leg row as proportion): refused toward evaluate_benefit with the benefit ids, then S$2,500 = 50% x the fixed S$5,000 limit  C=1 K=1 S=1 U=1
+PASS RC grader: the rc-live-1 grader passes a correct RCW1 answer  C=1 K=1 S=1 U=1
+
+reliable-chat slice [wong] 3/3 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS T5 death explanation: separate dated TL / PA for Adrian, event-date uncertainty, 100% Accidental Death, contact advice  C=1 K=1 S=1 U=1
+PASS T1 no orphaned timing clause: the borrowed 90-day statement is omitted whole (never "payable if death occurs" alone)  C=1 K=1 S=1 U=1
+PASS T2a the live CDA sentence, every clause supported, is kept whole (the uncertainty as its own statement)  C=1 K=1 S=1 U=1
+PASS T4 contact advice survives the unrelated insurer's clause; the server's contact step names the certificate's own insurer  C=1 K=1 S=1 U=1
+PASS T2b an unsupported clause omits its whole dependent statement (no "Says it ..." orphan under another benefit); the independent uncertainty stays  C=1 K=1 S=1 U=1
+PASS I2 event question: answered with Adrian's relevant benefits; no household inventory although household_documents was called  C=1 K=1 S=1 U=1
+PASS G5 fresh paraphrase: S$2,500 from 50% of the fixed S$5,000 limit, re-verifiable  C=1 K=1 S=1 U=1
+
+reliable-chat stage 3 [wong] 7/7 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS H1 hospital-day control: S$100 per day, one complete 24-hour period -> S$100 (never nights)  C=1 K=1 S=1 U=1
+PASS G2 side question answered for Jun (S$100 per day, 24-hour rule, 30 days), then the pending bone question is put back  C=1 K=1 S=1 U=1
+PASS T3 currency: the S$ restatement of a bare-$ amount is omitted whole; the named benefit and its non-monetary terms remain; no orphaned "payable only for a child under 18"  C=1 K=1 S=1 U=1
+
+reliable-chat stage 3 [tan] 3/3 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS CASE terms: missing (no part named) / ambiguous (a region two rows split) / unlisted (a part no row lists) / ordinary names
+PASS UNLISTED: collarbone -> unlisted_case (not needs_facts with unrelated options); the question offering the leg / wrist rows is refused; no question shown; the listed cases and the contact step are
+PASS UNLISTED: saved answer = returned answer
+PASS OPTION vs REPORTED: a valid below-the-knee option for a reported thigh bone -> case_conflict naming the thigh case, no S$10,000; the thigh option -> S$20,000
+PASS MISSING vs AMBIGUOUS: no part named -> needs_facts (missing, all cases); "his leg" -> needs_facts (ambiguous) offering only the two leg cases
+PASS CONTACT: Jun's personal schedule -> its insurer; the wording that belongs to it (same policy number) -> the schedule's insurer; Wei (not covered) -> refused; another household's schedule -> refused
+
+reliable-chat cases [tan] 6/6 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS CASE terms: missing (no part named) / ambiguous (a region two rows split) / unlisted (a part no row lists) / ordinary names
+PASS OPTION vs REPORTED (wrist + a valid Leg option): unlisted_case, no leg illustration; case words "broken wrist" -> unlisted_case; the answer states both tables' cases and the Kestrel contact step, with no question
+PASS WRIST: saved answer = returned answer
+PASS GRADER v2 calibration: the pre-registered wrist control (RCX) passes this correct, useful answer
+PASS CONTACT: the certificate -> Kestrel Life Ltd; the scheme summary (KestrelOne brand, same policy) -> the certificate's insurer, never the brand alone; the travel wording linked to nobody -> refused
+PASS CONTACT: travel wording LINKED to Adrian but with no personal policy of his behind it (an unrelated product) -> refused
+PASS CONTACT through the route: the linked travel wording is refused; one Kestrel Life Ltd step; never KestrelOne or Harbourline
+PASS CONTACT: Ethan (no policy of his own) -> refused for the parents' certificate
+
+reliable-chat cases [wong] 8/8 passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS RCT1a recorded calls: the invented id b1 is refused with the person's benefit ids; case "shin bone" now resolves to "Leg - below the knee (tibia or fibula)" -> S$10,000
+PASS RCT1a turn 3 recorded question about the insurer's review is refused; the turn ends with the corrected S$20,000 and no question
+[chat] output guard changed an answer
+PASS RCT2b recorded shape: an illustration shown beside a question, then corrected -> the withdrawal is SAID ("no longer applies") and S$20,000 shown
+PASS RCT2a recorded shape: the bone answered under another key -> the case question is not put back (turns 2 and 3); S$10,000 then S$20,000, withdrawal said
+PASS RCT2a recorded shape: the pre-registered grader v2 passes the replayed conversation
+PASS RCT1a: the pre-registered grader passes the replayed conversation
+
+reliable-chat live regressions [tan] passed
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS RCW1b recorded calls: the assumption is the household's recorded words ("Adrian broke his leg"), not the paraphrase; the gate accepts the S$2,500
+PASS RCW3 recorded call: "broken wrist" names none of the Simple Fracture cases -> unlisted_case (no options to choose from); the server's terms say it lists no case for a wrist; no question
+PASS P50A recorded steps: a contact step for the travel wording linked to nobody is refused; one Kestrel step for its two documents; no Harbourline
+PASS RCW1b: the pre-registered grader passes the replayed answer
+
+reliable-chat live regressions [wong] passed
+PASS control: RCW3 inventory dump -> FAIL (I1)
+PASS control: RCW3 good -> PASS
+PASS control: RCW1 orphan fragment -> FAIL (W1S,O1)
+PASS control: RCW1 no record -> FAIL (W1S)
+PASS control: RCT1 promise -> FAIL (T2S,T3S,P2)
+PASS control: budget refusal -> BLOCKED
+PASS control: v2 incomplete: the wrist control without contact advice -> FAIL (X4)
+PASS control: v2 unsupported insurer: claim advice naming KestrelOne (the summary's brand) alone -> FAIL (X4,IN1)
+PASS control: v2 good wrist control -> PASS
+PASS control: v2 incomplete correction: S$20,000 without saying the earlier estimate no longer applies -> FAIL (T2S,T3S,T3U,T3Q)
+PASS control: live RCT1b (v1 PASS): ends with an insurer-review question -> FAIL (T3Q,R3)
+PASS control: live RCT1b (v1 PASS): a question after the corrected illustration -> FAIL (T3Q,R3)
+PASS control: live RCW3 graded as the wrist control: asks the household to choose neck / hip / leg -> FAIL (X2,X3,X4)
+PASS control: live P50A: contact advice naming the travel insurer (Harbourline) -> FAIL (X1,X2,IN1)
+PASS control: live RCW1a (v1 PASS, correct and useful) still passes -> PASS
+reliable-chat grader controls all passed
+
+## pr53-final-rag2-calc-test
+
+> dearpolicy-mvp@1.0.0-rc.14 rag2:calc-test
+> node --import tsx scripts/rag2-calc-regressions.ts
+
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS D1 day counts under each rule (across midnight, local +08:00 dates, midnight admission, same day)
+PASS D2 day-count wording is read, never defaulted; two different rules are not resolved by picking one
+PASS D3 first-full-day exceptions stated in the wording (admission before 12:00 noon counts as a full day) are honoured; none stated -> never assumed
+PASS H1 complete-24-hour rule: 63 h stay -> 2 periods x S$120 = S$240 indicative estimate (record re-runs)
+PASS H2 child's column; each night after the first 2 nights, up to 20 days: 5 nights -> 3 x S$200 = S$600
+PASS H3 first full day + minimum stay + exclusion: unresolved until the household settles the exclusion; then 2 full days x S$80 (child) = S$160
+PASS H10 first full day with the wording's noon exception: admitted 09:00 1 March, discharged 11:00 4 March -> 1, 2, 3 March x S$80 = S$240 (record re-runs, the gate keeps it; a tampered exception is rejected)
+PASS H4 day cap hit exactly: 30 full days (cap 30) -> S$2,400; 31 full days -> still S$2,400
+PASS H5 no day-count rule in the wording -> unresolved: printed S$50 rate + 'how days are counted'; never an estimate
+PASS H6 dates missing -> unresolved with the specific inputs the rule needs (dates AND times for first-full-day)
+PASS H7 minimum stay not met (4 h) -> not payable, with the wording's reason, no amount
+PASS H8 household nights are never payable days: compute per_day / product with a household count refused; the old nights x rate estimate is gone
+PASS H9 assumed dates only for a what-if: refused for purpose question; an illustration for purpose what_if
+PASS B1 fracture: min(bill S$2,400, S$800 per fracture, S$1,500 child annual limit) = S$800
+PASS B2 deductible larger than the bill -> not payable (never a negative or S$0 'estimate')
+PASS B3 deductible then 10% co-insurance capped at S$3,000: S$50,000 -> S$46,500 -> S$43,500
+PASS B4 rounding half-up to the cent, and the bill steps reproduce calculateMedicalReimbursement exactly
+PASS B5 policy rounding in a record (to the dollar, down) re-runs; a wrong rounding is rejected
+PASS B6 deduction order not printed -> unresolved with that requirement (no competing guess)
+PASS B8 order of the excess and the limit follows the wording: silent and it matters -> unresolved; silent and it does not -> estimate; stated (excess first) -> applied as stated
+PASS B7 mixed currency refused: an SGD bill against a US$ limit -> unresolved; compute sum of SGD + USD refused
+PASS L1 lump sum: a question gives the printed sum + the reviewed-definition requirement; a what-if gives 25% of S$150,000 = S$37,500 (cap S$50,000) as an illustration
+PASS V1 valid cap on the household's bill survives (household figure attributed, cap and result re-run)
+PASS V2 valid deductible + co-insurance cap survives; the household's bill without attribution is rejected
+PASS V3 valid per-day with the wording's day-count rule survives
+PASS V4 wrong operation: a 'min' step whose output is the sum
+PASS V5 wrong column: the limit bound to the Insured Adult column for the child
+PASS V6 wrong person: an operand bound to another household member
+PASS V7 wrong version: the record names another document hash
+PASS V8 wrong day-count rule: 'each night' where the wording says first full day
+PASS V8b an estimate whose record carries an assumption the sentence does not state
+PASS V9 an unresolved condition in an estimate
+PASS V10 household words not in their messages
+PASS V11 nights for days: a hospital-cash record without a day count from the dates
+PASS V12 payout wording, a total, and an illustration without a what-if are rejected
+PASS V13 a number merely printed on the cited page never validates a calculation (S$160 is the ICU row)
+PASS V14 household words from an earlier turn of the same conversation are accepted (stored user messages)
+PASS C1 composer: an unresolved result gives the printed rate (bound) plus the specific requirement; an estimate carries its record
+PASS R1 claim records: a claim scenario creates one (no amount on it); an ordinary question or a what-if never does
+
+Expected vs actual:
+| case | expected | actual |
+|---|---|---|
+| first full day, 1 Mar 20:00 -> 4 Mar 11:00 | 2 | 2 |
+| complete 24h, same stay (63 h) | 2 | 2 |
+| each night, same stay | 3 | 3 |
+| day or part of a day, same stay | 4 | 4 |
+| first full day, admitted 00:00 local | 3 | 3 |
+| each night, 01:00 local (+08:00 is the previous UTC date) -> 23:00 same day | 0 | 0 |
+| first full day, same-day stay | 0 | 0 |
+| complete 24h, 23h59m | 0 | 0 |
+| timestamp without offset is blocked | MISSING_TIMEZONE_OFFSET | MISSING_TIMEZONE_OFFSET |
+| morning admission 09:00 3 Oct -> 6 Oct 10:15: 3, 4, 5 Oct | 3 | 3 |
+| evening admission 21:40 3 Oct -> 6 Oct 10:15: 4, 5 Oct | 2 | 2 |
+| exactly 12:00 is not before noon | 2 | 2 |
+| no exception stated -> admission day never counted | 2 | 2 |
+| H24 kind | indicative_estimate | indicative_estimate |
+| H24 amount | 240 | 240 |
+| NIGHT amount (5 nights, 2 excess) | 600 | 600 |
+| H24 Ben's (child) column rate | 60 | 60 |
+| FFD with open exclusion: kind | unresolved | unresolved |
+| FFD with open exclusion: amount | null | null |
+| FFD settled: amount (2 full days) | 160 | 160 |
+| noon exception applied | indicative_estimate 240 | indicative_estimate 240 |
+| gate keeps the estimate | 0 | 0 |
+| cap exactly (30 full days) | 2400 | 2400 |
+| cap exceeded (31 full days) | 2400 | 2400 |
+| PLAIN kind | unresolved | unresolved |
+| PLAIN amount | null | null |
+| FFD no dates kind | unresolved | unresolved |
+| FFD dates without times | unresolved | unresolved |
+| FFD 4 h stay | not_payable | not_payable |
+| compute per_day with household nights | refused | refused |
+| H24 what-if (5 x 24 h) | conditional_illustration 600 | conditional_illustration 600 |
+| fracture cap | 800 | 800 |
+| fracture kind | indicative_estimate | indicative_estimate |
+| child annual limit read from the Insured Child column | 1500 | 1500 |
+| deductible > bill | not_payable | not_payable |
+| deductible + co-insurance cap | 43500 | 43500 |
+| S$12,345.67 - S$3,500 then 90% (half-up) | 7961.1 | 7961.1 |
+| core: 10% of 1005 cents, policy bears (half-up) | 905 | 905 |
+| core: 10% of 1015 cents (913.5 -> 914) | 914 | 914 |
+| claims calculator on the same core | 9.14 | 9.14 |
+| order unresolved | unresolved | unresolved |
+| silent, order matters (S$1,100 vs S$1,200) | unresolved | unresolved |
+| silent, either order S$900 | indicative_estimate 900 | indicative_estimate 900 |
+| excess first, then the S$1,200 limit: min(1,400, 1,200) | indicative_estimate 1200 | indicative_estimate 1200 |
+| SGD bill vs USD limit | unresolved | unresolved |
+| CI question | unresolved | unresolved |
+| CI what-if | conditional_illustration 37500 | conditional_illustration 37500 |
+| gate: valid min/cap record | kept | kept |
+| gate: valid deduction record | kept | kept |
+| gate: household figure unattributed | rejected | rejected |
+| gate: per-day with first-full-day rule | kept | kept |
+| V4 wrong operation -> rejected | rejected | rejected |
+| V5 wrong column -> rejected | rejected | rejected |
+| V6 wrong person -> rejected | rejected | rejected |
+| V7 wrong version -> rejected | rejected | rejected |
+| V8 wrong day-count rule -> rejected | rejected | rejected |
+| V8b an estimate whose record carries an assumption the sentence does not state -> rejected | rejected | rejected |
+| V9 an unresolved condition in an estimate -> rejected | rejected | rejected |
+| V10 household words not in their messages -> rejected | rejected | rejected |
+| V11 nights for days -> rejected | rejected | rejected |
+| gate: payout wording | rejected | rejected |
+| gate: estimate stated as a total | rejected | rejected |
+| gate: illustration for a what-if | kept | kept |
+| gate: illustration without a what-if asked | rejected | rejected |
+| gate: page number without a calculation | rejected | rejected |
+| gate: earlier-turn household words | kept | kept |
+| gate: household words found nowhere | rejected | rejected |
+| composer unresolved: sentences | printed+requirement | printed+requirement |
+| composer estimate: label + record | true 1 | true 1 |
+| composer attributes the bill | Indicative estimate: for the S$2,400 bill you mentioned, Ben's cover comes to S$800. | Indicative estimate: for the S$2,400 bill you mentioned, Ben's cover comes to S$800. |
+| already attributed: unchanged | Indicative estimate: for the S$2,400 bill you gave, it comes to S$800. | Indicative estimate: for the S$2,400 bill you gave, it comes to S$800. |
+| a printed figure is never attributed to the household | Indicative estimate: up to the S$800 limit, it comes to S$800. | Indicative estimate: up to the S$800 limit, it comes to S$800. |
+| claim purpose without recorded event facts | null | null |
+| ordinary question with event facts | null | null |
+| claim scenario creates a record | 1 | 1 |
+| the same conversation updates the same record | 6786adcd-9ef0-444d-949d-f9ec4b541bc7 | 6786adcd-9ef0-444d-949d-f9ec4b541bc7 |
+
+rag2:calc-test 39/39 passed
+
+## pr53-final-rag2-facts-test
+
+> dearpolicy-mvp@1.0.0-rc.14 rag2:facts-test
+> node --import tsx scripts/rag2-facts-regressions.ts
+
+  ok  F1 'not stated' from words that do not say it is refused
+  ok  F2 placeholder "unknown" is refused
+  ok  F2 placeholder "Not mentioned" is refused
+  ok  F2 placeholder "N/A" is refused
+  ok  F2 placeholder "unspecified" is refused
+  ok  F2 placeholder "not given" is refused
+  ok  F2 placeholder "to be confirmed" is refused
+  ok  F2 placeholder "no details given" is refused
+  ok  F3 the household saying they are not sure may be recorded (so it is never asked again)
+  ok  F4 a real answer is still recorded
+  ok  F5 a value merely containing 'not' is not a placeholder
+rag2 facts regressions: 11 passed
+
+## pr53-final-security-import-boundary-test
+
+> dearpolicy-mvp@1.0.0-rc.14 security:import-boundary-test
+> node --import tsx scripts/import-boundary-regressions.ts
+
+import-boundary regressions passed: scanned 388 files under app/, lib/, components/ and middleware.ts for devAccountId() -- none found outside lib/db/client.ts's own definition; scanned 99 files under app/, components/ and middleware.ts for createServiceSupabaseClient()/withServiceTransaction() -- none found; scanned 91 files under app/ for the in-memory createRateLimiter() -- none found (every route uses the shared Postgres-backed createDbRateLimiter() instead); no production module imports the operator-only reviewer provisioning module.
+
+## pr53-final-security-ci-workflow-coverage-test
+
+> dearpolicy-mvp@1.0.0-rc.14 security:ci-workflow-coverage-test
+> node --import tsx scripts/ci-workflow-coverage-regressions.ts
+
+ci-workflow-coverage regressions passed (real file): all 132 required launch suites from REQUIRED_CI_SUITES have a corresponding `npm run` step in .github/workflows/ci.yml.
+ci-workflow-coverage sabotage cycle passed: deleting `npm run rag2:binding-test` from an in-memory copy of .github/workflows/ci.yml makes findMissingSuites() report it missing (caught); the real, unmodified file still reports zero missing suites (no false positive).
+
+## pr53-browser-final
+Local database reachable
+seeded the report-layout households
+Real chat page reachable
+
+> dearpolicy-mvp@1.0.0-rc.14 e2e:reliable-chat
+> playwright test -c e2e/support/playwright.reliable-chat.config.ts
+
+
+Running 3 tests using 1 worker
+
+--- V1 click to visible answer 1987 ms
+--- V1 DISPLAYED:
+DearPolicy
+
+The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%. The Fracture Benefit is for a Fracture caused by an Accident and confirmed by X-ray.
+
+A FACT THAT CHANGES THIS ASSESSMENT
+Which leg bone was it — the thigh bone (femur), or below the knee (tibia or fibula)?
+This changes what your policy pays under: “Leg - below the knee (tibia or fibula) 10%” (page 1)
+Answer
+Show full assessment
+--- V1 loop (recorded) 270 ms
+--- V2 click to visible answer 3002 ms
+--- V2 DISPLAYED:
+DearPolicy
+
+You told me it was the shin bone.
+
+If the Fracture Benefit applies to Jun's case “Leg - below the knee (tibia or fibula)” (as you described: “Jun broke his leg playing football”), the conditional illustration is S$10,000: 10% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+
+NEXT STEP
+
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+
+SOURCES
+--- V2 loop (recorded) 138 ms
+--- V3 click to visible answer 1996 ms
+--- V3 DISPLAYED:
+DearPolicy
+
+Updated: bone is now thigh bone (you said shin bone at first). The earlier estimate worked out from it no longer applies.
+
+If the Fracture Benefit applies to Jun's case “Leg - thigh bone (femur)” (as you described: “Jun broke his leg playing football”), the conditional illustration is S$20,000: 20% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+
+SOURCES
+--- V3 loop (recorded) 86 ms
+--- P1 reopened page contains V3: true
+  ✓  1 [chromium] › e2e/tests/reliable-chat.spec.ts:41:5 › RC1: benefit -> terms -> question -> server evaluation -> correction, then reopened (1.1m)
+--- RC2 click to visible answer 2057 ms
+--- RC2 DISPLAYED:
+DearPolicy
+
+The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%. It lists no case for a collarbone.
+
+NEXT STEP
+
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+
+SOURCES
+--- RC2 loop (recorded) 137 ms
+  ✓  2 [chromium] › e2e/tests/reliable-chat.spec.ts:75:5 › RC2: a part no listed case covers is said with the listed cases and a contact step; no question reaches the page (3.0s)
+--- RC3 unresolved DISPLAYED:
+DearPolicy
+
+The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.
+
+A FACT THAT CHANGES THIS ASSESSMENT
+Which bone should I use for this illustration?
+This changes what your policy pays under: “Leg - below the knee (tibia or fibula) 10%” (page 1)
+Answer
+Show full assessment
+--- RC3 unresolved loop (recorded) 102 ms
+--- RC3 corrected DISPLAYED:
+DearPolicy
+
+Updated: injury is now shin bone (you said Jun fractured his shin and thigh in a fall. What could the fracture benefit pay? at first).
+
+You told me only his shin bone was fractured, not his thigh.
+
+If the Fracture Benefit applies to Jun's case “Leg - below the knee (tibia or fibula)” (as you described: “only his shin bone was fractured, not his thigh”), the conditional illustration is S$10,000: 10% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.
+
+NEXT STEP
+
+Contact Aurora Assurance Pte. Ltd. about the FamilyGuard Personal Accident - Policy Schedule to ask what it needs for a claim.
+
+SOURCES
+--- RC3 corrected loop (recorded) 110 ms
+  ✓  3 [chromium] › e2e/tests/reliable-chat.spec.ts:88:5 › RC3: conflicting bones save no estimate; a correction gives the shin calculation without repeating the question (5.5s)
+
+  3 passed (1.3m)
+Browser verification completed
+
+## pr53-build
+✓ Compiled successfully in 12.5s
+  Collecting page data using 8 workers ...
+  Generating static pages using 8 workers (0/58) ...
+  Generating static pages using 8 workers (14/58) 
+  Generating static pages using 8 workers (28/58) 
+  Generating static pages using 8 workers (43/58) 
+✓ Generating static pages using 8 workers (58/58) in 920ms
+  Finalizing page optimization ...
