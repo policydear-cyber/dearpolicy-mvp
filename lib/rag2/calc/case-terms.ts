@@ -65,17 +65,20 @@ const itemsOf = (label: string) => label.split(/,|;|\/|\bor\b|\band\b/i).map((x)
 
 /** The listed cases the household's words name. */
 export function caseFor(rows: CaseRow[], words: string): CaseChoice {
-  const want = partsIn(words);
-  if (!want.length) return { kind: "missing" };
+  const named = partsIn(words);
+  if (!named.length) return { kind: "missing" };
+  // Explicitly negated anatomy cannot identify an injury. Keep affirmative parts
+  // ("not the thigh, the shin" -> shin); infer no diagnosis from negative facts alone.
+  const negated = new Set(PARTS.filter((p) => {
+    const matches = [...words.matchAll(new RegExp(p.words.source, "gi"))];
+    return matches.some((m) => /\b(?:not|no|neither|without)(?:\s+(?:the|a|an|his|her|my|their|left|right|broken|fractured|injured)){0,3}\s*$/i.test(words.slice(Math.max(0, m.index! - 60), m.index)));
+  }).map((p) => p.id));
+  const want = named.filter((p) => !negated.has(p));
+  if (!want.length) return { kind: "ambiguous", rows: [...rows], parts: named, conflicting: true };
   const rowInfo = rows.map((r) => ({ row: r, parts: partsIn(r.label), items: itemsOf(r.label).map(partsIn) }));
   let candidates: CaseRow[] | null = null;
   let choose = false;
-  // Negated anatomical terms are not positive evidence for a row. Leave the case unresolved.
-  const negated = PARTS.some((p) => {
-    const matches = [...words.matchAll(new RegExp(p.words.source, "gi"))];
-    return matches.some((m) => /\b(?:not|no|neither|without)(?:\s+(?:the|a|an|his|her|my|their|left|right|broken|fractured|injured)){0,3}\s*$/i.test(words.slice(Math.max(0, m.index! - 60), m.index)));
-  });
-  let conflicting = negated;
+  let conflicting = false;
   const unmatched: string[] = [];
   for (const p of want) {
     // 1. a row printing the part itself
