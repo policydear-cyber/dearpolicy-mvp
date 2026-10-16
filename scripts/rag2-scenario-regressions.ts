@@ -16,6 +16,7 @@
  *
  * Evidence class: PLUMBING / CONTROL evidence (scripted stand-in). RELEASE_TRANSCRIPT=1 prints every conversation.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setEnv, startHarness, type Harness } from "./fixtures/rag2-loop/harness";

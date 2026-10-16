@@ -23,6 +23,7 @@
  * PGlite + the adversarial households (scripts/fixtures/rag2-adv, read-only) + the REAL chat route with
  * DEARPOLICY_RAG_LOOP=1 and the test-only scripted model. Exit 1 if any check fails.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { ChatAnswer } from "@/types";

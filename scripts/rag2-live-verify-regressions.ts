@@ -9,6 +9,7 @@
  *   node --import tsx scripts/rag2-live-verify-regressions.ts   (npm run rag2:live-verify-test)
  *   PART=binding node --import tsx scripts/rag2-live-verify-regressions.ts
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as RH from "./fixtures/rag2-stress/report-household";
@@ -146,9 +147,9 @@ async function main() {
     // insurer alias, source-bound: the scheme summary of the same policy number is stored under a brand name
     await h.db.query("UPDATE policies SET insurer='MeriLife' WHERE id=$1", [BH.doc("GTL_SUM").id]);
     const DATED = "Hypothetically, Darren died in a car accident in Japan on 3 October 2026, the day of the accident. What can I do?";
-    const [alias] = await run([{ user: DATED, steps: [() => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ text: "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.", value_ids: [vidOf(v, /Term Life/)], subject_id: D }], next_steps: ["Contact MeriLife and Lumen General to report the death."] })]] }]);
+    const [alias] = await run([{ user: DATED, steps: [() => [call("person_benefits", { subject_id: D })], (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ text: "Darren’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.", value_ids: [vidOf(v, /Term Life/)], subject_id: D }], next_steps: ["Contact MeriLife to report the death.", "Notify Lumen General as well."] })]] }]);
     await h.db.query("UPDATE policies SET insurer='Meridian Life Ltd' WHERE id=$1", [BH.doc("GTL_SUM").id]);
-    await check("INSURER a name the same policy's own documents use for the certificate's insurer (MeriLife, same policy number) is that insurer; an unrelated insurer (Lumen General) is still taken out", () => {
+    await check("INSURER a name the same policy's own documents use for the certificate's insurer (MeriLife, same policy number) is that insurer; a step naming an unrelated insurer (Lumen General) is still omitted (whole: reliable chat contract C -- a joint step is never rewritten)", () => {
       assert.match(alias.v, /\[next\] Contact MeriLife to report the death\./, alias.v); assert.ok(!/Lumen General/.test(alias.v), alias.v);
     });
     // the death question's ONE question, when the wording counts the window "from the date of the Accident"
@@ -212,9 +213,10 @@ async function main() {
     ] })]] }]);
     const { personBenefits } = await import("@/lib/rag2/benefits");
     const view = await personBenefits(LH.ACCOUNT, A);
-    await check("CONDITION death and dismemberment are adjacent and only dismemberment prints the 365-day window: the death sentence does not borrow it, the dismemberment sentence keeps it, and no accident-date question is attached to death", () => {
+    await check("CONDITION death and dismemberment are adjacent and only dismemberment prints the 365-day window: the death sentence that borrows it is omitted whole, the dismemberment sentence keeps it, and no accident-date question is attached to death", () => {
       assert.deepEqual(view.benefits.find((b) => b.benefit.label === "Accidental Death")?.conditions, []);
-      assert.match(death.v, /pays Accidental Death at 100% of the Sum Insured\./, death.v);
+      // reliable chat (contract C): the death statement that borrows the window is omitted WHOLE, not trimmed
+      assert.ok((death.trace.dropped ?? []).some((d: any) => /pays Accidental Death at 100% of the Sum Insured if death occurs within 365 days/.test(d.sentence)), JSON.stringify(death.trace.dropped));
       assert.ok(!/Accidental Death[^.\n]*365/.test(death.v), death.v);
       assert.match(death.v, /Permanent Dismemberment[^.\n]*within 365 days of the Accident/, death.v);
       assert.ok(!(death.answer.questions ?? []).some((q: any) => /accident/i.test(q.text) && /date/i.test(q.text) && /365/.test(q.why ?? "")), JSON.stringify(death.answer.questions));
@@ -224,7 +226,7 @@ async function main() {
     // ------------------------------------------------ 3. insurer aliases need corroboration and a product relationship
     const DATED = "Hypothetically, Adrian died in a car accident in Japan on 3 October 2026, the day of the accident. What can I do?";
     const stepTurn = (steps: string[]) => ({ user: DATED, steps: [() => [call("person_benefits", { subject_id: A })], (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: amounts(v), next_steps: steps })]] });
-    const [al1] = await run([stepTurn(["Contact KestrelOne and Falcon General to report the death."])]);
+    const [al1] = await run([stepTurn(["Contact KestrelOne to report the death.", "Notify Falcon General as well."])]);
     const sumId = LH.doc("SUMMARY").id;
     const sumP5 = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=5", [sumId])).rows[0].text as string;
     await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=5", [sumId, sumP5.replace("Underwritten by Kestrel Life Ltd.\n", "")]);

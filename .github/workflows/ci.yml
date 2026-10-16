@@ -193,6 +193,16 @@ jobs:
         run: npm run verify:gate-test
       - name: Conversational RAG retrieval tools behind DEARPOLICY_RAG_TOOLS (default off; household-scoped, active/released/current documents only; the subject's table column before the value; every value with its evidence -- page, row, column, passage offsets; integer-cent calculations labelled printed limit vs indicative estimate; bindings and records accepted by the save-time gate)
         run: npm run rag2:tools-test
+      - name: Reliable chat conflicting and negated cases (no arbitrary row or saved estimate; an affirmative correction clears the question and saves a re-verifiable illustration)
+        run: npm run reliable-chat:conflicts-test
+      - name: Reliable chat first slice (server-resolved benefit records and evaluate_benefit -- the correct benefit retrieved, its supported terms explained, a necessary question asked, the case evaluated on the server and shown as a verified conditional illustration, a correction withdrawing it; two households with different bases)
+        run: npm run reliable-chat:slice-test
+      - name: Reliable chat stage 3 (death explanations without orphaned clauses, contact advice for the person's own documents, an event question never answered with an inventory, the hospital-day control, a side question, a bare-$ amount omitted whole)
+        run: npm run reliable-chat:stage3-test
+      - name: Reliable chat real-model regressions (the two rc-live-1 failures replayed with the model's exact recorded tool calls -- "shin bone" for the below-the-knee row; the household's own words, not the model's paraphrase, as an illustration's assumption)
+        run: npm run reliable-chat:live-regressions-test
+      - name: Reliable chat case selection and contact eligibility on the active route (a part no listed case covers is said, never asked; an option id never overrides the reported case; missing vs ambiguous vs unlisted; contact steps only for the person's own policy or wording that belongs to it) and the real-model grader's controls
+        run: npm run reliable-chat:cases-test && node --import tsx scripts/rag2-live/reliable-chat-check.ts --controls
       - name: Conversational RAG loop behind DEARPOLICY_RAG_LOOP (default off; one model-driven loop through the real chat route with a scripted test model -- the person resolved first and asked once, one policy-relevant question at a time, never a known fact again, an interruption answered then the pending question re-asked, a correction updating facts and withdrawing what was derived, every visible sentence tied to evidence and checked by the save-time gate, indicative estimates labelled and never totalled)
         run: npm run rag2:loop-test
       - name: Conversational RAG conversation state, fact provenance, evidence precision and usage accounting (integration, two synthetic households, scripted test model and a fake-fetch hosted adapter -- facts only from the household's words, no inferred classifications or payable days; speaker vs active subject in a shared login; stepchildren offered and labelled; supporting sentence / row with header, continuation and footnote; every loop model call counted, recorded and stopped by per-turn, household, run, time and cancellation limits with an honest reply)

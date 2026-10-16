@@ -10,6 +10,7 @@
  * reply exactly as saved in chat_messages. `-- --out <file>` also writes the transcript as Markdown.
  * Exit code 0 always (a transcript, not a test: rag2:adversarial-test holds the assertions).
  */
+import "./fixtures/legacy-contract";
 import { writeFile } from "node:fs/promises";
 import type { ChatAnswer } from "@/types";
 import { setAdvEnv, startAdvHarness, type AdvHarness } from "./fixtures/rag2-adv/harness";

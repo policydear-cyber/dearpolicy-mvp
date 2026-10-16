@@ -1,0 +1,603 @@
+[
+  {
+    "scenario": "RCT1a",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "T1C",
+        "dim": "C",
+        "name": "turn 1: the Fracture Benefit for Jun; no amount before the bone is known (no S$10,000 / S$20,000); nothing superseded (15%) or from the other household (S$300,000)",
+        "ok": true
+      },
+      {
+        "id": "T1K",
+        "dim": "K",
+        "name": "turn 1: the supported terms -- the leg rows (thigh bone 20%, below the knee 10%) as a percentage of Jun's sum insured (S$100,000)",
+        "ok": true
+      },
+      {
+        "id": "T1U",
+        "dim": "U",
+        "name": "turn 1: exactly one necessary question, about which leg bone (thigh / femur vs below the knee / shin / tibia / fibula)",
+        "ok": true
+      },
+      {
+        "id": "T2C",
+        "dim": "C",
+        "name": "turn 2: the conditional illustration S$10,000 (below the knee 10% x S$100,000); not S$20,000",
+        "ok": false,
+        "detail": "You told me the doctor said it was the shin bone; that detail does not identify which listed case applies. The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.\nWhich listed case applies to Jun: a thigh bone (femur), or a bone below the knee (tibia or fibula)?"
+      },
+      {
+        "id": "T2S",
+        "dim": "S",
+        "name": "turn 2: from a saved calculation that recomputes to S$10,000, its 10% bound to the wording and its S$100,000 to the schedule",
+        "ok": false,
+        "detail": "null"
+      },
+      {
+        "id": "T2U",
+        "dim": "U",
+        "name": "turn 2: answers without a further question and without 'couldn't confirm'",
+        "ok": false,
+        "detail": "You told me the doctor said it was the shin bone; that detail does not identify which listed case applies. The FamilyGuard Personal Accident - Policy Wording (page 1) pays the Fracture Benefit as a percentage of Jun's own sum insured (S$100,000 on the FamilyGuard Personal Accident - Policy Schedule) for each listed case: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%; Wrist 5%; Finger or toe 2%.\nWhich listed case applies to Jun: a thigh bone (femur), or a bone below the knee (tibia or fibula)?"
+      },
+      {
+        "id": "T3C",
+        "dim": "C",
+        "name": "turn 3: the corrected illustration S$20,000 (thigh bone 20% x S$100,000); S$10,000 not presented as current",
+        "ok": true
+      },
+      {
+        "id": "T3S",
+        "dim": "S",
+        "name": "turn 3: from a saved calculation that recomputes to S$20,000",
+        "ok": true
+      },
+      {
+        "id": "T3U",
+        "dim": "U",
+        "name": "turn 3: the correction is acknowledged and the earlier estimate withdrawn (said, or recorded as withdrawn)",
+        "ok": true
+      },
+      {
+        "id": "T3Q",
+        "dim": "U",
+        "name": "turn 3 (v2): the corrected illustration ends the turn -- no further question; the withdrawal is SAID on the page",
+        "ok": false,
+        "detail": "Updated: fracture bone is now thigh bone (you said shin bone at first). If the Fracture Benefit applies to Jun's case “Leg - thigh bone (femur)”, the conditional illustration is S$20,000: 20% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision.\nHas the insurer made a reviewed medical decision that Jun’s diagnosis meets the policy’s definition of “Leg - thigh bone (femur)”?"
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R2",
+        "dim": "U",
+        "name": "turn 2: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN2",
+        "dim": "C",
+        "name": "turn 2: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O2",
+        "dim": "U",
+        "name": "turn 2: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P2",
+        "dim": "U",
+        "name": "turn 2: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G2",
+        "dim": "S",
+        "name": "turn 2: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R3",
+        "dim": "U",
+        "name": "turn 3: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": false,
+        "detail": "Has the insurer made a reviewed medical decision that Jun’s diagnosis meets the policy’s definition of “Leg - thigh bone (femur)”?"
+      },
+      {
+        "id": "IN3",
+        "dim": "C",
+        "name": "turn 3: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O3",
+        "dim": "U",
+        "name": "turn 3: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P3",
+        "dim": "U",
+        "name": "turn 3: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "turn 3: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "RCT1b",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "T1C",
+        "dim": "C",
+        "name": "turn 1: the Fracture Benefit for Jun; no amount before the bone is known (no S$10,000 / S$20,000); nothing superseded (15%) or from the other household (S$300,000)",
+        "ok": true
+      },
+      {
+        "id": "T1K",
+        "dim": "K",
+        "name": "turn 1: the supported terms -- the leg rows (thigh bone 20%, below the knee 10%) as a percentage of Jun's sum insured (S$100,000)",
+        "ok": true
+      },
+      {
+        "id": "T1U",
+        "dim": "U",
+        "name": "turn 1: exactly one necessary question, about which leg bone (thigh / femur vs below the knee / shin / tibia / fibula)",
+        "ok": true
+      },
+      {
+        "id": "T2C",
+        "dim": "C",
+        "name": "turn 2: the conditional illustration S$10,000 (below the knee 10% x S$100,000); not S$20,000",
+        "ok": true
+      },
+      {
+        "id": "T2S",
+        "dim": "S",
+        "name": "turn 2: from a saved calculation that recomputes to S$10,000, its 10% bound to the wording and its S$100,000 to the schedule",
+        "ok": true
+      },
+      {
+        "id": "T2U",
+        "dim": "U",
+        "name": "turn 2: answers without a further question and without 'couldn't confirm'",
+        "ok": true
+      },
+      {
+        "id": "T3C",
+        "dim": "C",
+        "name": "turn 3: the corrected illustration S$20,000 (thigh bone 20% x S$100,000); S$10,000 not presented as current",
+        "ok": true
+      },
+      {
+        "id": "T3S",
+        "dim": "S",
+        "name": "turn 3: from a saved calculation that recomputes to S$20,000",
+        "ok": true
+      },
+      {
+        "id": "T3U",
+        "dim": "U",
+        "name": "turn 3: the correction is acknowledged and the earlier estimate withdrawn (said, or recorded as withdrawn)",
+        "ok": true
+      },
+      {
+        "id": "T3Q",
+        "dim": "U",
+        "name": "turn 3 (v2): the corrected illustration ends the turn -- no further question; the withdrawal is SAID on the page",
+        "ok": false,
+        "detail": "Updated: fracture bone is now thigh bone (you said shin bone at first). The earlier estimate worked out from it no longer applies. If the Fracture Benefit applies to Jun's case “Leg - thigh bone (femur)”, the conditional illustration is S$20,000: 20% of Jun's sum insured of S$100,000 (FamilyGuard Personal Accident), under the FamilyGuard Personal Accident - Policy Wording; it is an illustration from the document's terms, not a payment or an insurer's decision. The policy says the Fracture Benefit applies to a fracture caused by an Accident and confirmed by X-ray.\nHas the insurer reviewed Jun’s diagnosis and confirmed that it meets the policy’s definition of “Leg - thigh bone (femur)”?"
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R2",
+        "dim": "U",
+        "name": "turn 2: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN2",
+        "dim": "C",
+        "name": "turn 2: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O2",
+        "dim": "U",
+        "name": "turn 2: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P2",
+        "dim": "U",
+        "name": "turn 2: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G2",
+        "dim": "S",
+        "name": "turn 2: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R3",
+        "dim": "U",
+        "name": "turn 3: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": false,
+        "detail": "Has the insurer reviewed Jun’s diagnosis and confirmed that it meets the policy’s definition of “Leg - thigh bone (femur)”?"
+      },
+      {
+        "id": "IN3",
+        "dim": "C",
+        "name": "turn 3: contact / claim advice names only the insurer of the person's own policy (Aurora Assurance)",
+        "ok": true
+      },
+      {
+        "id": "O3",
+        "dim": "U",
+        "name": "turn 3: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P3",
+        "dim": "U",
+        "name": "turn 3: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "turn 3: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "RCW1a",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "W1C",
+        "dim": "C",
+        "name": "S$2,500, conditional; never a product of the S$1,000,000 / S$600,000 sums (no S$300,000 / S$500,000 / S$3,000,000)",
+        "ok": true
+      },
+      {
+        "id": "W1K",
+        "dim": "K",
+        "name": "the terms: 50% of the Simple Fracture Benefit Limit of S$5,000",
+        "ok": true
+      },
+      {
+        "id": "W1S",
+        "dim": "S",
+        "name": "from a saved calculation that recomputes to S$2,500 with 50% and S$5,000 bound to the Summary of Benefits",
+        "ok": true
+      },
+      {
+        "id": "W1U",
+        "dim": "U",
+        "name": "answers without 'couldn't confirm' and without a question (the case is given)",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Kestrel Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "RCW1b",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "W1C",
+        "dim": "C",
+        "name": "S$2,500, conditional; never a product of the S$1,000,000 / S$600,000 sums (no S$300,000 / S$500,000 / S$3,000,000)",
+        "ok": false,
+        "detail": "The summary lists Leg under the Simple Fracture schedule, but the uploaded summary does not establish whether Adrian’s diagnosis meets its definition.\nI haven’t given a what-if amount for “Simple Fracture” in Public Officers Group Personal Accident - Summary of Benefits, because I couldn’t confirm the figures it uses against your documents.\nContact KestrelOne (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Personal Accident - Summary of Benefits to ask what it needs for a claim."
+      },
+      {
+        "id": "W1K",
+        "dim": "K",
+        "name": "the terms: 50% of the Simple Fracture Benefit Limit of S$5,000",
+        "ok": false,
+        "detail": "The summary lists Leg under the Simple Fracture schedule, but the uploaded summary does not establish whether Adrian’s diagnosis meets its definition.\nI haven’t given a what-if amount for “Simple Fracture” in Public Officers Group Personal Accident - Summary of Benefits, because I couldn’t confirm the figures it uses against your documents.\nContact KestrelOne (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Personal Accident - Summary of Benefits to ask what it needs for a claim."
+      },
+      {
+        "id": "W1S",
+        "dim": "S",
+        "name": "from a saved calculation that recomputes to S$2,500 with 50% and S$5,000 bound to the Summary of Benefits",
+        "ok": false,
+        "detail": "null"
+      },
+      {
+        "id": "W1U",
+        "dim": "U",
+        "name": "answers without 'couldn't confirm' and without a question (the case is given)",
+        "ok": false,
+        "detail": "The summary lists Leg under the Simple Fracture schedule, but the uploaded summary does not establish whether Adrian’s diagnosis meets its definition.\nI haven’t given a what-if amount for “Simple Fracture” in Public Officers Group Personal Accident - Summary of Benefits, because I couldn’t confirm the figures it uses against your documents.\nContact KestrelOne (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Personal Accident - Summary of Benefits to ask what it needs for a claim."
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Kestrel Life Ltd)",
+        "ok": false,
+        "detail": "KestrelOne: Contact KestrelOne (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Personal Accident - Summary of Benefits to ask what it needs for a claim."
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": false,
+        "detail": "[{\"where\":\"summary\",\"figure\":\"S$2,500\",\"reason\":\"an illustration is given though the household did not ask a what-if\"}]"
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "RCW2",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "DR1",
+        "dim": "S",
+        "name": "Adrian's dated amounts: Group Term Life S$1,000,000 and Group Personal Accident S$600,000, each with the certificate date (6 October 2022), each bound to Adrian's own certificate row",
+        "ok": true
+      },
+      {
+        "id": "DR2",
+        "dim": "U",
+        "name": "useful, supported contact advice: a step to contact / notify the person's own insurer (Kestrel) or the scheme administrator / employer",
+        "ok": true
+      },
+      {
+        "id": "DR3",
+        "dim": "C",
+        "name": "uncertainty about cover on the event date is stated as uncertainty, and nothing is stated as an exclusion",
+        "ok": true
+      },
+      {
+        "id": "DR4",
+        "dim": "C",
+        "name": "no recommendation to contact or claim from an unrelated insurer (Harbourline / travel), and its wording is not presented as Adrian's cover",
+        "ok": true
+      },
+      {
+        "id": "DR5",
+        "dim": "C",
+        "name": "no dismemberment condition (365 days) borrowed into the death benefit",
+        "ok": true
+      },
+      {
+        "id": "DR6",
+        "dim": "C",
+        "name": "no invented mandatory paperwork (the wording prints only 'proof of death and the relevant documents in our prescribed form'; anything more is a suggestion, labelled as one)",
+        "ok": true
+      },
+      {
+        "id": "DR7",
+        "dim": "U",
+        "name": "no unrelated benefit fallback or unrelated figure (only the certificate's S$1,000,000 / S$600,000 and the allowance's S$3,000 / S$1,500 may appear)",
+        "ok": true
+      },
+      {
+        "id": "DK",
+        "dim": "K",
+        "name": "the Accidental Death benefit (100% of the Sum Insured) is explained",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Kestrel Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "RCW3",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "I1",
+        "dim": "U",
+        "name": "no household inventory (no per-person document list, no unlinked / unreadable file lines)",
+        "ok": true
+      },
+      {
+        "id": "I2",
+        "dim": "C",
+        "name": "names Adrian's accident cover (Group Personal Accident / its fracture benefits); never recommends the travel insurer (Harbourline)",
+        "ok": true
+      },
+      {
+        "id": "I3",
+        "dim": "K",
+        "name": "the fracture terms that decide it: Simple Fracture (wrist row 40% of S$5,000) and / or Other Fracture (a percentage of the Sum Insured), or the one question that separates them (closed / open)",
+        "ok": true
+      },
+      {
+        "id": "I4",
+        "dim": "S",
+        "name": "any illustrated amount comes from a saved calculation that recomputes (S$2,000 for the Simple Fracture wrist row)",
+        "ok": true
+      },
+      {
+        "id": "I5",
+        "dim": "U",
+        "name": "answers the question (no 'couldn't confirm')",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Kestrel Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  }
+]

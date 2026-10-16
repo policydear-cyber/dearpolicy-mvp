@@ -31,6 +31,7 @@ import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } 
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
+import { renderStatements } from "./statement-render";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
@@ -128,8 +129,23 @@ export function canonicalCalcSentence(k: CalcOutcome): string {
   return `If ${what}${words ? `, on what you told me (“${words}”)` : said ? ", on the facts you reported" : ""}, the indicative illustration is ${amt}; it is not an approved payment${open.length ? `, and ${open.join("; ")}` : ""}.`;
 }
 
-export function loopToolSpecs(): LoopToolSpec[] {
-  return [...RAG_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })), ...LOOP_ACTIONS];
+/** Reliable chat (contract B): which calculation contract the model is offered. "benefits" (the default and the only
+ * one a production build accepts): the model selects a benefit and evaluate_benefit assembles the operands on the
+ * server; `calculate` is offered only for a household bill against printed limits. "legacy-operands": the earlier
+ * operand-assembly calculate (lump_sum / hospital_cash with value ids), kept only for the older scripted suites while
+ * they are ported -- never in production. */
+export function chatContract(env: Record<string, string | undefined> = process.env): "benefits" | "legacy-operands" {
+  return env.DEARPOLICY_CHAT_CONTRACT === "legacy-operands" && env.NODE_ENV !== "production" ? "legacy-operands" : "benefits";
+}
+const BILL_ONLY = new Set(["calculator", "purpose", "subject_id", "policy_id", "benefit", "bill", "sub_limit_value_ids", "limit_value_ids", "passage_limits", "deductible_value_id", "co_insurance_value_id", "co_insurance_cap_value_id", "settled"]);
+function billOnlyCalculate(t: { name: string; description: string; parameters: LoopToolSpec["parameters"] }): LoopToolSpec {
+  const props = Object.fromEntries(Object.entries((t.parameters as { properties: Record<string, unknown> }).properties).filter(([k]) => BILL_ONLY.has(k)));
+  props.calculator = { type: "string", enum: ["bill_reimbursement"] };
+  return { name: t.name, description: "Work out a household's bill against the printed sub-limits / limits, deductible, co-insurance and co-insurance cap of one document (calculator bill_reimbursement), for one household member. A benefit that pays a percentage of a base or a daily rate is worked out with evaluate_benefit instead.", parameters: { ...(t.parameters as object), properties: props } as LoopToolSpec["parameters"] };
+}
+export function loopToolSpecs(env: Record<string, string | undefined> = process.env): LoopToolSpec[] {
+  const legacy = chatContract(env) === "legacy-operands";
+  return [...RAG_TOOLS.filter((t) => legacy ? t.name !== "evaluate_benefit" : true).map((t) => (t.name === "calculate" && !legacy ? billOnlyCalculate(t) : { name: t.name, description: t.description, parameters: t.parameters })), ...LOOP_ACTIONS];
 }
 
 const isRef = (v: any): v is EvidenceRef => !!v && typeof v === "object" && typeof v.policyId === "string" && !!v.passage && typeof v.passage.text === "string" && !!v.page;
@@ -223,6 +239,13 @@ const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_pas
 /** An inventory question: what / which policies, documents, files or plans the household (or a person) has. */
 export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|submit|provide|bring|send|attach)\b)[^]*(?:\b(?:what|which|list|show|tell me|give me)\b[^?.!]*\b(?:policies|documents|uploads|files|plans|(?:every|all|each|any) (?:of (?:the|our|my) )?(?:polic(?:y|ies)|documents?|files?|uploads?))\b|\b(?:polic(?:y|ies)|documents?|files?)\b[^?.!]*\b(?:on file|uploaded|do (?:we|i) have|does \w+ have)\b|\b(?:our|my|the household'?s?) (?:document )?library\b|\bwhat plans? does\b)/i;
 
+/** Reliable chat (recorded failure 4): the documents are asked about only to choose which ones to CLAIM under / which
+ * apply or pay ("which of my uploaded policies should I claim under for Adrian's accident?") -- an event question about
+ * benefits, not a request for the library list. A separate inventory clause ("..., and which documents do we have for
+ * him?") is still an inventory side question. */
+const EVENT_WORDS = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim\w*)\b/i;
+export const CLAIM_SELECTION_QUESTION = /\b(?:which|what)\b[^?.!,;]*\b(?:polic(?:y|ies)|documents?|plans?|covers?|insurances?)\b[^?.!,;]*\b(?:claim\w*|apply|applies|cover|covers|pay|pays|payable|use)\b/i;
+
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
@@ -276,7 +299,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const messages: LoopMessage[] = [{ role: "system", content: SYSTEM_PROMPT + "\n\n" + stateNote(state, input.people, state.speakerId) }];
   for (const h of state.history.slice(-6)) { messages.push({ role: "user", content: h.user }); messages.push({ role: "assistant", content: h.assistant }); }
   messages.push({ role: "user", content: input.message });
-  const tools = loopToolSpecs();
+  const tools = loopToolSpecs(env);
   let reply: LoopReply | null = null;
   const t0 = Date.now();
   const meter = new LoopUsageMeter({ model: input.model, accountId: input.accountId, limits, startedAt: t0, promptVersion: LOOP_PROMPT_VERSION, signal: input.signal ?? null });
@@ -406,6 +429,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): failed runs of each tool this turn; a tool that failed twice is not run again. */
   const failures = new Map<string, number>();
   const noteFailure = (name: string) => failures.set(name, (failures.get(name) ?? 0) + 1);
+  /** Reliable chat: benefits this turn found the household's reported case is not one of (per person). */
+  const unlistedNow = new Map<string, { benefit: string; labels: string[] }>();
+  /** rc-live-3: per person, the benefit whose case evaluate_benefit could not settle this turn (missing / ambiguous). */
+  const caseOpenNow = new Map<string, string>();
   let budgetWarned = false;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
@@ -717,10 +744,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const withdrawn = claim.derived.filter((d) => hit(d.factKeys)).map((d) => d.sentence);
           claim.derived = claim.derived.filter((d) => !hit(d.factKeys));
           // Every calculation worked out from the old value is withdrawn (and marked so on the claim record).
-          for (const r of Object.values(claim.calcs ?? {})) if (!r.withdrawn && hit(r.factKeys)) r.withdrawn = { cause: "fact", key, reason: `${key.replace(/_/g, " ")} was corrected (from ${String(old.value)} to ${value})`, turn: state.turn };
+          // (rc-live-2 RCT2b: a calculation shown in a turn that ended with a question has no "derived" sentence, so the
+          // withdrawal was recorded but not said; every calculation withdrawn here now counts for the note)
+          const calcsWithdrawn: string[] = [];
+          for (const [cid, r] of Object.entries(claim.calcs ?? {})) if (!r.withdrawn && hit(r.factKeys)) { r.withdrawn = { cause: "fact", key, reason: `${key.replace(/_/g, " ")} was corrected (from ${String(old.value)} to ${value})`, turn: state.turn }; calcsWithdrawn.push(cid); }
           if (oldKey && oldKey !== key) delete claim.facts[oldKey];
           claim.facts[key] = { ...entry, previous: [...(old.previous ?? []), { value: old.value, words: old.words, turn: old.turn, source: old.source, basis: old.basis }] };
-          corrected.push({ key, from: old.value, to: value, withdrawn });
+          corrected.push({ key, from: old.value, to: value, withdrawn: [...withdrawn, ...calcsWithdrawn.filter(() => !withdrawn.length)] });
           if (withdrawn.length) scrubWithdrawn(withdrawn);
         } else if (!old || (old.basis === "paraphrased" && chk.basis === "stated")) claim.facts[key] = old ? { ...entry, previous: old.previous } : entry;
         recorded.push(key);
@@ -783,6 +813,24 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       let key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
+      // Reliable chat (rc-live-1, RCW3): when the household's reported part is not one of a benefit's listed cases, a
+      // question asking them to choose one of those cases is irrelevant -- the answer is that the document lists no such case.
+      {
+        const un = unlistedNow.get(String(a.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? ""));
+        const q = `${String(a.question ?? "")} ${Array.isArray(a.options) ? (a.options as unknown[]).map(String).join(" ") : ""}`.toLowerCase();
+        const named = un ? un.labels.filter((l) => { const w = (l.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((x) => !["the", "and", "full", "break", "other", "fracture"].includes(x)); return w.length && w.some((x) => q.includes(x)); }) : [];
+        if (un && (named.length >= 2 || /\b(?:which|what)\b[^?]*\b(?:listed )?(?:fracture )?cases?\b/.test(q))) {
+          noteFailure("ask_user");
+          return { result: { ok: false, error: `the household reported a case ${un.benefit} does not list; do not ask them to choose one of its listed cases. Say the document lists no such case (benefit_terms with its listed cases) and suggest asking the insurer; end with final_answer.` } };
+        }
+      }
+      // Reliable chat (rc-live-1, RCT1a / RCT1b turn 3: "Has the insurer made a reviewed medical decision that Jun's
+      // diagnosis meets the policy's definition ...?"): what the insurer has decided or reviewed is not a fact the
+      // household can give; it is the insurer's step, said once as a next step.
+      if (/insurer/i.test(key) || /\b(?:has|have|did)\s+the\s+insurer\b|\binsurer(?:['’]s)?\s+(?:decision|review|reviewed|approv\w*|assessment|confirmation)\b|\breviewed medical (?:decision|record)\b/i.test(String(a.question ?? ""))) {
+        noteFailure("ask_user");
+        return { result: { ok: false, error: "what the insurer has decided, reviewed or confirmed is not a fact the household can give: do not ask it. Say the insurer's review once (a next step, e.g. contact:<policy_id>) and end with final_answer." } };
+      }
       const subject = (a.subject_id as string) ?? state.claim?.subjectId ?? state.subjectId;
       const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
       // Agent F (D15): the same fact under another key (admitted_at / admission_time, how_it_happened / cause) is known.
@@ -852,7 +900,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const more = completionLines((composed?.sentences ?? []).map((x) => x.text), question, subject);
         if (more.length) { completionNudged = true; return { result: { ok: false, error: `before asking: ${more.join("; ")}. Then call ask_user again: those statements first, then the one question that most changes the result.` } }; }
       }
-      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
+      const caseOf = subject ? caseOpenNow.get(subject) : undefined;
+      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), ...(caseOf ? { caseOf } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface: redirectPreface, composed } };
     }
     // final_answer
@@ -1035,9 +1084,35 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // V1.2: a reported event's illustration states the household's OWN words as its assumption (the save-time gate
     // requires a verbatim quote; a what-if is checked against the question asked instead). A paraphrase is replaced by their message of this turn when its facts were recorded from it; otherwise
     // the call is refused with that reason -- never stored as if the household had said it.
-    if (call.name === "calculate" && call.arguments.purpose !== "what_if" && typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim() && !quotedFrom(call.arguments.assumption_words, userTexts)) {
+    // Reliable chat (contract B): a percentage or daily-rate benefit is evaluated on the server from its benefit id; the
+    // model no longer assembles its operands (value ids, percentages, shares, quotes). The refusal names the benefits.
+    if (call.name === "calculate" && chatContract(env) === "benefits" && ["lump_sum", "hospital_cash"].includes(String(call.arguments.calculator))) {
+      const subject = typeof call.arguments.subject_id === "string" ? call.arguments.subject_id : null;
+      const want = String(call.arguments.benefit ?? "").toLowerCase();
+      const recs = [...(ctx.benefitRecords?.values() ?? [])].filter((r) => (!subject || r.memberId === subject) && (r.kind === "percentage_schedule" || /day|night|hospital/i.test(r.benefit) || (!!want && (r.benefit.toLowerCase().includes(want) || want.includes(r.benefit.toLowerCase())))));
+      noteFailure(call.name);
+      return `calculate does not take ${String(call.arguments.calculator)} any more: a benefit paying a percentage of a base or a daily rate is worked out on the server. Call evaluate_benefit with the benefit's benefit_id and only what the household reported (the case in their words or a listed option_id; a stay's admission / discharge) -- never amounts, percentages, value ids or quotes.${recs.length ? ` This person's matching benefits: ${recs.slice(0, 6).map((r) => `${r.id} = ${r.benefit}${r.policy.product ? ` (${r.policy.product})` : ""}`).join("; ")}.` : " Call person_benefits for this person to get the benefit ids."}`;
+    }
+    if ((call.name === "calculate" || call.name === "evaluate_benefit") && call.arguments.purpose !== "what_if" && typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim() && !quotedFrom(call.arguments.assumption_words, userTexts)) {
       if (!recordedNow.length) return "assumption_words must quote the household's own words verbatim (from their messages)";
       call.arguments = { ...call.arguments, assumption_words: input.message.replace(/\s+/g, " ").trim() };
+    }
+    // Reliable chat (rc-live-1, RCW1b: case "closed fracture of his leg", the model's paraphrase, became the illustration's
+    // stated assumption and the save-time gate rightly refused it as not the household's what-if): an evaluation's
+    // assumption is always the household's own words -- the recorded words of the facts it rests on, else its case words
+    // when they quote the household, else this message as they wrote it.
+    if (call.name === "evaluate_benefit") {
+      const subj = String(call.arguments.subject_id ?? "");
+      const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+      (ctx.reported ??= new Map()).set(subj, Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim()));
+    }
+    if (call.name === "evaluate_benefit" && !(typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim())) {
+      const subj = String(call.arguments.subject_id ?? "");
+      const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+      const keys = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String) : [];
+      const fromFacts = keys.map((k) => facts[k]?.words).find((w): w is string => typeof w === "string" && !!w.trim() && quotedFrom(w, userTexts));
+      const caseWords = typeof call.arguments.case === "string" && call.arguments.case.trim() && quotedFrom(call.arguments.case, userTexts) ? call.arguments.case : null;
+      call.arguments = { ...call.arguments, assumption_words: fromFacts ?? caseWords ?? input.message.replace(/\s+/g, " ").trim() };
     }
     if (call.name === "calculate") { const bad = resolveEvidenceInputs(call); if (bad) return bad; }
     const sig = call.name + " " + JSON.stringify(call.arguments);
@@ -1284,6 +1359,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const call of out.toolCalls) {
       if (reply) { messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: "the turn already ended" }) }); continue; }
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
+        // Reliable chat (contract C): statements of kind calculation / benefit_terms and contact next steps are written
+        // by the server from the saved calculation or the resolved record; an id this turn did not produce is sent back.
+        if (call.name === "final_answer" || call.name === "ask_user") {
+          const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
+          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+          if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
+        }
         if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
         let r = action(call);
         if (r.terminal?.kind === "final" && !gateRepaired) {
@@ -1314,6 +1396,31 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const openKey = `${call.arguments.subject_id}|${String(call.arguments.calculator)}|${benefitKey}`;
         if (kind === "unresolved" && miss.length) (state.openCalcs ??= {})[openKey] = { args: call.arguments, missing: miss.map((m) => normalizeKey(m.key)), turn: state.turn };
         else if (kind === "indicative_estimate" || kind === "conditional_illustration") { if (state.openCalcs) delete state.openCalcs[openKey]; }
+      }
+      // Reliable chat: what an evaluation's case rests on -- the facts the model names (fact_keys), else the facts the
+      // household gave for this person this turn -- so a correction withdraws exactly the results built on it.
+      if (res.ok && call.name === "evaluate_benefit" && (res.data as { status?: string }).status === "unlisted_case") {
+        const d = res.data as { listed_cases?: string; benefit?: string };
+        unlistedNow.set(String(call.arguments.subject_id ?? ""), { benefit: d.benefit ?? "", labels: String(d.listed_cases ?? "").split("; ").map((x) => x.replace(/\s+\d+(?:\.\d+)?%$/, "").trim()).filter(Boolean) });
+      }
+      if (res.ok && call.name === "evaluate_benefit") {
+        const rid = (res.data as { result_id?: string }).result_id; const k = rid ? calcOutcomes(ctx).get(rid) : undefined;
+        const subj = String(call.arguments.subject_id ?? "");
+        const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+        const named = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String).filter((x) => facts[x]) : [];
+        if (k) k.dependsOn = named.length ? named : [...new Set(recordedNow.filter((r) => r.subject === subj && facts[r.key]).map((r) => r.key))];
+        // rc-live-3 RCT2a: the open "which case?" question is answered once the server has settled the case from the
+        // household's words (a result for one listed case, or the case is not listed) -- whatever key the model noted
+        // the answer under ("fracture_bone_detail" for a question asked as "fracture_bone"). It is never put back.
+        const status = (res.data as { status?: string }).status;
+        const bid = String(call.arguments.benefit_id ?? "");
+        const reason = (res.data as { reason?: string }).reason;
+        if (bid && ((status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) || status === "case_conflict")) caseOpenNow.set(subj, bid);
+        const settles = !!bid && (!!rid || status === "unlisted_case");
+        if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
+        const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
+        if (settles && asksCase(state.pending)) { state.pending = null; (trace.adjusted ??= []).push(`the open case question was answered (${bid})`); }
+        if (settles && asksCase(state.parkedPending)) state.parkedPending = null;
       }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "household_documents") inventoryNow = res.data as Inventory;
@@ -1387,7 +1494,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // looks the documents up while answering something else (a death claim) keeps its own verified, bound answer: the
     // inventory rule removes every sentence with a figure and every binding, so applying it to any turn that called
     // household_documents silently dropped verified amounts (s50-live-1 turn 1).
-    if (!INVENTORY_QUESTION.test(input.message)) return r;
+    // Reliable chat (recorded failure 4): "which of my uploaded policies should I claim under for Adrian's accident?" is
+    // an EVENT question about which benefits may apply, not a request for the library list -- calling the document
+    // lookup on the way never turns the answer into an inventory.
+    if (!INVENTORY_QUESTION.test(input.message) || CLAIM_SELECTION_QUESTION.test(input.message)) return r;
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
@@ -1452,6 +1562,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return r;
   };
   let reasked: LoopPending | null = null;
+  // Reliable chat (contract C, library_status): an inventory question is answered from the household's own document
+  // lookup even when the model did not call it -- the list never depends on which model sentences survived the checks.
+  // (Only for a plain inventory question -- no event, no figures -- and only when some of the model's own sentences were
+  // taken out: a reply that stood on its own is left as the model wrote it.)
+  const ended = (reply ?? beforeRepair) as LoopReply | null;
+  if (!inventoryNow && INVENTORY_QUESTION.test(input.message) && !CLAIM_SELECTION_QUESTION.test(input.message) && !EVENT_WORDS.test(input.message) && !/\d/.test(input.message) && ended?.kind === "final" && (ended.composed?.dropped.length ?? 0) > 0) {
+    const res = await runTool(ctx, "household_documents", {}, loopToolEnv(env)).catch(() => null);
+    if (res?.ok) { inventoryNow = res.data as Inventory; record("household_documents", { by: "server" }, true, []); }
+  }
   const done = conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null)));
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
@@ -1504,7 +1623,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
     if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
-    if (state.claim) for (const s of c.sentences) if (s.estimate && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn, evidenceIds: s.evidenceIds });
+    if (state.claim) for (const s of c.sentences) if ((s.estimate || s.kind === "conditional_illustration") && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn, evidenceIds: s.evidenceIds });
     // Agent G: each calculation of the claim, with the facts and evidence it rests on (what a correction or a deleted
     // source withdraws, here and on the claim record).
     if (state.claim?.subjectId) for (const k of c.calcs) if (k.subjectId === state.claim.subjectId) (state.claim.calcs ??= {})[k.calcId] = calcRef(k, state.claim, (k.evidence ?? []).map((e) => evidenceIdOf(state, e, "calculate")), state.turn);

@@ -1,0 +1,3715 @@
+{
+  "scenario": "RCW2",
+  "title": "reliable chat: death after an accident overseas -- benefits that may apply and what to do first (Wong)",
+  "conversationId": "78971d20-7216-4bfd-ad8b-1865999e2c53",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”\nAdrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.\nAdrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.\nThe Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.\nThe summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.\nThe uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured.\nThe uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.\nThe group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.\nThe uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026.",
+      "timings": {
+        "acceptedMs": 8,
+        "firstAssistantPersistedMs": 22646,
+        "answerSeenMs": 22673,
+        "modelMs": 21461,
+        "upstreamMs": 21230,
+        "relayMs": 21234
+      },
+      "calls": [
+        {
+          "seq": 26,
+          "at": "2026-10-15T12:58:04.276Z",
+          "estInputTokens": 14768,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024768000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7184,
+            "output": 18,
+            "cached": 7019
+          },
+          "latencyMs": 1515,
+          "upstreamMs": 1515,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 27,
+          "at": "2026-10-15T12:58:05.804Z",
+          "estInputTokens": 14993,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024993000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 4,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7299,
+            "output": 88,
+            "cached": 7058
+          },
+          "latencyMs": 2563,
+          "upstreamMs": 2563,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 28,
+          "at": "2026-10-15T12:58:08.371Z",
+          "estInputTokens": 15333,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025333,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 6,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7495,
+            "output": 153,
+            "cached": 7173
+          },
+          "latencyMs": 2763,
+          "upstreamMs": 2763,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 29,
+          "at": "2026-10-15T12:58:11.173Z",
+          "estInputTokens": 23977,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0033977000000000005,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 10,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 13951,
+            "output": 80,
+            "cached": 7369
+          },
+          "latencyMs": 2393,
+          "upstreamMs": 2393,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 30,
+          "at": "2026-10-15T12:58:13.587Z",
+          "estInputTokens": 24347,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0034347,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 12,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 14163,
+            "output": 61,
+            "cached": 13825
+          },
+          "latencyMs": 2986,
+          "upstreamMs": 2986,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 31,
+          "at": "2026-10-15T12:58:16.582Z",
+          "estInputTokens": 27209,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0037209,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 14,
+          "systemPromptSha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "toolsSha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 15983,
+            "output": 545,
+            "cached": 14037
+          },
+          "latencyMs": 9241,
+          "upstreamMs": 9241,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 26,
+          "at": "2026-10-15T12:58:04.277Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 14996,
+          "reservedUsd": 0.0024996000000000003,
+          "chargedUsd": 0.00009569,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 1514,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFK0ZEmE4AQk2VngC2a5sDmDcM6a",
+          "usage": {
+            "input": 7184,
+            "output": 18,
+            "cached": 7019,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        },
+        {
+          "seq": 27,
+          "at": "2026-10-15T12:58:05.804Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15227,
+          "reservedUsd": 0.0025226999999999997,
+          "chargedUsd": 0.00013868,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 2522,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFK2tRIuEFD29rS1TG2IZVGHpDxc",
+          "usage": {
+            "input": 7299,
+            "output": 88,
+            "cached": 7058,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        },
+        {
+          "seq": 28,
+          "at": "2026-10-15T12:58:08.375Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15585,
+          "reservedUsd": 0.0025585,
+          "chargedUsd": 0.00018043,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 2719,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFK5XgBK8TgmZy7UF97lXXKvFFEo",
+          "usage": {
+            "input": 7495,
+            "output": 153,
+            "cached": 7173,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        },
+        {
+          "seq": 29,
+          "at": "2026-10-15T12:58:11.174Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 24253,
+          "reservedUsd": 0.0034253,
+          "chargedUsd": 0.0007718900000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 2351,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFK8ZtcP0oPv4P3VdeNympkfKwyr",
+          "usage": {
+            "input": 13951,
+            "output": 80,
+            "cached": 7369,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        },
+        {
+          "seq": 30,
+          "at": "2026-10-15T12:58:13.588Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 24634,
+          "reservedUsd": 0.0034634,
+          "chargedUsd": 0.00020255000000000002,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 2944,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFKATf4UghPYwgiDqYLnbU8r8PYO",
+          "usage": {
+            "input": 14163,
+            "output": 61,
+            "cached": 13825,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        },
+        {
+          "seq": 31,
+          "at": "2026-10-15T12:58:16.583Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 27504,
+          "reservedUsd": 0.0037504,
+          "chargedUsd": 0.00060747,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "b79130f3382248d0",
+          "kind": "loop",
+          "upstreamMs": 9196,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZFKDoXBEgf584XITUNEbT6MkCcSP",
+          "usage": {
+            "input": 15983,
+            "output": 545,
+            "cached": 14037,
+            "reasoning": 0
+          },
+          "scenario": "RCW2",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-15T12:58:04Z",
+          "t": 1792069084.278,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 1511,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFK0ZEmE4AQk2VngC2a5sDmDcM6a",
+          "usage": {
+            "prompt_tokens": 7184,
+            "completion_tokens": 18,
+            "total_tokens": 7202,
+            "cached_tokens": 7019,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person"
+          ],
+          "status": 200,
+          "relay_ms": 1512
+        },
+        {
+          "at": "2026-10-15T12:58:05Z",
+          "t": 1792069085.806,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 2519,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFK2tRIuEFD29rS1TG2IZVGHpDxc",
+          "usage": {
+            "prompt_tokens": 7299,
+            "completion_tokens": 88,
+            "total_tokens": 7387,
+            "cached_tokens": 7058,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "note_facts"
+          ],
+          "status": 200,
+          "relay_ms": 2520
+        },
+        {
+          "at": "2026-10-15T12:58:08Z",
+          "t": 1792069088.377,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 2717,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFK5XgBK8TgmZy7UF97lXXKvFFEo",
+          "usage": {
+            "prompt_tokens": 7495,
+            "completion_tokens": 153,
+            "total_tokens": 7648,
+            "cached_tokens": 7173,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "policies_for",
+            "person_benefits",
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2718
+        },
+        {
+          "at": "2026-10-15T12:58:11Z",
+          "t": 1792069091.176,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 10,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 2348,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFK8ZtcP0oPv4P3VdeNympkfKwyr",
+          "usage": {
+            "prompt_tokens": 13951,
+            "completion_tokens": 80,
+            "total_tokens": 14031,
+            "cached_tokens": 7369,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 2349
+        },
+        {
+          "at": "2026-10-15T12:58:13Z",
+          "t": 1792069093.59,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 12,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 2941,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFKATf4UghPYwgiDqYLnbU8r8PYO",
+          "usage": {
+            "prompt_tokens": 14163,
+            "completion_tokens": 61,
+            "total_tokens": 14224,
+            "cached_tokens": 13825,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2941
+        },
+        {
+          "at": "2026-10-15T12:58:16Z",
+          "t": 1792069096.585,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 14,
+          "tools": 13,
+          "tools_sha256": "ada192ce47e2b893311060d22f3659ed1fdf34efefac9afe87deb032a45cd53e",
+          "system_prompt_sha256": "e6b7d16bb613992a77bdec393221403bf1fdb77389cdc3bfd3f14b79f6b35749",
+          "upstream_ms": 9194,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZFKDoXBEgf584XITUNEbT6MkCcSP",
+          "usage": {
+            "prompt_tokens": 15983,
+            "completion_tokens": 545,
+            "total_tokens": 16528,
+            "cached_tokens": 14037,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 9194
+        }
+      ],
+      "tokens": {
+        "input": 66075,
+        "output": 945
+      },
+      "costUsd": {
+        "charged": 0.0019967100000000005,
+        "reserved": 0.0182199,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "guardUsd": 0.0019967100000000005,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 22678,
+  "firstUsefulResponseMs": 22646,
+  "tokens": {
+    "input": 66075,
+    "output": 945
+  },
+  "costUsd": 0.0019967100000000005,
+  "calls": 6,
+  "loaded": {
+    "conversationId": "78971d20-7216-4bfd-ad8b-1865999e2c53",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 2,
+        "turn": 1,
+        "claim": {
+          "facts": {
+            "event": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "killed in a road accident in Malaysia",
+              "words": "killed in a road accident in Malaysia",
+              "source": "user_reported"
+            },
+            "event_date": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "2026-10-03",
+              "words": "3 October 2026",
+              "source": "user_reported"
+            }
+          },
+          "derived": [],
+          "subjectId": "7e800000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7184,
+                "output": 18,
+                "attempt": 1,
+                "costUsd": 0.00009569,
+                "latencyMs": 1515
+              },
+              {
+                "ok": true,
+                "input": 7299,
+                "output": 88,
+                "attempt": 1,
+                "costUsd": 0.00013868,
+                "latencyMs": 2563
+              },
+              {
+                "ok": true,
+                "input": 7495,
+                "output": 153,
+                "attempt": 1,
+                "costUsd": 0.00018043,
+                "latencyMs": 2767
+              },
+              {
+                "ok": true,
+                "input": 13951,
+                "output": 80,
+                "attempt": 1,
+                "costUsd": 0.0007718900000000001,
+                "latencyMs": 2394
+              },
+              {
+                "ok": true,
+                "input": 14163,
+                "output": 61,
+                "attempt": 1,
+                "costUsd": 0.00020255000000000002,
+                "latencyMs": 2988
+              },
+              {
+                "ok": true,
+                "input": 15983,
+                "output": 545,
+                "attempt": 1,
+                "costUsd": 0.00060747,
+                "latencyMs": 9242
+              }
+            ],
+            "limit": null,
+            "steps": 6,
+            "usage": {
+              "input": 66075,
+              "output": 945
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”",
+              "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+              "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+              "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+              "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+              "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured.",
+              "The uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+              "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+              "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026."
+            ],
+            "latencyMs": 21561,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Adrian"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "event",
+                      "value": "killed in a road accident in Malaysia",
+                      "words": "killed in a road accident in Malaysia"
+                    },
+                    {
+                      "key": "event_date",
+                      "value": "2026-10-03",
+                      "words": "3 October 2026"
+                    }
+                  ],
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "death accident",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "death after a road accident",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "accidental death benefit road accident Malaysia territorial limits claim notification documents first steps",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":10}",
+                "evidenceIds": [
+                  "e14",
+                  "e15",
+                  "e16",
+                  "e17",
+                  "e18",
+                  "e19",
+                  "e20",
+                  "e21",
+                  "e22",
+                  "e23"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "purpose": "what_if",
+                  "benefit_id": "bc5b1ff65dd",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001",
+                  "assumption_words": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026."
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"resolved\",\"kind\":\"printed_percent\"}",
+                "evidenceIds": [
+                  "e5"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "territorial scope worldwide Malaysia accident death exclusions road traffic claim proof death prescribed documents notify claim first",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":9}",
+                "evidenceIds": [
+                  "e14",
+                  "e16",
+                  "e19",
+                  "e15",
+                  "e17",
+                  "e20",
+                  "e21",
+                  "e22",
+                  "e23"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "fact",
+                      "text": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”"
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                      "benefit": "Group Term Life",
+                      "value_ids": [
+                        "v1"
+                      ],
+                      "evidence_ids": [
+                        "e3"
+                      ]
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                      "benefit": "Group Personal Accident",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "evidence_ids": [
+                        "e4"
+                      ]
+                    },
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+                      "benefit": "Accidental Death",
+                      "value_ids": [],
+                      "benefit_id": "bc5b1ff65dd",
+                      "subject_id": "7e800000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e5",
+                        "e4"
+                      ]
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+                      "benefit": "Death due to Accident",
+                      "evidence_ids": [
+                        "e19"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured, but the uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+                      "evidence_ids": [
+                        "e15"
+                      ]
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+                      "evidence_ids": [
+                        "e14"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026.",
+                      "evidence_ids": [
+                        "e21",
+                        "e4"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?",
+            "evidenceChosen": [
+              "e3",
+              "e4",
+              "e5",
+              "e19",
+              "e15",
+              "e14",
+              "e21"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP TERM LIFE(POLICY NO.KPT-520011)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 364,
+                          "text": "S****604D",
+                          "start": 355,
+                          "header": ""
+                        },
+                        {
+                          "end": 385,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 365,
+                          "header": ""
+                        },
+                        {
+                          "end": 397,
+                          "text": "S$1,000,000",
+                          "start": 386,
+                          "header": ""
+                        },
+                        {
+                          "end": 403,
+                          "text": "As of",
+                          "start": 398,
+                          "header": ""
+                        },
+                        {
+                          "end": 414,
+                          "text": "06/10/2022",
+                          "start": 404,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 397,
+                      "text": "S$1,000,000",
+                      "start": 386
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 385,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 365,
+                      "memberId": "7e800000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 414,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                    "start": 355,
+                    "onPage": 1
+                  },
+                  "policyId": "7e800000-0000-4000-8000-000000000101",
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP PERSONAL ACCIDENT(POLICY NO. KPA-520012)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 531,
+                          "text": "S****604D",
+                          "start": 522,
+                          "header": ""
+                        },
+                        {
+                          "end": 552,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 532,
+                          "header": ""
+                        },
+                        {
+                          "end": 562,
+                          "text": "S$600,000",
+                          "start": 553,
+                          "header": ""
+                        },
+                        {
+                          "end": 568,
+                          "text": "As of",
+                          "start": 563,
+                          "header": ""
+                        },
+                        {
+                          "end": 579,
+                          "text": "06/10/2022",
+                          "start": 569,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 562,
+                      "text": "S$600,000",
+                      "start": 553
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 552,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 532,
+                      "memberId": "7e800000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 579,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                    "start": 522,
+                    "onPage": 1
+                  },
+                  "policyId": "7e800000-0000-4000-8000-000000000101",
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e800000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?",
+            "assistant": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.” Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date. Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date. The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured. The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents. The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured. The uploaded documents do not confirm a travel schedule or personal travel cover for Adrian. The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form. The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7e800000-0000-4000-8000-000000000101": "Public Officers Group Insurance Scheme - Certificate",
+          "7e800000-0000-4000-8000-000000000102": "Public Officers Group Personal Accident - Summary of Benefits",
+          "7e800000-0000-4000-8000-000000000103": "Public Officers Group Personal Accident - Policy Wording",
+          "7e800000-0000-4000-8000-000000000104": "Travel Insurance - Policy Wording",
+          "7e800000-0000-4000-8000-000000000105": "Travel Insurance - Benefit Summary"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 316,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 229,
+              "onPage": 1
+            },
+            "support": {
+              "end": 316,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 229,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "support": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 364,
+                    "text": "S****604D",
+                    "start": 355,
+                    "header": ""
+                  },
+                  {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "header": ""
+                  },
+                  {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386,
+                    "header": ""
+                  },
+                  {
+                    "end": 403,
+                    "text": "As of",
+                    "start": 398,
+                    "header": ""
+                  },
+                  {
+                    "end": 414,
+                    "text": "06/10/2022",
+                    "start": 404,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386
+              },
+              "layout": "person_row",
+              "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "memberId": "7e800000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "support": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 531,
+                    "text": "S****604D",
+                    "start": 522,
+                    "header": ""
+                  },
+                  {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "header": ""
+                  },
+                  {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553,
+                    "header": ""
+                  },
+                  {
+                    "end": 568,
+                    "text": "As of",
+                    "start": 563,
+                    "header": ""
+                  },
+                  {
+                    "end": 579,
+                    "text": "06/10/2022",
+                    "start": 569,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553
+              },
+              "layout": "person_row",
+              "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "memberId": "7e800000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "support": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 162,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 120,
+              "onPage": 9
+            },
+            "support": {
+              "end": 162,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 120,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "support": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 443,
+              "text": "• Death due to Accident\tS$3,000",
+              "start": 412,
+              "onPage": 9
+            },
+            "support": {
+              "end": 443,
+              "text": "• Death due to Accident\tS$3,000",
+              "start": 412,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 474,
+              "text": "• Death due to Illness\tS$1,500",
+              "start": 444,
+              "onPage": 9
+            },
+            "support": {
+              "end": 474,
+              "text": "• Death due to Illness\tS$1,500",
+              "start": 444,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 202,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 164,
+              "onPage": 13
+            },
+            "support": {
+              "end": 202,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 164,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 210,
+              "text": "Hip\t75%",
+              "start": 203,
+              "onPage": 13
+            },
+            "support": {
+              "end": 210,
+              "text": "Hip\t75%",
+              "start": 203,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 247,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 211,
+              "onPage": 13
+            },
+            "support": {
+              "end": 247,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 211,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "passage": {
+              "end": 247,
+              "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 127,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "passage": {
+              "end": 442,
+              "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+              "start": 290,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-wording"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "search_passages",
+            "page": {
+              "end": 3,
+              "start": 3
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 348,
+              "text": "Section 4 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.\nThe Compassionate Death Allowance Benefit may be claimed under either the Core Scheme or the Voluntary Scheme.",
+              "start": 0,
+              "onPage": 3
+            },
+            "support": {
+              "end": 237,
+              "text": "If an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.",
+              "start": 50,
+              "onPage": 3
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-wording"
+          },
+          "e15": {
+            "id": "e15",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 304,
+              "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Policy Wording\nSection 1 - Accidental Death\nWe will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.\nThis wording applies only to a Journey shown in a Schedule issued to you.",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 230,
+              "text": "We will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.",
+              "start": 105,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000104",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-travel-wording"
+          },
+          "e16": {
+            "id": "e16",
+            "via": "search_passages",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36\nSection A - Death and Disablement\nAccidental Death: 100% of the Sum Insured.\nPermanent Dismemberment: up to 100% of the Sum Insured according to the Scale of Compensation, if the loss occurs within 365 days of the Accident.\nSection B - Compassionate Death Allowance\nCompassionate Death Allowance (per enrolled Insured Person)",
+              "start": 0,
+              "onPage": 9
+            },
+            "support": {
+              "end": 85,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36",
+              "start": 0,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e17": {
+            "id": "e17",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 163,
+              "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Benefit Summary\nPlans: Classic, Premier\nAccidental Death: as shown in the Schedule for the plan chosen",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 163,
+              "text": "Accidental Death: as shown in the Schedule for the plan chosen",
+              "start": 101,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000105",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-travel-summary"
+          },
+          "e18": {
+            "id": "e18",
+            "via": "search_passages",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 247,
+              "text": "Simple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 88,
+              "onPage": 13
+            },
+            "support": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e19": {
+            "id": "e19",
+            "via": "search_passages",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 571,
+              "text": "• Death due to Accident\tS$3,000\n• Death due to Illness\tS$1,500\nThe allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+              "start": 412,
+              "onPage": 9
+            },
+            "support": {
+              "end": 571,
+              "text": "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+              "start": 475,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e20": {
+            "id": "e20",
+            "via": "search_passages",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 86,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+              "start": 0,
+              "onPage": 13
+            },
+            "support": {
+              "end": 86,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+              "start": 0,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e21": {
+            "id": "e21",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 325,
+              "text": "Section 2 - Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSimple Fracture means a closed fracture where the skin is not broken.\nSum Insured means the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
+              "start": 0,
+              "onPage": 2
+            },
+            "support": {
+              "end": 128,
+              "text": "Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+              "start": 24,
+              "onPage": 2
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-wording"
+          },
+          "e22": {
+            "id": "e22",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 637,
+              "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022\nGROUP PERSONAL ACCIDENT(POLICY NO. KPA-520012)\nS****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022\nS****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+              "start": 415,
+              "onPage": 1
+            },
+            "support": {
+              "end": 509,
+              "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+              "start": 475,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e23": {
+            "id": "e23",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 389,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-4410)\nSection 6 - Other Fracture\nOther Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.\nBone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 93,
+              "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-wording"
+          }
+        },
+        "speakerId": "7e800000-0000-4000-8000-000000000001",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "established": [
+          {
+            "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "turn": 1,
+            "benefit": "Group Term Life",
+            "valueIds": [
+              "v1"
+            ],
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e3"
+            ]
+          },
+          {
+            "text": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "turn": 1,
+            "benefit": "Group Personal Accident",
+            "valueIds": [
+              "v2"
+            ],
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e4"
+            ]
+          },
+          {
+            "text": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+            "turn": 1,
+            "benefit": "Death due to Accident",
+            "valueIds": [],
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e19"
+            ]
+          }
+        ],
+        "recentSubjectIds": [
+          "7e800000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+            "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+            "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured.",
+            "The uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+            "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+            "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026."
+          ],
+          "summary": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”",
+          "citations": [
+            {
+              "chunkId": "rag2:e3",
+              "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e4",
+              "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Public Officers Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e5",
+              "excerpt": "Accidental Death: 100% of the Sum Insured.",
+              "insurer": "KestrelOne",
+              "pageEnd": 9,
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "pageStart": 9,
+              "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e19",
+              "excerpt": "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+              "insurer": "KestrelOne",
+              "pageEnd": 9,
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "pageStart": 9,
+              "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e15",
+              "excerpt": "We will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.",
+              "insurer": "Harbourline General Insurance Pte. Ltd.",
+              "pageEnd": 1,
+              "policyId": "7e800000-0000-4000-8000-000000000104",
+              "pageStart": 1,
+              "policyName": "Travel Insurance - Policy Wording",
+              "documentRole": "policy_wording"
+            },
+            {
+              "chunkId": "rag2:e14",
+              "excerpt": "If an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 3,
+              "policyId": "7e800000-0000-4000-8000-000000000103",
+              "pageStart": 3,
+              "policyName": "Public Officers Group Personal Accident - Policy Wording",
+              "documentRole": "policy_wording"
+            },
+            {
+              "chunkId": "rag2:e21",
+              "excerpt": "Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+              "insurer": "Kestrel Life Ltd",
+              "pageEnd": 2,
+              "policyId": "7e800000-0000-4000-8000-000000000103",
+              "pageStart": 2,
+              "policyName": "Public Officers Group Personal Accident - Policy Wording",
+              "documentRole": "policy_wording"
+            }
+          ],
+          "nextSteps": [
+            "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+          ],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "78971d20-7216-4bfd-ad8b-1865999e2c53",
+          "figureBindings": [
+            {
+              "asOf": "2022-10-06",
+              "value": 1000000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Term Life",
+              "pageEnd": 1,
+              "passage": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "currency": "SGD",
+              "policyId": "7e800000-0000-4000-8000-000000000101",
+              "sentence": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+              "pageStart": 1,
+              "rowPerson": "Wong Jia Hui, Adrian",
+              "subjectId": "7e800000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:pr50-cert"
+            },
+            {
+              "asOf": "2022-10-06",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "currency": "SGD",
+              "policyId": "7e800000-0000-4000-8000-000000000101",
+              "sentence": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+              "pageStart": 1,
+              "rowPerson": "Wong Jia Hui, Adrian",
+              "subjectId": "7e800000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:pr50-cert"
+            },
+            {
+              "value": 3000,
+              "column": null,
+              "benefit": "Death due to Accident",
+              "pageEnd": 9,
+              "passage": "• Death due to Accident\tS$3,000\n• Death due to Illness\tS$1,500\nThe allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+              "currency": "SGD",
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "sentence": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+              "pageStart": 9,
+              "subjectId": "7e800000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:pr50-summary"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7e800000-0000-4000-8000-000000000001"
+        },
+        "content": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”",
+        "visible": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”\nAdrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.\nAdrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.\nThe Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.\nThe summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.\nThe uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured.\nThe uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.\nThe group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.\nThe uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026.\nContact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim.",
+        "questions": [],
+        "userAt": "2026-10-15T12:58:25.850Z",
+        "assistantAt": "2026-10-15T12:58:25.850Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7184,
+              "output": 18,
+              "attempt": 1,
+              "costUsd": 0.00009569,
+              "latencyMs": 1515
+            },
+            {
+              "ok": true,
+              "input": 7299,
+              "output": 88,
+              "attempt": 1,
+              "costUsd": 0.00013868,
+              "latencyMs": 2563
+            },
+            {
+              "ok": true,
+              "input": 7495,
+              "output": 153,
+              "attempt": 1,
+              "costUsd": 0.00018043,
+              "latencyMs": 2767
+            },
+            {
+              "ok": true,
+              "input": 13951,
+              "output": 80,
+              "attempt": 1,
+              "costUsd": 0.0007718900000000001,
+              "latencyMs": 2394
+            },
+            {
+              "ok": true,
+              "input": 14163,
+              "output": 61,
+              "attempt": 1,
+              "costUsd": 0.00020255000000000002,
+              "latencyMs": 2988
+            },
+            {
+              "ok": true,
+              "input": 15983,
+              "output": 545,
+              "attempt": 1,
+              "costUsd": 0.00060747,
+              "latencyMs": 9242
+            }
+          ],
+          "limit": null,
+          "steps": 6,
+          "usage": {
+            "input": 66075,
+            "output": 945
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”",
+            "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+            "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+            "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured.",
+            "The uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+            "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+            "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026."
+          ],
+          "latencyMs": 21561,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Adrian"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "event",
+                    "value": "killed in a road accident in Malaysia",
+                    "words": "killed in a road accident in Malaysia"
+                  },
+                  {
+                    "key": "event_date",
+                    "value": "2026-10-03",
+                    "words": "3 October 2026"
+                  }
+                ],
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "death accident",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "policies_for",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "death after a road accident",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "k": 10,
+                "query": "accidental death benefit road accident Malaysia territorial limits claim notification documents first steps",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "search_passages",
+              "summary": "{\"hits\":10}",
+              "evidenceIds": [
+                "e14",
+                "e15",
+                "e16",
+                "e17",
+                "e18",
+                "e19",
+                "e20",
+                "e21",
+                "e22",
+                "e23"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "purpose": "what_if",
+                "benefit_id": "bc5b1ff65dd",
+                "subject_id": "7e800000-0000-4000-8000-000000000001",
+                "assumption_words": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026."
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"resolved\",\"kind\":\"printed_percent\"}",
+              "evidenceIds": [
+                "e5"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "k": 10,
+                "query": "territorial scope worldwide Malaysia accident death exclusions road traffic claim proof death prescribed documents notify claim first",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "search_passages",
+              "summary": "{\"hits\":9}",
+              "evidenceIds": [
+                "e14",
+                "e16",
+                "e19",
+                "e15",
+                "e17",
+                "e20",
+                "e21",
+                "e22",
+                "e23"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "fact",
+                    "text": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”"
+                  },
+                  {
+                    "kind": "fact",
+                    "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                    "benefit": "Group Term Life",
+                    "value_ids": [
+                      "v1"
+                    ],
+                    "evidence_ids": [
+                      "e3"
+                    ]
+                  },
+                  {
+                    "kind": "fact",
+                    "text": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                    "benefit": "Group Personal Accident",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "evidence_ids": [
+                      "e4"
+                    ]
+                  },
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+                    "benefit": "Accidental Death",
+                    "value_ids": [],
+                    "benefit_id": "bc5b1ff65dd",
+                    "subject_id": "7e800000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e5",
+                      "e4"
+                    ]
+                  },
+                  {
+                    "kind": "fact",
+                    "text": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+                    "benefit": "Death due to Accident",
+                    "evidence_ids": [
+                      "e19"
+                    ]
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured, but the uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+                    "evidence_ids": [
+                      "e15"
+                    ]
+                  },
+                  {
+                    "kind": "fact",
+                    "text": "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+                    "evidence_ids": [
+                      "e14"
+                    ]
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026.",
+                    "evidence_ids": [
+                      "e21",
+                      "e4"
+                    ]
+                  }
+                ],
+                "next_steps": [
+                  "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                ],
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026. Which of his benefits may apply, and what should I do first?",
+          "evidenceChosen": [
+            "e3",
+            "e4",
+            "e5",
+            "e19",
+            "e15",
+            "e14",
+            "e21"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "RCW2",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7e800000-0000-4000-8000-000000000001",
+    "speakerId": "7e800000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "facts": {
+        "event": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "killed in a road accident in Malaysia",
+          "words": "killed in a road accident in Malaysia",
+          "source": "user_reported"
+        },
+        "event_date": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "2026-10-03",
+          "words": "3 October 2026",
+          "source": "user_reported"
+        }
+      },
+      "derived": [],
+      "subjectId": "7e800000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 6,
+        "usage": {
+          "input": 66075,
+          "output": 945
+        },
+        "latencyMs": 21561,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Adrian"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "event",
+                  "value": "killed in a road accident in Malaysia",
+                  "words": "killed in a road accident in Malaysia"
+                },
+                {
+                  "key": "event_date",
+                  "value": "2026-10-03",
+                  "words": "3 October 2026"
+                }
+              ],
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "death accident",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "death after a road accident",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "accidental death benefit road accident Malaysia territorial limits claim notification documents first steps",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":10}",
+            "evidenceIds": [
+              "e14",
+              "e15",
+              "e16",
+              "e17",
+              "e18",
+              "e19",
+              "e20",
+              "e21",
+              "e22",
+              "e23"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "purpose": "what_if",
+              "benefit_id": "bc5b1ff65dd",
+              "subject_id": "7e800000-0000-4000-8000-000000000001",
+              "assumption_words": "Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026."
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"resolved\",\"kind\":\"printed_percent\"}",
+            "evidenceIds": [
+              "e5"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "territorial scope worldwide Malaysia accident death exclusions road traffic claim proof death prescribed documents notify claim first",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":9}",
+            "evidenceIds": [
+              "e14",
+              "e16",
+              "e19",
+              "e15",
+              "e17",
+              "e20",
+              "e21",
+              "e22",
+              "e23"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "fact",
+                  "text": "You said, “Hypothetically, Adrian was killed in a road accident in Malaysia on 3 October 2026.”"
+                },
+                {
+                  "kind": "fact",
+                  "text": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                  "benefit": "Group Term Life",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "evidence_ids": [
+                    "e3"
+                  ]
+                },
+                {
+                  "kind": "fact",
+                  "text": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+                  "benefit": "Group Personal Accident",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "evidence_ids": [
+                    "e4"
+                  ]
+                },
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.",
+                  "benefit": "Accidental Death",
+                  "value_ids": [],
+                  "benefit_id": "bc5b1ff65dd",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e5",
+                    "e4"
+                  ]
+                },
+                {
+                  "kind": "fact",
+                  "text": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+                  "benefit": "Death due to Accident",
+                  "evidence_ids": [
+                    "e19"
+                  ]
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The uploaded travel wording says accidental-death cover applies only to a journey shown in a schedule issued to the insured, but the uploaded documents do not confirm a travel schedule or personal travel cover for Adrian.",
+                  "evidence_ids": [
+                    "e15"
+                  ]
+                },
+                {
+                  "kind": "fact",
+                  "text": "The group accident wording says the Compassionate Death Allowance requires proof of death and relevant documents in the insurer’s prescribed form.",
+                  "evidence_ids": [
+                    "e14"
+                  ]
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The uploaded documents do not establish whether the Malaysia event would meet the policy’s definitions and conditions, or whether Adrian’s cover was in force on 3 October 2026.",
+                  "evidence_ids": [
+                    "e21",
+                    "e4"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+              ],
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e3",
+          "e4",
+          "e5",
+          "e19",
+          "e15",
+          "e14",
+          "e21"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 316,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+          "start": 229,
+          "onPage": 1
+        },
+        "support": {
+          "end": 316,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+          "start": 229,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "support": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 364,
+                "text": "S****604D",
+                "start": 355,
+                "header": ""
+              },
+              {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "header": ""
+              },
+              {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386,
+                "header": ""
+              },
+              {
+                "end": 403,
+                "text": "As of",
+                "start": 398,
+                "header": ""
+              },
+              {
+                "end": 414,
+                "text": "06/10/2022",
+                "start": 404,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 397,
+            "text": "S$1,000,000",
+            "start": 386
+          },
+          "layout": "person_row",
+          "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 385,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 365,
+            "memberId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "support": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 531,
+                "text": "S****604D",
+                "start": 522,
+                "header": ""
+              },
+              {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "header": ""
+              },
+              {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553,
+                "header": ""
+              },
+              {
+                "end": 568,
+                "text": "As of",
+                "start": 563,
+                "header": ""
+              },
+              {
+                "end": 579,
+                "text": "06/10/2022",
+                "start": 569,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 562,
+            "text": "S$600,000",
+            "start": 553
+          },
+          "layout": "person_row",
+          "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 552,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 532,
+            "memberId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "support": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 162,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 120,
+          "onPage": 9
+        },
+        "support": {
+          "end": 162,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 120,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "support": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 443,
+          "text": "• Death due to Accident\tS$3,000",
+          "start": 412,
+          "onPage": 9
+        },
+        "support": {
+          "end": 443,
+          "text": "• Death due to Accident\tS$3,000",
+          "start": 412,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 474,
+          "text": "• Death due to Illness\tS$1,500",
+          "start": 444,
+          "onPage": 9
+        },
+        "support": {
+          "end": 474,
+          "text": "• Death due to Illness\tS$1,500",
+          "start": 444,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 202,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 164,
+          "onPage": 13
+        },
+        "support": {
+          "end": 202,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 164,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 210,
+          "text": "Hip\t75%",
+          "start": 203,
+          "onPage": 13
+        },
+        "support": {
+          "end": 210,
+          "text": "Hip\t75%",
+          "start": 203,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 247,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 211,
+          "onPage": 13
+        },
+        "support": {
+          "end": 247,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 211,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "passage": {
+          "end": 247,
+          "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 127,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 442,
+          "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-wording"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "search_passages",
+        "page": {
+          "end": 3,
+          "start": 3
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 348,
+          "text": "Section 4 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.\nThe Compassionate Death Allowance Benefit may be claimed under either the Core Scheme or the Voluntary Scheme.",
+          "start": 0,
+          "onPage": 3
+        },
+        "support": {
+          "end": 237,
+          "text": "If an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.",
+          "start": 50,
+          "onPage": 3
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-wording"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 304,
+          "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Policy Wording\nSection 1 - Accidental Death\nWe will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.\nThis wording applies only to a Journey shown in a Schedule issued to you.",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 230,
+          "text": "We will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.",
+          "start": 105,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000104",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-travel-wording"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "search_passages",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 411,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36\nSection A - Death and Disablement\nAccidental Death: 100% of the Sum Insured.\nPermanent Dismemberment: up to 100% of the Sum Insured according to the Scale of Compensation, if the loss occurs within 365 days of the Accident.\nSection B - Compassionate Death Allowance\nCompassionate Death Allowance (per enrolled Insured Person)",
+          "start": 0,
+          "onPage": 9
+        },
+        "support": {
+          "end": 85,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36",
+          "start": 0,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e17": {
+        "id": "e17",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 163,
+          "text": "Harbourline General Insurance Pte. Ltd. - Travel Insurance - Benefit Summary\nPlans: Classic, Premier\nAccidental Death: as shown in the Schedule for the plan chosen",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 163,
+          "text": "Accidental Death: as shown in the Schedule for the plan chosen",
+          "start": 101,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000105",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-travel-summary"
+      },
+      "e18": {
+        "id": "e18",
+        "via": "search_passages",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 247,
+          "text": "Simple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 88,
+          "onPage": 13
+        },
+        "support": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e19": {
+        "id": "e19",
+        "via": "search_passages",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 571,
+          "text": "• Death due to Accident\tS$3,000\n• Death due to Illness\tS$1,500\nThe allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+          "start": 412,
+          "onPage": 9
+        },
+        "support": {
+          "end": 571,
+          "text": "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+          "start": 475,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e20": {
+        "id": "e20",
+        "via": "search_passages",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 86,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+          "start": 0,
+          "onPage": 13
+        },
+        "support": {
+          "end": 86,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+          "start": 0,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e21": {
+        "id": "e21",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 325,
+          "text": "Section 2 - Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSimple Fracture means a closed fracture where the skin is not broken.\nSum Insured means the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 128,
+          "text": "Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+          "start": 24,
+          "onPage": 2
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-wording"
+      },
+      "e22": {
+        "id": "e22",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 637,
+          "text": "S****917H\tLim Pei Shan, Cheryl\tS$1,000,000\tAs of\t06/10/2022\nGROUP PERSONAL ACCIDENT(POLICY NO. KPA-520012)\nS****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022\nS****917H\tLim Pei Shan, Cheryl\tS$600,000\tAs of\t06/10/2022",
+          "start": 415,
+          "onPage": 1
+        },
+        "support": {
+          "end": 509,
+          "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+          "start": 475,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e23": {
+        "id": "e23",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 389,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No. KP-4410)\nSection 6 - Other Fracture\nOther Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.\nBone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 93,
+          "text": "Kestrel Life Ltd - Public Officers Group Personal Accident - Policy Wording (Group Policy No.",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-wording"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7e800000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e3",
+            "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e4",
+            "excerpt": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Public Officers Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e5",
+            "excerpt": "Accidental Death: 100% of the Sum Insured.",
+            "insurer": "KestrelOne",
+            "pageEnd": 9,
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "pageStart": 9,
+            "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e19",
+            "excerpt": "The allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+            "insurer": "KestrelOne",
+            "pageEnd": 9,
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "pageStart": 9,
+            "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e15",
+            "excerpt": "We will pay the Accidental Death benefit shown in your Schedule if you die within 90 days of an Accident during your Journey.",
+            "insurer": "Harbourline General Insurance Pte. Ltd.",
+            "pageEnd": 1,
+            "policyId": "7e800000-0000-4000-8000-000000000104",
+            "pageStart": 1,
+            "policyName": "Travel Insurance - Policy Wording",
+            "documentRole": "policy_wording"
+          },
+          {
+            "chunkId": "rag2:e14",
+            "excerpt": "If an Insured Person dies as a result of an Accident, we will pay the Compassionate Death Allowance Benefit on receipt of proof of death and the relevant documents in our prescribed form.",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 3,
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "pageStart": 3,
+            "policyName": "Public Officers Group Personal Accident - Policy Wording",
+            "documentRole": "policy_wording"
+          },
+          {
+            "chunkId": "rag2:e21",
+            "excerpt": "Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.",
+            "insurer": "Kestrel Life Ltd",
+            "pageEnd": 2,
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "pageStart": 2,
+            "policyName": "Public Officers Group Personal Accident - Policy Wording",
+            "documentRole": "policy_wording"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2022-10-06",
+            "value": 1000000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Term Life",
+            "pageEnd": 1,
+            "passage": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+            "currency": "SGD",
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "sentence": "Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "pageStart": 1,
+            "rowPerson": "Wong Jia Hui, Adrian",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          {
+            "asOf": "2022-10-06",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+            "currency": "SGD",
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "sentence": "Adrian’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; this is the amount recorded on that date, not confirmation of cover on the hypothetical event date.",
+            "pageStart": 1,
+            "rowPerson": "Wong Jia Hui, Adrian",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          {
+            "value": 3000,
+            "column": null,
+            "benefit": "Death due to Accident",
+            "pageEnd": 9,
+            "passage": "• Death due to Accident\tS$3,000\n• Death due to Illness\tS$1,500\nThe allowance applies only to Insured Persons enrolled for it under the scheme's optional cover.",
+            "currency": "SGD",
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "sentence": "The summary lists a S$3,000 Death due to Accident compassionate allowance only for insured persons enrolled for that optional cover; Adrian’s enrollment is not established in the uploaded documents.",
+            "pageStart": 9,
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

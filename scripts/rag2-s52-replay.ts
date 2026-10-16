@@ -7,6 +7,7 @@
  * Evidence class: REPLAY of recorded model output, not a new model result. A product change that would make the model
  * act differently (e.g. use a calculation that now succeeds) is NOT shown by a replay: the recorded next step is played.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -129,7 +130,9 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
   await check("the differences from the live answers (run.json's saved answers, shown as the page shows them) are exactly the fixes above", () => {
     const expected: Record<string, { removed: RegExp[]; added: RegExp[] }> = {
       "S52A#0": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd with the death certificate/], added: [/^The group accident wording lists S\$2,000 for Repatriation of Mortal Remains if death occurs outside Singapore as a result of an Accident\.$/, /says to notify Kestrel Life Ltd within 6 months with the death certificate/] },
-      "S52A#1": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd of a death and provide/], added: [/^For Adrian, the group accident wording provides Repatriation of Mortal Remains of S\$2,000 if death occurs outside Singapore as a result of an Accident\.$/, /notify Kestrel Life Ltd of a death within 6 months/, /does not document travel cover for Japan/] },
+      "S52A#1": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd of a death and provide/, /^Contact the group personal accident insurer about .*; keep the death certificate/], added: [/^For Adrian, the group accident wording provides Repatriation of Mortal Remains of S\$2,000 if death occurs outside Singapore as a result of an Accident\.$/, /notify Kestrel Life Ltd of a death within 6 months/, /does not document travel cover for Japan/,
+        // reliable chat (contract C): the live next step's three independent actions are three steps, each checked whole
+        /^Contact the group personal accident insurer about the Accidental Death and Repatriation of Mortal Remains benefits\.$/, /^Keep the death certificate and reasonable repatriation-cost records\.$/, /^Ask what claim forms and supporting documents are required\.$/] },
       "S52C#0": { removed: [/^I couldn’t confirm an answer to that from your documents\.$/, /IMG_0042\.jpg \(could not be read\) -- link it to a person so it can be used for them\.$/], added: [/its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/] },
       "S52D#0": { removed: [/do not provide Adrian’s Group Personal Accident Sum Insured/], added: [] },
     };

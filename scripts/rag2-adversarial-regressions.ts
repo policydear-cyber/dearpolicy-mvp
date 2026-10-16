@@ -13,6 +13,7 @@
  * Each check prints PASS/FAIL; a final JSON line lists the results. Exit 1 if any check failed.
  * Filter with RAG2_ADV_ONLY=<regex on check names>.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import type { ChatAnswer } from "@/types";
 import { setAdvEnv, startAdvHarness, type AdvHarness, type Saved } from "./fixtures/rag2-adv/harness";

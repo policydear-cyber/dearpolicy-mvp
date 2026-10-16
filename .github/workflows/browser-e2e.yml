@@ -286,6 +286,17 @@ jobs:
         env:
           PR50_NAMES: snake
         run: npm run e2e:rag2-pr50
+      - name: Seed the reliable-chat second household (Tan) and restart the server
+        run: |
+          pkill -f "e2e/support/rag2-loop-server.ts" || true
+          sleep 2
+          node --import tsx e2e/support/seed-rag2-stress-report.ts --household tan
+          E2E_RAG2_HOUSEHOLD=tan PORT=3300 NODE_ENV=test nohup node --import tsx e2e/support/rag2-loop-server.ts > logs/reliable-chat-server.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3300/api/health && break; sleep 2; done
+          curl -sf -o /dev/null http://localhost:3300/api/health || { echo "not ready"; exit 1; }
+      - name: Run the reliable-chat browser slice (benefit -> terms -> question -> server evaluation -> correction -> reopen; scripted model; displayed = saved)
+        timeout-minutes: 20
+        run: npm run e2e:reliable-chat
       - name: Service logs on failure (synthetic data only; no secrets exist in this job)
         if: failure()
         run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done

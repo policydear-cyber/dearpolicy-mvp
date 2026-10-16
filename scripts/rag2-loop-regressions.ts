@@ -18,6 +18,7 @@
  *     under the deterministic stand-in.
  * Every check runs; exit 1 if any failed.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

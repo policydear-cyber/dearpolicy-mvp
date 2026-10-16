@@ -29,7 +29,9 @@ export const NOTE_FACTS: LoopToolSpec = {
 
 /** One sentence of the visible answer and what it rests on (final_answer, and ask_user's statements). */
 const SENTENCE: JsonSchema = { type: "object", properties: {
-  text: str("One sentence as the household will read it (no ids: cite with the fields below)."),
+  kind: { type: "string", enum: ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status"], description: "What this statement is. calculation: an evaluate_benefit result (give result_id; the server writes the figures, base and source). benefit_terms: a benefit's printed terms (give benefit_id; the server writes them). fact: something a cited passage states. uncertainty: what the documents do not establish (e.g. cover on a later date). suggestion: a general, labelled suggestion (no figures, no requirement the documents do not print). library_status: what documents the household has. One claim per statement: never join two benefits, two insurers or two conditions in one statement." },
+  benefit_id: str("kind benefit_terms: the benefit (b...) from person_benefits."),
+  text: str("One sentence as the household will read it (no ids: cite with the fields below). For kind calculation / benefit_terms the server writes it; leave it short."),
   evidence_ids: ids("Evidence ids (e1, e2...) the sentence rests on."),
   value_ids: ids("Value ids (v1...) from select_table_value whose figures the sentence states."),
   result_id: str("A result id (r1...) from compute whose result the sentence states."),
@@ -60,7 +62,7 @@ export const FINAL_ANSWER: LoopToolSpec = {
   parameters: { type: "object", properties: {
     subject_id: str("The household member the answer is about (when it is about one)."),
     sentences: { type: "array", items: SENTENCE },
-    next_steps: { type: "array", items: { type: "string" }, description: "Optional practical next steps (no figures)." },
+    next_steps: { type: "array", items: { type: "string" }, description: "Optional practical next steps (no figures), one action each. To say who to contact about a document, give the step as \"contact:<policy_id>\": the server writes it naming that document's own insurer." },
   }, required: ["sentences"], additionalProperties: false },
 };
 

@@ -102,10 +102,20 @@ export type RowChoice = { row: PctRow; table: PctTable } | { ambiguous: { row: P
 /** The ONE row the condition's own words name (\"... of the leg\" names \"Jaw, Pelvis, Leg, Ankle or Knee\"), in the table
  * the benefit names. A tie, or no row named, is never resolved; a named row that prints no single percentage, or is
  * printed again with a different percentage, is unresolved. */
+/** Reliable chat (rc-live-1, RCT1a: "the shin bone" matched no row of "Leg - below the knee (tibia or fibula)"): the
+ * everyday name of a bone also carries its anatomical name, which schedules print. Only adds words; never removes. */
+const ANATOMY: Record<string, string[]> = {
+  shin: ["tibia"], shinbone: ["tibia"], calf: ["fibula"], thigh: ["femur"], thighbone: ["femur"], kneecap: ["patella"],
+  collarbone: ["clavicle"], breastbone: ["sternum"], tailbone: ["coccyx"], heel: ["calcaneus"], cheekbone: ["zygoma"],
+  forearm: ["radius", "ulna"], jawbone: ["mandible"], skull: ["cranium"], backbone: ["vertebra", "vertebrae"], spine: ["vertebra", "vertebrae"],
+};
+function withAnatomy(words: string[]): string[] {
+  return [...new Set([...words, ...words.flatMap((w) => (ANATOMY[w] ?? []).map(stem))])];
+}
 export function choosePercentRow(tables: PctTable[], benefit: string, condition: string): RowChoice {
   const pool = ownTables(tables, benefit).flatMap((table) => table.rows.map((row) => ({ row, table })));
   const benefitWords = new Set(wordsOf(benefit));
-  const want = wordsOf(condition).filter((w) => !benefitWords.has(w));
+  const want = withAnatomy(wordsOf(condition)).filter((w) => !benefitWords.has(w));
   const scored = pool.map((x) => { const have = new Set(wordsOf(x.row.label)); return { ...x, hits: want.filter((w) => have.has(w)).length }; }).filter((x) => x.hits > 0);
   if (!scored.length) return { none: pool };
   const best = Math.max(...scored.map((x) => x.hits));

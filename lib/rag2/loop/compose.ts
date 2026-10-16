@@ -11,6 +11,7 @@
  */
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
+import { RENDERED, RENDERED_STEPS } from "./statement-render";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
 import { currencyDeclarationLine, documentCurrency, moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
@@ -130,41 +131,35 @@ export function withoutUnconfirmedAddress(text: string, people: { id: string; na
   if (t === text) return text;
   return t.replace(/^\s*([a-z])/, (m, c) => c.toUpperCase()).replace(/\s{2,}/g, " ").trim();
 }
-/** The sentence without its clauses about an endorsement; null when nothing (or only a connective) is left. */
-export function withoutEndorsementClauses(text: string): string | null {
-  // clauses with the separator that introduces each (kept as written, so the remaining connectives read as before)
-  const re = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though)\b))/;
-  const bits = text.split(re);
-  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
-  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
-  const keep = clauses.filter((c) => !ENDORSEMENT_WORDS_RE().test(c.body));
-  if (keep.length === clauses.length) return text;
-  if (!keep.length) return null;
-  let t = keep.map((c, k) => (k ? c.sep + c.body.replace(k === 0 ? /^$/ : /^$/, "") : c.body)).join("").trim();
-  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though)\s+/i, "");
-  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
-  if (!/[.!?]$/.test(t)) t += ".";
-  t = t.charAt(0).toUpperCase() + t.slice(1);
-  return t.split(/\s+/).length >= 4 ? t : null;
-}
-const ENDORSEMENT_WORDS_RE = () => ENDORSEMENT_WORDS;
 const CLAUSE_SPLIT = /(;\s+|:\s+|,\s+(?=(?:and|but|while|although|though|whereas)\b))/;
-/** The clauses of a sentence (the split withoutEndorsementClauses uses). */
+/** The clauses of a sentence. */
 export function clausesOf(text: string): string[] { return text.split(CLAUSE_SPLIT).filter((_, k) => k % 2 === 0); }
-/** The sentence without the clauses `dropIt` selects; null when nothing (or only a connective) is left. */
-export function withoutClausesWhere(text: string, dropIt: (body: string) => boolean): string | null {
-  const bits = text.split(CLAUSE_SPLIT);
-  const clauses: { sep: string; body: string }[] = [{ sep: "", body: bits[0] }];
-  for (let k = 1; k < bits.length; k += 2) clauses.push({ sep: bits[k], body: bits[k + 1] ?? "" });
-  const keep = clauses.filter((c) => !dropIt(c.body));
-  if (keep.length === clauses.length) return text;
-  if (!keep.length) return null;
-  let t = keep.map((c, k) => (k ? c.sep + c.body : c.body)).join("").trim();
-  if (keep[0] !== clauses[0]) t = t.replace(/^(?:and|but|while|although|though|whereas)\s+/i, "");
-  t = t.replace(/[;:,]\s*$/, "").replace(/[;:,]?\s*\.$/, ".");
-  if (!/[.!?]$/.test(t)) t += ".";
-  t = t.charAt(0).toUpperCase() + t.slice(1);
-  return t.split(/\s+/).length >= 4 ? t : null;
+/** Reliable chat (contract C): a statement's INDEPENDENT claims as separate statements carrying the same citations --
+ * only three recognisable kinds, so a clause that leans on the one before is never surfaced on its own:
+ *   - an action ("contact ...", "keep ...", "ask ...") -- a step or an instruction;
+ *   - a claim with its own document as subject ("the policy wording says / lists / pays ...");
+ *   - an uncertainty about the documents ("the uploaded documents do not establish ...").
+ * Anything else stays with the clause before it and is checked together with it (a subject that refers back -- "Cai is
+ * not listed" after "the schedule names ..." -- or a qualification -- "your two nights alone do not establish ..." --
+ * is part of the claim it qualifies). Server-written statements, calculations, value-bound figures and labelled lists
+ * are never split. */
+const ACTION_PART = /^(?:contact|call|ask|keep|check|report|notify|submit|gather|tell|bring|send|email|write|get|request|confirm|upload|find out|make sure)\b/i;
+const DOCUMENT_CLAIM_PART = /^the [\w\s’'-]{0,60}?\b(?:wording|summary|schedule|certificate|policy|document|booklet|plan|endorsement|brochure)\b[^,;]{0,30}?\b(?:says|lists|prints|states|pays|provides|shows|defines|describes|covers)\b/i;
+const UNCERTAINTY_PART = /^(?:the (?:uploaded |stored )?documents?|your (?:uploaded )?documents?|these documents|it is (?:not clear|unclear))\b[^;]{0,40}?\b(?:do(?:es)? not|don['’]t|doesn['’]t|cannot|can['’]t|whether)\b/i;
+const LIMITING = /\b(?:alone|only|unless|except|on (?:its|their) own)\b/i;
+export function independentStatements(x: Record<string, unknown>): Record<string, unknown>[] {
+  const text = String(x?.text ?? "");
+  if (!text || RENDERED.has(x) || x.result_id || x.result_ids || (Array.isArray(x.value_ids) && x.value_ids.length) || /^[^;:.]{1,80}:\s/.test(text)) return [x];
+  const bits = text.split(/(;\s+|,\s+(?=(?:and|but|while|whereas)\s))/);
+  const parts: string[] = [bits[0]];
+  for (let k = 1; k < bits.length; k += 2) {
+    const body = (bits[k + 1] ?? "").replace(/^(?:and|but|while|whereas)\s+/i, "");
+    if (body.split(/\s+/).length >= 4 && (ACTION_PART.test(body) || ((DOCUMENT_CLAIM_PART.test(body) || UNCERTAINTY_PART.test(body)) && !LIMITING.test(body)))) parts.push(body);
+    else parts[parts.length - 1] += bits[k] + (bits[k + 1] ?? "");
+  }
+  if (parts.length < 2) return [x];
+  const tidy = (t: string) => { const u = t.trim().replace(/[;,\s]+$/, ""); return u.charAt(0).toUpperCase() + u.slice(1) + (/[.!?]$/.test(u) ? "" : "."); };
+  return parts.map((t) => ({ ...x, text: tidy(t), _split: true }));
 }
 const CUR_AT = /(S\$|SGD\s?|US\$|USD\s?|HK\$|RM\s?|(?<![A-Za-z$])\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
 /** How a line prints `value`: with S$ / SGD ("explicit"), with a bare "$" ("bare"), in another currency, or not at all. */
@@ -209,8 +204,7 @@ export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<
       return { kept: text.replace(/[.!?]?\s*$/, "") + ` (${docName} prints this amount without a currency sign and states: “${decl.replace(/[.\s]+$/, "")}”).`, reason: "", basis };
     }
     const reason = `states ${f.raw} from ${docName}, which prints that amount with a bare $ and does not state its currency`;
-    const rest = withoutClausesWhere(text, (b) => b === clause);
-    return rest && rest !== text ? { kept: rest, reason, basis: null } : { dropped: reason };
+    return { dropped: reason };
   }
   return null;
 }
@@ -342,14 +336,6 @@ export function borrowedCondition(text: string, passages: (string | { text: stri
     if (!underNamed) return `states “${w}” for ${named.join(" / ")}, but the cited wording prints it only under ${[...new Set(owners.map((o) => (o.owner ?? "another line") + (o.owner && POLICY_WIDE.test(o.owner) && o.doc ? ` of ${o.doc}` : "")))].join(" / ")}`;
   }
   return null;
-}
-/** The sentence without its time-window clauses (", if … within 365 days of the Accident"); null when nothing is left. */
-export function withoutWindowClauses(text: string): string | null {
-  let t = text.replace(/,?\s*(?:but\s+)?(?:only\s+)?(?:if|provided(?: that)?|when|where)\b[^.;]*?\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b[^.;]*/gi, "");
-  t = t.replace(/\s*\bwithin\s+\d+\s+(?:calendar\s+)?(?:days?|weeks?|months?|years?)\b(?:\s+(?:of|from|after)\s+[^.;,]*)?/gi, "");
-  t = t.replace(/\s{2,}/g, " ").replace(/\s+([.;,])/g, "$1").trim();
-  if (!/[.!?]$/.test(t)) t += ".";
-  return t.split(/\s+/).length >= 5 ? t : null;
 }
 const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
 /** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
@@ -501,34 +487,6 @@ export function insurerNotFor(text: string, subjectId: string | null, ctx: Pick<
   }
   return null;
 }
-/** V1.4: the statement with an insurer the person has no document from taken out of a list of insurers ("contact
- * Meridian Life and Lumen General" -> "contact Meridian Life"), when what remains still names one of the person's own
- * insurers; null when it cannot be (the sentence is then left out). */
-export function withoutOtherInsurers(text: string, subjectId: string | null, ctx: Pick<Ctx, "benefits">, relevant?: Set<string> | null): string | null {
-  const hb = ctx.benefits;
-  if (!hb || !subjectId) return null;
-  const mineIns = new Set((hb.policiesByMember.get(subjectId) ?? []).filter((p) => p.personal && (!relevant || relevant.has(p.policyId))).flatMap((p) => [p.insurer ?? "", ...(hb.insurerAliases?.get(p.policyId) ?? [])]).map((n) => n.trim()).filter(Boolean));
-  let t = text;
-  for (const ins of hb.insurers) {
-    if (mineIns.has(ins) || !insurerNotFor(ins, subjectId, ctx, true, relevant)) continue;
-    const esc = ins.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+(?:Ltd|Limited|Pte\.? Ltd|Insurance)\.?$/i, "");
-    const name = `${esc}(?:\\s+(?:Insurance|Pte\\.?\\s+Ltd|Ltd|Limited))*\\.?`;
-    const before = t;
-    t = t.replace(new RegExp(`\\bboth\\s+(?=[^.;]*\\band\\s+${name})`, "i"), "").replace(new RegExp(`\\s*(?:,|\\band\\b|\\bor\\b)\\s+${name}(?=[\\s.,;]|$)`, "i"), "").replace(new RegExp(`${name}\\s*(?:,|\\band\\b|\\bor\\b)\\s+`, "i"), "");
-    if (t === before) {
-      // V1.5 (pr50-live A: "Contact <own insurer> ... to report the death, and ask <other insurer> whether ..." lost the
-      // supported contact step with the unrelated clause): the clauses that name the other insurer are taken out on
-      // their own; what remains must still stand (and is checked below like any other remainder).
-      if (!insurerNotFor(t, subjectId, ctx, true, relevant)) continue; // nothing of another insurer is left to take out
-      const kept = withoutClausesWhere(t, (body) => !!insurerNotFor(body, subjectId, ctx, true, relevant));
-      if (!kept || kept === t) return null;
-      t = kept;
-    }
-  }
-  t = t.replace(/\s{2,}/g, " ").trim();
-  if (insurerNotFor(t, subjectId, ctx, true, relevant)) return null;
-  return [...mineIns].some((i) => !insurerNotFor(i, subjectId, ctx, true, relevant) && new RegExp(`\\b${i.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t)) ? t : null;
-}
 /** V1.4: the benefits a document prints -- its product headings and benefit labels, from the shared benefit view.
  * Never a household member's name, an address, a date or a letter line. (Without the view: the document's own label
  * lines, less any naming a household member or printing a digit.) */
@@ -575,29 +533,6 @@ function identityLabel(ref: EvidenceRef, value: number, currency: string, clause
   if (!namesBenefit(clause, pick)) return better ? { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` } : null;
   if (better) return { conflict: `printed under “${pick}”, but the sentence states it for “${better}”` };
   return { label: pick };
-}
-/** V1.3: a sentence whose figure could not be verified, cut into parts that can each be checked on their own: its
- * clauses at "; ", or -- for one clause -- the part before the comma-delimited phrase stating that figure (the
- * document, insurer, person and date facts). Null when no self-standing part remains. */
-function verifiableParts(text: string, failedRaw: string | null): string[] | null {
-  const tidy = (x: string) => { const t = x.trim().replace(/[,;:\s]+$/, ""); return t ? t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? "" : ".") : ""; };
-  const enough = (x: string) => (x.match(/[A-Za-z]{2,}/g) ?? []).length >= 4;
-  if (/;\s+/.test(text)) {
-    const raw = text.split(/;\s+/);
-    const at = failedRaw ? raw.findIndex((x) => x.includes(failedRaw)) : -1;
-    // A later clause pointing back at the unsupported figure ("... that this is the current amount") is not kept alone.
-    const BACK = /\b(?:this|that|it|these|those)\s+(?:is|was|are|were|amount|figure|sum|cover)\b/i;
-    const parts = raw.filter((x, k) => !(at >= 0 && k > at && BACK.test(x))).map(tidy).filter(enough);
-    return parts.length >= 2 || (parts.length === 1 && at >= 0 && !parts[0].includes(failedRaw!)) ? parts : null;
-  }
-  if (!failedRaw) return null;
-  const segs = text.split(/,\s+/);
-  const at = segs.findIndex((x) => x.includes(failedRaw));
-  if (at <= 0) return null;
-  const head = tidy(segs.slice(0, at).join(", "));
-  // A head that is the reason given for the dropped figure ("Nothing on file amends it, so ... is S$80") is not kept alone.
-  if (/^(?:so|and so|therefore|thus|hence|which means|meaning|because|as)\b/i.test(segs[at].trim())) return null;
-  return enough(head) && !/\b(?:if|unless|when|provided|subject to)\b/i.test(segs.slice(at).join(" ")) ? [head] : null;
 }
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
 function lineCarries(text: string, words: string[]): boolean {
@@ -862,7 +797,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     ...(((x?.value_ids as string[]) ?? []).map((id) => ctx.tools.values.get(id)?.operand.evidence.policyId)),
   ]).filter((x): x is string => !!x));
   const people = peopleFromLabels(ctx.names ?? []);
-  const sentencesIn = [...(args.sentences ?? [])];
+  // Reliable chat (contract C): independent claims joined in one sentence ("Contact Kestrel ...; ask Harbourline ...")
+  // become separate statements BEFORE validation, each with its own subject, so one failing claim never takes a
+  // supported one with it -- and nothing is cut out of a finished statement afterwards.
+  const sentencesIn = (args.sentences ?? []).flatMap((x) => independentStatements(x));
   for (let i = 0; i < sentencesIn.length; i++) {
     for (const x of out.sentences) x.at ??= cur;
     cur = i;
@@ -895,30 +833,30 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // V1.4: an insurer is named for a person only when one of that person's linked documents is from it -- never an
     // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
     const wrongInsurer = insurerNotFor(text, subjectId, ctx, false, relevantPolicies);
-    if (wrongInsurer) { const kept = withoutOtherInsurers(text, subjectId, ctx, relevantPolicies); if (kept) { out.dropped.push({ sentence: text, reason: wrongInsurer + " (that insurer was taken out)" }); text = kept; } else { drop(text, wrongInsurer); continue; } }
+    // Reliable chat (contract C): a statement is checked whole. Independent claims were split into their own statements
+    // above; what fails here is omitted as a unit -- never cut down to a fragment whose meaning changes.
+    if (wrongInsurer) { drop(text, wrongInsurer); continue; }
     // V1.4: an endorsement that belongs to another household member supports no conclusion about this person -- no
     // amendment, caveat, uncertainty or conflict (s50-live-2: Michelle's endorsement cited as making Darren's amount
     // uncertain). Person / policy / version binding applies to statements without figures too.
     // V1.5: a condition is stated only for the benefit whose own wording prints it -- a "within 365 days" printed under
     // Permanent Dismemberment is never borrowed for Accidental Death because the two lines are adjacent in the passage.
     const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => ({ text: evidenceTextOf(e), doc: ctx.policyNames?.get(e.policyId) ?? ctx.state.docNames?.[e.policyId] ?? null })));
-    if (borrowed) { const kept = withoutWindowClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: borrowed + " (that condition was taken out)" }); text = kept; } else { drop(text, borrowed); continue; } }
+    if (borrowed) { drop(text, borrowed); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
     {
       let bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
-      for (let n = 0; bare && !("dropped" in bare) && n < 3; n++) {
-        if (bare.basis) { evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, bare.basis, "compose")])]; text = bare.kept; bare = null; break; }
-        out.dropped.push({ sentence: text, reason: bare.reason + " (that clause was taken out)" }); text = bare.kept;
-        bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
-      }
-      if (bare && "dropped" in bare) { drop(text, bare.dropped); continue; }
+      // (the document's own currency statement is cited with it -- an addition; an unsupported currency claim omits the
+      // statement whole)
+      if (bare && !("dropped" in bare) && bare.basis) { evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, bare.basis, "compose")])]; text = bare.kept; bare = null; }
+      if (bare) { drop(text, "dropped" in bare ? bare.dropped : bare.reason); continue; }
     }
     // V1.5: a trip conclusion (not covered / not shown) is checked against person, policy, dates, destination and source.
     let tripVerified = false;
     { const trip = tripConclusion(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), subjectId, ctx); if (trip && "drop" in trip) { drop(text, trip.drop); continue; } if (trip && "verified" in trip) tripVerified = true; else if (trip) { out.dropped.push({ sentence: text, reason: trip.reason }); text = trip.reworded; } }
     const notTheirs = otherPersonsEndorsement(text, subjectId, ctx);
-    if (notTheirs) { const kept = withoutEndorsementClauses(text); if (kept) { out.dropped.push({ sentence: text, reason: notTheirs + " (that clause was taken out)" }); text = kept; } else { drop(text, notTheirs); continue; } }
+    if (notTheirs) { drop(text, notTheirs); continue; }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
     // household's current, active version -- with or without a figure in the sentence.
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));
@@ -997,18 +935,14 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // benefit, requiring proof ..., and says it can be claimed under either scheme; the documents do not establish
       // <person>'s Sum Insured or enrolment") is checked clause by clause: an unsupported clause is taken out and the
       // supported ones stay -- never the whole sentence for one clause, never an unsupported clause for the rest.
-      // (A labelled list -- "Adrian: <document>; <document>" -- is items of one statement, not independent claims.)
+      // Reliable chat (contract C): a statement's own clauses (those that still depend on it -- "..., and says it can be
+      // claimed under either scheme") are checked with it; one unsupported clause omits the whole statement, never just
+      // that clause (which would leave a fragment about another benefit). Independent claims were split off above.
+      // (A labelled list, an absence clause and the household's own words said back are judged with the statement.)
       const parts = /^[^;:.]{1,80}:\s/.test(text) ? [text] : clausesOf(text);
       if (parts.length > 1) {
-        // (An absence clause -- "it does not list X" -- names what is missing from its evidence by design; it is judged
-        // with the sentence it belongs to, as before.)
-        // (Only a clause that itself states something about cover is judged alone -- not the household's own words said
-        // back to them, "You told me he was warded for two nights".)
         const failing = parts.filter((c) => COVERISH.test(c) && !/\byou (?:told|said|mentioned|wrote|reported|gave)\b/i.test(c) && !ABSENCE.test(c) && !NOT_STATED.test(c.trim())).map((c) => ({ c, why: checkCitedStatement(c, citedEv, { ...stmtCtx, subjectId }) })).filter((x) => x.why);
-        if (failing.length && failing.length < parts.length) {
-          const kept = withoutClausesWhere(text, (body) => failing.some((f) => f.c === body));
-          if (kept && !checkCitedStatement(kept, citedEv, stmtCtx)) { out.dropped.push({ sentence: text, reason: `a clause is not supported by its evidence and was taken out (“${failing[0].c.trim()}”: ${failing[0].why})` }); text = kept; }
-        }
+        if (failing.length) { drop(text, `not supported by its evidence: “${failing[0].c.trim()}”: ${failing[0].why}`, UNSUPPORTED_NOTE); continue; }
       }
       const why = checkCitedStatement(text, citedEv, stmtCtx);
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
@@ -1157,7 +1091,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (failed) {
       // V1.3: the parts of the sentence that can stand on their own are checked on their own (once); only the part
       // whose figure is unsupported is left out, never the supported document, person and date facts with it.
-      const parts = !(s as { _part?: boolean })._part ? verifiableParts(text, failedRaw) : null;
+      // Reliable chat (contract C): only the statement's independent claims that do not state the failed figure are
+      // kept -- each a whole statement with its own subject; a clause is never cut out of the claim it belongs to.
+      const indep = !(s as { _part?: boolean })._part ? independentStatements({ text }).map((x) => String(x.text)).filter((p) => !failedRaw || !p.includes(failedRaw)) : [];
+      const parts = indep.length && indep.length < independentStatements({ text }).length ? indep : null;
       if (parts) { out.dropped.push({ sentence: text, reason: failed }); sentencesIn.splice(i + 1, 0, ...parts.map((p) => ({ ...s, text: p, _part: true }))); continue; }
       drop(text, failed); continue;
     }
@@ -1180,13 +1117,15 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   }
   for (const x of out.sentences) x.at ??= cur;
   cur = -1;
-  for (const step of Array.isArray(args.nextSteps) ? args.nextSteps : []) {
+  // (independent steps joined in one -- "contact X, and ask Y ..." -- are separate steps, each checked whole)
+  const stepsIn = (Array.isArray(args.nextSteps) ? args.nextSteps : []).flatMap((x) => RENDERED_STEPS.has(String(x)) ? [String(x)] : independentStatements({ text: String(x ?? "") }).map((y) => String(y.text)));
+  for (const step of stepsIn) {
     const t = stripInternalIds(String(step ?? "")).text;
     if (!t) continue;
     if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
     let stepText = t;
-    const wrongInsurer = insurerNotFor(stepText, out.subjectId, ctx, true, relevantPolicies);
-    if (wrongInsurer) { const kept = withoutOtherInsurers(stepText, out.subjectId, ctx, relevantPolicies); if (!kept) { drop(stepText, wrongInsurer, STEP_NOTE); continue; } stepText = kept; }
+    const wrongInsurer = RENDERED_STEPS.has(stepText) ? null : insurerNotFor(stepText, out.subjectId, ctx, true, relevantPolicies);
+    if (wrongInsurer) { drop(stepText, wrongInsurer, STEP_NOTE); continue; }
     if (internalIdsIn(t).length) { drop(t, "a next step may not show an internal id", STEP_NOTE); continue; }
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);
@@ -1218,6 +1157,9 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
     if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact the household has given (or it has since been corrected)` };
     keys.push(hit[0]);
   }
+  // Reliable chat: the facts a server evaluation's case rests on (evaluate_benefit fact_keys), so correcting one
+  // withdraws the result built on it.
+  for (const k of c.dependsOn ?? []) if (facts[k] && !keys.includes(k)) keys.push(k);
   return { keys, problem: null };
 }
 /** Integration (S7): an estimate sentence that states the household's own bill figure says it is theirs ("the S$1,500
@@ -1311,6 +1253,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
       const hh = calcFactKeys(c, ctx); if (hh.problem) { drop(text, hh.problem, MISSING_FACT_NOTE); return; }
       factKeys = hh.keys;
     } else if (!ILLUSTRATION_IF.test(text)) { drop(text, "an illustration must state its what-if (“if …”)"); return; }
+    else factKeys = (c.dependsOn ?? []).filter((k) => !!ctx.state.claim?.facts?.[k]);
     if (c.kind === "indicative_estimate") text = attributeHouseholdFigures(text, c);
     // Integration (r6): an estimate that assumes earlier use of a capped allowance leaves what this stay needs states
     // that assumption in its own sentence (the save-time gate rejects it otherwise).

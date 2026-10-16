@@ -12,6 +12,7 @@
  *   R  (ingest-live-4) the one gate repair names only what the check said: no example limitation the model can copy.
  *   C  (ingest-live-5b) a child / adult comparison cited from the table row: the correct one passes, swapped figures fail.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";

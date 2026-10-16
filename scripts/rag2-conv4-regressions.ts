@@ -16,6 +16,7 @@
  * The same holds for another benefit and fact (L3, Kai's fracture: a table value issued two turns earlier).
  * REPRO=1 prints the visible text of each replayed turn.
  */
+import "./fixtures/legacy-contract";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
