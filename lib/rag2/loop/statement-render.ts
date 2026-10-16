@@ -51,7 +51,10 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
     // (an evaluation this turn found the household's reported part among none of these cases: said with the terms)
     const un = d.ctx.unlisted?.get(`${r.memberId}|${r.id}`);
     const none = un?.length ? ` It lists no case for ${un.length > 1 ? un.slice(0, -1).join(", ") + " or " + un.at(-1) : `a ${un[0]}`}.` : "";
-    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}`, evidence_ids: ev, value_ids: vals };
+    // (Actual-library findings: an unresolved base is said with the specific link that is missing -- never left as a bare
+    // "Sum Insured" the household cannot act on, and never contradicted by an amount)
+    const missing = b.kind === "unresolved" ? ` ${b.why.charAt(0).toUpperCase()}${b.why.slice(1)}.` : "";
+    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${missing}`, evidence_ids: ev, value_ids: vals };
   }
   const p = r.printed;
   if (p?.kind === "money") {

@@ -9,6 +9,7 @@
  * dropped here -- with an honest note -- before the gate ever sees it. Nothing is added: no figure is ever written by
  * this code, only bound.
  */
+import { isHeadingLine } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
 import { RENDERED, RENDERED_STEPS } from "./statement-render";
@@ -207,6 +208,39 @@ export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<
     return { dropped: reason };
   }
   return null;
+}
+/**
+ * Actual-library findings (16 Oct, the Compassionate Death Allowance Benefit: "funeral expenses incurred, up to $2,000"):
+ * a statement giving an amount with a bare "$", as its source line prints it. A bare "$" does not establish SGD. The
+ * currency is established only by the document's own currency statement (then said in that currency, the statement
+ * cited -- bareCurrencyClaim), or by the same document printing the SAME benefit's same amount with its currency (a
+ * benefit table line under that benefit's name; then said in that currency, that line cited). Otherwise the benefit and
+ * its terms are kept and the amount is said as printed, with its currency named as unknown -- never dropped whole and
+ * never shown as S$. Null when the statement states no bare-"$" amount its cited lines print that way.
+ */
+export function bareAmountClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state" | "people">): { text: string; basis: EvidenceRef | null } | null {
+  let out = text, basis: EvidenceRef | null = null, changed = false;
+  for (const f of moneyFiguresIn(text)) {
+    if (f.currency !== "$") continue;
+    const src = cited.flatMap((e) => evidenceTextOf(e).split(/\n+/).map((line) => ({ e, line }))).find((x) => printedForm(x.line, f.value) === "bare");
+    if (!src) continue;
+    const raw = f.raw.replace(/[.,;:]+$/, "");
+    const docText = ctx.libraryText?.get(src.e.policyId) ?? "";
+    if (currencyDeclarationLine(docText)) { out = out.replace(raw, "S" + raw); changed = true; continue; }
+    // the benefit the bare line is printed for (its section heading), and a line of the same document printing that
+    // benefit's same amount with its currency
+    const label = tidyLabel((lineLabel(src.e.policyId, src.line, ctx) ?? "").replace(/^\s*(?:section|part|clause)\s+[\w.]+\s*[-–:]\s*/i, ""));
+    const explicit = label && benefitWords(label).size ? docText.split("\n").find((l) => printedForm(l, f.value) === "explicit" && namesBenefit(l, label)) : undefined;
+    if (explicit) {
+      const lib = ctx.libraryPages?.get(src.e.policyId);
+      const pg = lib?.pages.find((x) => x.text.includes(explicit));
+      const ev = pg ? evidenceFor({ policyId: src.e.policyId, documentHash: lib!.hash, page: pg.page, pageText: pg.text, passage: explicit, subjectId: null }) : null;
+      if (ev) { out = out.replace(raw, "S" + raw); basis = ev; changed = true; continue; }
+    }
+    out = out.replace(raw, `${raw.replace(/^\$\s?/, "")} (printed with a “$” sign; the document does not say which currency)`);
+    changed = true;
+  }
+  return changed ? { text: out, basis } : null;
 }
 const AMOUNT_ABSENT = [
   /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t)\s+(?:provide|state|show|list|give|include|print|specify|mention|contain|establish|confirm)\b[^.;]{0,80}?\b(?:sum insured|sum assured|insured amount|amount of cover|cover amount|coverage amount)\b/i,
@@ -409,6 +443,15 @@ const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule",
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
 /** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
  * document (the save-time gate reads the same heading the same way). Null when none is printed. */
+/** A line continuing the sentence of the line above it (that line is unfinished prose). */
+function continuesPrevious(lines: string[], i: number): boolean {
+  for (let j = i - 1; j >= 0; j--) {
+    const p = lines[j].trim(); if (!p) return false;
+    // (prose: a sentence of eight or more words left unfinished -- never a table row ending in its figure)
+    return !/[.!?:;]["”’)]*$/.test(p) && !/\d\s?%?$/.test(p) && !isHeadingLine(p, lines[i]) && p.split(/\t+| {3,}/).length === 1 && p.split(/\s+/).length >= 8;
+  }
+  return false;
+}
 export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const text = ctx.libraryText?.get(ref.policyId) ?? null;
   if (!text) return null;
@@ -422,7 +465,9 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & 
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
     // V1.4: a line naming a household member (a name printed on its own line) is never a product heading.
     if (cells.length === 1 && (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)))) continue;
-    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
+    // (Actual-library findings: the first line of a wrapped sentence -- "... as a result of an Accident, which" -- is prose,
+    // not the heading the figure is printed under: skipped, so the section heading above the paragraph is found.)
+    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l) && isHeadingLine(l, lines[i + 1] ?? null) && !continuesPrevious(lines, i)) return l;
     if (cells.length >= 2 && !/\d/.test(l)) return null;
   }
   return null;
@@ -444,14 +489,15 @@ function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">
 /** Every label a document prints: its headings and its "Label:" lines. */
 function documentLabels(text: string): string[] {
   const out = new Set<string>();
-  for (const raw of text.split(/\n/)) {
+  const all = text.split(/\n/);
+  for (const [i, raw] of all.entries()) {
     const l = raw.trim(); if (!l) continue;
     const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim();
     if (own) { out.add(tidyLabel(own)); continue; }
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
     // (V1.5: a bullet item -- "• Death due to Accident" under Compassionate Death Allowance -- is a case of the benefit
     // above it, not a benefit label of its own.)
-    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
+    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l) && isHeadingLine(l, all[i + 1] ?? null) && !continuesPrevious(all, i)) out.add(tidyLabel(l));
   }
   return [...out].filter((x) => benefitWords(x).size > 0);
 }
@@ -845,7 +891,13 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (borrowed) { drop(text, borrowed); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
+    let relatedCurrency = false;
     {
+      const asPrinted = bareAmountClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+      if (asPrinted) { text = asPrinted.text; if (asPrinted.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, asPrinted.basis, "compose")])]; }
+      relatedCurrency = !!asPrinted?.basis;
+    }
+    if (!relatedCurrency) {
       let bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
       // (the document's own currency statement is cited with it -- an addition; an unsupported currency claim omits the
       // statement whole)

@@ -18,6 +18,7 @@ import { uniqueSteps } from "../../components/next-steps";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import * as TAN from "../fixtures/reliable-chat/tan";
 import * as PR50 from "../fixtures/rag2-pr50/household";
+import * as BOOKLET from "../fixtures/reliable-chat/booklet";
 import { gradeP50A } from "./pr50a-check";
 
 type Check = { id: string; dim: "C" | "K" | "S" | "U"; name: string; ok: boolean; detail?: string };
@@ -50,7 +51,12 @@ function finish(scenario: string, checks: Check[], b: ReturnType<typeof base>): 
 }
 /** Grader v2 (after rc-live-1, whose v1 grades passed answers that were not useful): questions the household cannot
  * answer, and contact / claim advice naming an insurer that is not behind one of the person's own policies. */
-export const GRADER_VERSION = "v2";
+export const GRADER_VERSION = "v3";
+/** v3 (actual-library repairs, rc-live-5, written before the run): every v2 check unchanged, plus the booklet
+ * household's graders (gradeBKL1 / gradeBKL2 / gradeBKL3) and a cut-clause check: a quotation ending in a connective
+ * ("..., which”") is a usefulness failure, and so is the generic model-use-limit text. */
+const CUT_QUOTE = /[“"][^”"]*\b(?:which|and|or|of|the|to|that|if|an?|by|with|for)\s*[”"]/i;
+const LIMIT_TEXT = /model-use limit|reached its|stopped before finishing/i;
 const INSURER_REVIEW_Q = /\b(?:has|have|did)\s+the\s+insurer\b|\binsurer(?:['’]s)?\s+(?:decision|review|reviewed|approv\w*|assessment|confirmation)\b|\breviewed medical (?:decision|record)\b/i;
 const ACT = /\b(?:contact|call|phone|email|write to|notify|inform|report (?:it|the \w+) to|claim (?:from|under|with)|submit (?:a claim )?to|ask)\b/i;
 const INSURERS = /\b(?:Aurora Assurance(?: Pte\.? Ltd\.?)?|Kestrel Life Ltd|KestrelOne|Harbourline General Insurance(?: Pte\.? Ltd\.?)?|Harbourline)\b/g;
@@ -164,7 +170,57 @@ export function gradeRCW3(id: string, conv: any): Graded {
   return finish(id, checks, b);
 }
 
-export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
+/** BKL1a / BKL1b (booklet household): "hip, but it could be his tibia" -> ONE question (the case), the Simple Fracture
+ * terms, no amount -> "the X-ray confirms it is his hip" -> S$3,750 (Hip 75% x the S$5,000 Simple Fracture Benefit Limit)
+ * from a saved calculation, no further question, the case question cleared. */
+export function gradeBKL1(id: string, conv: any): Graded {
+  const b = base(conv); const checks: Check[] = [];
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  if (b.blocked || !b.turns.length) return finish(id, checks, b);
+  const [t1, t2] = b.turns;
+  const qs = questionsOf(t1?.answer);
+  add("B1Q", "U", "turn 1: exactly one question, about which bone / case it is (hip vs tibia / leg)", qs.length === 1 && /hip/i.test(qs[0]) && /tibia|leg|shin|knee/i.test(qs[0]), qs.join(" | "));
+  add("B1C", "C", "turn 1: no amount chosen before the case is known (no S$3,750 / S$2,500 / S$225,000 / S$150,000), no calculation saved", !!t1 && !/S\$3,750|S\$2,500|S\$225,000|S\$150,000/.test(t1.v) && !calcsOf(t1.answer).length, t1?.v ?? "");
+  add("B1K", "K", "turn 1: the Simple Fracture terms that decide it (Hip 75%, the leg row 50%, of the S$5,000 limit)", !!t1 && /Simple Fracture/i.test(t1.v) && /75%/.test(t1.v) && /50%/.test(t1.v) && /S\$5,000/.test(t1.v), t1?.v ?? "");
+  add("B1U", "U", "turn 1: never the generic model-use limit text", !!t1 && !LIMIT_TEXT.test(t1.v), t1?.v ?? "");
+  const r2 = calcsOf(t2?.answer)[0];
+  add("B2C", "C", "turn 2: the illustration S$3,750 (Hip 75% x S$5,000), conditional", !!t2 && money(t2.v).includes(3750) && /illustration|conditional|if /i.test(t2.v), t2?.v ?? "");
+  add("B2S", "S", "turn 2: from a saved calculation that recomputes to S$3,750, bound to the booklet", !!r2 && recomputes(r2, 375_000) && docOps(r2).every((o) => o.binding?.policyId === BOOKLET.doc("BOOKLET").id), JSON.stringify(r2 ?? null).slice(0, 900));
+  add("B2U", "U", "turn 2: no further question; the case question is cleared; no 'couldn't confirm'", !!t2 && !questionsOf(t2.answer).length && !conv?.loaded?.state?.ragLoop?.pending && !NOT_CONFIRMED.test(t2.v), t2?.v ?? "");
+  b.turns.forEach((t, i) => add(`CQ${i + 1}`, "U", `turn ${i + 1}: no cut quotation`, !t.v.split("\n").some((l) => CUT_QUOTE.test(l)), t.v));
+  universal(add, b.turns, "", ["Aldermoor Life Ltd"]);
+  return finish(id, checks, b);
+}
+/** BKL2: Other Fracture (open hip) -> 75% x Daniel's Group Personal Accident sum insured S$300,000 = S$225,000; never the
+ * Term Life S$500,000 (S$375,000), never the superseded 2022 amounts, never "not established" beside the amount. */
+export function gradeBKL2(id: string, conv: any): Graded {
+  const b = base(conv); const checks: Check[] = [];
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  if (b.blocked || !b.turns.length) return finish(id, checks, b);
+  const t = b.turns[0]; const rec = calcsOf(t.answer)[0];
+  add("O1C", "C", "S$225,000 = 75% of Daniel's Group Personal Accident sum insured (S$300,000); never S$375,000 / S$150,000 / S$200,000", money(t.v).includes(225000) && !/S\$375,000|S\$150,000|S\$200,000/.test(t.v), t.v);
+  add("O1S", "S", "from a saved calculation that recomputes to S$225,000, its S$300,000 bound to the certificate", !!rec && recomputes(rec, 22_500_000) && docOps(rec).some((o) => o.value === 300000 && o.binding?.policyId === BOOKLET.doc("CERT").id), JSON.stringify(rec ?? null).slice(0, 900));
+  add("O1U", "U", "no contradiction (no 'not established' / 'unresolved' base beside the amount), no question, no 'couldn't confirm'", !/not established|unresolved|could not be established/i.test(t.v) && !questionsOf(t.answer).length && !NOT_CONFIRMED.test(t.v), t.v);
+  add("OCQ", "U", "no cut quotation", !t.v.split("\n").some((l) => CUT_QUOTE.test(l)), t.v);
+  universal(add, b.turns, "", ["Aldermoor Life Ltd"]);
+  return finish(id, checks, b);
+}
+/** BKL3: the Compassionate Death Allowance Benefit -- named, with its conditions (accidental death, proof of death) and
+ * its funeral-expenses amount said WITHOUT an S$ (the booklet prints a bare $), never dropped whole; no cut clause. */
+export function gradeBKL3(id: string, conv: any): Graded {
+  const b = base(conv); const checks: Check[] = [];
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  if (b.blocked || !b.turns.length) return finish(id, checks, b);
+  const t = b.turns[0];
+  add("D1K", "K", "the Compassionate Death Allowance Benefit is named, with funeral expenses and its condition (death from an Accident) and proof of death", /Compassionate Death Allowance/i.test(t.v) && /funeral/i.test(t.v) && /accident/i.test(t.v) && /proof of death|death certificate|proof/i.test(t.v), t.v);
+  add("D1C", "C", "the amount is never S$2,000 (the booklet's $ names no currency); nothing from Repatriation ($5,000) stated for it", !/S\$2,000|SGD\s?2,000/.test(t.v) && !/5,000/.test(t.v.split("\n").filter((l) => /Compassionate|funeral/i.test(l)).join(" ")), t.v);
+  add("D1U", "U", "useful: no 'couldn't confirm', no generic limit text, no question unless the documents depend on a fact the household can give", !NOT_CONFIRMED.test(t.v) && !LIMIT_TEXT.test(t.v) && questionsOf(t.answer).length <= 1, t.v);
+  add("DCQ", "U", "no cut quotation", !t.v.split("\n").some((l) => CUT_QUOTE.test(l)), t.v);
+  universal(add, b.turns, "", ["Aldermoor Life Ltd"]);
+  return finish(id, checks, b);
+}
+
+export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
   RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
 
@@ -197,6 +253,11 @@ function controls() {
     ["budget refusal", gradeRCW1("RCW1a", conv([{ summary: "I stopped: the model-use budget set for this test run is used up." }])), "BLOCKED", null],
     ["v2 incomplete: the wrist control without contact advice", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%." }])), "FAIL", "X4"],
     ["v2 unsupported insurer: claim advice naming KestrelOne (the summary's brand) alone", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%.", nextSteps: ["Contact KestrelOne to make a claim."] }])), "FAIL", "IN1"],
+    ["v3 BKL1 the generic model-use limit text instead of the question", gradeBKL1("BKL1a", conv([{ summary: "Civil Service Group Insurance Scheme - Certificate prints “Group Personal Accident” as S$300,000.", details: ["I stopped before finishing because this question reached its model-use limit."] }, { summary: "I couldn’t finish." }])), "FAIL", "B1Q"],
+    ["v3 BKL3 the death allowance dropped whole (\"I haven't stated the amount for If an Insured Person ... which\")", gradeBKL3("BKL3", conv([{ summary: "I haven’t stated the amount for If an Insured Person sustains bodily injury as a result of an Accident, which in Group Insurance Benefits Booklet (page 9), because the currency didn’t match what the document prints." }])), "FAIL", "D1K"],
+    ["v3 BKL3 a cut quotation", gradeBKL3("BKL3", conv([{ summary: "The booklet's Compassionate Death Allowance Benefit pays funeral expenses on proof of death after an accident, up to 2,000 (printed with a “$” sign; the document does not say which currency).", details: ["I'm asking because the wording turns on “If an Insured Person sustains bodily injury as a result of an Accident, which”."] }])), "FAIL", "DCQ"],
+    ["v3 BKL3 good", gradeBKL3("BKL3", conv([{ summary: "The Group Insurance Benefits Booklet's Compassionate Death Allowance Benefit pays the funeral expenses incurred, up to 2,000 (printed with a “$” sign; the document does not say which currency), if Daniel dies as a result of an Accident within 365 days, on receipt of proof of death and the original receipts.", nextSteps: ["Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."] }])), "PASS", null],
+    ["v3 BKL2 Term Life base (S$375,000)", gradeBKL2("BKL2", conv([{ summary: "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$375,000: 75% of Daniel's sum insured of S$500,000 (Group Term Life)." }])), "FAIL", "O1C"],
     ["v2 good wrist control", gradeRCX("RCX", conv([{ summary: "The Summary of Benefits lists no case for a wrist under Simple Fracture: Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%.", nextSteps: ["Contact Kestrel Life Ltd (through the employer or scheme administrator) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."] }])), "PASS", null],
     ["v2 incomplete correction: S$20,000 without saying the earlier estimate no longer applies", gradeRCT1("RCT1a", conv([{ summary: "The Fracture Benefit pays a percentage of Jun's sum insured of S$100,000: Leg - thigh bone (femur) 20%; Leg - below the knee (tibia or fibula) 10%.", questions: [{ text: "Was it the thigh bone (femur) or below the knee (tibia or fibula)?" }] }, { summary: "If it applies, the conditional illustration is S$10,000." }, { summary: "If it applies, the conditional illustration is S$20,000." }])), "FAIL", "T3Q"],
     ...liveControls(),

@@ -61,7 +61,9 @@ export type LoopPending =
       evidenceIds?: string[];
       /** rc-live-3: the benefit whose listed case this question asks for (asked after evaluate_benefit could not settle
        * the case); answered once the server settles that benefit's case from the household's words. */
-      caseOf?: string };
+      caseOf?: string;
+      /** Actual-library findings: the server requirement this question asks (its id this turn) and the benefit it is for. */
+      requirementId?: string; benefitId?: string };
 /** Round 7: a cited, bound statement of a printed benefit the conversation has already made (with the evidence and
  * table-value ids it rests on), so a later turn -- the household answering the question about it -- can explain it
  * again with the same citation and binding. */
@@ -128,6 +130,9 @@ export type RagLoopState = {
   values?: Record<string, PersistedValue>;
   /** Round 7: benefits already stated, cited and bound in this conversation (newest last). */
   established?: EstablishedStatement[];
+  /** Actual-library findings (latency): the benefits evaluated in this conversation, so a later turn evaluates the same
+   * benefit again by its id (re-resolved and re-checked by the server) without listing every benefit again. */
+  evaluated?: { id: string; benefit: string; product: string | null; subjectId: string }[];
   /** Calculations left unresolved for missing household facts, per subject|calculator|benefit, re-run when the facts arrive. */
   openCalcs?: Record<string, { args: Record<string, unknown>; missing: string[]; turn: number }>;
 };

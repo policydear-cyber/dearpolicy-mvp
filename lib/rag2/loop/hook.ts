@@ -212,7 +212,8 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     // V1.2: a fact question asked with nothing before it says briefly why the detail changes the answer -- the clause it
     // turns on, in the wording's own words (figure-free; a clause printing an amount is described, not quoted).
     const why = p.kind === "fact" ? String(p.why ?? "").split(/;\s*/)[0].replace(/\s*\(page \d+\)\s*$/, "").replace(/\s+/g, " ").trim() : "";
-    const whyText = why && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why.length > 160 ? why.slice(0, why.lastIndexOf(" ", 157)) + " …" : why}”` : "it changes which of the policy's benefits or amounts applies";
+    // (a clause is quoted whole or not at all: a cut sentence can lose its condition, exception or "not")
+    const whyText = why && why.length <= 240 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why}”` : "it changes which of the policy's benefits or amounts applies";
     const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : `I'm asking because ${whyText}.`;
     answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(reply.trailing ?? [])].join(" ") || lead;
     answer.questions = [q];
@@ -231,7 +232,10 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     answer.summary = [...notes, unknownPersonText(unknownPeople)].join(" ");
   } else if (reply.kind === "final") {
     const c = reply.composed;
-    const texts = c.sentences.map((s) => s.text);
+    // Actual-library findings: the useful result leads -- a verified calculation first, then the printed terms and
+    // conditions, then the rest (each statement is a whole unit, so their order changes no meaning).
+    const rank = (s: { kind?: string }) => (s.kind === "conditional_illustration" || s.kind === "indicative_estimate" ? 0 : s.kind === "requirement" ? 2 : 1);
+    const texts = c.sentences.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s.text);
     // A correction is said first (what changed, and what no longer applies), then the answer.
     const lead = notes.length ? [notes.join(" "), ...texts] : texts;
     // Agent P (task 3): the composer's notes are user-facing caveats (or, when nothing could be kept, one accurate

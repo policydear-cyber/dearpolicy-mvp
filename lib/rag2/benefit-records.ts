@@ -15,11 +15,12 @@ import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow } from "./store";
 import { percentTables, type PctTable } from "./calc/pct-rows";
 import { sharedTopic, topicStems } from "./loop/topic";
+import { isHeadingLine } from "./headings";
 
 export type ScheduleRow = { id: string; label: string; percent: number; ppm: number; evidence: EvidenceRef };
 export type ScheduleBase =
   | { kind: "fixed_limit"; label: string; cents: number; currency: string; evidence: EvidenceRef }
-  | { kind: "sum_insured"; label: string; cents: number; currency: string; evidence: EvidenceRef; from: PersonBenefit }
+  | { kind: "sum_insured"; label: string; cents: number; currency: string; evidence: EvidenceRef; from: PersonBenefit; section?: string }
   | { kind: "unresolved"; words: string; why: string };
 export type BenefitRecord = {
   id: string;
@@ -56,8 +57,24 @@ function tableBenefit(t: PctTable): string | null {
   return null;
 }
 
+/** The product a schedule belongs to: of the person's certificate products, the one named by the nearest heading above
+ * the table in its own document (pages in order) -- "PART B - GROUP PERSONAL ACCIDENT" above Section 4 - Other Fracture.
+ * A heading naming another product nearer the table, or one naming two, decides nothing. Null when no heading names one. */
+function productSection(before: string, labels: string[]): { label: string; heading: string } | null {
+  const lines = before.split("\n");
+  const want = labels.map((label) => ({ label, w: [...words(label)] })).filter((x) => x.w.length);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!isHeadingLine(lines[i], lines[i + 1] ?? null)) continue;
+    const have = words(lines[i]);
+    const named = want.filter((x) => x.w.every((w) => have.has(w)));
+    if (named.length === 1) return { label: named[0].label, heading: lines[i].trim() };
+    if (named.length > 1) return null;
+  }
+  return null;
+}
+
 /** What a schedule's percentages are OF, resolved from the document's own wording and the person's own rows. */
-function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, docs: DocRow[], own: PersonBenefit[], memberName: string): ScheduleBase {
+function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, docs: DocRow[], own: PersonBenefit[], memberName: string, before = ""): ScheduleBase {
   const base = t.base.replace(/\)+$/, "").trim();
   const m = MONEY.exec(base);
   if (m) {
@@ -79,6 +96,15 @@ function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, d
     const cands = own.filter((b) => b.applicability === "person_row" && b.printed.kind === "money" && !b.conflicts?.length
       && (family.has(b.policy.id) || [...words(b.benefit.label + " " + (b.policy.product ?? ""))].some((w) => want.has(w))));
     let distinct = [...new Map(cands.map((b) => [`${b.printed.kind === "money" ? b.printed.cents : 0}|${b.benefit.label}`, b])).values()];
+    // Actual-library findings: a document holding several products under a generic title ("Group Insurance Benefits
+    // Booklet"): the product section the table is printed in, as its own headings name it, binds the table to that
+    // product's certificate entry -- never the first, the largest, or one sharing only a policy number.
+    const section = productSection(`${before}\n${pageText.slice(0, t.start)}`, [...new Set(own.filter((b) => b.applicability === "person_row" && b.printed.kind === "money").map((b) => b.benefit.label))]);
+    if (section) {
+      const inSection = distinct.filter((b) => b.benefit.label === section.label);
+      if (inSection.length === 1) distinct = inSection;
+      else if (!inSection.length) return { kind: "unresolved", words: base, why: `the table is printed under “${section.heading}”, and no ${section.label} sum insured is printed for ${memberName} under this scheme in the household's documents` };
+    }
     // several products on one certificate (Group Term Life and Group Personal Accident): the one whose own label shares
     // the most distinctive words with this document's product -- a unique best only
     if (distinct.length > 1) {
@@ -88,9 +114,9 @@ function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, d
     }
     if (distinct.length === 1 && distinct[0].printed.kind === "money") {
       const b = distinct[0];
-      return { kind: "sum_insured", label: `${memberName}'s ${b.benefit.label} sum insured`, cents: (b.printed as { cents: number }).cents, currency: (b.printed as { currency: string }).currency, evidence: b.source.evidence, from: b };
+      return { kind: "sum_insured", label: `${memberName}'s ${b.benefit.label} sum insured`, cents: (b.printed as { cents: number }).cents, currency: (b.printed as { currency: string }).currency, evidence: b.source.evidence, from: b, ...(section && section.label === b.benefit.label ? { section: section.heading } : {}) };
     }
-    return { kind: "unresolved", words: base, why: distinct.length ? `more than one personal sum insured could be the base (${distinct.map((b) => b.benefit.label).join(", ")})` : `no sum insured printed for ${memberName} under this policy was found in the household's documents` };
+    return { kind: "unresolved", words: base, why: distinct.length ? `the ${doc.productName ?? "document"} does not print this table under one of ${memberName}'s certificate products (${distinct.map((b) => b.benefit.label).join(", ")}), so which of those amounts is its Sum Insured is not established` : `no sum insured printed for ${memberName} under this policy was found in the household's documents` };
   }
   return { kind: "unresolved", words: base, why: `the table is a percentage of “${base}”, which is not a printed amount or the person's sum insured` };
 }
@@ -117,12 +143,14 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
   const mine = docs.filter((d) => d.ownerId === memberId || links.some((l) => l.policyId === d.id && l.memberId === memberId));
   const pages = mine.length ? await loadPages(accountId, mine.map((d) => d.id)) : [];
   for (const d of mine) for (const p of pages.filter((x) => x.policyId === d.id)) {
+    // the document's text before this page, in page order (the product section a table sits in may start pages earlier)
+    const before = pages.filter((x) => x.policyId === d.id && x.page < p.page).sort((a, b) => a.page - b.page).map((x) => x.text).join("\n");
     for (const t of percentTables(p.text)) {
       const benefit = tableBenefit(t); if (!benefit) continue;
       const rows: ScheduleRow[] = t.rows.filter((r) => r.percents.length === 1).map((r, i) => ({ id: `${hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit)}r${i + 1}`, label: r.label, percent: r.percents[0], ppm: Math.round(r.percents[0] * 10_000),
         evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: r.start, end: r.end, subjectId: null }) }));
       if (!rows.length) continue;
-      const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName);
+      const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName, before);
       const id = hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit);
       out.push({ id, householdId: accountId, memberId, memberName, policy: policyOf(d), benefit, kind: "percentage_schedule", applicability: "shared_wording", printed: null, asOf: null, conditions: [],
         schedule: { header: t.header, base, rows, table: t, page: p.page, pageText: p.text },

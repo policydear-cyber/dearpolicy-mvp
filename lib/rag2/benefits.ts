@@ -17,6 +17,7 @@
  * A household member's name, an address, a date or a salutation is NEVER a benefit label: labels come only from the
  * document's product headings and its own benefit rows / "Label: value" lines.
  */
+import { sentenceEndLine } from "./headings";
 import { endorsementScope } from "./endorsement-scope";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
@@ -132,9 +133,14 @@ export async function personBenefits(accountId: string, memberId: string, preloa
           : pct ? { kind: "percent", percent: Number(pct[1]), ppm: Math.round(Number(pct[1]) * 10000), of: pct[2] ? cut(pct[2]) : null }
           : ref ? { kind: "reference", of: ref[1].replace(/\s+/g, " ") } : null;
         if (!printed) continue;
-        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end: start + line.length, subjectId: memberId });
+        // (Actual-library findings: a line wrapped mid-sentence is read with its continuation -- the condition is the whole
+        // sentence, never its first line)
+        const last = sentenceEndLine(lines, i);
+        const end = start + lines.slice(i, last + 1).join("\n").length;
+        const whole = lines.slice(i, last + 1).map((x) => x.trim()).join(" ");
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end, subjectId: memberId });
         push({ key: `${d.id}:${p.page}:${start}`, applicability: "shared_wording", benefit: { label: ll.label, source: "label_line" }, printed, asOf: null,
-          conditions: CONDITION.test(ll.value) ? [line.trim()] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
+          conditions: CONDITION.test(whole) ? [whole] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
       }
     }
     // 2b. A roster stored ONE CELL PER LINE: reconstructed by its record structure (lib/claims/roster-layout.ts); what

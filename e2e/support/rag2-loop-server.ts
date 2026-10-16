@@ -41,6 +41,8 @@ import { PR50_SCENARIOS } from "../../scripts/fixtures/rag2-pr50/conversations";
 import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { ACCOUNT as ACCOUNT_TAN } from "../../scripts/fixtures/reliable-chat/tan";
 import { TAN_SCENARIOS } from "../../scripts/fixtures/reliable-chat/conversations";
+import { ACCOUNT as ACCOUNT_BK } from "../../scripts/fixtures/reliable-chat/booklet";
+import { BOOKLET_SCENARIOS } from "../../scripts/fixtures/reliable-chat/booklet-conversations";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
 import { installFetchGuard } from "./rag2-live-fetch-guard";
 import { HostedLoopModel } from "@/lib/rag2/loop/hosted-model";
@@ -73,13 +75,13 @@ process.env.DEV_AUTH_ENABLED = "1";
 // scenario per recorded conversation, replayed verbatim (no model call).
 const S52_REPLAY = () => recordedRun(runDir("RUN-s52-live-1-")).map((c) => ({ id: "R" + c.scenario.slice(1), title: `replay of s52-live-1 ${c.scenario}`, messages: c.turns.map((t) => t.user), turns: replayScript(c.turns) }));
 const S50_REPLAY = () => { const turns = recordedTurns(runDir("RUN-s50-live-2-"), "S50"); return [{ id: "R50", title: "replay of s50-live-2", messages: turns.map((t) => t.user), turns: replayScript(turns) }]; };
-const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding-cells" ? { account: ACCOUNT_B, scenarios: S50_REPLAY() } : process.env.E2E_RAG2_HOUSEHOLD === "livelib" ? { account: ACCOUNT_LL, scenarios: [...LIVELIB_SCENARIOS, ...S52_REPLAY()] } : process.env.E2E_RAG2_HOUSEHOLD === "pr50" ? { account: ACCOUNT_P50, scenarios: PR50_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "tan" ? { account: ACCOUNT_TAN, scenarios: TAN_SCENARIOS() } : null;
+const SCRIPTED_HH = LIVE ? null : process.env.E2E_RAG2_HOUSEHOLD === "report" ? { account: ACCOUNT_R, scenarios: REPORT_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding" ? { account: ACCOUNT_B, scenarios: BINDING_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "binding-cells" ? { account: ACCOUNT_B, scenarios: S50_REPLAY() } : process.env.E2E_RAG2_HOUSEHOLD === "livelib" ? { account: ACCOUNT_LL, scenarios: [...LIVELIB_SCENARIOS, ...S52_REPLAY()] } : process.env.E2E_RAG2_HOUSEHOLD === "pr50" ? { account: ACCOUNT_P50, scenarios: PR50_SCENARIOS } : process.env.E2E_RAG2_HOUSEHOLD === "tan" ? { account: ACCOUNT_TAN, scenarios: TAN_SCENARIOS() } : process.env.E2E_RAG2_HOUSEHOLD === "booklet" ? { account: ACCOUNT_BK, scenarios: BOOKLET_SCENARIOS() } : null;
 // Reliable chat: E2E_RAG2_HOUSEHOLD=tan (and RAG2_LIVE_HOUSEHOLD=tan) is the migrated contract's second household
 // (scripts/fixtures/reliable-chat/tan.ts). Every other scripted household replays moves recorded for the earlier operand
 // contract, so it keeps that contract until ported (scripts/fixtures/legacy-contract.ts; never in production).
-if (!LIVE && process.env.E2E_RAG2_HOUSEHOLD !== "tan") process.env.DEARPOLICY_CHAT_CONTRACT ??= "legacy-operands";
+if (!LIVE && process.env.E2E_RAG2_HOUSEHOLD !== "tan" && process.env.E2E_RAG2_HOUSEHOLD !== "booklet") process.env.DEARPOLICY_CHAT_CONTRACT ??= "legacy-operands";
 const REPORT = !!SCRIPTED_HH;
-process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD === "livelib" ? ACCOUNT_LL : process.env.RAG2_LIVE_HOUSEHOLD === "pr50" ? ACCOUNT_P50 : process.env.RAG2_LIVE_HOUSEHOLD === "tan" ? ACCOUNT_TAN : process.env.RAG2_LIVE_HOUSEHOLD?.startsWith("binding") ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
+process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : process.env.RAG2_LIVE_HOUSEHOLD === "stress" ? "00000000-0000-0000-0000-00000000d401" : process.env.RAG2_LIVE_HOUSEHOLD === "livelib" ? ACCOUNT_LL : process.env.RAG2_LIVE_HOUSEHOLD === "pr50" ? ACCOUNT_P50 : process.env.RAG2_LIVE_HOUSEHOLD === "tan" ? ACCOUNT_TAN : process.env.RAG2_LIVE_HOUSEHOLD === "booklet" ? ACCOUNT_BK : process.env.RAG2_LIVE_HOUSEHOLD?.startsWith("binding") ? ACCOUNT_B : ACCOUNT_L) : SCRIPTED_HH ? SCRIPTED_HH.account : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 

@@ -34,6 +34,9 @@ export type ToolContext = {
   /** V1.4: the person's own row values person_benefits already issued (policy|subject|benefit -> value id): a
    * select_table_value for the same row reuses it instead of reading the table again. */
   personRows?: Map<string, string>;
+  /** Actual-library findings: sum-insured value ids the SERVER bound to a schedule by the product section the schedule is
+   * printed in (value id -> the certificate product it is printed under). Set by evaluate_benefit only. */
+  sectionBound?: Map<string, string>;
   /** V1.5: what the conversation is about (the household's messages), for ranking printed wording by relevance. */
   topicText?: string;
   /** V1.5: tool reads already returned this turn (person_benefits per person, read_page per page): repeats are answered
@@ -42,6 +45,9 @@ export type ToolContext = {
   /** Reliable chat: the benefit records shown to the model this turn (benefit id -> record), for server-rendered
    * statements. Evaluation never trusts this cache: evaluate_benefit re-resolves the records every time. */
   benefitRecords?: Map<string, BenefitRecord>;
+  /** Actual-library findings (latency): one resolution of a person's benefit records per turn (person_benefits,
+   * evaluate_benefit and its handler resolved them up to three times). The documents do not change within a turn. */
+  recordCache?: Map<string, Promise<BenefitRecord[]>>;
   /** Reliable chat: the household's own recorded words per person (the loop's facts), so evaluate_benefit's case is
    * checked against what they reported -- never only against the model's case words or option id. */
   reported?: Map<string, string[]>;
@@ -51,6 +57,13 @@ export type ToolContext = {
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };
 
+/** A person's benefit records, resolved once per turn (re-resolved on every turn: lifecycle, links and versions). */
+export function recordsFor(ctx: ToolContext, subjectId: string): Promise<BenefitRecord[]> {
+  const c = (ctx.recordCache ??= new Map());
+  let p = c.get(subjectId);
+  if (!p) { p = resolveBenefitRecords(ctx.accountId, subjectId); c.set(subjectId, p); p.catch(() => c.delete(subjectId)); }
+  return p;
+}
 export function createToolContext(args: { accountId: string; speakerId?: string | null; lastSubjectId?: string | null; asOf?: string | null }): ToolContext {
   if (!args.accountId) throw new Error("a tool context needs the household's account id");
   return { accountId: args.accountId, asOf: (args.asOf ?? new Date().toISOString()).slice(0, 10), conversation: { speakerId: args.speakerId ?? null, lastSubjectId: args.lastSubjectId ?? null, recentSubjectIds: [] }, values: new Map(), results: new Map(), seq: 0 };
@@ -150,7 +163,7 @@ export const RAG_TOOLS: ToolDef[] = [
       view.benefits = view.benefits.filter((b) => b.applicability !== "shared_wording" || keepShared.has(b));
       // Reliable chat: every benefit carries its server-resolved benefit_id; percentage schedules (a table of cases each
       // paying a percentage of a base the header names) are listed with their cases and resolved base.
-      const records = await resolveBenefitRecords(ctx.accountId, String(a.subject_id));
+      const records = await recordsFor(ctx, String(a.subject_id));
       for (const r of records) (ctx.benefitRecords ??= new Map()).set(r.id, r);
       const idOf = new Map(records.filter((r) => r.personBenefit).map((r) => [r.personBenefit!.key, r.id]));
       const schedules = rankRecords(records.filter((r) => r.kind === "percentage_schedule"), String(a.topic ?? "") + " " + (ctx.topicText ?? "")).slice(0, 4).map(recordForModel);
@@ -200,7 +213,7 @@ export const RAG_TOOLS: ToolDef[] = [
     }, required: ["benefit_id", "subject_id", "purpose"], additionalProperties: false },
     handler: async (ctx, a) => {
       const res = await evaluateBenefit(ctx, a);
-      if (res.ok) { const recs = await resolveBenefitRecords(ctx.accountId, String(a.subject_id)); for (const r of recs) (ctx.benefitRecords ??= new Map()).set(r.id, r); }
+      if (res.ok) { const recs = await recordsFor(ctx, String(a.subject_id)); for (const r of recs) (ctx.benefitRecords ??= new Map()).set(r.id, r); }
       return res;
     },
   },

@@ -100,14 +100,15 @@ async function main() {
   const relayPlumbing = !!health && health.mode !== "live";
   const relayLog = health?.log ?? "";
   if (!fs.existsSync(".next/BUILD_ID")) throw new Error("no next build output (.next/BUILD_ID) in this directory: the server serves the production build");
-  const scenarioHousehold = ["scenario", "stress", "binding", "binding-cells", "livelib", "pr50", "tan"].includes(process.env.RAG2_LIVE_HOUSEHOLD ?? "");
+  const scenarioHousehold = ["scenario", "stress", "binding", "binding-cells", "livelib", "pr50", "tan", "booklet"].includes(process.env.RAG2_LIVE_HOUSEHOLD ?? "");
   const tanHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "tan";
+  const bookletHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "booklet";
   const stressHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "stress";
   const cellsHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding-cells";
   const livelibHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "livelib";
   const pr50Household = process.env.RAG2_LIVE_HOUSEHOLD === "pr50";
   const bindingHousehold = process.env.RAG2_LIVE_HOUSEHOLD === "binding" || cellsHousehold;
-  const { S47, S48, S49, S49B, S50, S52A, S52B, S52C, S52D, P50C, P50D, P50A, RC_TAN, RC_WONG, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT, BINDING_ACCOUNT, LIVELIB_ACCOUNT, PR50_ACCOUNT, TAN_ACCOUNT } = await import("./scenario-household");
+  const { S47, S48, S49, S49B, S50, S52A, S52B, S52C, S52D, P50C, P50D, P50A, RC_TAN, RC_WONG, RC_BOOKLET, BOOKLET_ACCOUNT, seedScenario, STRESS_ACCOUNT, SCENARIO_ACCOUNT, BINDING_ACCOUNT, LIVELIB_ACCOUNT, PR50_ACCOUNT, TAN_ACCOUNT } = await import("./scenario-household");
   // Reliable chat (after rc-live-1, which ran three unplanned scenarios because the filter was left out): a scenario
   // household runs ONLY the scenarios named with --scenarios -- required, every id must exist, no duplicates -- and
   // --dry-run prints exactly what would run and stops before seeding, the server or any model call.
@@ -119,7 +120,7 @@ async function main() {
     if (new Set(wantedIds).size !== wantedIds.length) throw new Error("a scenario id is named twice in --scenarios");
     return wantedIds.map((w) => list.find((x) => x.id === w)!);
   };
-  const scenarios: Scenario[] = scenarioHousehold ? (tanHousehold ? picked(RC_TAN) : pr50Household ? (process.env.RAG2_LIVE_LEGACY_ALL === "1" ? [P50C, P50D, P50A] : picked([P50C, P50D, P50A, ...RC_WONG])) : livelibHousehold ? [S52A, S52B, S52C, S52D].filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id)) : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
+  const scenarios: Scenario[] = scenarioHousehold ? (tanHousehold ? picked(RC_TAN) : bookletHousehold ? picked(RC_BOOKLET) : pr50Household ? (process.env.RAG2_LIVE_LEGACY_ALL === "1" ? [P50C, P50D, P50A] : picked([P50C, P50D, P50A, ...RC_WONG])) : livelibHousehold ? [S52A, S52B, S52C, S52D].filter((x) => !arg("scenarios") || arg("scenarios")!.split(",").map((y) => y.trim()).includes(x.id)) : cellsHousehold ? [S50] : bindingHousehold ? [S49, S49B] : [stressHousehold ? S48 : S47]) : (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
   if (flag("dry-run")) {
     console.log(`DRY RUN (no seeding, no server, no model call): household ${process.env.RAG2_LIVE_HOUSEHOLD ?? "live"}; run cap US$${safety.capUsd}; ${scenarios.length} scenario(s):\n${scenarios.map((x) => `  ${x.id} -- ${x.turns.length} turn(s): ${x.turns.map((t) => JSON.stringify(t.user)).join(" / ")}`).join("\n")}`);
     await pool.end().catch(() => undefined);
@@ -161,7 +162,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (scenarioHousehold) await seedScenario(tanHousehold ? "tan" : pr50Household ? "pr50" : livelibHousehold ? "livelib" : cellsHousehold ? "binding-cells" : bindingHousehold ? "binding" : stressHousehold ? "stress" : "scenario"); else await seedLive();
+  if (scenarioHousehold) await seedScenario(tanHousehold ? "tan" : bookletHousehold ? "booklet" : pr50Household ? "pr50" : livelibHousehold ? "livelib" : cellsHousehold ? "binding-cells" : bindingHousehold ? "binding" : stressHousehold ? "stress" : "scenario"); else await seedLive();
   const env = { ...process.env, E2E_RAG2_LIVE: "1", PORT: String(port), DEARPOLICY_RAG_LOOP: "1", E2E_RAG2_NEXT: "start", NEXT_TELEMETRY_DISABLED: "1" };
   const log = fs.createWriteStream(path.join(outDir, "server.log"));
   const server: ChildProcess = spawn(process.execPath, ["--import", "tsx", "e2e/support/rag2-loop-server.ts"], { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -245,7 +246,7 @@ async function main() {
       conv.costUsd = conv.turns.reduce((n: number, t: any) => n + (t.costUsd?.charged ?? 0), 0);
       conv.calls = conv.turns.reduce((n: number, t: any) => n + (t.httpCalls?.filter((c: any) => !c.refused).length ?? 0), 0);
       if (conversationId) {
-        const loaded = await loadConversation(conversationId, scenarioHousehold ? (tanHousehold ? TAN_ACCOUNT : pr50Household ? PR50_ACCOUNT : livelibHousehold ? LIVELIB_ACCOUNT : bindingHousehold ? BINDING_ACCOUNT : stressHousehold ? STRESS_ACCOUNT : SCENARIO_ACCOUNT) : undefined);
+        const loaded = await loadConversation(conversationId, scenarioHousehold ? (tanHousehold ? TAN_ACCOUNT : bookletHousehold ? BOOKLET_ACCOUNT : pr50Household ? PR50_ACCOUNT : livelibHousehold ? LIVELIB_ACCOUNT : bindingHousehold ? BINDING_ACCOUNT : stressHousehold ? STRESS_ACCOUNT : SCENARIO_ACCOUNT) : undefined);
         // The scenario household is graded separately (scripts/rag2-live/scenario-check.ts, written before the run).
         const verdict: Verdict = scenarioHousehold ? { scenario: s.id, verdict: "INCOMPLETE", failureStage: null, incomplete: "graded by scenario-check.ts", checks: [] } as unknown as Verdict : grade(s, loaded);
         if (scenarioHousehold) conv.loaded = { conversationId: loaded.conversationId, state: loaded.state, turns: loaded.turns };

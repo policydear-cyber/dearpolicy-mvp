@@ -42,13 +42,14 @@ const SENTENCE: JsonSchema = { type: "object", properties: {
 
 export const ASK_USER: LoopToolSpec = {
   name: "ask_user",
-  description: "End this turn by asking the household ONE question. kind=person: who they mean, offering the candidates resolve_person returned (option ids). kind=fact: one fact that changes eligibility or the amount under a benefit you have found -- cite the evidence ids that make it matter. Never ask for a fact already recorded. One question only. When you have already identified the benefit and this person's printed figure, give it first in statements -- as printed, with its conditions (\"payable if ...\"), cited -- then ask the one question that is still open; never as an amount they will get.",
+  description: "End this turn by asking the household ONE question. kind=person: who they mean, offering the candidates resolve_person returned (option ids). kind=fact: one fact that changes eligibility or the amount under a benefit you have found. When evaluate_benefit returned a requirement_id (what it still needs), pass that requirement_id and phrase the question: the server supplies the person, the fact and the evidence. Otherwise give fact_key, subject_id and the evidence ids that make it matter. Never ask for a fact already recorded. One question only. When you have already identified the benefit and this person's printed figure, give it first in statements -- as printed, with its conditions (\"payable if ...\"), cited -- then ask the one question that is still open; never as an amount they will get.",
   parameters: { type: "object", properties: {
     kind: { type: "string", enum: ["person", "fact"] },
     question: str("The single question, in plain words, ending with a question mark. It is shown once, as the question card."),
     statements: { type: "array", items: SENTENCE, description: "kind=fact, optional: what the documents already say that the household needs before the question -- e.g. the identified benefit for this person, said conditionally and citing its evidence. Checked exactly like final_answer sentences (a figure must be printed in its cited evidence; never a payout or a decision). Statements, not questions." },
     preface: str("Optional short lead-in before the question (e.g. sympathy). A figure or a statement about cover belongs in statements with its evidence."),
-    fact_key: str("kind=fact: the key the answer will be recorded under (see note_facts)."),
+    requirement_id: str("kind=fact: the requirement_id evaluate_benefit returned for what it still needs (this turn). The server fills in fact_key, subject_id and because_evidence_ids from it."),
+    fact_key: str("kind=fact, without requirement_id: the key the answer will be recorded under (see note_facts)."),
     subject_id: str("kind=fact: who the fact is about."),
     because_evidence_ids: ids("kind=fact: evidence ids of the benefit / clause that makes this fact matter."),
     options: ids("kind=person: the candidate member ids (from resolve_person). kind=fact: optional answer choices."),

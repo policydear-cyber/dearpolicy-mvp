@@ -11,6 +11,7 @@ import * as BINDING_HH from "../../scripts/fixtures/rag2-binding/household";
 import * as LIVELIB_HH from "../../scripts/fixtures/rag2-livelib/household";
 import * as PR50_HH from "../../scripts/fixtures/rag2-pr50/household";
 import * as TAN_HH from "../../scripts/fixtures/reliable-chat/tan";
+import * as BOOKLET_HH from "../../scripts/fixtures/reliable-chat/booklet";
 
 // V1.4: `--household binding` seeds the binding household (scripts/fixtures/rag2-binding) instead.
 // `--household binding-cells` seeds it with the certificate one cell per line (the s50 live runs' layout).
@@ -20,7 +21,8 @@ const SCAN_NAME = process.argv.includes("--scan-name") ? process.argv[process.ar
 const LIVELIB = process.argv.includes("livelib") ? { ...LIVELIB_HH, DOCS: LIVELIB_HH.DOCS.map((d) => (d.key === "SCAN" && SCAN_NAME ? { ...d, filename: SCAN_NAME } : d)) } : null;
 // `--household pr50` seeds the PR #50 live-failure household (file names from PR50_NAMES).
 // `--household tan` seeds the reliable-chat second household (scripts/fixtures/reliable-chat/tan.ts).
-const HH = process.argv.includes("tan") ? TAN_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+// `--household booklet` seeds the actual-library repair household (scripts/fixtures/reliable-chat/booklet.ts).
+const HH = process.argv.includes("tan") ? TAN_HH : process.argv.includes("booklet") ? BOOKLET_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];

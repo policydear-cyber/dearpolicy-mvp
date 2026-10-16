@@ -9,7 +9,7 @@
  *     -> documented_terms | needs_facts | conditional_illustration (or indicative_estimate / not_payable / unresolved)
  *        | unresolved_evidence | unsupported_operation
  */
-import type { ToolContext, ToolResult } from "./tools";
+import { recordsFor, type ToolContext, type ToolResult } from "./tools";
 import type { EvidenceRef } from "./evidence";
 import type { TableValueOperand } from "./compute";
 import type { SelectedValue } from "./tables";
@@ -52,7 +52,7 @@ const caseOptions = (rows: ScheduleRow[]) => rows.map((r) => ({ option_id: r.id,
 export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknown>): Promise<ToolResult> {
   const subjectId = String(a.subject_id ?? ""), benefitId = String(a.benefit_id ?? "").trim();
   if (!subjectId || !benefitId) return fail("evaluate_benefit needs subject_id and benefit_id (a benefit_id from person_benefits for this person)");
-  const records = await resolveBenefitRecords(ctx.accountId, subjectId);
+  const records = await recordsFor(ctx, subjectId);
   const rec = records.find((r) => r.id === benefitId);
   if (!rec) {
     const alts = records.filter((r) => r.kind === "percentage_schedule" || r.applicability === "person_row").slice(0, 6).map((r) => `${r.id} (${r.benefit}${r.policy.product ? `, ${r.policy.product}` : ""})`);
@@ -113,6 +113,7 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     if (s.base.kind === "sum_insured") {
       const vid = await personAmountValue(ctx, s.base.from, rec.memberName, subjectId);
       if (!vid) return ok({ status: "unresolved_evidence", benefit: rec.benefit, benefit_id: rec.id, why: `${rec.memberName}'s sum insured row could not be read as a printed amount` }, [rec.source.evidence]);
+      if (s.base.section) (ctx.sectionBound ??= new Map()).set(vid, s.base.from.benefit.label);
       args.sum_insured_value_id = vid;
     }
     const res = await runCalculate(ctx, args);
