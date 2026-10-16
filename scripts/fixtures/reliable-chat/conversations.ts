@@ -6,6 +6,7 @@
  */
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { M, doc } from "./tan";
+import { conflictingTurns, CONFLICT_USER, CORRECTED_USER } from "./conflicting-conversations";
 
 export type RcScenario = { id: string; title: string; messages: string[]; turns: ScriptTurn[] };
 const call = (name: string, args: Record<string, unknown>) => ({ name, arguments: args });
@@ -57,6 +58,7 @@ export function unlistedTurns(): ScriptTurn[] {
 }
 
 export const TAN_SCENARIOS = (): RcScenario[] => [
+  { id: "RC3", title: "conflicting descriptions -> clarification -> useful corrected illustration", messages: [CONFLICT_USER, CORRECTED_USER], turns: conflictingTurns() },
   { id: "RC1", title: "first complete conversation: benefit -> terms -> question -> server evaluation -> correction", messages: [TAN_U1, TAN_U2, TAN_U3], turns: fractureTurns() },
   { id: "RC2", title: "an unlisted case: said with the listed cases, no question", messages: [TAN_U_UNLISTED], turns: unlistedTurns() },
 ];
