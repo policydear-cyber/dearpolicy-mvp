@@ -58,7 +58,10 @@ export type LoopPending =
       purpose?: "speaker" | "subject" }
   | { kind: "fact"; question: string; factKey: string; subjectId: string | null; why: string; options?: string[]; turn: number;
       /** Round 7: the evidence ids that made the fact matter (the benefit / clause the question is about). */
-      evidenceIds?: string[] };
+      evidenceIds?: string[];
+      /** rc-live-3: the benefit whose listed case this question asks for (asked after evaluate_benefit could not settle
+       * the case); answered once the server settles that benefit's case from the household's words. */
+      caseOf?: string };
 /** Round 7: a cited, bound statement of a printed benefit the conversation has already made (with the evidence and
  * table-value ids it rests on), so a later turn -- the household answering the question about it -- can explain it
  * again with the same citation and binding. */

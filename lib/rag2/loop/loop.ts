@@ -431,6 +431,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const noteFailure = (name: string) => failures.set(name, (failures.get(name) ?? 0) + 1);
   /** Reliable chat: benefits this turn found the household's reported case is not one of (per person). */
   const unlistedNow = new Map<string, { benefit: string; labels: string[] }>();
+  /** rc-live-3: per person, the benefit whose case evaluate_benefit could not settle this turn (missing / ambiguous). */
+  const caseOpenNow = new Map<string, string>();
   let budgetWarned = false;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
@@ -898,7 +900,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const more = completionLines((composed?.sentences ?? []).map((x) => x.text), question, subject);
         if (more.length) { completionNudged = true; return { result: { ok: false, error: `before asking: ${more.join("; ")}. Then call ask_user again: those statements first, then the one question that most changes the result.` } }; }
       }
-      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
+      const caseOf = subject ? caseOpenNow.get(subject) : undefined;
+      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), ...(caseOf ? { caseOf } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface: redirectPreface, composed } };
     }
     // final_answer
@@ -1406,6 +1409,18 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
         const named = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String).filter((x) => facts[x]) : [];
         if (k) k.dependsOn = named.length ? named : [...new Set(recordedNow.filter((r) => r.subject === subj && facts[r.key]).map((r) => r.key))];
+        // rc-live-3 RCT2a: the open "which case?" question is answered once the server has settled the case from the
+        // household's words (a result for one listed case, or the case is not listed) -- whatever key the model noted
+        // the answer under ("fracture_bone_detail" for a question asked as "fracture_bone"). It is never put back.
+        const status = (res.data as { status?: string }).status;
+        const bid = String(call.arguments.benefit_id ?? "");
+        const reason = (res.data as { reason?: string }).reason;
+        if (bid && status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) caseOpenNow.set(subj, bid);
+        const settles = !!bid && (!!rid || status === "unlisted_case");
+        if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
+        const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
+        if (settles && asksCase(state.pending)) { state.pending = null; (trace.adjusted ??= []).push(`the open case question was answered (${bid})`); }
+        if (settles && asksCase(state.parkedPending)) state.parkedPending = null;
       }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "household_documents") inventoryNow = res.data as Inventory;

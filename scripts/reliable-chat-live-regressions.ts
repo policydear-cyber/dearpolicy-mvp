@@ -83,6 +83,23 @@ async function main() {
       ] }]);
     if (process.env.SHOW) console.log(JSON.stringify((b[1].trace.toolCalls ?? []).map((c: any) => [c.name, c.ok, (c.error ?? "").slice(0, 300)])));
     check("RCT2b recorded shape: an illustration shown beside a question, then corrected -> the withdrawal is SAID (\"no longer applies\") and S$20,000 shown", /S\$10,000/.test(b[1].v) && /no longer applies/.test(b[2].v) && /S\$20,000/.test(b[2].v), b.map((x: any) => x.v).join("\n---\n"));
+    // rc-live-3 RCT2a: the bone answer noted under another key ("fracture_bone_detail", the question was "fracture_bone")
+    // -- the answered case question was put back on turns 2 and 3 ("here is the question I was on").
+    const c3 = await run([t1,
+      { user: "The doctor said it was the shin bone.", steps: [
+        () => [call("note_facts", { facts: [{ key: "fracture_bone_detail", value: "shin bone", words: "The doctor said it was the shin bone." }], subject_id: J })],
+        () => [call("evaluate_benefit", { case: "shin bone", purpose: "claim", fact_keys: ["fracture_bone_detail"], benefit_id: SCHED, subject_id: J })],
+        (v: ScriptView) => [call("final_answer", { subject_id: J, sentences: [{ kind: "fact", text: "You told me, “The doctor said it was the shin bone.”" }, { kind: "calculation", result_id: evalOf(v).result_id, text: "-" }] })],
+      ] },
+      { user: "Sorry, I got that wrong - the X-ray shows it was his thigh bone.", steps: [
+        () => [call("note_facts", { facts: [{ key: "fracture_bone_detail", value: "thigh bone", words: "the X-ray shows it was his thigh bone" }], subject_id: J })],
+        () => [call("evaluate_benefit", { case: "the X-ray shows it was his thigh bone", purpose: "claim", fact_keys: ["fracture_bone_detail", "how_it_happened", "injury"], option_id: SCHED + "r1", benefit_id: SCHED, subject_id: J })],
+        (v: ScriptView) => [call("final_answer", { subject_id: J, sentences: [{ kind: "fact", text: "You told me, “Sorry, I got that wrong - the X-ray shows it was his thigh bone.”" }, { kind: "calculation", result_id: evalOf(v).result_id, text: "-" }] })],
+      ] }]);
+    const noBack = (x: any) => !(x.answer.questions ?? []).length && !/question I was on/.test(x.v);
+    check("RCT2a recorded shape: the bone answered under another key -> the case question is not put back (turns 2 and 3); S$10,000 then S$20,000, withdrawal said", noBack(c3[1]) && noBack(c3[2]) && /S\$10,000/.test(c3[1].v) && /S\$20,000/.test(c3[2].v) && /no longer applies/.test(c3[2].v), c3.map((x: any) => x.v + " | Q: " + JSON.stringify((x.answer.questions ?? []).map((q: any) => q.text))).join("\n---\n"));
+    const g3 = gradeRCT1("RCT2a", { turns: [{}, {}, {}], loaded: { turns: c3.map((x) => ({ answer: x.answer })), state: c3[2].state }, saved: { traces: c3.map((x) => x.trace) } });
+    check("RCT2a recorded shape: the pre-registered grader v2 passes the replayed conversation", g3.verdict === "PASS", JSON.stringify(g3.checks.filter((c) => !c.ok)));
     const g = gradeRCT1("RCT1a", { turns: [{}, {}, {}], loaded: { turns: out.map((x) => ({ answer: x.answer })), state: out[2].state }, saved: { traces: out.map((x) => x.trace) } });
     check("RCT1a: the pre-registered grader passes the replayed conversation", g.verdict === "PASS", JSON.stringify(g.checks.filter((c) => !c.ok)));
   } else {
