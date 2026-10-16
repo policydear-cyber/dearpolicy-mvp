@@ -1415,7 +1415,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const status = (res.data as { status?: string }).status;
         const bid = String(call.arguments.benefit_id ?? "");
         const reason = (res.data as { reason?: string }).reason;
-        if (bid && status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) caseOpenNow.set(subj, bid);
+        if (bid && ((status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) || status === "case_conflict")) caseOpenNow.set(subj, bid);
         const settles = !!bid && (!!rid || status === "unlisted_case");
         if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
         const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));

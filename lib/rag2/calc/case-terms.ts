@@ -56,7 +56,7 @@ const regionOf = (id: string) => byId.get(id)?.within ?? null;
 export type CaseRow = { id: string; label: string };
 export type CaseChoice =
   | { kind: "row"; row: CaseRow; parts: string[] }
-  | { kind: "ambiguous"; rows: CaseRow[]; parts: string[] }
+  | { kind: "ambiguous"; rows: CaseRow[]; parts: string[]; conflicting?: boolean }
   | { kind: "unlisted"; parts: string[] }
   | { kind: "missing" };
 
@@ -65,11 +65,21 @@ const itemsOf = (label: string) => label.split(/,|;|\/|\bor\b|\band\b/i).map((x)
 
 /** The listed cases the household's words name. */
 export function caseFor(rows: CaseRow[], words: string): CaseChoice {
-  const want = partsIn(words);
-  if (!want.length) return { kind: "missing" };
+  const named = partsIn(words);
+  if (!named.length) return { kind: "missing" };
+  // Explicitly negated anatomy cannot identify an injury. Keep affirmative parts
+  // ("not the thigh, the shin" -> shin); infer no diagnosis from negative facts alone.
+  const negated = new Set(PARTS.filter((p) => {
+    const matches = [...words.matchAll(new RegExp(p.words.source, "gi"))];
+    return matches.some((m) => /\b(?:not|no|neither|without)(?:\s+(?:the|a|an|his|her|my|their|left|right|broken|fractured|injured)){0,3}\s*$/i.test(words.slice(Math.max(0, m.index! - 60), m.index)));
+  }).map((p) => p.id));
+  const want = named.filter((p) => !negated.has(p));
+  if (!want.length) return { kind: "ambiguous", rows: [...rows], parts: named, conflicting: true };
   const rowInfo = rows.map((r) => ({ row: r, parts: partsIn(r.label), items: itemsOf(r.label).map(partsIn) }));
   let candidates: CaseRow[] | null = null;
   let choose = false;
+  let conflicting = false;
+  const unmatched: string[] = [];
   for (const p of want) {
     // 1. a row printing the part itself
     const exact = rowInfo.filter((x) => x.parts.includes(p)).map((x) => x.row);
@@ -80,14 +90,21 @@ export function caseFor(rows: CaseRow[], words: string): CaseChoice {
     // 3. for a region, every row printing a part within it: the household chooses which
     const within = rowInfo.filter((x) => x.parts.some((q) => regionOf(q) === p)).map((x) => x.row);
     const these = exact.length ? exact : general.length ? general : within;
-    if (!these.length) continue;
+    if (!these.length) { unmatched.push(p); continue; }
     if (!exact.length && !general.length) choose = true;
     const kept: CaseRow[] = candidates ? candidates.filter((r) => these.includes(r)) : these;
-    candidates = kept.length ? kept : candidates;
+    if (candidates && !kept.length) {
+      // Disjoint parts never select whichever PARTS entry happened to be visited first.
+      conflicting = true;
+      candidates = [...new Map([...candidates, ...these].map((r) => [r.id, r])).values()];
+    } else if (conflicting) {
+      candidates = [...new Map([...(candidates ?? []), ...these].map((r) => [r.id, r])).values()];
+    } else candidates = kept;
   }
+  if (unmatched.length) return { kind: "unlisted", parts: unmatched };
   if (!candidates || !candidates.length) return { kind: "unlisted", parts: want };
   const distinct = [...new Map(candidates.map((r) => [r.id, r])).values()];
-  return distinct.length === 1 && !choose ? { kind: "row", row: distinct[0], parts: want } : { kind: "ambiguous", rows: distinct, parts: want };
+  return distinct.length === 1 && !choose && !conflicting ? { kind: "row", row: distinct[0], parts: want } : { kind: "ambiguous", rows: distinct, parts: want, ...(conflicting ? { conflicting: true } : {}) };
 }
 
 /** Whether a chosen row is consistent with what the household reported (all of their recorded words together): the row
@@ -96,7 +113,7 @@ export function rowConsistent(rows: CaseRow[], row: CaseRow, reportedWords: stri
   const c = caseFor(rows, reportedWords.join(" ; "));
   if (c.kind === "missing") return { ok: true };
   if (c.kind === "row" && c.row.id === row.id) return { ok: true };
-  if (c.kind === "ambiguous" && c.rows.some((r) => r.id === row.id)) return { ok: true };
+  if (c.kind === "ambiguous" && !c.conflicting && c.rows.some((r) => r.id === row.id)) return { ok: true };
   return { ok: false, parts: c.parts };
 }
 /** A plain name for a part (used in messages). */

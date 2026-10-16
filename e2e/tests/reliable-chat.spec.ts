@@ -84,3 +84,21 @@ test("RC2: a part no listed case covers is said with the listed cases and a cont
   expect(s.saved.questions ?? []).toHaveLength(0);
   expect(a.shown).not.toMatch(/Which listed fracture case/);
 });
+
+test("RC3: conflicting bones save no estimate; a correction gives the shin calculation without repeating the question", async ({ page, request }) => {
+  const [u1, u2] = await scenario(request, "RC3");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a1 = await send(page, u1);
+  const s1 = await sameAsSaved(request, a1.shown, "RC3 unresolved");
+  expect(s1.saved.calculations ?? []).toHaveLength(0);
+  expect(a1.shown).not.toMatch(/illustration is S\$/);
+  expect(a1.shown).toContain("Which bone should I use for this illustration?");
+  const a2 = await send(page, u2);
+  const s2 = await sameAsSaved(request, a2.shown, "RC3 corrected");
+  expect(a2.shown).toMatch(/conditional illustration is S\$10,000/);
+  expect(a2.shown).not.toMatch(/illustration is S\$20,000/);
+  expect(s2.saved.calculations ?? []).toHaveLength(1);
+  expect(s2.saved.questions ?? []).toHaveLength(0);
+  expect(a2.shown).not.toContain("Which bone should I use");
+});
