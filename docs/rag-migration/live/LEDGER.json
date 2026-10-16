@@ -458,6 +458,32 @@
       "calls": 17,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "rc-live-4-tan",
+      "tested_code_sha": "0222152792a0bd8e442a3c83f34fcceae895b26d",
+      "request_sha": "c471dcbece0e8f5988d144cf3e1d940e84009d5e",
+      "at": "2026-10-16T00:17:20.503Z",
+      "preflight": false,
+      "run_cap_usd": 0.016,
+      "spent_usd": 0.010427,
+      "reserved_unsettled_usd": 0,
+      "calls": 31,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-4-wong",
+      "tested_code_sha": "0222152792a0bd8e442a3c83f34fcceae895b26d",
+      "request_sha": "c471dcbece0e8f5988d144cf3e1d940e84009d5e",
+      "at": "2026-10-16T00:17:20.769Z",
+      "preflight": false,
+      "run_cap_usd": 0.01,
+      "spent_usd": 0.005274,
+      "reserved_unsettled_usd": 0,
+      "calls": 17,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

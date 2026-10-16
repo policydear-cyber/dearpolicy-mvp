@@ -1,0 +1,3286 @@
+{
+  "scenario": "RCW4a",
+  "title": "rc-live-2: fixed-limit Simple Fracture, attempt 1",
+  "conversationId": "cf2b03b4-0606-4a3d-b036-9ee46972d52d",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+      "timings": {
+        "acceptedMs": 578,
+        "firstAssistantPersistedMs": 14977,
+        "answerSeenMs": 15048,
+        "modelMs": 13792,
+        "upstreamMs": 13614,
+        "relayMs": 13626
+      },
+      "calls": [
+        {
+          "seq": 1,
+          "at": "2026-10-16T00:16:14.456Z",
+          "estInputTokens": 15029,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025029,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7326,
+            "output": 18,
+            "cached": 0
+          },
+          "latencyMs": 1523,
+          "upstreamMs": 1522,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-16T00:16:16.019Z",
+          "estInputTokens": 15254,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025254,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 4,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7441,
+            "output": 112,
+            "cached": 7200
+          },
+          "latencyMs": 2483,
+          "upstreamMs": 2483,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 3,
+          "at": "2026-10-16T00:16:18.513Z",
+          "estInputTokens": 15738,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025738000000000002,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 6,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7724,
+            "output": 104,
+            "cached": 7315
+          },
+          "latencyMs": 2220,
+          "upstreamMs": 2220,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 4,
+          "at": "2026-10-16T00:16:20.863Z",
+          "estInputTokens": 21310,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.003131,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 9,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11835,
+            "output": 83,
+            "cached": 7598
+          },
+          "latencyMs": 2050,
+          "upstreamMs": 2050,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 5,
+          "at": "2026-10-16T00:16:22.932Z",
+          "estInputTokens": 22381,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0032381,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 11,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 12532,
+            "output": 77,
+            "cached": 11709
+          },
+          "latencyMs": 2476,
+          "upstreamMs": 2476,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 6,
+          "at": "2026-10-16T00:16:25.455Z",
+          "estInputTokens": 23311,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0033311,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 13,
+          "systemPromptSha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "toolsSha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 13043,
+            "output": 198,
+            "cached": 12406
+          },
+          "latencyMs": 3040,
+          "upstreamMs": 3040,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 1,
+          "at": "2026-10-16T00:16:14.459Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15256,
+          "reservedUsd": 0.0025256000000000002,
+          "chargedUsd": 0.0007416,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 1518,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuJ6VXIVWzkp4rk5ZTSSpECy1HL",
+          "usage": {
+            "input": 7326,
+            "output": 18,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-16T00:16:16.020Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15488,
+          "reservedUsd": 0.0025488000000000004,
+          "chargedUsd": 0.00015209999999999998,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 2482,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuKD4FaZEPMeDtYyqekpeF3VA6t",
+          "usage": {
+            "input": 7441,
+            "output": 112,
+            "cached": 7200,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        },
+        {
+          "seq": 3,
+          "at": "2026-10-16T00:16:18.514Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16000,
+          "reservedUsd": 0.0026,
+          "chargedUsd": 0.00016605000000000002,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 2178,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuNvDqs3QIrFBCKemVSWkfyf1RO",
+          "usage": {
+            "input": 7724,
+            "output": 104,
+            "cached": 7315,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        },
+        {
+          "seq": 4,
+          "at": "2026-10-16T00:16:20.869Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 21588,
+          "reservedUsd": 0.0031588000000000002,
+          "chargedUsd": 0.00054118,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 2050,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuPOLJpVI4GReoYK8mO2lLYTStj",
+          "usage": {
+            "input": 11835,
+            "output": 83,
+            "cached": 7598,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        },
+        {
+          "seq": 5,
+          "at": "2026-10-16T00:16:22.937Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 22669,
+          "reservedUsd": 0.0032669,
+          "chargedUsd": 0.00023789000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 2434,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuRt8Meh2AZs0gpT43XRY0RfUD6",
+          "usage": {
+            "input": 12532,
+            "output": 77,
+            "cached": 11709,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        },
+        {
+          "seq": 6,
+          "at": "2026-10-16T00:16:25.461Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 23615,
+          "reservedUsd": 0.0033615,
+          "chargedUsd": 0.00028676,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "418ce31386fc0bcd",
+          "kind": "loop",
+          "upstreamMs": 3039,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZPuUtjL65FlC3Sk2jF0bUCnODZhj",
+          "usage": {
+            "input": 13043,
+            "output": 198,
+            "cached": 12406,
+            "reasoning": 0
+          },
+          "scenario": "RCW4a",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-16T00:16:14Z",
+          "t": 1792109774.484,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 1478,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuJ6VXIVWzkp4rk5ZTSSpECy1HL",
+          "usage": {
+            "prompt_tokens": 7326,
+            "completion_tokens": 18,
+            "total_tokens": 7344,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person"
+          ],
+          "status": 200,
+          "relay_ms": 1482
+        },
+        {
+          "at": "2026-10-16T00:16:16Z",
+          "t": 1792109776.025,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 2476,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuKD4FaZEPMeDtYyqekpeF3VA6t",
+          "usage": {
+            "prompt_tokens": 7441,
+            "completion_tokens": 112,
+            "total_tokens": 7553,
+            "cached_tokens": 7200,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "note_facts"
+          ],
+          "status": 200,
+          "relay_ms": 2477
+        },
+        {
+          "at": "2026-10-16T00:16:18Z",
+          "t": 1792109778.518,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 2171,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuNvDqs3QIrFBCKemVSWkfyf1RO",
+          "usage": {
+            "prompt_tokens": 7724,
+            "completion_tokens": 104,
+            "total_tokens": 7828,
+            "cached_tokens": 7315,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "policies_for",
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 2176
+        },
+        {
+          "at": "2026-10-16T00:16:20Z",
+          "t": 1792109780.888,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 9,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 2025,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuPOLJpVI4GReoYK8mO2lLYTStj",
+          "usage": {
+            "prompt_tokens": 11835,
+            "completion_tokens": 83,
+            "total_tokens": 11918,
+            "cached_tokens": 7598,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2025
+        },
+        {
+          "at": "2026-10-16T00:16:22Z",
+          "t": 1792109782.941,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 11,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 2429,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuRt8Meh2AZs0gpT43XRY0RfUD6",
+          "usage": {
+            "prompt_tokens": 12532,
+            "completion_tokens": 77,
+            "total_tokens": 12609,
+            "cached_tokens": 11709,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 2430
+        },
+        {
+          "at": "2026-10-16T00:16:25Z",
+          "t": 1792109785.463,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 13,
+          "tools": 13,
+          "tools_sha256": "be30f3cecacc88e4e3e3688f70c267fd2501c9bbab941cc3f9cce112a5913145",
+          "system_prompt_sha256": "f35d38b707aea76d157c6e69004d0113c255cf9ace0aa33dbdd0a4cc5cf43ae1",
+          "upstream_ms": 3035,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZPuUtjL65FlC3Sk2jF0bUCnODZhj",
+          "usage": {
+            "prompt_tokens": 13043,
+            "completion_tokens": 198,
+            "total_tokens": 13241,
+            "cached_tokens": 12406,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3036
+        }
+      ],
+      "tokens": {
+        "input": 59901,
+        "output": 592
+      },
+      "costUsd": {
+        "charged": 0.0021255799999999997,
+        "reserved": 0.0174616,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "guardUsd": 0.0021255799999999997,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 15064,
+  "firstUsefulResponseMs": 14977,
+  "tokens": {
+    "input": 59901,
+    "output": 592
+  },
+  "costUsd": 0.0021255799999999997,
+  "calls": 6,
+  "loaded": {
+    "conversationId": "cf2b03b4-0606-4a3d-b036-9ee46972d52d",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 3,
+        "turn": 1,
+        "claim": {
+          "calcs": {
+            "ka0a91bbb6f": {
+              "kind": "conditional_illustration",
+              "turn": 1,
+              "calcId": "ka0a91bbb6f",
+              "benefit": "Simple Fracture",
+              "factKeys": [
+                "injury",
+                "fracture_type",
+                "how_it_happened",
+                "surgery"
+              ],
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "withdrawn": null,
+              "evidenceIds": [
+                "e6",
+                "e11"
+              ]
+            }
+          },
+          "facts": {
+            "injury": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "broke his leg",
+              "words": "Adrian broke his leg",
+              "source": "user_reported"
+            },
+            "surgery": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "no surgery",
+              "words": "no surgery",
+              "source": "user_reported"
+            },
+            "fracture_type": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "closed fracture",
+              "words": "a closed fracture",
+              "source": "user_reported"
+            },
+            "how_it_happened": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "in a fall",
+              "words": "in a fall",
+              "source": "user_reported"
+            }
+          },
+          "derived": [
+            {
+              "turn": 1,
+              "factKeys": [
+                "injury",
+                "fracture_type",
+                "how_it_happened",
+                "surgery"
+              ],
+              "sentence": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "evidenceIds": [
+                "e6",
+                "e11"
+              ]
+            }
+          ],
+          "subjectId": "7e800000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7326,
+                "output": 18,
+                "attempt": 1,
+                "costUsd": 0.0007416,
+                "latencyMs": 1525
+              },
+              {
+                "ok": true,
+                "input": 7441,
+                "output": 112,
+                "attempt": 1,
+                "costUsd": 0.00015209999999999998,
+                "latencyMs": 2483
+              },
+              {
+                "ok": true,
+                "input": 7724,
+                "output": 104,
+                "attempt": 1,
+                "costUsd": 0.00016605000000000002,
+                "latencyMs": 2220
+              },
+              {
+                "ok": true,
+                "input": 11835,
+                "output": 83,
+                "attempt": 1,
+                "costUsd": 0.00054118,
+                "latencyMs": 2057
+              },
+              {
+                "ok": true,
+                "input": 12532,
+                "output": 77,
+                "attempt": 1,
+                "costUsd": 0.00023789000000000001,
+                "latencyMs": 2482
+              },
+              {
+                "ok": true,
+                "input": 13043,
+                "output": 198,
+                "attempt": 1,
+                "costUsd": 0.00028676,
+                "latencyMs": 3046
+              }
+            ],
+            "limit": null,
+            "steps": 6,
+            "usage": {
+              "input": 59901,
+              "output": 592
+            },
+            "dropped": [
+              {
+                "reason": "not supported by its evidence: “the insurer’s medical assessment remains unresolved.”: its evidence does not mention what it is about (insurer, medical, assessment, remain)",
+                "sentence": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved."
+              }
+            ],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision."
+            ],
+            "latencyMs": 14123,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Adrian"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "injury",
+                      "value": "broke his leg",
+                      "words": "Adrian broke his leg"
+                    },
+                    {
+                      "key": "how_it_happened",
+                      "value": "in a fall",
+                      "words": "in a fall"
+                    },
+                    {
+                      "key": "fracture_type",
+                      "value": "closed fracture",
+                      "words": "a closed fracture"
+                    },
+                    {
+                      "key": "surgery",
+                      "value": "no surgery",
+                      "words": "no surgery"
+                    }
+                  ],
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accident fracture",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "Simple Fracture provision; closed leg fracture",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "Simple Fracture benefit conditions closed fracture leg no surgery definition eligibility X-ray medical practitioner",
+                  "policy_ids": [
+                    "7e800000-0000-4000-8000-000000000102"
+                  ],
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":3}",
+                "evidenceIds": [
+                  "e14",
+                  "e15",
+                  "e16"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "leg",
+                  "purpose": "claim",
+                  "fact_keys": [
+                    "injury",
+                    "fracture_type",
+                    "how_it_happened",
+                    "surgery"
+                  ],
+                  "benefit_id": "b167f5dfe35",
+                  "subject_id": "7e800000-0000-4000-8000-000000000001",
+                  "assumption_words": "Adrian broke his leg"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+                "evidenceIds": [
+                  "e6",
+                  "e11"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "calculation",
+                      "text": "If the Simple Fracture benefit applies to Adrian Wong Jia Hui (Adrian)'s case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                      "result_id": "ka0a91bbb6f"
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved.",
+                      "evidence_ids": [
+                        "e14"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7e800000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.",
+            "evidenceChosen": [
+              "e6",
+              "e11"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 100000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 100000000,
+              "notes": [],
+              "value": 1000000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 364,
+                        "text": "S****604D",
+                        "start": 355,
+                        "header": ""
+                      },
+                      {
+                        "end": 385,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 365,
+                        "header": ""
+                      },
+                      {
+                        "end": 397,
+                        "text": "S$1,000,000",
+                        "start": 386,
+                        "header": ""
+                      },
+                      {
+                        "end": 403,
+                        "text": "As of",
+                        "start": 398,
+                        "header": ""
+                      },
+                      {
+                        "end": 414,
+                        "text": "06/10/2022",
+                        "start": 404,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 414,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                  "start": 355,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP TERM LIFE(POLICY NO.KPT-520011)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 364,
+                          "text": "S****604D",
+                          "start": 355,
+                          "header": ""
+                        },
+                        {
+                          "end": 385,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 365,
+                          "header": ""
+                        },
+                        {
+                          "end": 397,
+                          "text": "S$1,000,000",
+                          "start": 386,
+                          "header": ""
+                        },
+                        {
+                          "end": 403,
+                          "text": "As of",
+                          "start": 398,
+                          "header": ""
+                        },
+                        {
+                          "end": 414,
+                          "text": "06/10/2022",
+                          "start": 404,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 397,
+                      "text": "S$1,000,000",
+                      "start": 386
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 385,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 365,
+                      "memberId": "7e800000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 414,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+                    "start": 355,
+                    "onPage": 1
+                  },
+                  "policyId": "7e800000-0000-4000-8000-000000000101",
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 531,
+                        "text": "S****604D",
+                        "start": 522,
+                        "header": ""
+                      },
+                      {
+                        "end": 552,
+                        "text": "Wong Jia Hui, Adrian",
+                        "start": 532,
+                        "header": ""
+                      },
+                      {
+                        "end": 562,
+                        "text": "S$600,000",
+                        "start": 553,
+                        "header": ""
+                      },
+                      {
+                        "end": 568,
+                        "text": "As of",
+                        "start": 563,
+                        "header": ""
+                      },
+                      {
+                        "end": 579,
+                        "text": "06/10/2022",
+                        "start": 569,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2022-10-06",
+                  "cell": {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553
+                  },
+                  "layout": "person_row",
+                  "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****604D",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "memberId": "7e800000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 579,
+                  "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                  "start": 522,
+                  "onPage": 1
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000101",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2022-10-06: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Adrian Wong Jia Hui's own row (“Wong Jia Hui, Adrian”) under “GROUP PERSONAL ACCIDENT(POLICY NO. KPA-520012)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 531,
+                          "text": "S****604D",
+                          "start": 522,
+                          "header": ""
+                        },
+                        {
+                          "end": 552,
+                          "text": "Wong Jia Hui, Adrian",
+                          "start": 532,
+                          "header": ""
+                        },
+                        {
+                          "end": 562,
+                          "text": "S$600,000",
+                          "start": 553,
+                          "header": ""
+                        },
+                        {
+                          "end": 568,
+                          "text": "As of",
+                          "start": 563,
+                          "header": ""
+                        },
+                        {
+                          "end": 579,
+                          "text": "06/10/2022",
+                          "start": 569,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2022-10-06",
+                    "cell": {
+                      "end": 562,
+                      "text": "S$600,000",
+                      "start": 553
+                    },
+                    "layout": "person_row",
+                    "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****604D",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 552,
+                      "text": "Wong Jia Hui, Adrian",
+                      "start": 532,
+                      "memberId": "7e800000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 579,
+                    "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+                    "start": 522,
+                    "onPage": 1
+                  },
+                  "policyId": "7e800000-0000-4000-8000-000000000101",
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": 500000,
+              "kind": "table_value",
+              "cents": null,
+              "count": null,
+              "period": null,
+              "benefit": "Jaw, Pelvis, Leg^, Ankle or Knee",
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 13,
+                  "start": 13
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 247,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 211,
+                  "onPage": 13
+                },
+                "support": {
+                  "end": 247,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 211,
+                  "onPage": 13
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000102",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-summary"
+              },
+              "valueKind": "percent"
+            },
+            "selected": {
+              "ppm": 500000,
+              "unit": null,
+              "cents": null,
+              "notes": [],
+              "value": 50,
+              "period": null,
+              "status": "ok",
+              "benefit": "Jaw, Pelvis, Leg^, Ankle or Knee",
+              "related": [],
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 13,
+                  "start": 13
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 247,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 211,
+                  "onPage": 13
+                },
+                "support": {
+                  "end": 247,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 211,
+                  "onPage": 13
+                },
+                "policyId": "7e800000-0000-4000-8000-000000000102",
+                "subjectId": "7e800000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:pr50-summary"
+              },
+              "rowLabel": "Jaw, Pelvis, Leg^, Ankle or Knee",
+              "valueKind": "percent",
+              "conditions": [],
+              "columnHeader": ""
+            },
+            "subjectId": "7e800000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.",
+            "assistant": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7e800000-0000-4000-8000-000000000101": "Public Officers Group Insurance Scheme - Certificate",
+          "7e800000-0000-4000-8000-000000000102": "Public Officers Group Personal Accident - Summary of Benefits",
+          "7e800000-0000-4000-8000-000000000103": "Public Officers Group Personal Accident - Policy Wording"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 316,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 229,
+              "onPage": 1
+            },
+            "support": {
+              "end": 316,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 229,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "support": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 364,
+                    "text": "S****604D",
+                    "start": 355,
+                    "header": ""
+                  },
+                  {
+                    "end": 385,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 365,
+                    "header": ""
+                  },
+                  {
+                    "end": 397,
+                    "text": "S$1,000,000",
+                    "start": 386,
+                    "header": ""
+                  },
+                  {
+                    "end": 403,
+                    "text": "As of",
+                    "start": 398,
+                    "header": ""
+                  },
+                  {
+                    "end": 414,
+                    "text": "06/10/2022",
+                    "start": 404,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386
+              },
+              "layout": "person_row",
+              "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "memberId": "7e800000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "support": {
+              "end": 414,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+              "start": 355,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 531,
+                    "text": "S****604D",
+                    "start": 522,
+                    "header": ""
+                  },
+                  {
+                    "end": 552,
+                    "text": "Wong Jia Hui, Adrian",
+                    "start": 532,
+                    "header": ""
+                  },
+                  {
+                    "end": 562,
+                    "text": "S$600,000",
+                    "start": 553,
+                    "header": ""
+                  },
+                  {
+                    "end": 568,
+                    "text": "As of",
+                    "start": 563,
+                    "header": ""
+                  },
+                  {
+                    "end": 579,
+                    "text": "06/10/2022",
+                    "start": 569,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2022-10-06",
+              "cell": {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553
+              },
+              "layout": "person_row",
+              "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "memberId": "7e800000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "support": {
+              "end": 579,
+              "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+              "start": 522,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000101",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-cert"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 162,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 120,
+              "onPage": 9
+            },
+            "support": {
+              "end": 162,
+              "text": "Accidental Death: 100% of the Sum Insured.",
+              "start": 120,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "support": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 443,
+              "text": "• Death due to Accident\tS$3,000",
+              "start": 412,
+              "onPage": 9
+            },
+            "support": {
+              "end": 443,
+              "text": "• Death due to Accident\tS$3,000",
+              "start": 412,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 474,
+              "text": "• Death due to Illness\tS$1,500",
+              "start": 444,
+              "onPage": 9
+            },
+            "support": {
+              "end": 474,
+              "text": "• Death due to Illness\tS$1,500",
+              "start": 444,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 202,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 164,
+              "onPage": 13
+            },
+            "support": {
+              "end": 202,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 164,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 210,
+              "text": "Hip\t75%",
+              "start": 203,
+              "onPage": 13
+            },
+            "support": {
+              "end": 210,
+              "text": "Hip\t75%",
+              "start": 203,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 247,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 211,
+              "onPage": 13
+            },
+            "support": {
+              "end": 247,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 211,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "passage": {
+              "end": 247,
+              "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 127,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "passage": {
+              "end": 442,
+              "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+              "start": 290,
+              "onPage": 1
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:pr50-wording"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "search_passages",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 247,
+              "text": "Simple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 88,
+              "onPage": 13
+            },
+            "support": {
+              "end": 126,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 88,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e15": {
+            "id": "e15",
+            "via": "search_passages",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 86,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+              "start": 0,
+              "onPage": 13
+            },
+            "support": {
+              "end": 86,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+              "start": 0,
+              "onPage": 13
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          },
+          "e16": {
+            "id": "e16",
+            "via": "search_passages",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36\nSection A - Death and Disablement\nAccidental Death: 100% of the Sum Insured.\nPermanent Dismemberment: up to 100% of the Sum Insured according to the Scale of Compensation, if the loss occurs within 365 days of the Accident.\nSection B - Compassionate Death Allowance\nCompassionate Death Allowance (per enrolled Insured Person)",
+              "start": 0,
+              "onPage": 9
+            },
+            "support": {
+              "end": 85,
+              "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36",
+              "start": 0,
+              "onPage": 9
+            },
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:pr50-summary"
+          }
+        },
+        "speakerId": "7e800000-0000-4000-8000-000000000001",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "claimRecord": {
+          "id": "3154c73b-d772-4805-8998-0075f9763b35",
+          "memberId": "7e800000-0000-4000-8000-000000000001"
+        },
+        "recentSubjectIds": [
+          "7e800000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.",
+        "answer": {
+          "mode": "answer",
+          "details": [],
+          "summary": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "citations": [
+            {
+              "chunkId": "rag2:e6",
+              "excerpt": "Simple Fracture Benefit Limit: S$5,000",
+              "insurer": "KestrelOne",
+              "pageEnd": 13,
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "pageStart": 13,
+              "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e11",
+              "excerpt": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "insurer": "KestrelOne",
+              "pageEnd": 13,
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "pageStart": 13,
+              "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+              "documentRole": "benefit_summary"
+            }
+          ],
+          "nextSteps": [
+            "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+          ],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "calculations": [
+            {
+              "id": "ka0a91bbb6f",
+              "kind": "conditional_illustration",
+              "steps": [
+                {
+                  "id": "s_part",
+                  "op": "percent_of",
+                  "out": 250000,
+                  "inputs": [
+                    "benefit_limit",
+                    "percent"
+                  ]
+                }
+              ],
+              "result": {
+                "value": 2500,
+                "currency": "SGD"
+              },
+              "benefit": "Simple Fracture",
+              "currency": "SGD",
+              "operands": [
+                {
+                  "id": "benefit_limit",
+                  "row": "Simple Fracture Benefit Limit: S$5,000",
+                  "role": "limit",
+                  "unit": "money",
+                  "label": "Simple Fracture benefit limit",
+                  "value": 5000,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Simple Fracture benefit limit",
+                    "pageEnd": 13,
+                    "passage": "Simple Fracture Benefit Limit: S$5,000",
+                    "policyId": "7e800000-0000-4000-8000-000000000102",
+                    "pageStart": 13,
+                    "subjectId": "7e800000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:pr50-summary"
+                  },
+                  "currency": "SGD"
+                },
+                {
+                  "id": "percent",
+                  "row": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "role": "percent",
+                  "unit": "percent",
+                  "label": "Jaw, Pelvis, Leg^, Ankle or Knee",
+                  "value": 50,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Jaw, Pelvis, Leg^, Ankle or Knee",
+                    "pageEnd": 13,
+                    "passage": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                    "policyId": "7e800000-0000-4000-8000-000000000102",
+                    "pageStart": 13,
+                    "subjectId": "7e800000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:pr50-summary"
+                  },
+                  "currency": null
+                }
+              ],
+              "policyId": "7e800000-0000-4000-8000-000000000102",
+              "rounding": {
+                "mode": "half_up",
+                "source": "default",
+                "precision": 2
+              },
+              "sentence": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "subjectId": "7e800000-0000-4000-8000-000000000001",
+              "assumption": "Adrian broke his leg",
+              "calculator": "lump_sum",
+              "conditions": [
+                {
+                  "id": "c_definition",
+                  "kind": "definition",
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee must meet Public Officers Group Personal Accident - Summary of Benefits’s own definition, confirmed by a reviewed medical decision.",
+                  "basis": "none",
+                  "needs": "a reviewed decision that Adrian’s diagnosis meets Public Officers Group Personal Accident - Summary of Benefits’s definition of Jaw, Pelvis, Leg^, Ankle or Knee (the insurer’s medical assessment)",
+                  "status": "unresolved"
+                }
+              ],
+              "documentHash": "sha256:pr50-summary",
+              "unresolvedText": "I worked out Adrian’s simple fracture under Public Officers Group Personal Accident - Summary of Benefits, but I couldn’t confirm the figure against your documents.",
+              "evidenceRequirements": [
+                "the specialist’s diagnosis report",
+                "the insurer’s claim form and medical assessment"
+              ]
+            }
+          ],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": "3154c73b-d772-4805-8998-0075f9763b35",
+          "conversationId": "cf2b03b4-0606-4a3d-b036-9ee46972d52d",
+          "figureBindings": [],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7e800000-0000-4000-8000-000000000001"
+        },
+        "content": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+        "visible": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.\nContact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim.",
+        "questions": [],
+        "userAt": "2026-10-16T00:16:28.614Z",
+        "assistantAt": "2026-10-16T00:16:28.614Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7326,
+              "output": 18,
+              "attempt": 1,
+              "costUsd": 0.0007416,
+              "latencyMs": 1525
+            },
+            {
+              "ok": true,
+              "input": 7441,
+              "output": 112,
+              "attempt": 1,
+              "costUsd": 0.00015209999999999998,
+              "latencyMs": 2483
+            },
+            {
+              "ok": true,
+              "input": 7724,
+              "output": 104,
+              "attempt": 1,
+              "costUsd": 0.00016605000000000002,
+              "latencyMs": 2220
+            },
+            {
+              "ok": true,
+              "input": 11835,
+              "output": 83,
+              "attempt": 1,
+              "costUsd": 0.00054118,
+              "latencyMs": 2057
+            },
+            {
+              "ok": true,
+              "input": 12532,
+              "output": 77,
+              "attempt": 1,
+              "costUsd": 0.00023789000000000001,
+              "latencyMs": 2482
+            },
+            {
+              "ok": true,
+              "input": 13043,
+              "output": 198,
+              "attempt": 1,
+              "costUsd": 0.00028676,
+              "latencyMs": 3046
+            }
+          ],
+          "limit": null,
+          "steps": 6,
+          "usage": {
+            "input": 59901,
+            "output": 592
+          },
+          "dropped": [
+            {
+              "reason": "not supported by its evidence: “the insurer’s medical assessment remains unresolved.”: its evidence does not mention what it is about (insurer, medical, assessment, remain)",
+              "sentence": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved."
+            }
+          ],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision."
+          ],
+          "latencyMs": 14123,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Adrian"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "injury",
+                    "value": "broke his leg",
+                    "words": "Adrian broke his leg"
+                  },
+                  {
+                    "key": "how_it_happened",
+                    "value": "in a fall",
+                    "words": "in a fall"
+                  },
+                  {
+                    "key": "fracture_type",
+                    "value": "closed fracture",
+                    "words": "a closed fracture"
+                  },
+                  {
+                    "key": "surgery",
+                    "value": "no surgery",
+                    "words": "no surgery"
+                  }
+                ],
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "accident fracture",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "policies_for",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "Simple Fracture provision; closed leg fracture",
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "k": 10,
+                "query": "Simple Fracture benefit conditions closed fracture leg no surgery definition eligibility X-ray medical practitioner",
+                "policy_ids": [
+                  "7e800000-0000-4000-8000-000000000102"
+                ],
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "search_passages",
+              "summary": "{\"hits\":3}",
+              "evidenceIds": [
+                "e14",
+                "e15",
+                "e16"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "leg",
+                "purpose": "claim",
+                "fact_keys": [
+                  "injury",
+                  "fracture_type",
+                  "how_it_happened",
+                  "surgery"
+                ],
+                "benefit_id": "b167f5dfe35",
+                "subject_id": "7e800000-0000-4000-8000-000000000001",
+                "assumption_words": "Adrian broke his leg"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+              "evidenceIds": [
+                "e6",
+                "e11"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "calculation",
+                    "text": "If the Simple Fracture benefit applies to Adrian Wong Jia Hui (Adrian)'s case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                    "result_id": "ka0a91bbb6f"
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved.",
+                    "evidence_ids": [
+                      "e14"
+                    ]
+                  }
+                ],
+                "next_steps": [
+                  "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                ],
+                "subject_id": "7e800000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Adrian broke his leg in a fall - a closed fracture, no surgery. Under the Simple Fracture provision of his accident cover, what illustration do the documents give? Don't promise a payment.",
+          "evidenceChosen": [
+            "e6",
+            "e11"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "RCW4a",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7e800000-0000-4000-8000-000000000001",
+    "speakerId": "7e800000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "calcs": {
+        "ka0a91bbb6f": {
+          "kind": "conditional_illustration",
+          "turn": 1,
+          "calcId": "ka0a91bbb6f",
+          "benefit": "Simple Fracture",
+          "factKeys": [
+            "injury",
+            "fracture_type",
+            "how_it_happened",
+            "surgery"
+          ],
+          "policyId": "7e800000-0000-4000-8000-000000000102",
+          "withdrawn": null,
+          "evidenceIds": [
+            "e6",
+            "e11"
+          ]
+        }
+      },
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "broke his leg",
+          "words": "Adrian broke his leg",
+          "source": "user_reported"
+        },
+        "surgery": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "no surgery",
+          "words": "no surgery",
+          "source": "user_reported"
+        },
+        "fracture_type": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "closed fracture",
+          "words": "a closed fracture",
+          "source": "user_reported"
+        },
+        "how_it_happened": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "in a fall",
+          "words": "in a fall",
+          "source": "user_reported"
+        }
+      },
+      "derived": [
+        {
+          "turn": 1,
+          "factKeys": [
+            "injury",
+            "fracture_type",
+            "how_it_happened",
+            "surgery"
+          ],
+          "sentence": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "evidenceIds": [
+            "e6",
+            "e11"
+          ]
+        }
+      ],
+      "subjectId": "7e800000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 6,
+        "usage": {
+          "input": 59901,
+          "output": 592
+        },
+        "latencyMs": 14123,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Adrian"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "injury",
+                  "value": "broke his leg",
+                  "words": "Adrian broke his leg"
+                },
+                {
+                  "key": "how_it_happened",
+                  "value": "in a fall",
+                  "words": "in a fall"
+                },
+                {
+                  "key": "fracture_type",
+                  "value": "closed fracture",
+                  "words": "a closed fracture"
+                },
+                {
+                  "key": "surgery",
+                  "value": "no surgery",
+                  "words": "no surgery"
+                }
+              ],
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "accident fracture",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "Simple Fracture provision; closed leg fracture",
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "Simple Fracture benefit conditions closed fracture leg no surgery definition eligibility X-ray medical practitioner",
+              "policy_ids": [
+                "7e800000-0000-4000-8000-000000000102"
+              ],
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":3}",
+            "evidenceIds": [
+              "e14",
+              "e15",
+              "e16"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "leg",
+              "purpose": "claim",
+              "fact_keys": [
+                "injury",
+                "fracture_type",
+                "how_it_happened",
+                "surgery"
+              ],
+              "benefit_id": "b167f5dfe35",
+              "subject_id": "7e800000-0000-4000-8000-000000000001",
+              "assumption_words": "Adrian broke his leg"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+            "evidenceIds": [
+              "e6",
+              "e11"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "calculation",
+                  "text": "If the Simple Fracture benefit applies to Adrian Wong Jia Hui (Adrian)'s case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                  "result_id": "ka0a91bbb6f"
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved.",
+                  "evidence_ids": [
+                    "e14"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim."
+              ],
+              "subject_id": "7e800000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e6",
+          "e11"
+        ],
+        "dropped": [
+          {
+            "reason": "not supported by its evidence: “the insurer’s medical assessment remains unresolved.”: its evidence does not mention what it is about (insurer, medical, assessment, remain)",
+            "sentence": "The summary does not establish whether Adrian’s diagnosis meets that definition; the insurer’s medical assessment remains unresolved."
+          }
+        ],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 316,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+          "start": 229,
+          "onPage": 1
+        },
+        "support": {
+          "end": 316,
+          "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+          "start": 229,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "support": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 364,
+                "text": "S****604D",
+                "start": 355,
+                "header": ""
+              },
+              {
+                "end": 385,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 365,
+                "header": ""
+              },
+              {
+                "end": 397,
+                "text": "S$1,000,000",
+                "start": 386,
+                "header": ""
+              },
+              {
+                "end": 403,
+                "text": "As of",
+                "start": 398,
+                "header": ""
+              },
+              {
+                "end": 414,
+                "text": "06/10/2022",
+                "start": 404,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 397,
+            "text": "S$1,000,000",
+            "start": 386
+          },
+          "layout": "person_row",
+          "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 385,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 365,
+            "memberId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "support": {
+          "end": 414,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$1,000,000\tAs of\t06/10/2022",
+          "start": 355,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 531,
+                "text": "S****604D",
+                "start": 522,
+                "header": ""
+              },
+              {
+                "end": 552,
+                "text": "Wong Jia Hui, Adrian",
+                "start": 532,
+                "header": ""
+              },
+              {
+                "end": 562,
+                "text": "S$600,000",
+                "start": 553,
+                "header": ""
+              },
+              {
+                "end": 568,
+                "text": "As of",
+                "start": 563,
+                "header": ""
+              },
+              {
+                "end": 579,
+                "text": "06/10/2022",
+                "start": 569,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2022-10-06",
+          "cell": {
+            "end": 562,
+            "text": "S$600,000",
+            "start": 553
+          },
+          "layout": "person_row",
+          "tableId": "7e800000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 552,
+            "text": "Wong Jia Hui, Adrian",
+            "start": 532,
+            "memberId": "7e800000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "support": {
+          "end": 579,
+          "text": "S****604D\tWong Jia Hui, Adrian\tS$600,000\tAs of\t06/10/2022",
+          "start": 522,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000101",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-cert"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 162,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 120,
+          "onPage": 9
+        },
+        "support": {
+          "end": 162,
+          "text": "Accidental Death: 100% of the Sum Insured.",
+          "start": 120,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "support": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 443,
+          "text": "• Death due to Accident\tS$3,000",
+          "start": 412,
+          "onPage": 9
+        },
+        "support": {
+          "end": 443,
+          "text": "• Death due to Accident\tS$3,000",
+          "start": 412,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 474,
+          "text": "• Death due to Illness\tS$1,500",
+          "start": 444,
+          "onPage": 9
+        },
+        "support": {
+          "end": 474,
+          "text": "• Death due to Illness\tS$1,500",
+          "start": 444,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 202,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 164,
+          "onPage": 13
+        },
+        "support": {
+          "end": 202,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 164,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 210,
+          "text": "Hip\t75%",
+          "start": 203,
+          "onPage": 13
+        },
+        "support": {
+          "end": 210,
+          "text": "Hip\t75%",
+          "start": 203,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 247,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 211,
+          "onPage": 13
+        },
+        "support": {
+          "end": 247,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 211,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "passage": {
+          "end": 247,
+          "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 127,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 442,
+          "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:pr50-wording"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "search_passages",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 247,
+          "text": "Simple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 88,
+          "onPage": 13
+        },
+        "support": {
+          "end": 126,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 88,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "search_passages",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 86,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+          "start": 0,
+          "onPage": 13
+        },
+        "support": {
+          "end": 86,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 12 of 36",
+          "start": 0,
+          "onPage": 13
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "search_passages",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 411,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36\nSection A - Death and Disablement\nAccidental Death: 100% of the Sum Insured.\nPermanent Dismemberment: up to 100% of the Sum Insured according to the Scale of Compensation, if the loss occurs within 365 days of the Accident.\nSection B - Compassionate Death Allowance\nCompassionate Death Allowance (per enrolled Insured Person)",
+          "start": 0,
+          "onPage": 9
+        },
+        "support": {
+          "end": 85,
+          "text": "KestrelOne Public Officers Group Personal Accident - Summary of Benefits Page 8 of 36",
+          "start": 0,
+          "onPage": 9
+        },
+        "policyId": "7e800000-0000-4000-8000-000000000102",
+        "subjectId": "7e800000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:pr50-summary"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7e800000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e6",
+            "excerpt": "Simple Fracture Benefit Limit: S$5,000",
+            "insurer": "KestrelOne",
+            "pageEnd": 13,
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "pageStart": 13,
+            "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e11",
+            "excerpt": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+            "insurer": "KestrelOne",
+            "pageEnd": 13,
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "pageStart": 13,
+            "policyName": "Public Officers Group Personal Accident - Summary of Benefits",
+            "documentRole": "benefit_summary"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [
+          {
+            "id": "ka0a91bbb6f",
+            "kind": "conditional_illustration",
+            "steps": [
+              {
+                "id": "s_part",
+                "op": "percent_of",
+                "out": 250000,
+                "inputs": [
+                  "benefit_limit",
+                  "percent"
+                ]
+              }
+            ],
+            "result": {
+              "value": 2500,
+              "currency": "SGD"
+            },
+            "benefit": "Simple Fracture",
+            "currency": "SGD",
+            "operands": [
+              {
+                "id": "benefit_limit",
+                "row": "Simple Fracture Benefit Limit: S$5,000",
+                "role": "limit",
+                "unit": "money",
+                "label": "Simple Fracture benefit limit",
+                "value": 5000,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Simple Fracture benefit limit",
+                  "pageEnd": 13,
+                  "passage": "Simple Fracture Benefit Limit: S$5,000",
+                  "policyId": "7e800000-0000-4000-8000-000000000102",
+                  "pageStart": 13,
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-summary"
+                },
+                "currency": "SGD"
+              },
+              {
+                "id": "percent",
+                "row": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                "role": "percent",
+                "unit": "percent",
+                "label": "Jaw, Pelvis, Leg^, Ankle or Knee",
+                "value": 50,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Jaw, Pelvis, Leg^, Ankle or Knee",
+                  "pageEnd": 13,
+                  "passage": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "policyId": "7e800000-0000-4000-8000-000000000102",
+                  "pageStart": 13,
+                  "subjectId": "7e800000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:pr50-summary"
+                },
+                "currency": null
+              }
+            ],
+            "policyId": "7e800000-0000-4000-8000-000000000102",
+            "rounding": {
+              "mode": "half_up",
+              "source": "default",
+              "precision": 2
+            },
+            "sentence": "If the Simple Fracture benefit applies to Adrian's case “Jaw, Pelvis, Leg^, Ankle or Knee” (as you described: “Adrian broke his leg”), the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Public Officers Group Personal Accident - Summary of Benefits; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "subjectId": "7e800000-0000-4000-8000-000000000001",
+            "assumption": "Adrian broke his leg",
+            "calculator": "lump_sum",
+            "conditions": [
+              {
+                "id": "c_definition",
+                "kind": "definition",
+                "text": "Jaw, Pelvis, Leg^, Ankle or Knee must meet Public Officers Group Personal Accident - Summary of Benefits’s own definition, confirmed by a reviewed medical decision.",
+                "basis": "none",
+                "needs": "a reviewed decision that Adrian’s diagnosis meets Public Officers Group Personal Accident - Summary of Benefits’s definition of Jaw, Pelvis, Leg^, Ankle or Knee (the insurer’s medical assessment)",
+                "status": "unresolved"
+              }
+            ],
+            "documentHash": "sha256:pr50-summary",
+            "unresolvedText": "I worked out Adrian’s simple fracture under Public Officers Group Personal Accident - Summary of Benefits, but I couldn’t confirm the figure against your documents.",
+            "evidenceRequirements": [
+              "the specialist’s diagnosis report",
+              "the insurer’s claim form and medical assessment"
+            ]
+          }
+        ],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
