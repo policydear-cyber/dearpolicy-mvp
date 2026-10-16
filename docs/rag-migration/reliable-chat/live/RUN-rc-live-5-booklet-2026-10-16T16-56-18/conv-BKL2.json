@@ -1,0 +1,2557 @@
+{
+  "scenario": "BKL2",
+  "title": "rc-live-5: Other Fracture on the Personal Accident sum insured in a generic booklet",
+  "conversationId": "7694570a-576b-44ec-b48d-4c4de410274a",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe booklet includes compound (open) fractures within “Other Fracture”.",
+      "timings": {
+        "acceptedMs": 22,
+        "firstAssistantPersistedMs": 10092,
+        "answerSeenMs": 10331,
+        "modelMs": 9611,
+        "upstreamMs": 9550,
+        "relayMs": 9552
+      },
+      "calls": [
+        {
+          "seq": 6,
+          "at": "2026-10-16T16:56:43.195Z",
+          "estInputTokens": 15261,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025261000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "toolsSha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7425,
+            "output": 159,
+            "cached": 7269
+          },
+          "latencyMs": 3665,
+          "upstreamMs": 3665,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 7,
+          "at": "2026-10-16T16:56:46.908Z",
+          "estInputTokens": 18080,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.002808,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 6,
+          "systemPromptSha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "toolsSha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9469,
+            "output": 152,
+            "cached": 7299
+          },
+          "latencyMs": 2689,
+          "upstreamMs": 2689,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-16T16:56:49.622Z",
+          "estInputTokens": 20329,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0030329000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 9,
+          "systemPromptSha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "toolsSha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11045,
+            "output": 172,
+            "cached": 9343
+          },
+          "latencyMs": 3257,
+          "upstreamMs": 3257,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 6,
+          "at": "2026-10-16T16:56:43.201Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15489,
+          "reservedUsd": 0.0025489,
+          "chargedUsd": 0.00016779,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "21a0d7147b98dbcd",
+          "kind": "loop",
+          "upstreamMs": 3662,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZfWW8b4rdOoX8K9Ubz3amiWUibwl",
+          "usage": {
+            "input": 7425,
+            "output": 159,
+            "cached": 7269,
+            "reasoning": 0
+          },
+          "scenario": "BKL2",
+          "turn": 1
+        },
+        {
+          "seq": 7,
+          "at": "2026-10-16T16:56:46.916Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18340,
+          "reservedUsd": 0.002834,
+          "chargedUsd": 0.00036599,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "21a0d7147b98dbcd",
+          "kind": "loop",
+          "upstreamMs": 2687,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZfWZaqvobEE3jWgp9vcKQKslh4pW",
+          "usage": {
+            "input": 9469,
+            "output": 152,
+            "cached": 7299,
+            "reasoning": 0
+          },
+          "scenario": "BKL2",
+          "turn": 1
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-16T16:56:49.623Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 20612,
+          "reservedUsd": 0.0030612000000000005,
+          "chargedUsd": 0.00034962999999999997,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "21a0d7147b98dbcd",
+          "kind": "loop",
+          "upstreamMs": 3213,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EZfWc61KcECDQjKkqAEjiDC6VXD69",
+          "usage": {
+            "input": 11045,
+            "output": 172,
+            "cached": 9343,
+            "reasoning": 0
+          },
+          "scenario": "BKL2",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-16T16:56:43Z",
+          "t": 1792169803.205,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "system_prompt_sha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "upstream_ms": 3657,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZfWW8b4rdOoX8K9Ubz3amiWUibwl",
+          "usage": {
+            "prompt_tokens": 7425,
+            "completion_tokens": 159,
+            "total_tokens": 7584,
+            "cached_tokens": 7269,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person",
+            "note_facts",
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 3658
+        },
+        {
+          "at": "2026-10-16T16:56:46Z",
+          "t": 1792169806.919,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 13,
+          "tools_sha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "system_prompt_sha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "upstream_ms": 2684,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZfWZaqvobEE3jWgp9vcKQKslh4pW",
+          "usage": {
+            "prompt_tokens": 9469,
+            "completion_tokens": 152,
+            "total_tokens": 9621,
+            "cached_tokens": 7299,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit",
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2684
+        },
+        {
+          "at": "2026-10-16T16:56:49Z",
+          "t": 1792169809.626,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 9,
+          "tools": 13,
+          "tools_sha256": "fc78108d0e9458c682973862914dde21e70aa220587d6c73ba82fb2f0ea50c40",
+          "system_prompt_sha256": "fd3d62c1b9f4d1bc3ad72722648ec600f6c1fc2f058513f82e7dec2728147c27",
+          "upstream_ms": 3209,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EZfWc61KcECDQjKkqAEjiDC6VXD69",
+          "usage": {
+            "prompt_tokens": 11045,
+            "completion_tokens": 172,
+            "total_tokens": 11217,
+            "cached_tokens": 9343,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3210
+        }
+      ],
+      "tokens": {
+        "input": 27939,
+        "output": 483
+      },
+      "costUsd": {
+        "charged": 0.00088341,
+        "reserved": 0.008444100000000001,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          6,
+          7,
+          8
+        ],
+        "guardUsd": 0.00088341,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 10341,
+  "firstUsefulResponseMs": 10092,
+  "tokens": {
+    "input": 27939,
+    "output": 483
+  },
+  "costUsd": 0.00088341,
+  "calls": 3,
+  "loaded": {
+    "conversationId": "7694570a-576b-44ec-b48d-4c4de410274a",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 3,
+        "turn": 1,
+        "claim": {
+          "calcs": {
+            "k6f9f57ae91": {
+              "kind": "conditional_illustration",
+              "turn": 1,
+              "calcId": "k6f9f57ae91",
+              "benefit": "Other Fracture",
+              "factKeys": [
+                "injury",
+                "fracture_type"
+              ],
+              "policyId": "7b000000-0000-4000-8000-000000000102",
+              "withdrawn": null,
+              "evidenceIds": [
+                "e2",
+                "e6"
+              ]
+            }
+          },
+          "facts": {
+            "injury": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "hip fracture",
+              "words": "Daniel's hip fracture",
+              "source": "user_reported"
+            },
+            "fracture_type": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "open (compound) fracture",
+              "words": "open (compound) fracture",
+              "source": "user_reported"
+            }
+          },
+          "derived": [
+            {
+              "turn": 1,
+              "factKeys": [
+                "injury",
+                "fracture_type"
+              ],
+              "sentence": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "evidenceIds": [
+                "e2",
+                "e6"
+              ]
+            }
+          ],
+          "subjectId": "7b000000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7425,
+                "output": 159,
+                "attempt": 1,
+                "costUsd": 0.00016779,
+                "latencyMs": 3671
+              },
+              {
+                "ok": true,
+                "input": 9469,
+                "output": 152,
+                "attempt": 1,
+                "costUsd": 0.00036599,
+                "latencyMs": 2697
+              },
+              {
+                "ok": true,
+                "input": 11045,
+                "output": 172,
+                "attempt": 1,
+                "costUsd": 0.00034962999999999997,
+                "latencyMs": 3258
+              }
+            ],
+            "limit": null,
+            "steps": 3,
+            "usage": {
+              "input": 27939,
+              "output": 483
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "composed": [
+              "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "The booklet includes compound (open) fractures within “Other Fracture”."
+            ],
+            "latencyMs": 9709,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "injury",
+                      "value": "hip fracture",
+                      "words": "Daniel's hip fracture"
+                    },
+                    {
+                      "key": "fracture_type",
+                      "value": "open (compound) fracture",
+                      "words": "open (compound) fracture"
+                    }
+                  ],
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "Other Fracture benefit for an open (compound) hip fracture",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "open (compound) hip fracture",
+                  "purpose": "claim",
+                  "fact_keys": [
+                    "injury",
+                    "fracture_type"
+                  ],
+                  "option_id": "b20810a4efcr2",
+                  "benefit_id": "b20810a4efc",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001",
+                  "assumption_words": "Daniel's hip fracture"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$225,000\"}",
+                "evidenceIds": [
+                  "e2",
+                  "e6"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 5,
+                  "query": "Other Fracture open compound fracture conditions definition fracture confirmation",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":4}",
+                "evidenceIds": [
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "calculation",
+                      "text": "If the Other Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                      "result_id": "k6f9f57ae91"
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "The booklet includes compound (open) fractures within “Other Fracture”.",
+                      "evidence_ids": [
+                        "e7"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?",
+            "evidenceChosen": [
+              "e2",
+              "e6",
+              "e7"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 50000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 363,
+                        "text": "S****411A",
+                        "start": 354,
+                        "header": ""
+                      },
+                      {
+                        "end": 384,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 364,
+                        "header": ""
+                      },
+                      {
+                        "end": 394,
+                        "text": "S$500,000",
+                        "start": 385,
+                        "header": ""
+                      },
+                      {
+                        "end": 400,
+                        "text": "As of",
+                        "start": 395,
+                        "header": ""
+                      },
+                      {
+                        "end": 411,
+                        "text": "01/04/2024",
+                        "start": 401,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 394,
+                    "text": "S$500,000",
+                    "start": 385
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 384,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 364,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 50000000,
+              "notes": [],
+              "value": 500000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 363,
+                        "text": "S****411A",
+                        "start": 354,
+                        "header": ""
+                      },
+                      {
+                        "end": 384,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 364,
+                        "header": ""
+                      },
+                      {
+                        "end": 394,
+                        "text": "S$500,000",
+                        "start": 385,
+                        "header": ""
+                      },
+                      {
+                        "end": 400,
+                        "text": "As of",
+                        "start": 395,
+                        "header": ""
+                      },
+                      {
+                        "end": 411,
+                        "text": "01/04/2024",
+                        "start": 401,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 394,
+                    "text": "S$500,000",
+                    "start": 385
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 384,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 364,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP TERM LIFE(POLICY NO.GTL-7001)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 363,
+                          "text": "S****411A",
+                          "start": 354,
+                          "header": ""
+                        },
+                        {
+                          "end": 384,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 364,
+                          "header": ""
+                        },
+                        {
+                          "end": 394,
+                          "text": "S$500,000",
+                          "start": 385,
+                          "header": ""
+                        },
+                        {
+                          "end": 400,
+                          "text": "As of",
+                          "start": 395,
+                          "header": ""
+                        },
+                        {
+                          "end": 411,
+                          "text": "01/04/2024",
+                          "start": 401,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 394,
+                      "text": "S$500,000",
+                      "start": 385
+                    },
+                    "layout": "person_row",
+                    "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 384,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 364,
+                      "memberId": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 411,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                    "start": 354,
+                    "onPage": 1
+                  },
+                  "policyId": "7b000000-0000-4000-8000-000000000101",
+                  "subjectId": "7b000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:bk-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7b000000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 30000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 522,
+                        "text": "S****411A",
+                        "start": 513,
+                        "header": ""
+                      },
+                      {
+                        "end": 543,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 523,
+                        "header": ""
+                      },
+                      {
+                        "end": 553,
+                        "text": "S$300,000",
+                        "start": 544,
+                        "header": ""
+                      },
+                      {
+                        "end": 559,
+                        "text": "As of",
+                        "start": 554,
+                        "header": ""
+                      },
+                      {
+                        "end": 570,
+                        "text": "01/04/2024",
+                        "start": 560,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 553,
+                    "text": "S$300,000",
+                    "start": 544
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 543,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 523,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 30000000,
+              "notes": [],
+              "value": 300000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 522,
+                        "text": "S****411A",
+                        "start": 513,
+                        "header": ""
+                      },
+                      {
+                        "end": 543,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 523,
+                        "header": ""
+                      },
+                      {
+                        "end": 553,
+                        "text": "S$300,000",
+                        "start": 544,
+                        "header": ""
+                      },
+                      {
+                        "end": 559,
+                        "text": "As of",
+                        "start": 554,
+                        "header": ""
+                      },
+                      {
+                        "end": 570,
+                        "text": "01/04/2024",
+                        "start": 560,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 553,
+                    "text": "S$300,000",
+                    "start": 544
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 543,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 523,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP PERSONAL ACCIDENT(POLICY NO. GPA-7002)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 522,
+                          "text": "S****411A",
+                          "start": 513,
+                          "header": ""
+                        },
+                        {
+                          "end": 543,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 523,
+                          "header": ""
+                        },
+                        {
+                          "end": 553,
+                          "text": "S$300,000",
+                          "start": 544,
+                          "header": ""
+                        },
+                        {
+                          "end": 559,
+                          "text": "As of",
+                          "start": 554,
+                          "header": ""
+                        },
+                        {
+                          "end": 570,
+                          "text": "01/04/2024",
+                          "start": 560,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 553,
+                      "text": "S$300,000",
+                      "start": 544
+                    },
+                    "layout": "person_row",
+                    "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 543,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 523,
+                      "memberId": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "context": null,
+                  "passage": {
+                    "end": 570,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                    "start": 513,
+                    "onPage": 1
+                  },
+                  "support": {
+                    "end": 570,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                    "start": 513,
+                    "onPage": 1
+                  },
+                  "policyId": "7b000000-0000-4000-8000-000000000101",
+                  "subjectId": "7b000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:bk-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7b000000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": 750000,
+              "kind": "table_value",
+              "cents": null,
+              "count": null,
+              "period": null,
+              "benefit": "Hip (Other Fracture)",
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 8,
+                  "start": 8
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 286,
+                  "text": "Hip (Other Fracture) 75%",
+                  "start": 262,
+                  "onPage": 8
+                },
+                "support": {
+                  "end": 286,
+                  "text": "Hip (Other Fracture) 75%",
+                  "start": 262,
+                  "onPage": 8
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none"
+              },
+              "valueKind": "percent"
+            },
+            "selected": {
+              "ppm": 750000,
+              "unit": null,
+              "cents": null,
+              "notes": [],
+              "value": 75,
+              "period": null,
+              "status": "ok",
+              "benefit": "Hip (Other Fracture)",
+              "related": [],
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 8,
+                  "start": 8
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 286,
+                  "text": "Hip (Other Fracture) 75%",
+                  "start": 262,
+                  "onPage": 8
+                },
+                "support": {
+                  "end": 286,
+                  "text": "Hip (Other Fracture) 75%",
+                  "start": 262,
+                  "onPage": 8
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none"
+              },
+              "rowLabel": "Hip (Other Fracture)",
+              "valueKind": "percent",
+              "conditions": [],
+              "columnHeader": ""
+            },
+            "subjectId": "7b000000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?",
+            "assistant": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision. The booklet includes compound (open) fractures within “Other Fracture”."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7b000000-0000-4000-8000-000000000101": "Civil Service Group Insurance Scheme - Certificate",
+          "7b000000-0000-4000-8000-000000000102": "Group Insurance Benefits Booklet"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 363,
+                    "text": "S****411A",
+                    "start": 354,
+                    "header": ""
+                  },
+                  {
+                    "end": 384,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 364,
+                    "header": ""
+                  },
+                  {
+                    "end": 394,
+                    "text": "S$500,000",
+                    "start": 385,
+                    "header": ""
+                  },
+                  {
+                    "end": 400,
+                    "text": "As of",
+                    "start": 395,
+                    "header": ""
+                  },
+                  {
+                    "end": 411,
+                    "text": "01/04/2024",
+                    "start": 401,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 394,
+                "text": "S$500,000",
+                "start": 385
+              },
+              "layout": "person_row",
+              "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 384,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 364,
+                "memberId": "7b000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "support": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 522,
+                    "text": "S****411A",
+                    "start": 513,
+                    "header": ""
+                  },
+                  {
+                    "end": 543,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 523,
+                    "header": ""
+                  },
+                  {
+                    "end": 553,
+                    "text": "S$300,000",
+                    "start": 544,
+                    "header": ""
+                  },
+                  {
+                    "end": 559,
+                    "text": "As of",
+                    "start": 554,
+                    "header": ""
+                  },
+                  {
+                    "end": 570,
+                    "text": "01/04/2024",
+                    "start": 560,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 553,
+                "text": "S$300,000",
+                "start": 544
+              },
+              "layout": "person_row",
+              "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 543,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 523,
+                "memberId": "7b000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 570,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+              "start": 513,
+              "onPage": 1
+            },
+            "support": {
+              "end": 570,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+              "start": 513,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 169,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 131,
+              "onPage": 7
+            },
+            "support": {
+              "end": 169,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 131,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "passage": {
+              "end": 339,
+              "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+              "start": 187,
+              "onPage": 8
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "passage": {
+              "end": 432,
+              "text": "Bone fractured Compensation (% of S$5,000)\nSkull 100%\nHip 75%\nJaw, Pelvis, Leg, Ankle or Knee 50%\nArm, Wrist or Elbow 40%",
+              "start": 311,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "evaluate_benefit",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 286,
+              "text": "Hip (Other Fracture) 75%",
+              "start": 262,
+              "onPage": 8
+            },
+            "support": {
+              "end": 286,
+              "text": "Hip (Other Fracture) 75%",
+              "start": 262,
+              "onPage": 8
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "search_passages",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 339,
+              "text": "Section 4 - Other Fracture\nOther Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.\nBone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+              "start": 0,
+              "onPage": 8
+            },
+            "support": {
+              "end": 127,
+              "text": "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture.",
+              "start": 27,
+              "onPage": 8
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "search_passages",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 353,
+              "text": "PART B - GROUP PERSONAL ACCIDENT\nSection 3 - Simple Fracture\nSimple Fracture means a closed fracture where the skin is not broken.\nSimple Fracture Benefit Limit: S$5,000\nWe will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.\nBone fractured Compensation (% of S$5,000)",
+              "start": 0,
+              "onPage": 7
+            },
+            "support": {
+              "end": 60,
+              "text": "Section 3 - Simple Fracture",
+              "start": 33,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 240,
+              "text": "Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+              "start": 0,
+              "onPage": 2
+            },
+            "support": {
+              "end": 11,
+              "text": "Definitions",
+              "start": 0,
+              "onPage": 2
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "search_passages",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 429,
+              "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person sustains bodily injury as a result of an Accident, which\nindependently of any other cause results in the Insured Person's death within 365 days of the Accident, we will\npay the funeral expenses incurred, up to $2,000, on receipt of proof of death and the original receipts.\nThis benefit is not payable for death caused by an illness.\nSection 6 - Repatriation",
+              "start": 0,
+              "onPage": 9
+            },
+            "support": {
+              "end": 239,
+              "text": "independently of any other cause results in the Insured Person's death within 365 days of the Accident, we will",
+              "start": 128,
+              "onPage": 9
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none"
+          }
+        },
+        "evaluated": [
+          {
+            "id": "b20810a4efc",
+            "benefit": "Other Fracture",
+            "product": "Group Insurance Benefits Booklet",
+            "subjectId": "7b000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "speakerId": "7b000000-0000-4000-8000-000000000001",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "claimRecord": {
+          "id": "2b409f94-269f-44a2-94d0-228c2a7c3375",
+          "memberId": "7b000000-0000-4000-8000-000000000001"
+        },
+        "recentSubjectIds": [
+          "7b000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "The booklet includes compound (open) fractures within “Other Fracture”."
+          ],
+          "summary": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "citations": [
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7b000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Civil Service Group Insurance Scheme - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e6",
+              "excerpt": "Hip (Other Fracture) 75%",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7b000000-0000-4000-8000-000000000102",
+              "pageStart": 8,
+              "policyName": "Group Insurance Benefits Booklet",
+              "documentRole": "policy_wording"
+            },
+            {
+              "chunkId": "rag2:e7",
+              "excerpt": "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture.",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7b000000-0000-4000-8000-000000000102",
+              "pageStart": 8,
+              "policyName": "Group Insurance Benefits Booklet",
+              "documentRole": "policy_wording"
+            }
+          ],
+          "nextSteps": [
+            "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+          ],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "calculations": [
+            {
+              "id": "k6f9f57ae91",
+              "kind": "conditional_illustration",
+              "steps": [
+                {
+                  "id": "s_part",
+                  "op": "percent_of",
+                  "out": 22500000,
+                  "inputs": [
+                    "sum_insured",
+                    "percent"
+                  ]
+                }
+              ],
+              "result": {
+                "value": 225000,
+                "currency": "SGD"
+              },
+              "benefit": "Other Fracture",
+              "currency": "SGD",
+              "operands": [
+                {
+                  "id": "sum_insured",
+                  "row": "S****411A",
+                  "role": "sum_insured",
+                  "unit": "money",
+                  "label": "Group Personal Accident",
+                  "value": 300000,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "asOf": "2024-04-01",
+                    "column": null,
+                    "layout": "person_row",
+                    "benefit": "Group Personal Accident",
+                    "pageEnd": 1,
+                    "passage": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                    "policyId": "7b000000-0000-4000-8000-000000000101",
+                    "pageStart": 1,
+                    "rowPerson": "Lee Wei Ming, Daniel",
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-cert"
+                  },
+                  "currency": "SGD"
+                },
+                {
+                  "id": "percent",
+                  "row": "Hip (Other Fracture) 75%",
+                  "role": "percent",
+                  "unit": "percent",
+                  "label": "Hip (Other Fracture)",
+                  "value": 75,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Hip (Other Fracture)",
+                    "pageEnd": 8,
+                    "passage": "Hip (Other Fracture) 75%",
+                    "policyId": "7b000000-0000-4000-8000-000000000102",
+                    "pageStart": 8,
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-booklet-none"
+                  },
+                  "currency": null
+                }
+              ],
+              "policyId": "7b000000-0000-4000-8000-000000000102",
+              "rounding": {
+                "mode": "half_up",
+                "source": "default",
+                "precision": 2
+              },
+              "sentence": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "subjectId": "7b000000-0000-4000-8000-000000000001",
+              "assumption": "Daniel's hip fracture",
+              "calculator": "lump_sum",
+              "conditions": [
+                {
+                  "id": "c_definition",
+                  "kind": "definition",
+                  "text": "Hip (Other Fracture) must meet Group Insurance Benefits Booklet’s own definition, confirmed by a reviewed medical decision.",
+                  "basis": "none",
+                  "needs": "a reviewed decision that Daniel’s diagnosis meets Group Insurance Benefits Booklet’s definition of Hip (Other Fracture) (the insurer’s medical assessment)",
+                  "status": "unresolved"
+                }
+              ],
+              "documentHash": "sha256:bk-booklet-none",
+              "unresolvedText": "I worked out Daniel’s other fracture under Group Insurance Benefits Booklet, but I couldn’t confirm the figure against your documents.",
+              "evidenceRequirements": [
+                "the specialist’s diagnosis report",
+                "the insurer’s claim form and medical assessment"
+              ]
+            }
+          ],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": "2b409f94-269f-44a2-94d0-228c2a7c3375",
+          "conversationId": "7694570a-576b-44ec-b48d-4c4de410274a",
+          "figureBindings": [],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7b000000-0000-4000-8000-000000000001"
+        },
+        "content": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+        "visible": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe booklet includes compound (open) fractures within “Other Fracture”.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim.",
+        "questions": [],
+        "userAt": "2026-10-16T16:56:52.941Z",
+        "assistantAt": "2026-10-16T16:56:52.941Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7425,
+              "output": 159,
+              "attempt": 1,
+              "costUsd": 0.00016779,
+              "latencyMs": 3671
+            },
+            {
+              "ok": true,
+              "input": 9469,
+              "output": 152,
+              "attempt": 1,
+              "costUsd": 0.00036599,
+              "latencyMs": 2697
+            },
+            {
+              "ok": true,
+              "input": 11045,
+              "output": 172,
+              "attempt": 1,
+              "costUsd": 0.00034962999999999997,
+              "latencyMs": 3258
+            }
+          ],
+          "limit": null,
+          "steps": 3,
+          "usage": {
+            "input": 27939,
+            "output": 483
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "composed": [
+            "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "The booklet includes compound (open) fractures within “Other Fracture”."
+          ],
+          "latencyMs": 9709,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Daniel"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "injury",
+                    "value": "hip fracture",
+                    "words": "Daniel's hip fracture"
+                  },
+                  {
+                    "key": "fracture_type",
+                    "value": "open (compound) fracture",
+                    "words": "open (compound) fracture"
+                  }
+                ],
+                "subject_id": "7b000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "Other Fracture benefit for an open (compound) hip fracture",
+                "subject_id": "7b000000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "open (compound) hip fracture",
+                "purpose": "claim",
+                "fact_keys": [
+                  "injury",
+                  "fracture_type"
+                ],
+                "option_id": "b20810a4efcr2",
+                "benefit_id": "b20810a4efc",
+                "subject_id": "7b000000-0000-4000-8000-000000000001",
+                "assumption_words": "Daniel's hip fracture"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$225,000\"}",
+              "evidenceIds": [
+                "e2",
+                "e6"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "k": 5,
+                "query": "Other Fracture open compound fracture conditions definition fracture confirmation",
+                "subject_id": "7b000000-0000-4000-8000-000000000001"
+              },
+              "name": "search_passages",
+              "summary": "{\"hits\":4}",
+              "evidenceIds": [
+                "e7",
+                "e8",
+                "e9",
+                "e10"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "calculation",
+                    "text": "If the Other Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                    "result_id": "k6f9f57ae91"
+                  },
+                  {
+                    "kind": "fact",
+                    "text": "The booklet includes compound (open) fractures within “Other Fracture”.",
+                    "evidence_ids": [
+                      "e7"
+                    ]
+                  }
+                ],
+                "next_steps": [
+                  "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                ],
+                "subject_id": "7b000000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?",
+          "evidenceChosen": [
+            "e2",
+            "e6",
+            "e7"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "BKL2",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7b000000-0000-4000-8000-000000000001",
+    "speakerId": "7b000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "calcs": {
+        "k6f9f57ae91": {
+          "kind": "conditional_illustration",
+          "turn": 1,
+          "calcId": "k6f9f57ae91",
+          "benefit": "Other Fracture",
+          "factKeys": [
+            "injury",
+            "fracture_type"
+          ],
+          "policyId": "7b000000-0000-4000-8000-000000000102",
+          "withdrawn": null,
+          "evidenceIds": [
+            "e2",
+            "e6"
+          ]
+        }
+      },
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "hip fracture",
+          "words": "Daniel's hip fracture",
+          "source": "user_reported"
+        },
+        "fracture_type": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "open (compound) fracture",
+          "words": "open (compound) fracture",
+          "source": "user_reported"
+        }
+      },
+      "derived": [
+        {
+          "turn": 1,
+          "factKeys": [
+            "injury",
+            "fracture_type"
+          ],
+          "sentence": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "evidenceIds": [
+            "e2",
+            "e6"
+          ]
+        }
+      ],
+      "subjectId": "7b000000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 3,
+        "usage": {
+          "input": 27939,
+          "output": 483
+        },
+        "latencyMs": 9709,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Daniel"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "injury",
+                  "value": "hip fracture",
+                  "words": "Daniel's hip fracture"
+                },
+                {
+                  "key": "fracture_type",
+                  "value": "open (compound) fracture",
+                  "words": "open (compound) fracture"
+                }
+              ],
+              "subject_id": "7b000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "Other Fracture benefit for an open (compound) hip fracture",
+              "subject_id": "7b000000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "open (compound) hip fracture",
+              "purpose": "claim",
+              "fact_keys": [
+                "injury",
+                "fracture_type"
+              ],
+              "option_id": "b20810a4efcr2",
+              "benefit_id": "b20810a4efc",
+              "subject_id": "7b000000-0000-4000-8000-000000000001",
+              "assumption_words": "Daniel's hip fracture"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$225,000\"}",
+            "evidenceIds": [
+              "e2",
+              "e6"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 5,
+              "query": "Other Fracture open compound fracture conditions definition fracture confirmation",
+              "subject_id": "7b000000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":4}",
+            "evidenceIds": [
+              "e7",
+              "e8",
+              "e9",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "calculation",
+                  "text": "If the Other Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                  "result_id": "k6f9f57ae91"
+                },
+                {
+                  "kind": "fact",
+                  "text": "The booklet includes compound (open) fractures within “Other Fracture”.",
+                  "evidence_ids": [
+                    "e7"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+              ],
+              "subject_id": "7b000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e2",
+          "e6",
+          "e7"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 363,
+                "text": "S****411A",
+                "start": 354,
+                "header": ""
+              },
+              {
+                "end": 384,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 364,
+                "header": ""
+              },
+              {
+                "end": 394,
+                "text": "S$500,000",
+                "start": 385,
+                "header": ""
+              },
+              {
+                "end": 400,
+                "text": "As of",
+                "start": 395,
+                "header": ""
+              },
+              {
+                "end": 411,
+                "text": "01/04/2024",
+                "start": 401,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 394,
+            "text": "S$500,000",
+            "start": 385
+          },
+          "layout": "person_row",
+          "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 384,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 364,
+            "memberId": "7b000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 411,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 354,
+          "onPage": 1
+        },
+        "support": {
+          "end": 411,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 354,
+          "onPage": 1
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000101",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 522,
+                "text": "S****411A",
+                "start": 513,
+                "header": ""
+              },
+              {
+                "end": 543,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 523,
+                "header": ""
+              },
+              {
+                "end": 553,
+                "text": "S$300,000",
+                "start": 544,
+                "header": ""
+              },
+              {
+                "end": 559,
+                "text": "As of",
+                "start": 554,
+                "header": ""
+              },
+              {
+                "end": 570,
+                "text": "01/04/2024",
+                "start": 560,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 553,
+            "text": "S$300,000",
+            "start": 544
+          },
+          "layout": "person_row",
+          "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 543,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 523,
+            "memberId": "7b000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 570,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+          "start": 513,
+          "onPage": 1
+        },
+        "support": {
+          "end": 570,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+          "start": 513,
+          "onPage": 1
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000101",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 7,
+          "start": 7
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 169,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 131,
+          "onPage": 7
+        },
+        "support": {
+          "end": 169,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 131,
+          "onPage": 7
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "passage": {
+          "end": 339,
+          "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+          "start": 187,
+          "onPage": 8
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 7,
+          "start": 7
+        },
+        "table": null,
+        "passage": {
+          "end": 432,
+          "text": "Bone fractured Compensation (% of S$5,000)\nSkull 100%\nHip 75%\nJaw, Pelvis, Leg, Ankle or Knee 50%\nArm, Wrist or Elbow 40%",
+          "start": 311,
+          "onPage": 7
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "evaluate_benefit",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 286,
+          "text": "Hip (Other Fracture) 75%",
+          "start": 262,
+          "onPage": 8
+        },
+        "support": {
+          "end": 286,
+          "text": "Hip (Other Fracture) 75%",
+          "start": 262,
+          "onPage": 8
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 339,
+          "text": "Section 4 - Other Fracture\nOther Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.\nBone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+          "start": 0,
+          "onPage": 8
+        },
+        "support": {
+          "end": 127,
+          "text": "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture.",
+          "start": 27,
+          "onPage": 8
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 7,
+          "start": 7
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 353,
+          "text": "PART B - GROUP PERSONAL ACCIDENT\nSection 3 - Simple Fracture\nSimple Fracture means a closed fracture where the skin is not broken.\nSimple Fracture Benefit Limit: S$5,000\nWe will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.\nBone fractured Compensation (% of S$5,000)",
+          "start": 0,
+          "onPage": 7
+        },
+        "support": {
+          "end": 60,
+          "text": "Section 3 - Simple Fracture",
+          "start": 33,
+          "onPage": 7
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 240,
+          "text": "Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 11,
+          "text": "Definitions",
+          "start": 0,
+          "onPage": 2
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "search_passages",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 429,
+          "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person sustains bodily injury as a result of an Accident, which\nindependently of any other cause results in the Insured Person's death within 365 days of the Accident, we will\npay the funeral expenses incurred, up to $2,000, on receipt of proof of death and the original receipts.\nThis benefit is not payable for death caused by an illness.\nSection 6 - Repatriation",
+          "start": 0,
+          "onPage": 9
+        },
+        "support": {
+          "end": 239,
+          "text": "independently of any other cause results in the Insured Person's death within 365 days of the Accident, we will",
+          "start": 128,
+          "onPage": 9
+        },
+        "policyId": "7b000000-0000-4000-8000-000000000102",
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:bk-booklet-none"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7b000000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Civil Service Group Insurance Scheme - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e6",
+            "excerpt": "Hip (Other Fracture) 75%",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "pageStart": 8,
+            "policyName": "Group Insurance Benefits Booklet",
+            "documentRole": "policy_wording"
+          },
+          {
+            "chunkId": "rag2:e7",
+            "excerpt": "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture.",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "pageStart": 8,
+            "policyName": "Group Insurance Benefits Booklet",
+            "documentRole": "policy_wording"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [
+          {
+            "id": "k6f9f57ae91",
+            "kind": "conditional_illustration",
+            "steps": [
+              {
+                "id": "s_part",
+                "op": "percent_of",
+                "out": 22500000,
+                "inputs": [
+                  "sum_insured",
+                  "percent"
+                ]
+              }
+            ],
+            "result": {
+              "value": 225000,
+              "currency": "SGD"
+            },
+            "benefit": "Other Fracture",
+            "currency": "SGD",
+            "operands": [
+              {
+                "id": "sum_insured",
+                "row": "S****411A",
+                "role": "sum_insured",
+                "unit": "money",
+                "label": "Group Personal Accident",
+                "value": 300000,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "asOf": "2024-04-01",
+                  "column": null,
+                  "layout": "person_row",
+                  "benefit": "Group Personal Accident",
+                  "pageEnd": 1,
+                  "passage": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "policyId": "7b000000-0000-4000-8000-000000000101",
+                  "pageStart": 1,
+                  "rowPerson": "Lee Wei Ming, Daniel",
+                  "subjectId": "7b000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:bk-cert"
+                },
+                "currency": "SGD"
+              },
+              {
+                "id": "percent",
+                "row": "Hip (Other Fracture) 75%",
+                "role": "percent",
+                "unit": "percent",
+                "label": "Hip (Other Fracture)",
+                "value": 75,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Hip (Other Fracture)",
+                  "pageEnd": 8,
+                  "passage": "Hip (Other Fracture) 75%",
+                  "policyId": "7b000000-0000-4000-8000-000000000102",
+                  "pageStart": 8,
+                  "subjectId": "7b000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:bk-booklet-none"
+                },
+                "currency": null
+              }
+            ],
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "rounding": {
+              "mode": "half_up",
+              "source": "default",
+              "precision": 2
+            },
+            "sentence": "If the Other Fracture benefit applies to Daniel's case “Hip (Other Fracture)”, the conditional illustration is S$225,000: 75% of Daniel's sum insured of S$300,000 (Group Personal Accident), under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "assumption": "Daniel's hip fracture",
+            "calculator": "lump_sum",
+            "conditions": [
+              {
+                "id": "c_definition",
+                "kind": "definition",
+                "text": "Hip (Other Fracture) must meet Group Insurance Benefits Booklet’s own definition, confirmed by a reviewed medical decision.",
+                "basis": "none",
+                "needs": "a reviewed decision that Daniel’s diagnosis meets Group Insurance Benefits Booklet’s definition of Hip (Other Fracture) (the insurer’s medical assessment)",
+                "status": "unresolved"
+              }
+            ],
+            "documentHash": "sha256:bk-booklet-none",
+            "unresolvedText": "I worked out Daniel’s other fracture under Group Insurance Benefits Booklet, but I couldn’t confirm the figure against your documents.",
+            "evidenceRequirements": [
+              "the specialist’s diagnosis report",
+              "the insurer’s claim form and medical assessment"
+            ]
+          }
+        ],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
