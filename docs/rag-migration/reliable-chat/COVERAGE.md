@@ -10,7 +10,8 @@ S$5,000 limit). The browser journey runs in browser-e2e CI (`npm run e2e:reliabl
 |---|---|
 | Fixed-limit calculation (50 % × S$5,000 = S$2,500), record recomputes, operands bound to the summary | slice [wong] V5, V6, RC grader; live-regressions [wong] RCW1b; stage3 [wong] G5 |
 | Sum-insured calculation (10 % × Jun's S$100,000; 5 % × Mei Ling's S$200,000) | slice [tan] V2, G1; live-regressions [tan] RCT1a |
-| Correction and withdrawal (S$10,000 withdrawn and said; S$20,000 recomputes) | slice [tan] V3; live-regressions [tan] RCT1a; browser RC1 |
+| Correction and withdrawal (S$10,000 withdrawn and said; S$20,000 recomputes) | slice [tan] V3; live-regressions [tan] RCT1a, RCT2b (illustration shown beside a question); browser RC1 |
+| An answered case question is never put back (answer noted under another key) | live-regressions [tan] RCT2a (rc-live-3 calls replayed; grader v2) |
 | Wrong person rejected (another household's Jun; a benefit id for another person) | slice [tan] G4; cases [tan] CONTACT (Wei, another household) |
 | Wrong base rejected (Term Life / PA money as base or percentage; the S$600,000 never used for Simple Fracture) | slice [wong] V5, V6 |
 | Wrong version rejected (superseded 15 % wording) | slice [tan] G4 |
