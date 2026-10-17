@@ -1,0 +1,4 @@
+[32m[1m✓[22m[39m Running next.config.ts took 126ms
+[33m[1m⚠[22m[39m "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+rag2 loop test server on http://localhost:3310 (LIVE model openai:gpt-6-luna, relay mode, PREFLIGHT, run cap US$0.12)
+[telemetry] {"name":"route.error","correlationId":"3a7725e6-b01d-4dae-8c27-95482440debd","timestamp":"2026-10-17T15:35:27.026Z","route":null,"status":"failure","errorCategory":"internal_unknown","httpStatus":500,"extra":{"error":{"errorName":"Error","errorCategory":"internal_unknown","safeMessage":"Something went wrong. Please try again."}}}

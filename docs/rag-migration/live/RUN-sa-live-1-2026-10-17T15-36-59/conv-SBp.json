@@ -1,0 +1,20 @@
+{
+  "scenario": "SBp",
+  "title": "structured: uncertain hip / tibia (fresh paraphrase)",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 22,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

@@ -1,0 +1,259 @@
+{
+  "testedCodeSha": "88df296ca09bd8c648ea38e73c7ce74168e23db1",
+  "requestSha": null,
+  "modelsRequested": {
+    "CHAT_MODEL": "openai:gpt-6-luna",
+    "JUDGEMENT_MODEL": "openai:gpt-6-luna",
+    "NARRATION_MODEL": "openai:gpt-6-luna",
+    "READING_MODEL": "openai:gpt-6-luna"
+  },
+  "providerModels": [],
+  "requestSettingsSent": [],
+  "budgetUsed": {
+    "capUsd": 0.12,
+    "spentUsd": 0,
+    "reservedUsd": 0,
+    "remainingUsd": 0.12,
+    "calls": 0,
+    "refusals": 0,
+    "open": 0,
+    "failed": 0
+  },
+  "perCall": [],
+  "promptObserved": {
+    "systemPromptSha256": [],
+    "toolSchemaSha256": [],
+    "settings": []
+  },
+  "availability": null,
+  "label": "LIVE MODEL RUN",
+  "runId": "sa-live-1",
+  "mode": "relay",
+  "preflight": false,
+  "keyNote": null,
+  "startedAt": "2026-10-17T15:36:59.314Z",
+  "commit": null,
+  "tree": null,
+  "dirty": false,
+  "buildId": "dEJp6UU9dM0WIpF-3bOo-",
+  "model": {
+    "requested": "openai:gpt-6-luna",
+    "pricePerMillion": {
+      "input": 0.1,
+      "output": 0.5,
+      "cachedInput": 0.01
+    },
+    "settings": {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  },
+  "prompt": {
+    "version": "rag2-loop-v18-applicability",
+    "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+    "toolSchemaSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+    "tools": 13
+  },
+  "budget": {
+    "runCapUsd": 0.12,
+    "meterRunMaxUsd": 0.12,
+    "turnMaxUsd": 0.05,
+    "maxCallsPerTurn": 12,
+    "maxTokensPerTurn": 80000,
+    "maxOutputTokensPerCall": 2000,
+    "retries": 1
+  },
+  "relay": {
+    "url": "http://127.0.0.1:8787",
+    "mode": "live",
+    "log": "/home/user/rag2-live-relay.jsonl"
+  },
+  "conversations": [
+    {
+      "scenario": "SAa",
+      "title": "structured: closed tibia -> corrected to hip (attempt 1)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fell off a ladder at home and fractured his tibia. It's a closed fracture. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 407,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SAb",
+      "title": "structured: closed tibia -> corrected to hip (attempt 2)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fell off a ladder at home and fractured his tibia. It's a closed fracture. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 19,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SAp",
+      "title": "structured: closed tibia -> corrected to hip (fresh paraphrase)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "My husband Daniel slipped on wet stairs at home and the doctor says he has a closed break of the shin bone. What could his personal accident cover pay out for that?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 17,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SBa",
+      "title": "structured: uncertain hip / tibia -> one question -> tibia (attempt 1)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 15,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SBb",
+      "title": "structured: uncertain hip / tibia -> one question -> tibia (attempt 2)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 18,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SBp",
+      "title": "structured: uncertain hip / tibia (fresh paraphrase)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 22,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SC",
+      "title": "structured: Simple versus Other Fracture comparison",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 11,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SD",
+      "title": "structured: the death allowance",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 12,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    },
+    {
+      "scenario": "SE",
+      "title": "structured: person switch to Grace",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fractured his tibia in an accident, a closed fracture. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 20,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    }
+  ],
+  "finishedAt": "2026-10-17T15:37:01.663Z",
+  "promptMatchesSource": true,
+  "httpCalls": []
+}

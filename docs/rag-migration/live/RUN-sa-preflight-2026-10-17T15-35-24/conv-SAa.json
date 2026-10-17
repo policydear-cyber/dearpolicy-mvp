@@ -1,0 +1,20 @@
+{
+  "scenario": "SAa",
+  "title": "structured: closed tibia -> corrected to hip (attempt 1)",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel fell off a ladder at home and fractured his tibia. It's a closed fracture. What would his accident cover pay?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 418,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

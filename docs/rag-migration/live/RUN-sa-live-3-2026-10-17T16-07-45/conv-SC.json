@@ -1,0 +1,3247 @@
+{
+  "scenario": "SC",
+  "title": "structured: Simple versus Other Fracture comparison",
+  "conversationId": "7b16c8ee-8307-449a-9b56-8be32b11d8c6",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.\nThe Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.",
+      "nextSteps": [
+        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+      ],
+      "timings": {
+        "acceptedMs": 11,
+        "firstAssistantPersistedMs": 9548,
+        "answerSeenMs": 9647,
+        "modelMs": 8295,
+        "upstreamMs": 8269,
+        "relayMs": 8284
+      },
+      "calls": [
+        {
+          "seq": 39,
+          "at": "2026-10-17T16:10:02.777Z",
+          "estInputTokens": 15356,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025356000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7474,
+            "output": 135,
+            "cached": 7348
+          },
+          "latencyMs": 2035,
+          "upstreamMs": 2035,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 40,
+          "at": "2026-10-17T16:10:04.879Z",
+          "estInputTokens": 19881,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029881000000000005,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 6,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10976,
+            "output": 153,
+            "cached": 7348
+          },
+          "latencyMs": 2331,
+          "upstreamMs": 2331,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 41,
+          "at": "2026-10-17T16:10:07.246Z",
+          "estInputTokens": 21445,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0031445,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 9,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11948,
+            "output": 278,
+            "cached": 10850
+          },
+          "latencyMs": 3929,
+          "upstreamMs": 3929,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 39,
+          "at": "2026-10-17T16:10:02.784Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15584,
+          "reservedUsd": 0.0025584,
+          "chargedUsd": 0.00015358,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2034,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea1GtzTULitbmcbPBjX8zU1HwzeXY",
+          "usage": {
+            "input": 7474,
+            "output": 135,
+            "cached": 7348,
+            "reasoning": 0
+          },
+          "scenario": "SC",
+          "turn": 1
+        },
+        {
+          "seq": 40,
+          "at": "2026-10-17T16:10:04.880Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 20136,
+          "reservedUsd": 0.0030136000000000004,
+          "chargedUsd": 0.00051278,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2330,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea1GvFIF4NrIZ9FCNwGUhv1L0ppK4",
+          "usage": {
+            "input": 10976,
+            "output": 153,
+            "cached": 7348,
+            "reasoning": 0
+          },
+          "scenario": "SC",
+          "turn": 1
+        },
+        {
+          "seq": 41,
+          "at": "2026-10-17T16:10:07.248Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 21723,
+          "reservedUsd": 0.0031723000000000003,
+          "chargedUsd": 0.0003573,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 3927,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea1GxxFqmWIlN9o0RH7Yyz9dnVuxY",
+          "usage": {
+            "input": 11948,
+            "output": 278,
+            "cached": 10850,
+            "reasoning": 0
+          },
+          "scenario": "SC",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-17T16:10:02Z",
+          "t": 1792253402.786,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2030,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea1GtzTULitbmcbPBjX8zU1HwzeXY",
+          "usage": {
+            "prompt_tokens": 7474,
+            "completion_tokens": 135,
+            "total_tokens": 7609,
+            "cached_tokens": 7348,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person",
+            "note_facts",
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 2031
+        },
+        {
+          "at": "2026-10-17T16:10:04Z",
+          "t": 1792253404.882,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2320,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea1GvFIF4NrIZ9FCNwGUhv1L0ppK4",
+          "usage": {
+            "prompt_tokens": 10976,
+            "completion_tokens": 153,
+            "total_tokens": 11129,
+            "cached_tokens": 7348,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit",
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 2332
+        },
+        {
+          "at": "2026-10-17T16:10:07Z",
+          "t": 1792253407.255,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 9,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 3919,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea1GxxFqmWIlN9o0RH7Yyz9dnVuxY",
+          "usage": {
+            "prompt_tokens": 11948,
+            "completion_tokens": 278,
+            "total_tokens": 12226,
+            "cached_tokens": 10850,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3921
+        }
+      ],
+      "tokens": {
+        "input": 30398,
+        "output": 566
+      },
+      "costUsd": {
+        "charged": 0.00102366,
+        "reserved": 0.0087443,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          39,
+          40,
+          41
+        ],
+        "guardUsd": 0.00102366,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 9657,
+  "firstUsefulResponseMs": 9548,
+  "tokens": {
+    "input": 30398,
+    "output": 566
+  },
+  "costUsd": 0.00102366,
+  "calls": 3,
+  "loaded": {
+    "conversationId": "7b16c8ee-8307-449a-9b56-8be32b11d8c6",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 4,
+        "turn": 1,
+        "claim": {
+          "calcs": {
+            "kbc169fde95": {
+              "kind": "conditional_illustration",
+              "turn": 1,
+              "calcId": "kbc169fde95",
+              "benefit": "Simple Fracture or Other Fracture due to Accident",
+              "factKeys": [
+                "injury"
+              ],
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "withdrawn": null,
+              "evidenceIds": [
+                "e2",
+                "e10"
+              ]
+            },
+            "kf7b1bf9abb": {
+              "kind": "conditional_illustration",
+              "turn": 1,
+              "calcId": "kf7b1bf9abb",
+              "benefit": "Simple Fracture",
+              "factKeys": [
+                "injury"
+              ],
+              "policyId": "7c000000-0000-4000-8000-000000000102",
+              "withdrawn": null,
+              "evidenceIds": [
+                "e3",
+                "e6"
+              ]
+            }
+          },
+          "facts": {
+            "injury": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "broke his leg",
+              "words": "Daniel broke his leg",
+              "source": "user_reported"
+            }
+          },
+          "derived": [
+            {
+              "turn": 1,
+              "factKeys": [
+                "injury"
+              ],
+              "sentence": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "evidenceIds": [
+                "e3",
+                "e6"
+              ]
+            },
+            {
+              "turn": 1,
+              "factKeys": [
+                "injury"
+              ],
+              "sentence": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "evidenceIds": [
+                "e2",
+                "e10"
+              ]
+            }
+          ],
+          "subjectId": "7c000000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7474,
+                "output": 135,
+                "attempt": 1,
+                "costUsd": 0.00015358,
+                "latencyMs": 2041
+              },
+              {
+                "ok": true,
+                "input": 10976,
+                "output": 153,
+                "attempt": 1,
+                "costUsd": 0.00051278,
+                "latencyMs": 2332
+              },
+              {
+                "ok": true,
+                "input": 11948,
+                "output": 278,
+                "attempt": 1,
+                "costUsd": 0.0003573,
+                "latencyMs": 3930
+              }
+            ],
+            "limit": null,
+            "steps": 3,
+            "usage": {
+              "input": 30398,
+              "output": 566
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "timings": {
+              "toolMs": {
+                "resolve_person": {
+                  "n": 1,
+                  "ms": 2
+                },
+                "person_benefits": {
+                  "n": 1,
+                  "ms": 52
+                },
+                "evaluate_benefit": {
+                  "n": 2,
+                  "ms": 27
+                }
+              },
+              "modelMs": 8303,
+              "otherMs": 32,
+              "resolve": {
+                "n": 1,
+                "ms": 16
+              }
+            },
+            "composed": [
+              "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+              "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total."
+            ],
+            "latencyMs": 8416,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "injury",
+                      "value": "broke his leg",
+                      "words": "Daniel broke his leg"
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "Simple Fracture and Other Fracture",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13",
+                  "e14"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "broke his leg",
+                  "purpose": "what_if",
+                  "benefit_id": "bbfa3c5c311",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "assumption_words": "Daniel broke his leg"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+                "evidenceIds": [
+                  "e3",
+                  "e6"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "broke his leg",
+                  "purpose": "what_if",
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "assumption_words": "Daniel broke his leg"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$300,000\"}",
+                "evidenceIds": [
+                  "e2",
+                  "e10"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "calculation",
+                      "text": "If the Simple Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                      "result_id": "kf7b1bf9abb"
+                    },
+                    {
+                      "kind": "calculation",
+                      "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                      "result_id": "kbc169fde95"
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+                      "evidence_ids": [
+                        "e14",
+                        "e13"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e14",
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+            "evidenceChosen": [
+              "e3",
+              "e6",
+              "e2",
+              "e10",
+              "e14",
+              "e13"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 50000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 358,
+                        "text": "S****411A",
+                        "start": 349,
+                        "header": ""
+                      },
+                      {
+                        "end": 379,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 359,
+                        "header": ""
+                      },
+                      {
+                        "end": 389,
+                        "text": "S$500,000",
+                        "start": 380,
+                        "header": ""
+                      },
+                      {
+                        "end": 395,
+                        "text": "As of",
+                        "start": 390,
+                        "header": ""
+                      },
+                      {
+                        "end": 406,
+                        "text": "01/04/2024",
+                        "start": 396,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 406,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 349,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 50000000,
+              "notes": [],
+              "value": 500000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 358,
+                        "text": "S****411A",
+                        "start": 349,
+                        "header": ""
+                      },
+                      {
+                        "end": 379,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 359,
+                        "header": ""
+                      },
+                      {
+                        "end": 389,
+                        "text": "S$500,000",
+                        "start": 380,
+                        "header": ""
+                      },
+                      {
+                        "end": 395,
+                        "text": "As of",
+                        "start": 390,
+                        "header": ""
+                      },
+                      {
+                        "end": 406,
+                        "text": "01/04/2024",
+                        "start": 396,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 406,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 349,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP TERM LIFE(POLICY NO.GTL-8001)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 358,
+                          "text": "S****411A",
+                          "start": 349,
+                          "header": ""
+                        },
+                        {
+                          "end": 379,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 359,
+                          "header": ""
+                        },
+                        {
+                          "end": 389,
+                          "text": "S$500,000",
+                          "start": 380,
+                          "header": ""
+                        },
+                        {
+                          "end": 395,
+                          "text": "As of",
+                          "start": 390,
+                          "header": ""
+                        },
+                        {
+                          "end": 406,
+                          "text": "01/04/2024",
+                          "start": 396,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 389,
+                      "text": "S$500,000",
+                      "start": 380
+                    },
+                    "layout": "person_row",
+                    "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 379,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 359,
+                      "memberId": "7c000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 406,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                    "start": 349,
+                    "onPage": 1
+                  },
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP PERSONAL ACCIDENT(POLICY NO. GPA-8002)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 517,
+                          "text": "S****411A",
+                          "start": 508,
+                          "header": ""
+                        },
+                        {
+                          "end": 538,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 518,
+                          "header": ""
+                        },
+                        {
+                          "end": 548,
+                          "text": "S$600,000",
+                          "start": 539,
+                          "header": ""
+                        },
+                        {
+                          "end": 554,
+                          "text": "As of",
+                          "start": 549,
+                          "header": ""
+                        },
+                        {
+                          "end": 565,
+                          "text": "01/04/2024",
+                          "start": 555,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 548,
+                      "text": "S$600,000",
+                      "start": 539
+                    },
+                    "layout": "person_row",
+                    "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 538,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 518,
+                      "memberId": "7c000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "context": null,
+                  "passage": {
+                    "end": 565,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "support": {
+                    "end": 565,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": 500000,
+              "kind": "table_value",
+              "cents": null,
+              "count": null,
+              "period": null,
+              "benefit": "Jaw, Pelvis, Leg, Ankle or Knee",
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 13,
+                  "start": 13
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 515,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 479,
+                  "onPage": 13
+                },
+                "support": {
+                  "end": 515,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 479,
+                  "onPage": 13
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000102",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-product-summary"
+              },
+              "valueKind": "percent"
+            },
+            "selected": {
+              "ppm": 500000,
+              "unit": null,
+              "cents": null,
+              "notes": [],
+              "value": 50,
+              "period": null,
+              "status": "ok",
+              "benefit": "Jaw, Pelvis, Leg, Ankle or Knee",
+              "related": [],
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 13,
+                  "start": 13
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 515,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 479,
+                  "onPage": 13
+                },
+                "support": {
+                  "end": 515,
+                  "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "start": 479,
+                  "onPage": 13
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000102",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-product-summary"
+              },
+              "rowLabel": "Jaw, Pelvis, Leg, Ankle or Knee",
+              "valueKind": "percent",
+              "conditions": [],
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "v4": {
+            "operand": {
+              "ppm": 500000,
+              "kind": "table_value",
+              "cents": null,
+              "count": null,
+              "period": null,
+              "benefit": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 8,
+                  "start": 8
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 469,
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "start": 417,
+                  "onPage": 8
+                },
+                "support": {
+                  "end": 469,
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "start": 417,
+                  "onPage": 8
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000103",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-pa-summary"
+              },
+              "valueKind": "percent"
+            },
+            "selected": {
+              "ppm": 500000,
+              "unit": null,
+              "cents": null,
+              "notes": [],
+              "value": 50,
+              "period": null,
+              "status": "ok",
+              "benefit": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+              "related": [],
+              "currency": null,
+              "evidence": {
+                "page": {
+                  "end": 8,
+                  "start": 8
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 469,
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "start": 417,
+                  "onPage": 8
+                },
+                "support": {
+                  "end": 469,
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "start": 417,
+                  "onPage": 8
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000103",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-pa-summary"
+              },
+              "rowLabel": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+              "valueKind": "percent",
+              "conditions": [],
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+            "assistant": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision. If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision. The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident. The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7c000000-0000-4000-8000-000000000101": "Scheme X Group Insurance - Certificate",
+          "7c000000-0000-4000-8000-000000000102": "Group Insurance Product Summary",
+          "7c000000-0000-4000-8000-000000000103": "Group Personal Accident Benefit Summary"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 358,
+                    "text": "S****411A",
+                    "start": 349,
+                    "header": ""
+                  },
+                  {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "header": ""
+                  },
+                  {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380,
+                    "header": ""
+                  },
+                  {
+                    "end": 395,
+                    "text": "As of",
+                    "start": 390,
+                    "header": ""
+                  },
+                  {
+                    "end": 406,
+                    "text": "01/04/2024",
+                    "start": 396,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 389,
+                "text": "S$500,000",
+                "start": 380
+              },
+              "layout": "person_row",
+              "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 379,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 359,
+                "memberId": "7c000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 406,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 349,
+              "onPage": 1
+            },
+            "support": {
+              "end": 406,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 349,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 517,
+                    "text": "S****411A",
+                    "start": 508,
+                    "header": ""
+                  },
+                  {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "header": ""
+                  },
+                  {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539,
+                    "header": ""
+                  },
+                  {
+                    "end": 554,
+                    "text": "As of",
+                    "start": 549,
+                    "header": ""
+                  },
+                  {
+                    "end": 565,
+                    "text": "01/04/2024",
+                    "start": 555,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 548,
+                "text": "S$600,000",
+                "start": 539
+              },
+              "layout": "person_row",
+              "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 538,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 518,
+                "memberId": "7c000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 565,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "start": 508,
+              "onPage": 1
+            },
+            "support": {
+              "end": 565,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "start": 508,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 394,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 356,
+              "onPage": 13
+            },
+            "support": {
+              "end": 394,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 356,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 470,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 432,
+              "onPage": 13
+            },
+            "support": {
+              "end": 470,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 432,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 478,
+              "text": "Hip\t75%",
+              "start": 471,
+              "onPage": 13
+            },
+            "support": {
+              "end": 478,
+              "text": "Hip\t75%",
+              "start": 471,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 515,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 479,
+              "onPage": 13
+            },
+            "support": {
+              "end": 515,
+              "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "start": 479,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 578,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 516,
+              "onPage": 13
+            },
+            "support": {
+              "end": 578,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 516,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 611,
+              "text": "Arm , Elbow, Wrist or Ribs\t25%",
+              "start": 581,
+              "onPage": 13
+            },
+            "support": {
+              "end": 611,
+              "text": "Arm , Elbow, Wrist or Ribs\t25%",
+              "start": 581,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 408,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 370,
+              "onPage": 8
+            },
+            "support": {
+              "end": 408,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 370,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 469,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+              "start": 417,
+              "onPage": 8
+            },
+            "support": {
+              "end": 469,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+              "start": 417,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 532,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 470,
+              "onPage": 8
+            },
+            "support": {
+              "end": 532,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 470,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 579,
+              "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+              "start": 533,
+              "onPage": 8
+            },
+            "support": {
+              "end": 579,
+              "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+              "start": 533,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 930,
+              "text": "(% of Sum Insured)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\nArm, Elbow, Wrist or Ribs (Other Fracture)\t20%\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nF.\tDisappearance\nIf an Insured Person:\n(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+              "start": 351,
+              "onPage": 8
+            },
+            "support": {
+              "end": 662,
+              "text": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+              "start": 580,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 687,
+              "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\n#\nArm , Elbow, Wrist or Ribs\t25%\n^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+              "start": 395,
+              "onPage": 13
+            },
+            "support": {
+              "end": 687,
+              "text": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+              "start": 612,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:al-product-summary"
+          }
+        },
+        "evaluated": [
+          {
+            "id": "bbfa3c5c311",
+            "benefit": "Simple Fracture",
+            "product": "Group Insurance Product Summary",
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          {
+            "id": "bd46d4e45bd",
+            "benefit": "Simple Fracture or Other Fracture due to Accident",
+            "product": "Group Personal Accident Benefit Summary",
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "speakerId": "7c000000-0000-4000-8000-000000000001",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "recentSubjectIds": [
+          "7c000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+            "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total."
+          ],
+          "summary": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "citations": [
+            {
+              "chunkId": "rag2:e3",
+              "excerpt": "Simple Fracture Benefit Limit: S$5,000",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 13,
+              "policyId": "7c000000-0000-4000-8000-000000000102",
+              "pageStart": 13,
+              "policyName": "Group Insurance Product Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e6",
+              "excerpt": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 13,
+              "policyId": "7c000000-0000-4000-8000-000000000102",
+              "pageStart": 13,
+              "policyName": "Group Insurance Product Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7c000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Scheme X Group Insurance - Certificate",
+              "documentRole": "schedule"
+            },
+            {
+              "chunkId": "rag2:e10",
+              "excerpt": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "pageStart": 8,
+              "policyName": "Group Personal Accident Benefit Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e14",
+              "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 13,
+              "policyId": "7c000000-0000-4000-8000-000000000102",
+              "pageStart": 13,
+              "policyName": "Group Insurance Product Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e13",
+              "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "pageStart": 8,
+              "policyName": "Group Personal Accident Benefit Summary",
+              "documentRole": "benefit_summary"
+            }
+          ],
+          "nextSteps": [
+            "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+          ],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "calculations": [
+            {
+              "id": "kf7b1bf9abb",
+              "kind": "conditional_illustration",
+              "steps": [
+                {
+                  "id": "s_part",
+                  "op": "percent_of",
+                  "out": 250000,
+                  "inputs": [
+                    "benefit_limit",
+                    "percent"
+                  ]
+                }
+              ],
+              "result": {
+                "value": 2500,
+                "currency": "SGD"
+              },
+              "benefit": "Simple Fracture",
+              "currency": "SGD",
+              "operands": [
+                {
+                  "id": "benefit_limit",
+                  "row": "Simple Fracture Benefit Limit: S$5,000",
+                  "role": "limit",
+                  "unit": "money",
+                  "label": "Simple Fracture benefit limit",
+                  "value": 5000,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Simple Fracture benefit limit",
+                    "pageEnd": 13,
+                    "passage": "Simple Fracture Benefit Limit: S$5,000",
+                    "policyId": "7c000000-0000-4000-8000-000000000102",
+                    "pageStart": 13,
+                    "subjectId": "7c000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:al-product-summary"
+                  },
+                  "currency": "SGD"
+                },
+                {
+                  "id": "percent",
+                  "row": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "role": "percent",
+                  "unit": "percent",
+                  "label": "Jaw, Pelvis, Leg, Ankle or Knee",
+                  "value": 50,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Jaw, Pelvis, Leg, Ankle or Knee",
+                    "pageEnd": 13,
+                    "passage": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                    "policyId": "7c000000-0000-4000-8000-000000000102",
+                    "pageStart": 13,
+                    "subjectId": "7c000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:al-product-summary"
+                  },
+                  "currency": null
+                }
+              ],
+              "policyId": "7c000000-0000-4000-8000-000000000102",
+              "rounding": {
+                "mode": "half_up",
+                "source": "default",
+                "precision": 2
+              },
+              "sentence": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "subjectId": "7c000000-0000-4000-8000-000000000001",
+              "assumption": "Daniel broke his leg broke his leg",
+              "calculator": "lump_sum",
+              "conditions": [
+                {
+                  "id": "c_definition",
+                  "kind": "definition",
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee must meet Group Insurance Product Summary’s own definition, confirmed by a reviewed medical decision.",
+                  "basis": "none",
+                  "needs": "a reviewed decision that Daniel’s diagnosis meets Group Insurance Product Summary’s definition of Jaw, Pelvis, Leg, Ankle or Knee (the insurer’s medical assessment)",
+                  "status": "unresolved"
+                }
+              ],
+              "documentHash": "sha256:al-product-summary",
+              "unresolvedText": "I worked out Daniel’s simple fracture under Group Insurance Product Summary, but I couldn’t confirm the figure against your documents.",
+              "evidenceRequirements": [
+                "the specialist’s diagnosis report",
+                "the insurer’s claim form and medical assessment"
+              ]
+            },
+            {
+              "id": "kbc169fde95",
+              "kind": "conditional_illustration",
+              "steps": [
+                {
+                  "id": "s_part",
+                  "op": "percent_of",
+                  "out": 30000000,
+                  "inputs": [
+                    "sum_insured",
+                    "percent"
+                  ]
+                }
+              ],
+              "result": {
+                "value": 300000,
+                "currency": "SGD"
+              },
+              "benefit": "Simple Fracture or Other Fracture due to Accident",
+              "currency": "SGD",
+              "operands": [
+                {
+                  "id": "sum_insured",
+                  "row": "S****411A",
+                  "role": "sum_insured",
+                  "unit": "money",
+                  "label": "Group Personal Accident",
+                  "value": 600000,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "asOf": "2024-04-01",
+                    "column": null,
+                    "layout": "person_row",
+                    "benefit": "Group Personal Accident",
+                    "pageEnd": 1,
+                    "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                    "policyId": "7c000000-0000-4000-8000-000000000101",
+                    "pageStart": 1,
+                    "rowPerson": "Lee Wei Ming, Daniel",
+                    "subjectId": "7c000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:al-cert"
+                  },
+                  "currency": "SGD"
+                },
+                {
+                  "id": "percent",
+                  "row": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "role": "percent",
+                  "unit": "percent",
+                  "label": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+                  "value": 50,
+                  "column": null,
+                  "period": null,
+                  "source": "document",
+                  "binding": {
+                    "column": null,
+                    "benefit": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+                    "pageEnd": 8,
+                    "passage": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                    "policyId": "7c000000-0000-4000-8000-000000000103",
+                    "pageStart": 8,
+                    "subjectId": "7c000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:al-pa-summary"
+                  },
+                  "currency": null
+                }
+              ],
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "rounding": {
+                "mode": "half_up",
+                "source": "default",
+                "precision": 2
+              },
+              "sentence": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+              "subjectId": "7c000000-0000-4000-8000-000000000001",
+              "assumption": "Daniel broke his leg broke his leg",
+              "calculator": "lump_sum",
+              "conditions": [
+                {
+                  "id": "c_definition",
+                  "kind": "definition",
+                  "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) must meet Group Personal Accident Benefit Summary’s own definition, confirmed by a reviewed medical decision.",
+                  "basis": "none",
+                  "needs": "a reviewed decision that Daniel’s diagnosis meets Group Personal Accident Benefit Summary’s definition of Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) (the insurer’s medical assessment)",
+                  "status": "unresolved"
+                }
+              ],
+              "documentHash": "sha256:al-pa-summary",
+              "unresolvedText": "I worked out Daniel’s simple fracture or other fracture due to accident under Group Personal Accident Benefit Summary, but I couldn’t confirm the figure against your documents.",
+              "evidenceRequirements": [
+                "the specialist’s diagnosis report",
+                "the insurer’s claim form and medical assessment"
+              ]
+            }
+          ],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "7b16c8ee-8307-449a-9b56-8be32b11d8c6",
+          "figureBindings": [],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
+        },
+        "content": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+        "visible": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.\nThe Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.",
+        "questions": [],
+        "userAt": "2026-10-17T16:10:11.210Z",
+        "assistantAt": "2026-10-17T16:10:11.210Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7474,
+              "output": 135,
+              "attempt": 1,
+              "costUsd": 0.00015358,
+              "latencyMs": 2041
+            },
+            {
+              "ok": true,
+              "input": 10976,
+              "output": 153,
+              "attempt": 1,
+              "costUsd": 0.00051278,
+              "latencyMs": 2332
+            },
+            {
+              "ok": true,
+              "input": 11948,
+              "output": 278,
+              "attempt": 1,
+              "costUsd": 0.0003573,
+              "latencyMs": 3930
+            }
+          ],
+          "limit": null,
+          "steps": 3,
+          "usage": {
+            "input": 30398,
+            "output": 566
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "timings": {
+            "toolMs": {
+              "resolve_person": {
+                "n": 1,
+                "ms": 2
+              },
+              "person_benefits": {
+                "n": 1,
+                "ms": 52
+              },
+              "evaluate_benefit": {
+                "n": 2,
+                "ms": 27
+              }
+            },
+            "modelMs": 8303,
+            "otherMs": 32,
+            "resolve": {
+              "n": 1,
+              "ms": 16
+            }
+          },
+          "composed": [
+            "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+            "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total."
+          ],
+          "latencyMs": 8416,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Daniel"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "injury",
+                    "value": "broke his leg",
+                    "words": "Daniel broke his leg"
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "Simple Fracture and Other Fracture",
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13",
+                "e14"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "broke his leg",
+                "purpose": "what_if",
+                "benefit_id": "bbfa3c5c311",
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "assumption_words": "Daniel broke his leg"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+              "evidenceIds": [
+                "e3",
+                "e6"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "broke his leg",
+                "purpose": "what_if",
+                "benefit_id": "bd46d4e45bd",
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "assumption_words": "Daniel broke his leg"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$300,000\"}",
+              "evidenceIds": [
+                "e2",
+                "e10"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "calculation",
+                    "text": "If the Simple Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                    "result_id": "kf7b1bf9abb"
+                  },
+                  {
+                    "kind": "calculation",
+                    "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                    "result_id": "kbc169fde95"
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+                    "evidence_ids": [
+                      "e14",
+                      "e13"
+                    ]
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e14",
+                      "e13"
+                    ]
+                  }
+                ],
+                "next_steps": [
+                  "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+          "evidenceChosen": [
+            "e3",
+            "e6",
+            "e2",
+            "e10",
+            "e14",
+            "e13"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "SC",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7c000000-0000-4000-8000-000000000001",
+    "speakerId": "7c000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "calcs": {
+        "kbc169fde95": {
+          "kind": "conditional_illustration",
+          "turn": 1,
+          "calcId": "kbc169fde95",
+          "benefit": "Simple Fracture or Other Fracture due to Accident",
+          "factKeys": [
+            "injury"
+          ],
+          "policyId": "7c000000-0000-4000-8000-000000000103",
+          "withdrawn": null,
+          "evidenceIds": [
+            "e2",
+            "e10"
+          ]
+        },
+        "kf7b1bf9abb": {
+          "kind": "conditional_illustration",
+          "turn": 1,
+          "calcId": "kf7b1bf9abb",
+          "benefit": "Simple Fracture",
+          "factKeys": [
+            "injury"
+          ],
+          "policyId": "7c000000-0000-4000-8000-000000000102",
+          "withdrawn": null,
+          "evidenceIds": [
+            "e3",
+            "e6"
+          ]
+        }
+      },
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "broke his leg",
+          "words": "Daniel broke his leg",
+          "source": "user_reported"
+        }
+      },
+      "derived": [
+        {
+          "turn": 1,
+          "factKeys": [
+            "injury"
+          ],
+          "sentence": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "evidenceIds": [
+            "e3",
+            "e6"
+          ]
+        },
+        {
+          "turn": 1,
+          "factKeys": [
+            "injury"
+          ],
+          "sentence": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+          "evidenceIds": [
+            "e2",
+            "e10"
+          ]
+        }
+      ],
+      "subjectId": "7c000000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 3,
+        "usage": {
+          "input": 30398,
+          "output": 566
+        },
+        "latencyMs": 8416,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Daniel"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "injury",
+                  "value": "broke his leg",
+                  "words": "Daniel broke his leg"
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "Simple Fracture and Other Fracture",
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13",
+              "e14"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "broke his leg",
+              "purpose": "what_if",
+              "benefit_id": "bbfa3c5c311",
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "assumption_words": "Daniel broke his leg"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$2,500\"}",
+            "evidenceIds": [
+              "e3",
+              "e6"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "broke his leg",
+              "purpose": "what_if",
+              "benefit_id": "bd46d4e45bd",
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "assumption_words": "Daniel broke his leg"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$300,000\"}",
+            "evidenceIds": [
+              "e2",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "calculation",
+                  "text": "If the Simple Fracture benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                  "result_id": "kf7b1bf9abb"
+                },
+                {
+                  "kind": "calculation",
+                  "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel Lee Wei Ming (Daniel)'s case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel Lee Wei Ming (Daniel)'s sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+                  "result_id": "kbc169fde95"
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The uploaded wording does not establish that these two benefits are payable together, and the accident benefit is specifically for fractures due to accident.",
+                  "evidence_ids": [
+                    "e14",
+                    "e13"
+                  ]
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The Group Insurance Product Summary (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e14",
+                    "e13"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e3",
+          "e6",
+          "e2",
+          "e10",
+          "e14",
+          "e13"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 358,
+                "text": "S****411A",
+                "start": 349,
+                "header": ""
+              },
+              {
+                "end": 379,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 359,
+                "header": ""
+              },
+              {
+                "end": 389,
+                "text": "S$500,000",
+                "start": 380,
+                "header": ""
+              },
+              {
+                "end": 395,
+                "text": "As of",
+                "start": 390,
+                "header": ""
+              },
+              {
+                "end": 406,
+                "text": "01/04/2024",
+                "start": 396,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 389,
+            "text": "S$500,000",
+            "start": 380
+          },
+          "layout": "person_row",
+          "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 379,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 359,
+            "memberId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 406,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 349,
+          "onPage": 1
+        },
+        "support": {
+          "end": 406,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 349,
+          "onPage": 1
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000101",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 517,
+                "text": "S****411A",
+                "start": 508,
+                "header": ""
+              },
+              {
+                "end": 538,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 518,
+                "header": ""
+              },
+              {
+                "end": 548,
+                "text": "S$600,000",
+                "start": 539,
+                "header": ""
+              },
+              {
+                "end": 554,
+                "text": "As of",
+                "start": 549,
+                "header": ""
+              },
+              {
+                "end": 565,
+                "text": "01/04/2024",
+                "start": 555,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 548,
+            "text": "S$600,000",
+            "start": 539
+          },
+          "layout": "person_row",
+          "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 538,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 518,
+            "memberId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 565,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+          "start": 508,
+          "onPage": 1
+        },
+        "support": {
+          "end": 565,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+          "start": 508,
+          "onPage": 1
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000101",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 394,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 356,
+          "onPage": 13
+        },
+        "support": {
+          "end": 394,
+          "text": "Simple Fracture Benefit Limit: S$5,000",
+          "start": 356,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 470,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 432,
+          "onPage": 13
+        },
+        "support": {
+          "end": 470,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 432,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 478,
+          "text": "Hip\t75%",
+          "start": 471,
+          "onPage": 13
+        },
+        "support": {
+          "end": 478,
+          "text": "Hip\t75%",
+          "start": 471,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 515,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 479,
+          "onPage": 13
+        },
+        "support": {
+          "end": 515,
+          "text": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+          "start": 479,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 578,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 516,
+          "onPage": 13
+        },
+        "support": {
+          "end": 578,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 516,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 611,
+          "text": "Arm , Elbow, Wrist or Ribs\t25%",
+          "start": 581,
+          "onPage": 13
+        },
+        "support": {
+          "end": 611,
+          "text": "Arm , Elbow, Wrist or Ribs\t25%",
+          "start": 581,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 408,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 370,
+          "onPage": 8
+        },
+        "support": {
+          "end": 408,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 370,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 469,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+          "start": 417,
+          "onPage": 8
+        },
+        "support": {
+          "end": 469,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+          "start": 417,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 532,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 470,
+          "onPage": 8
+        },
+        "support": {
+          "end": 532,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 470,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 579,
+          "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+          "start": 533,
+          "onPage": 8
+        },
+        "support": {
+          "end": 579,
+          "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+          "start": 533,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 930,
+          "text": "(% of Sum Insured)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\nArm, Elbow, Wrist or Ribs (Other Fracture)\t20%\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nF.\tDisappearance\nIf an Insured Person:\n(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+          "start": 351,
+          "onPage": 8
+        },
+        "support": {
+          "end": 662,
+          "text": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+          "start": 580,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 687,
+          "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\n#\nArm , Elbow, Wrist or Ribs\t25%\n^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+          "start": 395,
+          "onPage": 13
+        },
+        "support": {
+          "end": 687,
+          "text": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+          "start": 612,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:al-product-summary"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e3",
+            "excerpt": "Simple Fracture Benefit Limit: S$5,000",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 13,
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "pageStart": 13,
+            "policyName": "Group Insurance Product Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e6",
+            "excerpt": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 13,
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "pageStart": 13,
+            "policyName": "Group Insurance Product Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Scheme X Group Insurance - Certificate",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e10",
+            "excerpt": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "pageStart": 8,
+            "policyName": "Group Personal Accident Benefit Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e14",
+            "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 13,
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "pageStart": 13,
+            "policyName": "Group Insurance Product Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e13",
+            "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "pageStart": 8,
+            "policyName": "Group Personal Accident Benefit Summary",
+            "documentRole": "benefit_summary"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [
+          {
+            "id": "kf7b1bf9abb",
+            "kind": "conditional_illustration",
+            "steps": [
+              {
+                "id": "s_part",
+                "op": "percent_of",
+                "out": 250000,
+                "inputs": [
+                  "benefit_limit",
+                  "percent"
+                ]
+              }
+            ],
+            "result": {
+              "value": 2500,
+              "currency": "SGD"
+            },
+            "benefit": "Simple Fracture",
+            "currency": "SGD",
+            "operands": [
+              {
+                "id": "benefit_limit",
+                "row": "Simple Fracture Benefit Limit: S$5,000",
+                "role": "limit",
+                "unit": "money",
+                "label": "Simple Fracture benefit limit",
+                "value": 5000,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Simple Fracture benefit limit",
+                  "pageEnd": 13,
+                  "passage": "Simple Fracture Benefit Limit: S$5,000",
+                  "policyId": "7c000000-0000-4000-8000-000000000102",
+                  "pageStart": 13,
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-product-summary"
+                },
+                "currency": "SGD"
+              },
+              {
+                "id": "percent",
+                "row": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                "role": "percent",
+                "unit": "percent",
+                "label": "Jaw, Pelvis, Leg, Ankle or Knee",
+                "value": 50,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Jaw, Pelvis, Leg, Ankle or Knee",
+                  "pageEnd": 13,
+                  "passage": "Jaw, Pelvis, Leg^, Ankle or Knee\t50%",
+                  "policyId": "7c000000-0000-4000-8000-000000000102",
+                  "pageStart": 13,
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-product-summary"
+                },
+                "currency": null
+              }
+            ],
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "rounding": {
+              "mode": "half_up",
+              "source": "default",
+              "precision": 2
+            },
+            "sentence": "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "assumption": "Daniel broke his leg broke his leg",
+            "calculator": "lump_sum",
+            "conditions": [
+              {
+                "id": "c_definition",
+                "kind": "definition",
+                "text": "Jaw, Pelvis, Leg, Ankle or Knee must meet Group Insurance Product Summary’s own definition, confirmed by a reviewed medical decision.",
+                "basis": "none",
+                "needs": "a reviewed decision that Daniel’s diagnosis meets Group Insurance Product Summary’s definition of Jaw, Pelvis, Leg, Ankle or Knee (the insurer’s medical assessment)",
+                "status": "unresolved"
+              }
+            ],
+            "documentHash": "sha256:al-product-summary",
+            "unresolvedText": "I worked out Daniel’s simple fracture under Group Insurance Product Summary, but I couldn’t confirm the figure against your documents.",
+            "evidenceRequirements": [
+              "the specialist’s diagnosis report",
+              "the insurer’s claim form and medical assessment"
+            ]
+          },
+          {
+            "id": "kbc169fde95",
+            "kind": "conditional_illustration",
+            "steps": [
+              {
+                "id": "s_part",
+                "op": "percent_of",
+                "out": 30000000,
+                "inputs": [
+                  "sum_insured",
+                  "percent"
+                ]
+              }
+            ],
+            "result": {
+              "value": 300000,
+              "currency": "SGD"
+            },
+            "benefit": "Simple Fracture or Other Fracture due to Accident",
+            "currency": "SGD",
+            "operands": [
+              {
+                "id": "sum_insured",
+                "row": "S****411A",
+                "role": "sum_insured",
+                "unit": "money",
+                "label": "Group Personal Accident",
+                "value": 600000,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "asOf": "2024-04-01",
+                  "column": null,
+                  "layout": "person_row",
+                  "benefit": "Group Personal Accident",
+                  "pageEnd": 1,
+                  "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "pageStart": 1,
+                  "rowPerson": "Lee Wei Ming, Daniel",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                },
+                "currency": "SGD"
+              },
+              {
+                "id": "percent",
+                "row": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                "role": "percent",
+                "unit": "percent",
+                "label": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+                "value": 50,
+                "column": null,
+                "period": null,
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",
+                  "pageEnd": 8,
+                  "passage": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+                  "policyId": "7c000000-0000-4000-8000-000000000103",
+                  "pageStart": 8,
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-pa-summary"
+                },
+                "currency": null
+              }
+            ],
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "rounding": {
+              "mode": "half_up",
+              "source": "default",
+              "precision": 2
+            },
+            "sentence": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "assumption": "Daniel broke his leg broke his leg",
+            "calculator": "lump_sum",
+            "conditions": [
+              {
+                "id": "c_definition",
+                "kind": "definition",
+                "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) must meet Group Personal Accident Benefit Summary’s own definition, confirmed by a reviewed medical decision.",
+                "basis": "none",
+                "needs": "a reviewed decision that Daniel’s diagnosis meets Group Personal Accident Benefit Summary’s definition of Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) (the insurer’s medical assessment)",
+                "status": "unresolved"
+              }
+            ],
+            "documentHash": "sha256:al-pa-summary",
+            "unresolvedText": "I worked out Daniel’s simple fracture or other fracture due to accident under Group Personal Accident Benefit Summary, but I couldn’t confirm the figure against your documents.",
+            "evidenceRequirements": [
+              "the specialist’s diagnosis report",
+              "the insurer’s claim form and medical assessment"
+            ]
+          }
+        ],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

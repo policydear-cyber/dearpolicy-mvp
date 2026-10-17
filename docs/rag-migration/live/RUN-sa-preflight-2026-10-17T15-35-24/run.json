@@ -1,0 +1,99 @@
+{
+  "testedCodeSha": "88df296ca09bd8c648ea38e73c7ce74168e23db1",
+  "requestSha": null,
+  "modelsRequested": {
+    "CHAT_MODEL": "openai:gpt-6-luna",
+    "JUDGEMENT_MODEL": "openai:gpt-6-luna",
+    "NARRATION_MODEL": "openai:gpt-6-luna",
+    "READING_MODEL": "openai:gpt-6-luna"
+  },
+  "providerModels": [],
+  "requestSettingsSent": [],
+  "budgetUsed": {
+    "capUsd": 0.12,
+    "spentUsd": 0,
+    "reservedUsd": 0,
+    "remainingUsd": 0.12,
+    "calls": 0,
+    "refusals": 0,
+    "open": 0,
+    "failed": 0
+  },
+  "perCall": [],
+  "promptObserved": {
+    "systemPromptSha256": [],
+    "toolSchemaSha256": [],
+    "settings": []
+  },
+  "availability": null,
+  "label": "PREFLIGHT -- no model call made; US$0",
+  "runId": "sa-preflight",
+  "mode": "relay",
+  "preflight": true,
+  "keyNote": null,
+  "startedAt": "2026-10-17T15:35:24.106Z",
+  "commit": null,
+  "tree": null,
+  "dirty": false,
+  "buildId": "dEJp6UU9dM0WIpF-3bOo-",
+  "model": {
+    "requested": "openai:gpt-6-luna",
+    "pricePerMillion": {
+      "input": 0.1,
+      "output": 0.5,
+      "cachedInput": 0.01
+    },
+    "settings": {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  },
+  "prompt": {
+    "version": "rag2-loop-v18-applicability",
+    "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+    "toolSchemaSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+    "tools": 13
+  },
+  "budget": {
+    "runCapUsd": 0.12,
+    "meterRunMaxUsd": 0.12,
+    "turnMaxUsd": 0.05,
+    "maxCallsPerTurn": 12,
+    "maxTokensPerTurn": 80000,
+    "maxOutputTokensPerCall": 2000,
+    "retries": 1
+  },
+  "relay": {
+    "url": "http://127.0.0.1:8787",
+    "mode": "live",
+    "log": "/home/user/rag2-live-relay.jsonl"
+  },
+  "conversations": [
+    {
+      "scenario": "SAa",
+      "title": "structured: closed tibia -> corrected to hip (attempt 1)",
+      "conversationId": null,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Daniel fell off a ladder at home and fractured his tibia. It's a closed fracture. What would his accident cover pay?",
+          "error": "POST /api/chat 404: No household"
+        }
+      ],
+      "totalMs": 418,
+      "firstUsefulResponseMs": null,
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": 0,
+      "calls": 0
+    }
+  ],
+  "finishedAt": "2026-10-17T15:35:27.037Z",
+  "promptMatchesSource": true,
+  "httpCalls": []
+}
