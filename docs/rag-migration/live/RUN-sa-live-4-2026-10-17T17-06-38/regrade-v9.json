@@ -1,0 +1,38 @@
+{
+  "version": "v9",
+  "source": "/home/user/wt/docs/rag-migration/live/RUN-sa-live-4-2026-10-17T17-06-38",
+  "scenarios": {
+    "SAr": {
+      "v8_2": "FAIL",
+      "v9": "FAIL",
+      "failed_v8_2": [
+        "K2",
+        "K5",
+        "U1"
+      ],
+      "failed_v9": [
+        "K2: final turn: one complete conditional sentence for S$3,750 (If … Hip … 75% … S$5,000 … not a payment)",
+        "K5: final turn: the saved calculation exists, is the displayed sentence and recomputes to S$3,750",
+        "U1: final turn: no pending question; a contact step only where R2 requires one (required here: false) [v9; v8.2 failed]"
+      ]
+    },
+    "SBa": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SBb": {
+      "v8_2": "FAIL",
+      "v9": "FAIL",
+      "failed_v8_2": [
+        "Q2",
+        "Q4"
+      ],
+      "failed_v9": [
+        "Q2: turn 1: the supported Simple Fracture terms come first (the S$5,000 limit and its hip and leg rows) and no amount is asserted before the case is known",
+        "Q4: turn 2: the illustration is for the clarified case (leg row, S$2,500), conditional and saved"
+      ]
+    }
+  }
+}

@@ -9,7 +9,10 @@
  */
 import { STRUCTURED_GRADERS, type Graded } from "./structured-check";
 
-export const REGRADE_VERSION = "v9";
+export const REGRADE_VERSION = "v9.1";
+/** v9.1 (after sa-live-5, recorded in EXPECTED-structured-answers.md before this change): R2 also says an established next step "is kept where
+ * still relevant and is not repeated unnecessarily" -- v9 missed that branch. A correction turn that states the unresolved relationship but was
+ * preceded by the contact step does not owe it again, unless the household asks what to do (R2(a)). Nothing else changed. */
 const lines = (v: string) => v.split("\n").filter(Boolean);
 const visibleOf = (a: any) => [a?.summary, ...(a?.details ?? []), ...((a?.questions ?? []) as any[]).map((q) => q.text), ...(a?.nextSteps ?? [])].filter(Boolean).join("\n");
 const CONTACT = /Contact Aldermoor Life Ltd/;
@@ -42,13 +45,15 @@ export function gradeV9(scenario: string, conv: any): Graded {
   const users = ((conv?.turns ?? []) as any[]).map((t) => String(t?.user ?? ""));
   const lastUser = users.at(-1) ?? "", lastText = visibleOf(turns.at(-1)?.answer);
   let g = base;
+  const established = turns.slice(0, -1).some((t) => CONTACT.test(visibleOf(t?.answer)));
+  const owed = (need: boolean) => need && !CONTACT.test(lastText) && !(established && !ASKS_WHAT_TO_DO.test(lastUser));
   if (g.checks.some((c) => c.id === "U1")) {
     const need = nextStepRequired(lastUser, lastText);
-    g = swap(g, "U1", !(turns.at(-1)?.answer?.questions ?? []).length && (!need || CONTACT.test(lastText)), `final turn: no pending question; a contact step only where R2 requires one (required here: ${need})`, lastText.slice(0, 700));
+    g = swap(g, "U1", !(turns.at(-1)?.answer?.questions ?? []).length && !owed(need), `final turn: no pending question; a contact step only where R2 requires one and it was not already given (required here: ${need}; given earlier: ${established})`, lastText.slice(0, 700));
   }
   if (g.checks.some((c) => c.id === "Q6")) {
     const need = nextStepRequired(lastUser, lastText);
-    g = swap(g, "Q6", !(turns.at(-1)?.answer?.questions ?? []).length && (!need || CONTACT.test(lastText)), `turn 2: the question is not asked again; a contact step only where R2 requires one (required here: ${need})`, lastText.slice(0, 700));
+    g = swap(g, "Q6", !(turns.at(-1)?.answer?.questions ?? []).length && !owed(need), `turn 2: the question is not asked again; a contact step only where R2 requires one and it was not already given (required here: ${need}; given earlier: ${established})`, lastText.slice(0, 700));
   }
   if (g.checks.some((c) => c.id === "C3")) {
     g = swap(g, "C3", !claimsATotal(lastText) && /(?:neither document says|do not establish|does not say|unclear|not established)/i.test(lastText), "the two figures are alternatives from separate documents, never added, combined or said payable together without evidence", lastText.slice(0, 900));
