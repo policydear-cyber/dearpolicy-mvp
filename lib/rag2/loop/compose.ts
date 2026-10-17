@@ -183,7 +183,7 @@ const clauseStems = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) 
  * statement is then cited and quoted with the amount. Without one, the clause is taken out (another document printing
  * S$ for a similar line is not that document's currency). Null when no clause does this.
  */
-export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state">): { kept: string; reason: string; basis: EvidenceRef | null } | { dropped: string } | null {
+export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state">): { kept: string; reason: string; basis: EvidenceRef | null } | { dropped: string; asPrinted?: string } | null {
   for (const clause of clausesOf(text)) for (const f of moneyFiguresIn(clause)) {
     if (f.currency !== "SGD") continue;
     const lines = cited.flatMap((e) => evidenceTextOf(e).split(/\n+|(?<=\.)\s+(?=[A-Z])/).map((line) => ({ e, line, form: printedForm(line, f.value) }))).filter((x) => x.form);
@@ -205,7 +205,10 @@ export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<
       return { kept: text.replace(/[.!?]?\s*$/, "") + ` (${docName} prints this amount without a currency sign and states: “${decl.replace(/[.\s]+$/, "")}”).`, reason: "", basis };
     }
     const reason = `states ${f.raw} from ${docName}, which prints that amount with a bare $ and does not state its currency`;
-    return { dropped: reason };
+    // PR #54 (rc-live-7: the model wrote "up to S$2,000" for the booklet's bare "$2,000" and the whole supported benefit
+    // was lost): the statement as the document prints it -- the bare "$" restored -- for bareAmountClaim to say honestly.
+    const raw = f.raw.replace(/[.,;:]+$/, "");
+    return { dropped: reason, asPrinted: text.replace(raw, raw.replace(/^(?:S\$|SGD\s?)\s?/i, "$")) };
   }
   return null;
 }
@@ -959,6 +962,13 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // (the document's own currency statement is cited with it -- an addition; an unsupported currency claim omits the
       // statement whole)
       if (bare && !("dropped" in bare) && bare.basis) { evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, bare.basis, "compose")])]; text = bare.kept; bare = null; }
+      // PR #54: an S$ the document does not print for a bare "$" amount -- the benefit and its terms are kept, the amount
+      // said as printed (bareAmountClaim: its own same-benefit currency line, or "the document does not say which
+      // currency"); the unsupported S$ is recorded as taken out. Never the whole statement for the currency alone.
+      if (bare && "dropped" in bare && bare.asPrinted) {
+        const re = bareAmountClaim(bare.asPrinted, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+        if (re) { out.dropped.push({ sentence: text, reason: bare.dropped + "; said as printed instead" }); text = re.text; if (re.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, re.basis, "compose")])]; bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx); if (bare && !("dropped" in bare) && bare.basis) bare = null; }
+      }
       if (bare) { drop(text, "dropped" in bare ? bare.dropped : bare.reason); continue; }
     }
     // V1.5: a trip conclusion (not covered / not shown) is checked against person, policy, dates, destination and source.

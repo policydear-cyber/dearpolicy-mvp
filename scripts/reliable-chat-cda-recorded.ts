@@ -92,7 +92,18 @@ async function main() {
   const c = await run("currency", turns([{ text: BOOKLET_SGD, from: "booklet" }, { text: SUMMARY_SGD, from: "summary" }]));
   const sgdLines = c.v.split("\n").filter((l) => /S\$2,000/.test(l));
   check("control (S$ for the booklet's bare $): never shown as the booklet's amount", !sgdLines.some((l) => /Booklet/i.test(l) && !/Summary/i.test(l)), c.v);
+  check("control (S$ for the booklet's bare $): the booklet statement is kept, its amount said as printed", /Booklet's Compassionate Death Allowance Benefit pays the funeral expenses incurred, up to 2,000 \(printed with a “\$” sign/.test(c.v), c.v);
   check("control (the summary's S$2,000): if shown, it is attributed to the separate summary only", sgdLines.every((l) => /Insurance Benefits Summary/.test(l)), c.v);
+
+  // rc-live-7 (live, FAIL): the model wrote "up to S$2,000" for the booklet's bare "$2,000" and the whole supported
+  // statement was dropped. Replayed with the live wording: the benefit and its terms are kept, the amount said as printed.
+  const LIVE7 = "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.";
+  const l7 = await run("rc-live-7 wording", turns([{ text: LIVE7, from: "booklet" }]));
+  check("rc-live-7 replay (S$ written for the bare $): the benefit, proof / prescribed form and Core / Voluntary terms are kept", /Compassionate Death Allowance/.test(l7.v) && /prescribed form/.test(l7.v) && /Core Scheme/.test(l7.v), l7.v);
+  check("rc-live-7 replay: the amount is said as printed (currency unknown), never S$2,000", /2,000 \(printed with a “\$” sign; the document does not say which currency\)/.test(l7.v) && !/S\$2,000/.test(l7.v), l7.v);
+  check("rc-live-7 replay: the unsupported S$ is recorded as taken out", (l7.trace.dropped ?? []).some((d: any) => /bare \$ and does not state its currency; said as printed instead/.test(d.reason)), JSON.stringify(l7.trace.dropped));
+  const g7 = gradeFL4("FL4", asConv(l7));
+  check("rc-live-7 replay: the FL4 grader passes", g7.verdict === "PASS", JSON.stringify(g7.checks.filter((c: any) => !c.ok)));
 
   const e = await run("enrolment", turns([{ text: FAITHFUL, from: "booklet" }, { text: FALSE_CAVEAT, from: "cert" }, { text: CURRENT, from: "cert" }]));
   check("enrolment: the false caveat is replaced by the certificate's dated listing (as of 01/04/2024) with the later-date limit", !/do not confirm|not confirm\w* Daniel/i.test(e.v) && /certificate lists Daniel/.test(e.v) && /01\/04\/2024/.test(e.v) && /later date/.test(e.v), e.v);
