@@ -58,3 +58,11 @@ Reading: 85-92% of each turn is model upstream time (about 1.3-4 s per call acro
 - Scripted journeys prove plumbing, not model choices; the real-model sample is nine scenarios once each.
 - `rag2:s52-replay` (11/12) fails identically on the baseline `81b1b07`; unchanged by this work.
 - Open model behaviour: omitted contact step (SAb), no clarifying question (SBa), evaluating only one fracture table in some ambiguity turns (sa-live-2).
+
+## Final verification of the tested code (`bc428476bb39ec2ad27e5b2ac153b5068518a0f8`; the branch head after it differs by documents only)
+Node v22.22.2.
+- `tsc --noEmit`: clean. `next build`: succeeds (locally and in the live-run workbench).
+- `scripts/reliable-chat-structured-answers.ts`: 52 of 52 (7 journeys + J3b + negative controls + grader controls); transcripts `transcripts/structured-answers-BASELINE-86c5940.txt` (22 of 35, 13 failing, on main) and `structured-answers-AFTER.txt` (regenerated from the tested code).
+- Regression suites (66 scripted `rag2:*` suites): 65 pass; `rag2:s52-replay` 11/12 fails identically on baseline `81b1b07` (pre-existing, not touched).
+- Real-browser journeys (Chromium, real chat page and /api/chat, scripted model moves, displayed = saved = reloaded): actual-library 5 of 5 (SA2 correction + reload, SA3, SA4, SA5, SA6), booklet 6 passed (3 skipped by their own config), RC8/FL5 3 of 3, tan household 3 of 3.
+- Scripted-model latency (no model time): server loop 71-251 ms per turn; send-to-visible 2.0-2.9 s, which is the page's polling interval. So in the live runs above, model upstream time is the only substantial server-side component; the browser adds about 2 s (polling) on top, measured only with scripted moves.
