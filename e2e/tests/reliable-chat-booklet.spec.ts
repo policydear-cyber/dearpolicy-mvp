@@ -58,7 +58,8 @@ test("BK1: an uncertain case asks one useful question (no amount), then the clar
   expect(a2.shown).toMatch(/conditional illustration is S\$3,750/);
   expect(s2.saved.calculations ?? []).toHaveLength(1);
   expect(s2.saved.questions ?? []).toHaveLength(0);
-  expect(a2.shown).not.toMatch(/^You told me/m);
+  // (the household's clarification is said back once, as theirs -- structured-answers release: the calculation no longer quotes it)
+  expect((a2.shown.match(/^You told me/gm) ?? []).length).toBeLessThanOrEqual(1);
 });
 
 test("BK2: Other Fracture uses the Personal Accident sum insured the booklet's section names (S$225,000), never Term Life", async ({ page, request }) => {

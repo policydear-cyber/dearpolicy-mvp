@@ -123,7 +123,19 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     const pct = percentOperand(row, subjectId);
     const percentId = issueValue(ctx, subjectId, pct.selected, pct.operand);
     // the illustration's stated assumption: the household's own words for the event, else the case they identified
-    const assumption = words?.trim() || caseWords || `the listed case “${row.label}” applies`;
+    // (structured-answers release: the statement is written from the RESOLVED case, never from the household's raw words --
+    // a correction, an earlier uncertain report or a multi-sentence message is not an assumption of the current result)
+    // The record keeps the household's own words as PROVENANCE (what the save-time check finds quoted in their messages:
+    // the event is theirs, not the server's), chosen from what they have CURRENTLY reported and that names this very
+    // case -- never an earlier uncertain report, a correction notice or the model's paraphrase. The visible statement
+    // never quotes them (renderCalculation): it says the resolved case.
+    const rowId = row.id;
+    const namesRow = (w: string) => { const c = caseFor(s.rows, w); return c.kind === "row" && c.row.id === rowId; };
+    const heard = [...(ctx.reportedFacts?.get(subjectId) ?? [])].sort((a, b) => b.turn - a.turn);
+    // (a sentence the household actually wrote first -- a recorded fact's words can carry the model's own normalised value)
+    const current = heard.filter((r) => r.key === null).map((r) => r.words).find(namesRow) ?? heard.map((r) => r.words).find(namesRow)
+      ?? [...reported].reverse().find(namesRow);
+    const assumption = current?.trim() || (words && caseFor(s.rows, words).kind === "row" && (caseFor(s.rows, words) as { row: { id: string } }).row.id === rowId ? words.trim() : "") || `the listed case “${row.label}” applies`;
     const args: Record<string, unknown> = { calculator: "lump_sum", purpose, subject_id: subjectId, policy_id: rec.policy.id, benefit: rec.benefit, condition: row.label, percent_value_id: percentId, assumption_words: assumption };
     if (s.base.kind === "sum_insured") {
       const vid = await personAmountValue(ctx, s.base.from, rec.memberName, subjectId);

@@ -309,6 +309,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const tools = loopToolSpecs(env);
   let reply: LoopReply | null = null;
   const t0 = Date.now();
+  const toolMs: Record<string, { n: number; ms: number }> = {};
   const meter = new LoopUsageMeter({ model: input.model, accountId: input.accountId, limits, startedAt: t0, promptVersion: LOOP_PROMPT_VERSION, signal: input.signal ?? null });
   let stop: MeterStop | null = null;
 
@@ -1403,9 +1404,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const live = (id: string) => !!state.evidence[id] && !stale.has(id);
     const sentences: Record<string, unknown>[] = [];
     const notes: string[] = [];
-    // (Actual-library findings: never an echo of words the answer already quotes -- a calculation's "as you described: …")
+    // (Actual-library findings: never an echo of words the answer already quotes, and -- structured-answers release -- none of a fact
+    // a SHOWN calculation rests on: that statement says the resolved case itself, so the fact is visibly used)
     const quoted = squashW(texts.join(" "));
-    const sayBacks = r.kind === "final" && !texts.some((t) => /^\s*you (?:told me|said)\b/i.test(t)) ? recordedNow.filter((x) => x.subject === subject && !quoted.includes(squashW(x.words))).map((x) => sayBack(x.words)).filter((x): x is string => !!x) : [];
+    const sayBacks = r.kind === "final" && !texts.some((t) => /^\s*you (?:told me|said)\b/i.test(t)) ? recordedNow.filter((x) => x.subject === subject && !quoted.includes(squashW(x.words)) && !(c0?.calcs ?? []).some((k) => (k.dependsOn ?? []).includes(x.key))).map((x) => sayBack(x.words)).filter((x): x is string => !!x) : [];
     sentences.push(...[...new Set(sayBacks)].map((text) => ({ text })));
     // Each lost calculation, in canonical wording built only from its verified record: the benefit as printed, its
     // printed percentages, the case and the household's own words it assumes, then what is still unresolved. Composed
@@ -1488,7 +1490,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (last) { budgetWarned = true; try { last.content = JSON.stringify({ ...JSON.parse(last.content), notice: BUDGET_NOTICE }); } catch { last.content += "\n" + BUDGET_NOTICE; } }
     }
     const m = await meter.next({ messages, tools, maxOutputTokens: limits.maxOutputTokens });
-    if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") record("model", {}, false, [], m.stop.detail); break; }
+    if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
     trace.steps++; trace.modelId = out.modelId || trace.modelId;
     messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls });
@@ -1541,7 +1543,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (call.name === "calculate") await readTableRest(call);
       const refusal = preflight(call);
       if (refusal) { record(call.name, call.arguments, false, [], refusal); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: refusal }) }); continue; }
+      const toolT0 = Date.now();
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
+      { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - toolT0; }
       await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
       const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
@@ -1637,6 +1641,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   trace.latencyMs = Date.now() - t0;
   trace.usage = { ...meter.usage };
   trace.calls = meter.calls;
+  { const modelMs = (meter.calls ?? []).reduce((a, c) => a + (c.latencyMs ?? 0), 0), tools = Object.values(toolMs).reduce((a, c) => a + c.ms, 0); trace.timings = { modelMs, toolMs, resolve: { n: ctx.timing?.resolveCount ?? 0, ms: ctx.timing?.resolveMs ?? 0 }, otherMs: Math.max(0, trace.latencyMs - modelMs - tools) }; }
   state.seq = ctx.seq;
 
   // V1.2: a calculation left unresolved only for household facts (kept per benefit, with its validated arguments) is

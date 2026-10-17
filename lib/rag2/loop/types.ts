@@ -77,6 +77,8 @@ export type TraceToolCall = { name: string; args: Record<string, unknown>; ok: b
 export type TraceTurn = {
   turn: number; userMessage: string; modelId: string; modelKind: "hosted" | "scripted"; steps: number;
   usage: ModelUsage; latencyMs: number; toolCalls: TraceToolCall[];
+  /** Where the loop's time went: model calls, each tool (calls, ms), benefit-record resolution (it is also inside the tool times), the rest. */
+  timings?: { modelMs: number; toolMs: Record<string, { n: number; ms: number }>; resolve: { n: number; ms: number }; otherMs: number };
   /** The evidence the visible answer rests on (ids into RagLoopState.evidence). */
   evidenceChosen: string[];
   outcome: "final_answer" | "ask_user" | "budget_exhausted" | "limit_reached" | "timeout" | "error";

@@ -76,7 +76,35 @@ export function moneyFiguresIn(text: string): StatedFigure[] {
   return out;
 }
 const SAYS_SUPERSEDED = /\b(?:superseded|replaced|earlier|previous(?:ly)?|old(?:er)?|original(?:ly)?|former(?:ly)?|no longer)\b/i;
-export const sentencesOf = (text: string) => (text ?? "").split(/(?<=[.!?])\s+(?=[A-Z“"(])/);
+/** Sentences of a text. A boundary inside a quotation or a parenthesis is not a sentence boundary: a server-written
+ * statement that quotes wording ("(as you described: “… .  Keep this …”)", a printed condition) stays ONE statement
+ * through validation, saving and display -- never split into fragments whose meaning (an amount apart from its "If")
+ * changes. An unbalanced opener never swallows the rest of the text (it closes at the end of the text only). */
+export const sentencesOf = (text: string): string[] => {
+  const t = text ?? "";
+  const out: string[] = [];
+  let depthQ = 0, depthP = 0, start = 0;
+  const re = /([.!?])(\s+)(?=[A-Z“"(])/g;
+  let scanned = start;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t))) {
+    const at = m.index + 1;
+    for (let k = scanned; k < at; k++) { const c = t[k]; if (c === "“") depthQ++; else if (c === "”") depthQ = Math.max(0, depthQ - 1); else if (c === "(") depthP++; else if (c === ")") depthP = Math.max(0, depthP - 1); }
+    scanned = at;
+    if (depthQ > 0 || depthP > 0) {
+      // an opener that never closes later in the text does not hold the text together
+      const rest = t.slice(at);
+      const closes = (depthQ > 0 ? rest.includes("”") : true) && (depthP > 0 ? rest.includes(")") : true);
+      if (closes) continue;
+      depthQ = 0; depthP = 0;
+    }
+    out.push(t.slice(start, at));
+    start = at + m[2].length;
+    scanned = start;
+  }
+  out.push(t.slice(start));
+  return out;
+};
 const norm = (s: string) => normalPassage(s ?? "");
 const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 const COVER_CLAIM = /^(?:(?:yes|good news)[,.!]?\s+)?(?:[\p{L}’' -]{2,60}?)\s+(?:is|are)\s+(not\s+)?covered\b/iu;

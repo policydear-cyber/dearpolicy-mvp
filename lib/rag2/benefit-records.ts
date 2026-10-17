@@ -57,7 +57,11 @@ function tableBenefit(t: PctTable): string | null {
   if (t.name) return t.name.trim();
   const lines = t.heading.split("\n").map((l) => l.trim()).filter(Boolean).reverse();
   for (const l of lines) { const m = /^(.+?)\s+(?:benefit\s+)?(?:sub-?)?limit\b/i.exec(l); if (m && !/\d/.test(m[1])) return m[1].replace(/\s+benefit$/i, "").trim(); }
-  for (const l of lines) if (!/\d/.test(l) && !/[.;]$/.test(l) && l.length <= 60 && !/\bpage\b/i.test(l) && /[A-Za-z]{3}/.test(l)) return l;
+  // (structured-answers release: a table's own column-header words -- "Schedule", "Compensation", "Benefit" -- name
+  // nothing; the benefit is the section title the table is printed under, as the document words it, with its section
+  // letter / number dropped: "E. Simple Fracture or Other Fracture due to Accident")
+  const HEADER_WORD = /^(?:compensation|schedule|schedule of indemnities|benefit|benefits|amount|amounts|table|description|nature of (?:injury|loss)|bone fractured|payable|limit)(?:\s+(?:compensation|schedule|benefit|amount|payable))*$/i;
+  for (const l of lines) { const c = l.replace(/^(?:[A-Z]|\d{1,2}|[ivx]+)[.)]\s+/, "").trim(); if (!/\d/.test(c) && !/[.;:]-?$/.test(c) && c.length <= 80 && !/\bpage\b/i.test(c) && /[A-Za-z]{3}/.test(c) && !HEADER_WORD.test(c) && !/\t/.test(c) && !/^\(/.test(c)) return c; }
   return null;
 }
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { pool,query } from "@/lib/db/client";
 import { classifyError } from "@/lib/telemetry/errors";
+import { recordEvent } from "@/lib/telemetry";
 import { enqueueJob, heartbeatJob, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { ensureChatSchema,getConversation,ChatConflict } from "./store";
@@ -29,12 +30,15 @@ export async function processChatAnalysisJob(job:BackgroundJobRow){
   const id=typeof (job.payload as Record<string,unknown>|null)?.chatJobId==="string"?(job.payload as Record<string,string>).chatJobId:"";
   if(!id||!job.account_id)throw new Error("background chat job payload is incomplete");
   const accountId=job.account_id;
-  const stored=await query<{status:string;request_json:ChatRequest}>("SELECT status,request_json FROM chat_analysis_jobs WHERE id=$1 AND account_id=$2",[id,accountId]);
+  const stored=await query<{status:string;request_json:ChatRequest;queue_ms:number}>("SELECT status,request_json,(extract(epoch from (now()-created_at))*1000)::int AS queue_ms FROM chat_analysis_jobs WHERE id=$1 AND account_id=$2",[id,accountId]);
   if(!stored.rows.length)throw new ChatConflict("This chat was deleted or the analysis was cancelled.");
   if(stored.rows[0].status==="complete"||stored.rows[0].status==="cancelled")return;
   const started=await query("UPDATE chat_analysis_jobs SET status='running',error=NULL,updated_at=now() WHERE id=$1 AND account_id=$2 AND status IN ('queued','running') RETURNING id",[id,accountId]);
   if(!started.rows.length)throw new ChatConflict("This chat analysis is no longer runnable.");
+  // latency evidence: queue delay (accepted -> picked up), preparation, and the workflow (loop + validation + save) apart
+  const queueMs=stored.rows[0].queue_ms;const prepT0=Date.now();
   const context=await prepareChat(stored.rows[0].request_json);
+  const prepareMs=Date.now()-prepT0;
   const check=async()=>{
     if(job.lease_owner){
       const lease=await heartbeatJob(pool,{jobId:job.id,workerId:job.lease_owner});
@@ -48,7 +52,9 @@ export async function processChatAnalysisJob(job:BackgroundJobRow){
     await query("UPDATE chat_analysis_jobs SET progress=$1::jsonb,updated_at=now() WHERE id=$2 AND account_id=$3 AND status='running'",[JSON.stringify(progress),id,accountId]);
   };
   try{
+    const wfT0=Date.now();
     await runChatWorkflow(context,{jobId:id,check,report});
+    void recordEvent({name:"chat.job.timing",correlationId:id,status:"success",extra:{queueMs,prepareMs,workflowMs:Date.now()-wfT0}});
   }catch(error){
     // D17 (Wave 2 adversarial audit): persist classifyError()'s safe,
     // taxonomy-level message instead of the raw error.message -- this
