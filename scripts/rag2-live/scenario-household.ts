@@ -162,7 +162,12 @@ export const FL4: Scenario = { id: "FL4", title: "rc-live-7: the death allowance
   { user: "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?", expect: {} }] };
 /** rc-live-8 (EXPECTED-rc-live-8.md): the same question on the repaired code, graded with v6 (FL4's v5 grade kept). */
 export const FL4b: Scenario = { ...FL4, id: "FL4b", title: "rc-live-8: FL4's question on the repaired code -- allowance present, honest currency, no invented condition, Core / Voluntary vs certificate listing distinguished", why: "rc-live-7 repair check" };
-export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4, FL4b] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
+/** rc-live-9 (EXPECTED-rc-live-9.md, grader v7): after the benefit-record repair (bullet / tab rows; heading-and-paragraph
+ * benefits with a bare "$"), rc-live-8's real wording once more, and one fresh paraphrase written for this run. */
+export const FL5a: Scenario = { ...FL4, id: "FL5a", title: "rc-live-9: the real-wording death question after the benefit-record repair -- the booklet's allowance offered and stated, honest currency, next step", why: "rc-live-8 repair check" };
+export const FL5b: Scenario = { id: "FL5b", title: "rc-live-9: a fresh paraphrase of the death question", why: "rc-live-8 repair check (paraphrase)", turns: [
+  { user: "Say Daniel passed away after an accident. Would the booklet cover any of the funeral costs, and how much? What proof would the insurer ask us for?", expect: {} }] };
+export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4, FL4b, FL5a, FL5b] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;

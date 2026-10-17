@@ -13,7 +13,7 @@ import type { EvidenceRef } from "../evidence";
 import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
-import { formatMoney, type BenefitRecord } from "../benefit-records";
+import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
 import { loadDocs, loadLinks, type DocRow, type LinkRow } from "../store";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
@@ -58,13 +58,53 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
   }
   const p = r.printed;
   if (p?.kind === "money") {
-    const amt = `${formatMoney(p.cents, p.currency)}${p.unit ? " " + p.unit : ""}`;
+    const amt = printedAmount(p);
     if (r.applicability === "person_row") { const v = r.personBenefit ? await personAmountValue(d.ctx, r.personBenefit, r.memberName, r.memberId) : null; return { text: `${who}'s ${docName(r)} lists ${pretty(r.benefit)} of ${amt}${r.asOf ? ` as of ${fmtDate(r.asOf)}` : ""}.`, evidence_ids: ev, value_ids: v ? [v] : [] }; }
+    // PR #54 (rc-live-8): a benefit printed under its own heading, or a row with a footnote, is said in ONE sentence with
+    // its name, its section, what it is for, its amount -- or that the document leaves the currency of its bare "$"
+    // unstated -- and its own printed conditions, quoted from its own lines (with their own evidence). The clause that
+    // pays the amount is said by the server ("for <what>, up to <amount>"), never quoted as a promise ("we will pay").
+    const pb = r.personBenefit;
+    if (pb && (pb.benefit.source === "section_heading" || pb.conditionSources?.length)) {
+      for (const e of pb.conditionSources ?? []) ev.push(d.evidenceId(e));
+      const doc = r.policy.product ?? "document";
+      const sec = pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `, under “${pb.benefit.section}”` : "";
+      const t = paidTerms(r.conditions, p.cents, pb.source.passage);
+      const figure = p.currency ? amt : `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""} (printed with a bare “$” sign; the ${doc} does not say which currency)`;
+      const conds = t.conditions.map((c) => `“${c.replace(/[“”]/g, "\"")}”`);
+      const list = conds.length > 1 ? `${conds.slice(0, -1).join(", ")} and ${conds.at(-1)}` : conds[0] ?? "";
+      return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}.`, evidence_ids: ev, value_ids: [] };
+    }
     return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}.`, evidence_ids: ev, value_ids: [] };
   }
   if (p?.kind === "percent") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${p.percent}%${p.of ? ` of the ${p.of}` : ""}.`, evidence_ids: ev, value_ids: [] };
   if (p?.kind === "reference") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) defines ${pretty(r.benefit)} as the ${p.of}.`, evidence_ids: ev, value_ids: [] };
   return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}.`, evidence_ids: ev, value_ids: [] };
+}
+
+/** PR #54 (rc-live-8): a benefit's printed paragraphs read as what it pays for, its cap word and its conditions: in the
+ * paragraph printing the amount, the comma clause that pays ("we will pay the funeral expenses incurred") gives what
+ * it is for, the clause printing the figure gives its cap word ("up to"), and every other clause is a condition, quoted
+ * as printed. A paragraph not printing the amount is a condition whole. */
+export function paidTerms(paras: string[], cents: number, passage = ""): { covers: string | null; cap: string | null; conditions: string[] } {
+  const figure = (cents / 100).toLocaleString("en-SG", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
+  let covers: string | null = null, cap: string | null = null;
+  const conditions: string[] = [];
+  const PAYS = /\b(?:we|the insurer|the company|it)\s+(?:will|shall)\s+(?:pay|reimburse)\s+(?:for\s+)?(.+)$/i;
+  for (const para of paras) {
+    const hasFigure = para.includes(figure);
+    if (!hasFigure && !PAYS.test(para)) { conditions.push(para.trim()); continue; }
+    for (const raw of para.split(/,\s+/)) {
+      const c = raw.trim().replace(/[.;]$/, "");
+      if (!c) continue;
+      if (c.includes(figure)) { cap = /\b(up to|not exceeding|a maximum of|maximum of|limited to)\b/i.exec(c)?.[1]?.toLowerCase() ?? cap; continue; }
+      const m = PAYS.exec(c);
+      if (m) { covers = m[1].trim(); continue; }
+      conditions.push(c);
+    }
+  }
+  cap ??= new RegExp(`\\b(up to|not exceeding|a maximum of|maximum of|limited to)\\s*(?:[A-Z]{0,3}\\$|SGD|USD)?\\s?${figure.replace(/[.,]/g, "\\$&")}\\b`, "i").exec(passage)?.[1]?.toLowerCase() ?? null;
+  return { covers, cap, conditions };
 }
 
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */

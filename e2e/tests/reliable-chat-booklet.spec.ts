@@ -113,3 +113,27 @@ test("RL3: no false enrolment caveat -- the certificate's dated listing, the all
   expect(a.shown).toMatch(/Compassionate Death Allowance Benefit/);
   expect(a.shown).not.toMatch(/S\$2,000/);
 });
+
+// PR #54 (after rc-live-8), recorded passage (server and spec run with BOOKLET_CDA=recorded): rc-live-8's moves, the
+// model selecting the booklet's allowance -- what the page displays is the complete saved answer, every next step included.
+test("RC8: the booklet's allowance by name, its own conditions and honest currency, the summary separate, the next step (displayed = saved)", async ({ page, request }) => {
+  test.skip(process.env.BOOKLET_CDA !== "recorded", "recorded-passage fixture only (BOOKLET_CDA=recorded)");
+  const [u] = await scenario(request, "RC8");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a = await send(page, u);
+  const s = await sameAsSaved(request, a.shown, "RC8");
+  const lines = a.shown.split("\n");
+  const bk = lines.find((l) => /Group Insurance Benefits Booklet/.test(l) && /Compassionate Death Allowance Benefit/.test(l)) ?? "";
+  expect(bk).toMatch(/Section 5 - Compassionate Death Allowance Benefit/);
+  expect(bk).toMatch(/funeral expenses incurred, up to 2,000 \(printed with a bare “\$” sign; the Group Insurance Benefits Booklet does not say which currency\)/);
+  expect(bk).toMatch(/dies as a result of an Accident/);
+  expect(bk).toMatch(/proof of death and the relevant documents in our prescribed form/);
+  expect(bk).toMatch(/Core Scheme or the Voluntary Scheme/);
+  expect(bk).not.toMatch(/S\$|5,000|overseas/);
+  for (const l of lines.filter((x) => /S\$2,000/.test(x))) { expect(l).toMatch(/Insurance Benefits Summary/); expect(l).not.toMatch(/Booklet/); }
+  expect(a.shown).toContain("Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme)");
+  expect(uniqueSteps(s.saved.nextSteps)).toHaveLength(1);
+  expect(a.shown).not.toMatch(/couldn['’]t confirm|haven['’]t stated|prints\s*:/);
+  expect(unfinished(a.shown)).toHaveLength(0);
+});

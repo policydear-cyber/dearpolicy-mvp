@@ -140,7 +140,9 @@ async function main() {
   // every later check (figures, conditions, paperwork, person, statement support) like any other.
   const booklet = B.doc("BOOKLET").id;
   const cites = (x: any, page: number) => (x.answer.citations ?? []).some((c: any) => c.policyId === booklet && Number(c.pageStart) === page);
-  const kept = (x: any) => /Compassionate Death Allowance/.test(x.v);
+  // (PR #54, after rc-live-8: the model's failed statement is omitted whole; the allowance may still be shown, but only
+  // as its record's validated terms written by the server -- never the model's words)
+  const kept = (x: any) => /says its Compassionate Death Allowance/.test(x.v) || x.v.split("\n").some((l: string) => /Compassionate Death Allowance/.test(l) && !/prints the Compassionate Death Allowance Benefit for the funeral expenses incurred, up to 2,000 \(printed with a bare “\$” sign/.test(l));
   {
     const p1 = l7;
     check("currency proof: the corrected statement keeps the benefit, Daniel, the 2,000 figure and every printed condition", /Compassionate Death Allowance Benefit/.test(p1.v) && /Daniel/.test(p1.v) && /2,000 \(printed with a “\$” sign/.test(p1.v) && /accident/i.test(p1.v) && /proof of death/.test(p1.v) && /prescribed form/.test(p1.v) && /Core Scheme/.test(p1.v), p1.v);
@@ -149,9 +151,9 @@ async function main() {
     check("currency proof: only the S$ figure changed -- the rest of the model's wording is unchanged", p1.v.includes(LIVE7.replace("S$2,000", "2,000 (printed with a “$” sign; the document does not say which currency)")), p1.v);
     // rejections: a wrong amount, an unsupported condition, a neighbouring benefit's amount or condition
     const wrong = await run("wrong amount", turns([{ text: LIVE7.replace("S$2,000", "S$3,000"), from: "booklet" }]));
-    check("currency proof (wrong amount S$3,000): never restated as printed -- the statement is not shown", !/3,000/.test(wrong.v) && !kept(wrong), wrong.v);
+    check("currency proof (wrong amount S$3,000): never restated as printed -- the statement is not shown (only the record's own terms may be)", !/3,000/.test(wrong.v) && !kept(wrong), wrong.v);
     const cond = await run("unsupported condition", turns([{ text: LIVE7.replace("if Daniel dies as a result of an accident", "if Daniel dies as a result of an accident within 365 days"), from: "booklet" }]));
-    check("currency proof (S$ + an unsupported 365-day condition): the statement is not shown, and 365 days never appears", !/365/.test(cond.v) && !kept(cond), cond.v);
+    check("currency proof (S$ + an unsupported 365-day condition): the statement is not shown (only the record's own terms may be), and 365 days never appears", !/365/.test(cond.v) && !kept(cond), cond.v);
     const nb = await run("neighbouring amount", turns([{ text: "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays up to S$5,000 if Daniel dies as a result of an accident.", from: "booklet" }]));
     check("currency proof (Repatriation's $5,000 put under the death allowance as S$5,000): never shown", !/5,000/.test(nb.v), nb.v);
     const nbc = await run("neighbouring condition", turns([{ text: "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses up to S$2,000 if Daniel's death occurs overseas.", from: "booklet" }]));

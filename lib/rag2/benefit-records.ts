@@ -122,8 +122,12 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
   for (const b of view.benefits) {
     const d = docs.find((x) => x.id === b.policy.id); if (!d) continue;
     const kind = b.printed.kind === "money" ? "printed_amount" : b.printed.kind === "percent" ? "printed_percent" : "printed_reference";
+    // (PR #54, rc-live-8: an amount printed with a bare "$" the document never explains is kept with its benefit, its
+    // currency an explicit unknown -- the record is incomplete, never dropped and never given a currency)
+    const unstated = b.currency?.status === "unstated";
     out.push({ id: hid(accountId, memberId, b.key), householdId: accountId, memberId, memberName, policy: policyOf(d), benefit: b.benefit.label.replace(/^[•▪●◦*–-]\s*/, ""), kind, applicability: b.applicability, printed: b.printed, asOf: b.asOf, conditions: b.conditions,
-      schedule: null, status: b.conflicts?.length ? "conflicting" : "resolved", unknowns: b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : [],
+      schedule: null, status: b.conflicts?.length ? "conflicting" : unstated ? "incomplete" : "resolved",
+      unknowns: [...(b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : []), ...(unstated ? [UNSTATED_CURRENCY] : [])],
       source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b, definitions: [] });
   }
   // percentage schedules on the person's linked documents (the same documents personBenefits reads)
@@ -169,11 +173,19 @@ export function rankRecords(records: BenefitRecord[], topic: string): BenefitRec
   return records.map((r, i) => ({ r, i, s: score(r) })).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.r);
 }
 
+/** PR #54 (rc-live-8): what is said for an amount printed with a bare "$" the document never explains. */
+export const UNSTATED_CURRENCY = "the document prints this amount with a bare “$” sign and does not say which currency";
+/** A printed amount as said to the household and the model: with its currency, or -- for a bare "$" the document never
+ * explains -- the figure with that currency stated as unknown (never "S$"). */
+export function printedAmount(p: { cents: number; currency: string; unit: string | null }): string {
+  if (!p.currency) return `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""} (printed with a bare “$” sign; the document does not say which currency)`;
+  return `${money(p.cents, p.currency)}${p.unit ? " " + p.unit : ""}`;
+}
 const money = (cents: number, currency: string) => `${currency === "SGD" ? "S$" : currency + " "}${(cents / 100).toLocaleString("en-SG", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 export const formatMoney = money;
 /** A compact record as the model sees it: identities, what is printed, the schedule rows and its base, what is unknown. */
 export function recordForModel(r: BenefitRecord): Record<string, unknown> {
-  const printed = r.printed?.kind === "money" ? `${money(r.printed.cents, r.printed.currency)}${r.printed.unit ? " " + r.printed.unit : ""}` : r.printed?.kind === "percent" ? `${r.printed.percent}%${r.printed.of ? " of the " + r.printed.of : ""}` : r.printed?.kind === "reference" ? `the ${r.printed.of}` : null;
+  const printed = r.printed?.kind === "money" ? printedAmount(r.printed) : r.printed?.kind === "percent" ? `${r.printed.percent}%${r.printed.of ? " of the " + r.printed.of : ""}` : r.printed?.kind === "reference" ? `the ${r.printed.of}` : null;
   const s = r.schedule;
   return { benefit_id: r.id, benefit: r.benefit, product: r.policy.product, insurer: r.policy.insurer, document: r.policy.personalProof ? "personal proof (lists this person)" : r.applicability === "amendment" ? "amendment" : "reference wording",
     kind: r.kind, ...(printed ? { printed } : {}), ...(r.asOf ? { as_of: r.asOf } : {}), ...(r.conditions.length ? { conditions: r.conditions } : {}), page: r.source.page,

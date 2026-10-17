@@ -33,7 +33,7 @@ import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, stated
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
-import { renderStatements } from "./statement-render";
+import { RENDERED, renderStatements } from "./statement-render";
 import { applicabilityOf } from "../applicability";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
@@ -729,6 +729,31 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     c.notes = [...c.notes.filter((n) => n !== DROPPED_NOTE), ...lines.filter((l) => !c.notes.includes(l))];
   };
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
+  /** PR #54 (rc-live-8): for each model statement the composer omitted whole, the one benefit record offered this turn
+   * that it is about -- its benefit_id, else the benefit it names (its benefit field or its text) in a document it
+   * cites -- as a benefit_terms statement to render; none when that is not exactly one record, when the answer already
+   * states that record's terms, or when the record's amounts conflict. */
+  const retainedTerms = (sentences: Record<string, unknown>[], dropped: { sentence: string; reason: string }[], subject: string): Record<string, unknown>[] => {
+    const norm = (t: unknown) => String(t ?? "").toLowerCase().replace(/[“”"’']/g, "").replace(/\s+/g, " ").trim();
+    const lost = dropped.filter((x) => !/said as printed instead$/.test(x.reason)).map((x) => norm(x.sentence)).filter((x) => x.length > 20);
+    const records = [...(ctx.benefitRecords?.values() ?? [])];
+    const stated = new Set(sentences.filter((x) => x?.kind === "benefit_terms").map((x) => String(x.benefit_id ?? "")));
+    const out: Record<string, unknown>[] = [];
+    for (const s of sentences) {
+      if (!s || typeof s !== "object" || s.kind === "benefit_terms" || s.kind === "calculation" || RENDERED.has(s)) continue;
+      const t = norm(s.text);
+      if (!t || !lost.some((x) => t.includes(x) || x.includes(t))) continue;
+      const who = typeof s.subject_id === "string" ? s.subject_id : subject;
+      const cited = new Set((Array.isArray(s.evidence_ids) ? s.evidence_ids : []).map((id) => state.evidence[String(id)]?.policyId).filter(Boolean));
+      const mine = records.filter((r) => r.memberId === who && r.status !== "conflicting" && r.kind !== "percentage_schedule");
+      let c = typeof s.benefit_id === "string" ? mine.filter((r) => r.id === s.benefit_id) : [];
+      if (!c.length) c = mine.filter((r) => r.benefit.length >= 8 && (norm(s.benefit) === norm(r.benefit) || t.includes(norm(r.benefit))) && cited.has(r.policy.id));
+      if (c.length !== 1 || stated.has(c[0].id)) continue;
+      stated.add(c[0].id);
+      out.push({ kind: "benefit_terms", benefit_id: c[0].id, subject_id: who, evidence_ids: [] });
+    }
+    return out;
+  };
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
     if (call.name === "final_answer" || call.name === "ask_user") for (const x of ((a.sentences ?? a.statements) as Record<string, unknown>[] | undefined) ?? []) {
@@ -1488,6 +1513,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         }
         if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
         let r = action(call);
+        // PR #54 (rc-live-8): a model statement about a benefit the server offered this turn that fails its check is
+        // omitted whole; the benefit's own validated terms are kept, written by the same renderer from its record
+        // (benefit_terms) -- never the model's failed words, and never a benefit the statement did not name.
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences)) {
+          const sentences = call.arguments.sentences as Record<string, unknown>[];
+          const extra = retainedTerms(sentences, r.terminal.composed.dropped, String(call.arguments.subject_id ?? state.subjectId ?? ""));
+          if (extra.length) {
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...extra] } };
+            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p2.length) {
+              await bindCitedFigures(again);
+              const r2 = action(again);
+              if (r2.terminal?.kind === "final") { r = r2; call.arguments = again.arguments; (trace.adjusted ??= []).push(`final_answer: kept the validated terms of ${extra.map((x) => String(x.benefit)).join(", ")} for a statement about it that failed its check`); }
+            }
+          }
+        }
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
           if (repair) { gateRepaired = true; beforeRepair = r.terminal; meter.grantRepairCall(); r = { result: { ok: false, error: repair } }; }
@@ -1695,6 +1736,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!shared.includes(anchorStem) || shared.length < 2) continue;
       const known = Object.keys(state.claim?.facts ?? {}).some((k) => new RegExp(`${anchorStem}.*(?:date|time)|(?:date|time).*${anchorStem}|event_date|incident_date`, "i").test(k)) || userTexts.some((u) => DATE_GIVEN.test(u));
       if (known) return r;
+      // PR #54 (after rc-live-8): a hypothetical event ("If Daniel died in an accident ...", "Suppose ...") has no date
+      // the household could give -- asking for one is a question they cannot answer; the printed terms are the answer.
+      const HYPOTHETICAL = /^\s*(?:if|suppose|supposing|what if|in (?:the )?case|were|should)\b/i;
+      if (HYPOTHETICAL.test(input.message) || Object.values(state.claim?.facts ?? {}).some((f) => f?.turn === state.turn && HYPOTHETICAL.test(String((f as { words?: string }).words ?? "")))) return r;
       const id = evidenceIdOf(state, b.source.evidence, "person_benefits");
       const doc = b.policy.product ?? "your document";
       const clause = (/\b(?:if|provided|when)\b.*$/i.exec(cond)?.[0] ?? cond).replace(/[.\s]+$/, "");

@@ -51,7 +51,7 @@ function finish(scenario: string, checks: Check[], b: ReturnType<typeof base>): 
 }
 /** Grader v2 (after rc-live-1, whose v1 grades passed answers that were not useful): questions the household cannot
  * answer, and contact / claim advice naming an insurer that is not behind one of the person's own policies. */
-export const GRADER_VERSION = "v6"; // v6 = v5 + FL4b (rc-live-8, scheme-membership expectation corrected); FL1-FL4 checks unchanged
+export const GRADER_VERSION = "v7"; // v7 = v6 + FL5a / FL5b (rc-live-9: FL4b's checks plus the next step); v6 = v5 + FL4b (rc-live-8, scheme-membership expectation corrected); FL1-FL4b checks unchanged
 /** v4 (applicability follow-up, rc-live-6, written before the run): every v3 check unchanged; adds gradeFL1 / gradeFL2 /
  * gradeFL3, which check the complete visible answers, the saved calculations, the withdrawals on the claim and the
  * pending state after each conversation -- not only the expected figures. */
@@ -341,7 +341,22 @@ export function gradeFL4b(id: string, conv: any): Graded {
   return finish(id, checks, b);
 }
 
-export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, FL4b: gradeFL4b, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
+/** FL5a / FL5b (rc-live-9, v7): FL4b's checks on the complete displayed answer, plus its next step -- the run log now
+ * records every next step, so the whole answer is graded:
+ *  - N1: at least one next step is shown, and it is a contact / claim step for the person's own insurer (Aldermoor Life
+ *    Ltd) -- never another insurer, never an amount. */
+export function gradeFL5(id: string, conv: any): Graded {
+  const g = gradeFL4b(id, conv);
+  const b = base(conv);
+  if (b.blocked || !b.turns.length) return g;
+  const steps = uniqueSteps(b.turns[0].answer?.nextSteps);
+  const checks = [...g.checks];
+  const ok = steps.length >= 1 && steps.some((x) => /\bcontact\b|\bclaim\b/i.test(x) && /Aldermoor Life/.test(x)) && steps.every((x) => !/S\$|\$\s?\d|SGD/.test(x));
+  checks.push({ id: "N1", dim: "U", name: "a next step is shown: contacting the person's own insurer (Aldermoor Life Ltd) about a claim, with no amount", ok, ...(!ok ? { detail: JSON.stringify(steps).slice(0, 1200) } : {}) });
+  return finish(id, checks, b);
+}
+
+export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, FL4b: gradeFL4b, FL5a: gradeFL5, FL5b: gradeFL5, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
   RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
 

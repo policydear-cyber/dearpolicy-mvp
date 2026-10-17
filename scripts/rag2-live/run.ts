@@ -35,6 +35,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { pool } from "@/lib/db/client";
+import { uniqueSteps } from "@/components/next-steps";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { LOOP_PROMPT_VERSION, SYSTEM_PROMPT } from "@/lib/rag2/loop/prompt";
 import { loopToolSpecs } from "@/lib/rag2/loop/loop";
@@ -222,7 +223,10 @@ async function main() {
         const relay = relayLog ? relayLines(relayLog, t0, Date.now()) : [];
         conv.turns.push({
           turn: i + 1, user: turn.user, jobStatus: job?.status ?? null, jobError: job?.error ?? null,
-          visible: answer ? [answer.summary, ...(answer.details ?? []), ...(answer.questions ?? []).map((q: any) => q.text)].filter(Boolean).join("\n") : null,
+          // (PR #54, after rc-live-8: the complete answer as the browser shows it -- summary, details, questions and every
+          // next step, de-duplicated as the page lists them -- so the run log compares with the saved answer whole)
+          visible: answer ? [answer.summary, ...(answer.details ?? []), ...(answer.questions ?? []).map((q: any) => q.text), ...uniqueSteps(answer.nextSteps)].filter(Boolean).join("\n") : null,
+          nextSteps: answer ? uniqueSteps(answer.nextSteps) : null,
           timings: { acceptedMs, firstAssistantPersistedMs: persisted ? new Date(persisted.created_at).getTime() - t0 : null, answerSeenMs, modelMs: calls.reduce((n: number, c: any) => n + (c.latencyMs ?? 0), 0), upstreamMs: relay.length ? relay.reduce((n, l) => n + (l.upstream_ms ?? 0), 0) : httpCalls.reduce((n: number, c: any) => n + (c.upstreamMs ?? 0), 0), relayMs: relay.reduce((n, l) => n + (l.relay_ms ?? 0), 0) },
           calls, httpCalls, modelExecutions: execs, relay,
           tokens: { input: httpCalls.reduce((n: number, c: any) => n + (c.usage?.input ?? 0), 0), output: httpCalls.reduce((n: number, c: any) => n + (c.usage?.output ?? 0), 0) },

@@ -5,7 +5,7 @@
  * Benefit. Values, evidence ids and benefit ids come from the real tools. No model call.
  */
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
-import { M, doc } from "./booklet";
+import { CDA, M, doc } from "./booklet";
 import { BKL1A, BKL1B, BKL3 as BKL3_RECORDED } from "./rc-live-5-recorded";
 
 export type BkScenario = { id: string; title: string; messages: string[]; turns: ScriptTurn[] };
@@ -98,6 +98,40 @@ export function bk4Turns(): ScriptTurn[] {
 }
 
 /** The browser replay (e2e/tests/reliable-chat-booklet.spec.ts, E2E_RAG2_HOUSEHOLD=booklet): the reported calls. */
+/** PR #54 (after rc-live-8): rc-live-8's question, verbatim, and the model's recorded calls (resolve_person; note_facts
+ * + person_benefits; three searches + policies_for), then the given final answer -- and, as recorded, the same answer
+ * again if the first is sent back. Its sentences are chosen from what the real tools returned (benefit ids, evidence). */
+export const RC8_U = "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?";
+export const RC8_UNC1 = "The booklet does not specify the exact supporting documents or forms beyond proof of death and the insurer’s prescribed documents, so the uploaded documents do not establish a specific checklist.";
+export const RC8_UNC2 = "The booklet is reference wording and the uploaded certificate does not confirm Daniel’s enrolment in the Core or Voluntary Scheme, so these documents alone do not establish that this benefit applies to him.";
+export const RC8_STEP = "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim.";
+/** The person_benefits record offered this turn for a benefit name in one document. */
+export const offeredId = (v: ScriptView, re: RegExp, policy: string): string => {
+  for (const o of v.turn) if (o.name === "person_benefits" && o.ok) for (const d of (o.result?.data?.documents ?? []) as any[]) if (d.policy_id === policy) for (const b of d.benefits ?? []) if (re.test(b.benefit) && b.benefit_id) return b.benefit_id;
+  return "none";
+};
+/** Every evidence id a tool returned this turn (as the model saw them). */
+export const idsOf = (v: ScriptView, name: string): string[] => { const out: string[] = []; const walk = (o: any) => { if (!o || typeof o !== "object") return; if (typeof o.evidence_id === "string") out.push(o.evidence_id); for (const x of Object.values(o)) walk(x); }; for (const o of v.turn) if (o.name === name && o.ok) walk(o.result); return [...new Set(out)]; };
+export function rc8Turns(sentences: (v: ScriptView) => Record<string, unknown>[], subject = D): ScriptTurn[] {
+  const final = (v: ScriptView) => [call("final_answer", { subject_id: subject, sentences: sentences(v), next_steps: [RC8_STEP] })];
+  return [{ user: /funeral/i, steps: [
+    () => [call("resolve_person", { mention: "Daniel" })],
+    () => [call("note_facts", { subject_id: subject, facts: [{ key: "death_scenario", value: "died in an accident", words: "If Daniel died in an accident" }] }),
+      call("person_benefits", { subject_id: subject, topic: "accidental death funeral expenses / funeral benefit" })],
+    () => [call("search_passages", { subject_id: subject, query: "Compassionate Death Allowance Benefit funeral expenses accidental death amount eligibility claim documents required death claim proof documents" }),
+      call("search_passages", { subject_id: subject, query: "Group Personal Accident accidental death benefit funeral expenses claim documents death certificate police report" }),
+      call("search_passages", { subject_id: subject, query: "death claim required documents funeral expenses compassionate death allowance" }),
+      call("policies_for", { subject_id: subject, topic: "accidental death funeral benefit" })],
+    final, final,
+  ] }];
+}
+/** rc-live-8's moves with the model selecting the booklet's own allowance (now offered) and the summary's row. */
+export const rc8Booklet = (): ScriptTurn[] => rc8Turns((v) => [
+  { kind: "benefit_terms", benefit_id: offeredId(v, /^Compassionate Death Allowance Benefit$/, doc("BOOKLET").id), subject_id: D, evidence_ids: [] },
+  { kind: "benefit_terms", benefit_id: offeredId(v, /^Compassionate Death Allowance Benefit$/, doc("SUMMARY").id), subject_id: D, evidence_ids: [] },
+  { kind: "uncertainty", text: RC8_UNC1, subject_id: D, evidence_ids: [hitOf(v, /prescribed form/)] },
+  { kind: "uncertainty", text: "The uploaded documents do not establish whether Daniel is in the Core Scheme or the Voluntary Scheme.", subject_id: D, evidence_ids: [hitOf(v, /Core Scheme/), ...idsOf(v, "policies_for")] }]);
+
 export const BOOKLET_SCENARIOS = (): BkScenario[] => [
   { id: "BK1", title: "uncertain hip / tibia: the recorded ask_user (no fact_key, no subject_id) -> one question -> the clarified illustration", messages: [BK1_U1, BK1_U2], turns: bk1Turns("recorded") },
   { id: "BK2", title: "Other Fracture: the Personal Accident sum insured, bound by the booklet's product section", messages: [BK2_U], turns: bk2Turns() },
@@ -105,4 +139,6 @@ export const BOOKLET_SCENARIOS = (): BkScenario[] => [
   // PR #54 follow-up: the rc-live-5 failures, with the model's recorded calls (./rc-live-5-recorded.ts)
   ...([["RL1a", BKL1A], ["RL1b", BKL1B]] as const).map(([id, turns]) => ({ id, title: `rc-live-5 ${id === "RL1a" ? "BKL1a" : "BKL1b"} as recorded: closed hip / tibia -> one case question -> S$3,750, no Other Fracture question`, messages: turns.map((t) => t.user as string), turns: [...turns] })),
   { id: "RL3", title: "rc-live-5 BKL3 as recorded: the allowance, and the dated certificate listing instead of a false enrolment caveat", messages: [BKL3_RECORDED[0].user as string], turns: BKL3_RECORDED },
+  // PR #54 (after rc-live-8), recorded passage only (BOOKLET_CDA=recorded)
+  ...(CDA === "recorded" ? [{ id: "RC8", title: "rc-live-8's moves, the model selecting the booklet's allowance: name, conditions, honest currency, next step", messages: [RC8_U], turns: rc8Booklet() }] : []),
 ];

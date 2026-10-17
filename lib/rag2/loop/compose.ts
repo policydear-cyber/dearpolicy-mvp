@@ -9,7 +9,7 @@
  * dropped here -- with an honest note -- before the gate ever sees it. Nothing is added: no figure is ever written by
  * this code, only bound.
  */
-import { isHeadingLine, productSection } from "../headings";
+import { isHeadingLine, paragraphs, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
 import { RENDERED, RENDERED_STEPS } from "./statement-render";
@@ -544,6 +544,40 @@ function namedDocs(text: string, ctx: Ctx): string[] {
   const lowerText = text.toLowerCase();
   return [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const words = contentWords(n).filter((w) => w.length >= 4 && !/^(?:polic|plan|schedul|certificat|document|wording|scanned)/.test(w)); const hits = words.filter((w) => lowerText.includes(w)); return words.length > 0 && hits.length >= Math.min(2, words.length); }).map(([id]) => id);
 }
+/** PR #54 (rc-live-8): why a figure is stated for one document while its cited source is another (null when it is not):
+ * the clause stating the figure names a household document -- its whole product name, or a word of its name no other
+ * current document's name has ("Booklet", "Summary") -- and every cited passage printing that figure is from a
+ * document the clause does not name. A separate summary's "S$2,000" is never the booklet's amount. */
+export function wrongDocumentFigure(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "policyNames" | "state">): string | null {
+  const names = [...(ctx.policyNames ?? new Map<string, string>())];
+  if (names.length < 2) return null;
+  // (a document is named by its whole name, or by the KIND of document its name says -- "booklet", "summary" -- when no
+  // other current document's name says it; a benefit or product word is never a document's name)
+  const KIND = /^(?:booklets?|summary|summaries|certificates?|endorsements?|schedules?|brochures?|wordings?|statements?|contracts?|letters?)$/;
+  const words = (n: string) => new Set((n.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => KIND.test(w)));
+  const named = (raw: string) => {
+    // (a quotation is the document's wording, not the sentence naming a document)
+    const clause = raw.replace(/“[^”]*”|"[^"]*"/g, " ");
+    const lc = clause.toLowerCase(), have = words(clause);
+    return names.filter(([id, n]) => {
+      if (n.length >= 8 && lc.includes(n.toLowerCase())) return true;
+      const others = new Set(names.filter(([o]) => o !== id).flatMap(([, m]) => [...words(m)]));
+      return [...words(n)].some((w) => !others.has(w) && have.has(w));
+    }).map(([id]) => id);
+  };
+  for (const f of moneyFiguresIn(text)) {
+    const clause = text.split(/;\s+/).find((c) => c.includes(f.raw)) ?? text;
+    const docs = named(clause);
+    if (!docs.length) continue;
+    const digits = /\d[\d,]*(?:\.\d+)?/.exec(f.raw)?.[0]?.replace(/,$/, "") ?? "";
+    if (!digits) continue;
+    const printing = cited.filter((e) => (e.passage?.text ?? "").includes(digits));
+    if (!printing.length || printing.some((e) => docs.includes(e.policyId))) continue;
+    const nameOf = (id: string) => ctx.policyNames?.get(id) ?? ctx.state.docNames?.[id] ?? "another document";
+    return `states ${f.raw} for the ${nameOf(docs[0])}, but the cited passage printing it is from the ${nameOf(printing[0].policyId)}`;
+  }
+  return null;
+}
 /** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands), and
  * the read evidence of the documents it names (cited with it, so the household sees which document was checked). */
 /** V1.1 (grounded negatives): words that say what is absent, not which thing -- left out of the topic check. */
@@ -589,7 +623,10 @@ function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">
   const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
   if (own) return own;
   // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
-  const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
+  // (PR #54, rc-live-8: a bullet / tab row "•<TAB><name>*<TAB>Up to S$2,000" is named by its first text cell -- never
+  // the bullet -- without the footnote marker its name carries)
+  const cells = line.trim().split(/\t+| {3,}/);
+  const first = (/[A-Za-z]{2}/.test(cells[0] ?? "") ? cells[0] : cells.find((c) => /[A-Za-z]{3}/.test(c) && !/\d/.test(c)) ?? cells[0] ?? "").replace(/\s*[*^#†‡]+$/, "");
   // V1.4: never a cell naming a household member (a roster row's name cell).
   const isPerson = (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(first)));
   if (first && first !== line.trim() && !/\d/.test(first) && !isPerson && benefitWords(first).size > 0) return first;
@@ -1001,6 +1038,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // PR #54: an amount or condition printed under a neighbouring numbered section of the same page.
     const neighbour = neighbouringSectionClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
     if (neighbour) { drop(text, neighbour); continue; }
+    const otherDoc = wrongDocumentFigure(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+    if (otherDoc) { drop(text, otherDoc); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
     let relatedCurrency = false;
@@ -1377,7 +1416,7 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
     const own = Object.values(ctx.state.evidence).filter((e) => e.policyId === rec.policyId && !ctx.stale?.has(e.id) && !e.table);
     // V1.2: a schedule row ("Death due to Accident     100%": laid out in columns, or ending in its percentage) is a
     // benefit, not a clause limiting cover to accidents.
-    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
+    const linesOf = (e: (typeof own)[number]) => paragraphs(withoutInstructions(e.passage.text)).flatMap((x) => x.split(/(?<=[.;])\s+/)).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
     // The clause that limits cover to accidents ("caused solely by an accident"), else one that says accident only.
     let pick: { e: (typeof own)[number]; line: string } | null = null;
     for (const test of [(l: string) => CAUSE_LIMIT.test(l), (l: string) => /\bonly\b/i.test(l)]) {
@@ -1601,7 +1640,7 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
     const noun = /\b([A-Za-z-]+)\s+benefit\b/i.exec(label)?.[1]?.toLowerCase() ?? null;
     for (const e of Object.values(ctx.state.evidence)) {
       if (e.policyId !== b.policyId || ctx.stale?.has(e.id) || e.table) continue;
-      for (const line of withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/)) {
+      for (const line of paragraphs(withoutInstructions(e.passage.text)).flatMap((x) => x.split(/(?<=[.;])\s+/))) {
         const sentence = line.replace(/\s+/g, " ").trim();
         if (!sentence || seen.has(sentence) || moneyFiguresIn(sentence).length) continue;
         const have = new Set(contentWords(sentence));

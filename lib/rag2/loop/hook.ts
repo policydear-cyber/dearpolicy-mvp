@@ -14,7 +14,7 @@ import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, LATER_DATE_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -26,7 +26,8 @@ type Save = (args: { conversation: ChatContext["conversation"]; token: ChatConte
 export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.";
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 /** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
-const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE]);
+// (PR #54: a dated listing said before a question keeps its later-date limit, as it does in a final answer)
+const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE, LATER_DATE_NOTE]);
 
 // ------------------------------------------------------------------ Round 7 (A3): when the gate rejects a figure
 const squashT = (t: string) => (t ?? "").replace(/\s+/g, " ").trim();

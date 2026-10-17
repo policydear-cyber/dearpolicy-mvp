@@ -18,7 +18,7 @@ import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
 // --- Agent K: calculation tool (separate block; coordinator merges) ---
 import { CALC_TOOLS } from "./calc/tool";
-import { rankRecords, recordForModel, resolveBenefitRecords, type BenefitRecord } from "./benefit-records";
+import { printedAmount, UNSTATED_CURRENCY, rankRecords, recordForModel, resolveBenefitRecords, type BenefitRecord } from "./benefit-records";
 import { evaluateBenefit } from "./evaluate";
 // --- end Agent K ---
 import { coInsurance, deductible, difference, householdFigure, minCap, perDay, percentage, product, sum, type ComputeOk, type Operand, type TableValueOperand } from "./compute";
@@ -170,7 +170,7 @@ export const RAG_TOOLS: ToolDef[] = [
       for (const r of records) (ctx.benefitRecords ??= new Map()).set(r.id, r);
       const idOf = new Map(records.filter((r) => r.personBenefit).map((r) => [r.personBenefit!.key, r.id]));
       const schedules = rankRecords(records.filter((r) => r.kind === "percentage_schedule"), String(a.topic ?? "") + " " + (ctx.topicText ?? "")).slice(0, 4).map(recordForModel);
-      const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? `${b.printed.currency === "SGD" ? "S$" : b.printed.currency + " "}${b.printed.amount.toLocaleString("en-SG")}${b.printed.unit ? " " + b.printed.unit : ""}` : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
+      const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? printedAmount(b.printed) : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
       const byDoc = new Map<string, PersonBenefit[]>();
       for (const b of view.benefits) byDoc.set(b.policy.id, [...(byDoc.get(b.policy.id) ?? []), b]);
       const documents = [];
@@ -190,6 +190,8 @@ export const RAG_TOOLS: ToolDef[] = [
             }
           }
           benefits.push({ ...(idOf.get(b.key) ? { benefit_id: idOf.get(b.key) } : {}), benefit: b.benefit.label, printed: fmt(b), applies: b.applicability === "person_row" ? "printed on this person's own row" : b.applicability === "amendment" ? "an amendment naming this person" : "wording for every insured person (not a figure about this person alone)",
+            ...(b.benefit.section && b.benefit.section !== b.benefit.label ? { section: b.benefit.section } : {}),
+            ...(b.currency && b.currency.status !== "printed" ? { currency: b.currency.status === "unstated" ? UNSTATED_CURRENCY : `${b.printed.kind === "money" ? b.printed.currency : ""} (${b.currency.basis})` } : {}),
             as_of: b.asOf, conditions: b.conditions, page: b.source.page, ...(valueId ? { value_id: valueId } : {}), ...(b.amendedBy ? { amended: `amended to ${b.amendedBy.currency === "SGD" ? "S$" : b.amendedBy.currency + " "}${b.amendedBy.amount.toLocaleString("en-SG")} with effect from ${b.amendedBy.effective} by an endorsement of this policy (page ${b.amendedBy.page}); this row's amount is the amount before that date` } : {}),
             ...(b.amends ? { amends: `replaces ${b.amends.currency === "SGD" ? "S$" : b.amends.currency + " "}${b.amends.amount.toLocaleString("en-SG")}${b.amends.asOf ? ` (printed as of ${b.amends.asOf})` : ""} from ${b.asOf}, as this endorsement's wording says` } : {}),
             ...(b.conflicts?.length ? { conflicts: b.conflicts.map((c) => `${c.currency} ${c.amount.toLocaleString("en-SG")} on page ${c.page} of another document of this policy${c.effective ? ` (${c.effective})` : ""}`) } : {}), evidence: b.source.evidence });
