@@ -1,0 +1,368 @@
+[
+  {
+    "scenario": "BKL1a",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "B1Q",
+        "dim": "U",
+        "name": "turn 1: exactly one question, about which bone / case it is (hip vs tibia / leg)",
+        "ok": true
+      },
+      {
+        "id": "B1C",
+        "dim": "C",
+        "name": "turn 1: no amount chosen before the case is known (no S$3,750 / S$2,500 / S$225,000 / S$150,000), no calculation saved",
+        "ok": true
+      },
+      {
+        "id": "B1K",
+        "dim": "K",
+        "name": "turn 1: the Simple Fracture terms that decide it (Hip 75%, the leg row 50%, of the S$5,000 limit)",
+        "ok": true
+      },
+      {
+        "id": "B1U",
+        "dim": "U",
+        "name": "turn 1: never the generic model-use limit text",
+        "ok": true
+      },
+      {
+        "id": "B2C",
+        "dim": "C",
+        "name": "turn 2: the illustration S$3,750 (Hip 75% x S$5,000), conditional",
+        "ok": true
+      },
+      {
+        "id": "B2S",
+        "dim": "S",
+        "name": "turn 2: from a saved calculation that recomputes to S$3,750, bound to the booklet",
+        "ok": true
+      },
+      {
+        "id": "B2U",
+        "dim": "U",
+        "name": "turn 2: no further question; the case question is cleared; no 'couldn't confirm'",
+        "ok": false,
+        "detail": "If the Simple Fracture benefit applies to Daniel's case “Hip” (as you described: “the X-ray confirms it is his hip.”), the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision, and only for an injury the insurer accepts as caused by an accident (the policy says “We will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident”). The Group Insurance Benefits Booklet (page 8) pays the Other Fracture as a percentage of Daniel's own sum insured (S$300,000 on the certificate) for each listed case: Skull (Other Fracture) 100%; Hip (Other Fracture) 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%.\nDoes Daniel’s diagnosis meet the booklet’s definition of “Hip” for the Other Fracture benefit, as determined by the insurer’s medical assessment?"
+      },
+      {
+        "id": "CQ1",
+        "dim": "U",
+        "name": "turn 1: no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "CQ2",
+        "dim": "U",
+        "name": "turn 2: no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R2",
+        "dim": "U",
+        "name": "turn 2: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN2",
+        "dim": "C",
+        "name": "turn 2: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O2",
+        "dim": "U",
+        "name": "turn 2: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P2",
+        "dim": "U",
+        "name": "turn 2: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G2",
+        "dim": "S",
+        "name": "turn 2: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "BKL2",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "O1C",
+        "dim": "C",
+        "name": "S$225,000 = 75% of Daniel's Group Personal Accident sum insured (S$300,000); never S$375,000 / S$150,000 / S$200,000",
+        "ok": true
+      },
+      {
+        "id": "O1S",
+        "dim": "S",
+        "name": "from a saved calculation that recomputes to S$225,000, its S$300,000 bound to the certificate",
+        "ok": true
+      },
+      {
+        "id": "O1U",
+        "dim": "U",
+        "name": "no contradiction (no 'not established' / 'unresolved' base beside the amount), no question, no 'couldn't confirm'",
+        "ok": true
+      },
+      {
+        "id": "OCQ",
+        "dim": "U",
+        "name": "no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "BKL3",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "D1K",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named, with funeral expenses and its condition (death from an Accident) and proof of death",
+        "ok": true
+      },
+      {
+        "id": "D1C",
+        "dim": "C",
+        "name": "the amount is never S$2,000 (the booklet's $ names no currency); nothing from Repatriation ($5,000) stated for it",
+        "ok": true
+      },
+      {
+        "id": "D1U",
+        "dim": "U",
+        "name": "useful: no 'couldn't confirm', no generic limit text, no question unless the documents depend on a fact the household can give",
+        "ok": true
+      },
+      {
+        "id": "DCQ",
+        "dim": "U",
+        "name": "no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "BKL1b",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "B1Q",
+        "dim": "U",
+        "name": "turn 1: exactly one question, about which bone / case it is (hip vs tibia / leg)",
+        "ok": true
+      },
+      {
+        "id": "B1C",
+        "dim": "C",
+        "name": "turn 1: no amount chosen before the case is known (no S$3,750 / S$2,500 / S$225,000 / S$150,000), no calculation saved",
+        "ok": true
+      },
+      {
+        "id": "B1K",
+        "dim": "K",
+        "name": "turn 1: the Simple Fracture terms that decide it (Hip 75%, the leg row 50%, of the S$5,000 limit)",
+        "ok": true
+      },
+      {
+        "id": "B1U",
+        "dim": "U",
+        "name": "turn 1: never the generic model-use limit text",
+        "ok": true
+      },
+      {
+        "id": "B2C",
+        "dim": "C",
+        "name": "turn 2: the illustration S$3,750 (Hip 75% x S$5,000), conditional",
+        "ok": true
+      },
+      {
+        "id": "B2S",
+        "dim": "S",
+        "name": "turn 2: from a saved calculation that recomputes to S$3,750, bound to the booklet",
+        "ok": true
+      },
+      {
+        "id": "B2U",
+        "dim": "U",
+        "name": "turn 2: no further question; the case question is cleared; no 'couldn't confirm'",
+        "ok": false,
+        "detail": "Thanks for the update. If the Simple Fracture benefit applies to Daniel's case “Hip” (as you described: “the X-ray confirms it is his hip”), the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Benefits Booklet; it is an illustration from the document's terms, not a payment or an insurer's decision, and only for an injury the insurer accepts as caused by an accident (the policy says “We will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident”). The Group Insurance Benefits Booklet (page 8) pays the Other Fracture as a percentage of Daniel's own sum insured (S$300,000 on the certificate) for each listed case: Skull (Other Fracture) 100%; Hip (Other Fracture) 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%.\nFor Daniel’s Other Fracture benefit, does the confirmed diagnosis meet the booklet’s definition of “Hip” or “Leg”?"
+      },
+      {
+        "id": "CQ1",
+        "dim": "U",
+        "name": "turn 1: no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "CQ2",
+        "dim": "U",
+        "name": "turn 2: no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "R2",
+        "dim": "U",
+        "name": "turn 2: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN2",
+        "dim": "C",
+        "name": "turn 2: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O2",
+        "dim": "U",
+        "name": "turn 2: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P2",
+        "dim": "U",
+        "name": "turn 2: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G2",
+        "dim": "S",
+        "name": "turn 2: the save-time gate rejected nothing",
+        "ok": true
+      }
+    ],
+    "note": null
+  }
+]

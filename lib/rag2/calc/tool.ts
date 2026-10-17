@@ -212,7 +212,11 @@ export async function runCalculate(ctx: ToolContext, args: Record<string, unknow
       // V1.2: a sum insured read from another document of the policy (a group certificate listing several products) must
       // be the one printed for THIS document's product -- the Group Term Life row is not the Group Personal Accident sum
       // insured. The product it is printed under must share a distinctive word with the calculation document's product.
-      const linkProblem = sumInsuredLink(sum, doc, ctx.values.get(String(a.sum_insured_value_id ?? a.base_value_id))?.selected?.benefit ?? null);
+      // (Actual-library findings: a generic booklet's title names no product; the server bound this row to the schedule by
+      // the product section the schedule is printed in -- that binding, made by evaluate_benefit, is the product link.)
+      const sumVid = String(a.sum_insured_value_id ?? a.base_value_id);
+      const printedUnder = ctx.values.get(sumVid)?.selected?.benefit ?? null;
+      const linkProblem = printedUnder && ctx.sectionBound?.get(sumVid) === printedUnder ? null : sumInsuredLink(sum, doc, printedUnder);
       if (linkProblem) return fail(linkProblem);
       // A fixed limit passed as the base of a percentage of the Sum Insured is refused.
       if (pctBase?.kind === "sum_insured" && /\blimit\b/i.test(sum.operand.benefit) && !/sum (?:insured|assured)/i.test(sum.operand.benefit)) return fail(`lump_sum: the percentage is of the Sum Insured (“${pctBase.words}”), not of ${sum.operand.benefit}`);

@@ -9,6 +9,7 @@
  * dropped here -- with an honest note -- before the gate ever sees it. Nothing is added: no figure is ever written by
  * this code, only bound.
  */
+import { isHeadingLine, paragraphs, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
 import { RENDERED, RENDERED_STEPS } from "./statement-render";
@@ -182,7 +183,7 @@ const clauseStems = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) 
  * statement is then cited and quoted with the amount. Without one, the clause is taken out (another document printing
  * S$ for a similar line is not that document's currency). Null when no clause does this.
  */
-export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state">): { kept: string; reason: string; basis: EvidenceRef | null } | { dropped: string } | null {
+export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state">): { kept: string; reason: string; basis: EvidenceRef | null } | { dropped: string; asPrinted?: string } | null {
   for (const clause of clausesOf(text)) for (const f of moneyFiguresIn(clause)) {
     if (f.currency !== "SGD") continue;
     const lines = cited.flatMap((e) => evidenceTextOf(e).split(/\n+|(?<=\.)\s+(?=[A-Z])/).map((line) => ({ e, line, form: printedForm(line, f.value) }))).filter((x) => x.form);
@@ -204,9 +205,45 @@ export function bareCurrencyClaim(text: string, cited: EvidenceRef[], ctx: Pick<
       return { kept: text.replace(/[.!?]?\s*$/, "") + ` (${docName} prints this amount without a currency sign and states: “${decl.replace(/[.\s]+$/, "")}”).`, reason: "", basis };
     }
     const reason = `states ${f.raw} from ${docName}, which prints that amount with a bare $ and does not state its currency`;
-    return { dropped: reason };
+    // PR #54 (rc-live-7: the model wrote "up to S$2,000" for the booklet's bare "$2,000" and the whole supported benefit
+    // was lost): the statement as the document prints it -- the bare "$" restored -- for bareAmountClaim to say honestly.
+    const raw = f.raw.replace(/[.,;:]+$/, "");
+    return { dropped: reason, asPrinted: text.replace(raw, raw.replace(/^(?:S\$|SGD\s?)\s?/i, "$")) };
   }
   return null;
+}
+/**
+ * Actual-library findings (16 Oct, the Compassionate Death Allowance Benefit: "funeral expenses incurred, up to $2,000"):
+ * a statement giving an amount with a bare "$", as its source line prints it. A bare "$" does not establish SGD. The
+ * currency is established only by the document's own currency statement (then said in that currency, the statement
+ * cited -- bareCurrencyClaim), or by the same document printing the SAME benefit's same amount with its currency (a
+ * benefit table line under that benefit's name; then said in that currency, that line cited). Otherwise the benefit and
+ * its terms are kept and the amount is said as printed, with its currency named as unknown -- never dropped whole and
+ * never shown as S$. Null when the statement states no bare-"$" amount its cited lines print that way.
+ */
+export function bareAmountClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryText" | "libraryPages" | "policyNames" | "state" | "people">): { text: string; basis: EvidenceRef | null } | null {
+  let out = text, basis: EvidenceRef | null = null, changed = false;
+  for (const f of moneyFiguresIn(text)) {
+    if (f.currency !== "$") continue;
+    const src = cited.flatMap((e) => evidenceTextOf(e).split(/\n+/).map((line) => ({ e, line }))).find((x) => printedForm(x.line, f.value) === "bare");
+    if (!src) continue;
+    const raw = f.raw.replace(/[.,;:]+$/, "");
+    const docText = ctx.libraryText?.get(src.e.policyId) ?? "";
+    if (currencyDeclarationLine(docText)) { out = out.replace(raw, "S" + raw); changed = true; continue; }
+    // the benefit the bare line is printed for (its section heading), and a line of the same document printing that
+    // benefit's same amount with its currency
+    const label = tidyLabel((lineLabel(src.e.policyId, src.line, ctx) ?? "").replace(/^\s*(?:section|part|clause)\s+[\w.]+\s*[-–:]\s*/i, ""));
+    const explicit = label && benefitWords(label).size ? docText.split("\n").find((l) => printedForm(l, f.value) === "explicit" && namesBenefit(l, label)) : undefined;
+    if (explicit) {
+      const lib = ctx.libraryPages?.get(src.e.policyId);
+      const pg = lib?.pages.find((x) => x.text.includes(explicit));
+      const ev = pg ? evidenceFor({ policyId: src.e.policyId, documentHash: lib!.hash, page: pg.page, pageText: pg.text, passage: explicit, subjectId: null }) : null;
+      if (ev) { out = out.replace(raw, "S" + raw); basis = ev; changed = true; continue; }
+    }
+    out = out.replace(raw, `${raw.replace(/^\$\s?/, "")} (printed with a “$” sign; the document does not say which currency)`);
+    changed = true;
+  }
+  return changed ? { text: out, basis } : null;
 }
 const AMOUNT_ABSENT = [
   /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t)\s+(?:provide|state|show|list|give|include|print|specify|mention|contain|establish|confirm)\b[^.;]{0,80}?\b(?:sum insured|sum assured|insured amount|amount of cover|cover amount|coverage amount)\b/i,
@@ -230,6 +267,77 @@ export function amountAbsenceContradiction(text: string, subjectId: string | nul
   const who = ctx.people?.find((p) => p.id === subjectId)?.names[0] ?? "this person";
   const amount = hit.printed.currency === "SGD" ? `S$${hit.printed.amount.toLocaleString("en-US")}` : `${hit.printed.currency} ${hit.printed.amount.toLocaleString("en-US")}`;
   return `says the documents do not give ${who}'s ${hit.benefit.label} amount, but ${who}'s ${hit.policy.product ?? "certificate"} lists ${amount}${hit.asOf ? ` as of ${hit.asOf}` : ""} (page ${hit.source.page})`;
+}
+/**
+ * PR #54 follow-up (rc-live-5 BKL3: "the uploaded documents do not confirm Daniel's enrolment in the group scheme" while
+ * his certificate lists him): a negative or uncertain statement about whether a person is enrolled, listed or covered is
+ * checked against THAT person's own certificate rows in this household's documents. When a certificate lists them, the
+ * statement is replaced by the dated fact -- the certificate lists them under the product, as of its date -- and that
+ * this alone does not establish cover on a later date. A statement limited to a date ("cover on the date of death is not
+ * established") is kept; so is one about a person no certificate of theirs lists. Another household's certificate, or
+ * another member's row, never counts. The product scope of a wording passage cited in the answer (a paragraph benefit)
+ * comes from that document's own section headings, never from its title.
+ */
+export const LATER_DATE_NOTE = "A dated certificate shows who it listed on that date; it does not by itself establish cover on a later date.";
+const ENROL_NEG = [
+  /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|list|name|include|record|evidence|prove|mention|verify)\w*\b[^.;]{0,90}?\b(?:enrol\w*|membership|a member|insured person|is insured|participat\w*|(?:is|are|was) (?:listed|named|covered))\b/i,
+  /\b(?:enrol\w*|membership|participation)\b[^.;]{0,50}\b(?:is|are|was|were|remains?)\s+(?:not\s+(?:confirmed|established|shown|known|verified)|unconfirmed|unknown|unclear|unverified)\b/i,
+  /\bunconfirmed\s+(?:enrol\w*|membership|participation)\b/i,
+  /\b(?:not|never)\s+(?:listed|named|enrol\w*)\s+(?:on|in|under)\b/i,
+];
+/** PR #54 (after rc-live-9 FL5b): "these documents do not establish that this funeral benefit applies to him" -- a
+ * statement about whether a documented benefit applies to the person, which runs together three different things: the
+ * benefit the wording documents, the person's DATED certificate listing, and eligibility for the event now. */
+const APPLIES_NEG = /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|prove|verify)\w*\s+(?:that\s+|whether\s+)?(?:this|the|that|his|her|their|any)\s+(?:[\w’'-]+\s+){0,4}?(?:benefit|allowance|cover|coverage)\s+(?:\w+\s+){0,2}?(?:applies|apply|would apply|is payable|covers)\s+(?:to|for)\b/i;
+export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages">, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
+  // (a statement that also says the person's enrolment or listing is unconfirmed is answered by the dated listing, as
+  // before; an applicability statement alone keeps its own question beside the listing)
+  const enrol = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
+  const applies = !enrol && APPLIES_NEG.test(text);
+  const m = enrol ?? (applies ? APPLIES_NEG.exec(text) : null);
+  if (!m || !subjectId || !ctx.benefits) return null;
+  if (DATED_LIMITATION.test(text)) return null;
+  const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.policy.personalProof && b.memberId === subjectId);
+  if (!rows.length) return null;
+  // What the enrolment is said to be IN: a certificate's listing shows the scheme and the products it lists. Enrolment
+  // for something else -- a particular benefit, the applicable / Core / Voluntary part of a scheme -- is not what the
+  // listing shows, and stays as said.
+  if (!applies && /\b(?:applicable|core|voluntary|optional|sub-?scheme)\b[^.;]{0,40}\benrol\w*/i.test(text)) return null;
+  const target = applies ? null : /\benrol\w*\s+(?:for|in|under|on|with|into)\s+([^,.;]{1,70})/i.exec(text)?.[1] ?? null;
+  if (target) {
+    const t = target.toLowerCase();
+    const listed = [...new Set(rows.map((b) => b.benefit.label))].some((l) => { const w = (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((x) => x !== "group"); return w.length > 0 && w.every((x) => t.includes(x)); });
+    const scheme = /\b(?:scheme|policy|certificate)\b/.test(t) && !/\b(?:benefit|allowance|core|voluntary|optional|section|part)\b/.test(t);
+    if (!listed && !scheme) return null;
+  }
+  // the product the answer's wording is about, as that wording's own section headings name it
+  const labels = [...new Set(rows.map((b) => b.benefit.label))];
+  let scope: string | null = null;
+  for (const e of cited) {
+    if (rows.some((b) => b.policy.id === e.policyId)) continue;
+    const lib = ctx.libraryPages?.get(e.policyId);
+    if (!lib) continue;
+    const before = [...lib.pages.filter((p) => p.page < e.passage.onPage).sort((a, b) => a.page - b.page).map((p) => p.text), (lib.pages.find((p) => p.page === e.passage.onPage)?.text ?? "").slice(0, e.passage.start)].join("\n");
+    const sec = productSection(before, labels);
+    if (sec) { scope = sec.label; break; }
+  }
+  const inScope = scope ? rows.filter((b) => b.benefit.label === scope) : rows;
+  if (!inScope.length) return null;
+  const latest = [...inScope].sort((a, b) => String(b.asOf ?? "").localeCompare(String(a.asOf ?? "")))[0];
+  const who = ctx.people?.find((p) => p.id === subjectId)?.names.at(-1) ?? "this person";
+  const under = [...new Set(inScope.filter((b) => b.policy.id === latest.policy.id).map((b) => b.benefit.label))];
+  const doc = latest.policy.product ?? "certificate";
+  // (the date as the certificate prints it on that row)
+  const printedDate = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{4}\b|\b\d{1,2}\s+[A-Z][a-z]+\s+\d{4}\b/.exec(latest.source.evidence.passage.text)?.[0] ?? latest.asOf;
+  const listing = `${who}'s certificate lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""}`;
+  // (an applicability statement keeps its own question -- whether the benefit applies to the event now -- stated apart
+  // from the dated listing, never merged into "not covered" or "covered")
+  if (applies) return { evidence: latest.source.evidence, benefit: benefitName,
+    text: `${listing}; whether ${benefitName ? `the ${benefitName}` : "this benefit"} applies to ${who} for this event is not established by the documents.`,
+    reason: `runs together the documented benefit, ${who}'s dated certificate listing (${doc}, page ${latest.source.page}) and eligibility for this event; said as those separate terms instead` };
+  return { evidence: latest.source.evidence,
+    text: `${listing}.`,
+    reason: `says ${who}'s enrolment or listing is not confirmed, but ${who}'s ${doc} lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""} (page ${latest.source.page})` };
 }
 const TRIP_NOT_COVERED = /\b(?:does not|do not|doesn['’]t|don['’]t|would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b|\b(?:is|are|was|were|would be)\s+not\s+(?:covered|insured)\b|\bisn['’]t covered\b|\bno cover(?:age)? (?:for|on|during)\b|\bexclud(?:es|ed)\b/i;
 const TRIP_NOT_SHOWN = /\b(?:does|do|did)\s+not\s+(?:document|show|establish|evidence|record|prove)\s+(?:any\s+)?(?:[\w’']+\s+){0,2}?cover(?:age)?\b|\bnot shown to (?:be )?cover(?:ed)?\b|\bno documented cover\b/i;
@@ -337,6 +445,55 @@ export function borrowedCondition(text: string, passages: (string | { text: stri
   }
   return null;
 }
+/** PR #54 (after rc-live-7): the numbered sections of a page ("Section 5 - Compassionate Death Allowance Benefit",
+ * "Section 6 - Repatriation"), each with the lines under it. */
+const SECTION_HEAD = /^\s*(?:section|part|clause)\s+[\w.]+\s*[-–—:]\s*(.+?)\s*$/i;
+function sectionsOf(pageText: string): { heading: string; text: string }[] {
+  const out: { heading: string; text: string }[] = [];
+  for (const line of pageText.split(/\n+/)) {
+    const m = SECTION_HEAD.exec(line);
+    if (m) out.push({ heading: m[1], text: "" });
+    else if (out.length) out[out.length - 1].text += line + "\n";
+  }
+  return out;
+}
+const CONDITION_CLAUSE = /\b(?:if|when|where|provided(?: that)?|only if)\b[^,;.]*/gi;
+const CONDITION_STOP = new Set(["their", "there", "would", "could", "should", "about", "under", "being", "after", "before", "which", "these", "those", "result", "results", "person", "insured"]);
+/**
+ * A statement naming ONE numbered section's benefit of a cited page that states an amount, or a condition, the page
+ * prints only under ANOTHER section (Repatriation's "$5,000" or "if death occurs overseas" stated for the Compassionate
+ * Death Allowance because the two sections share a page). Null when the sentence names no single section of the page,
+ * or when what it states is printed under the section it names.
+ */
+export function neighbouringSectionClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryPages" | "people">): string | null {
+  const names = new Set((ctx.people ?? []).flatMap((p) => p.names).flatMap((n) => (n ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? []));
+  for (const e of cited) {
+    const pg = ctx.libraryPages?.get(e.policyId)?.pages.find((x) => x.page === e.page.start);
+    if (!pg) continue;
+    const secs = sectionsOf(pg.text);
+    if (secs.length < 2) continue;
+    const named = secs.filter((x) => benefitWords(x.heading).size > 0 && namesBenefit(text, x.heading));
+    if (named.length !== 1) continue;
+    const own = named[0], others = secs.filter((x) => x !== own);
+    for (const f of moneyFiguresIn(text)) {
+      const inOwn = !!printedForm(own.text, f.value);
+      const elsewhere = others.find((x) => printedForm(x.text, f.value));
+      if (!inOwn && elsewhere) return `states ${f.raw} for ${own.heading}, but the page prints that amount only under ${elsewhere.heading}`;
+    }
+    // A condition clause is another section's when ALL its content words are printed under that section and some of
+    // them are not printed under the section the sentence names ("if death occurs overseas": Repatriation's own words).
+    const has = (t: string, w: string) => t.includes(w.replace(/s$/, ""));
+    const ownLower = (own.heading + "\n" + own.text).toLowerCase();
+    for (const m of text.matchAll(CONDITION_CLAUSE)) {
+      const words = (m[0].toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !CONDITION_STOP.has(w) && !names.has(w) && !["only", "when", "where", "provided"].includes(w));
+      const missing = words.filter((w) => !has(ownLower, w));
+      if (!words.length || !missing.length) continue;
+      const other = others.find((x) => { const o = (x.heading + "\n" + x.text).toLowerCase(); return words.every((w) => has(o, w)); });
+      if (other) return `states “${m[0].trim()}” for ${own.heading}, but the page prints that condition only under ${other.heading}`;
+    }
+  }
+  return null;
+}
 const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
 /** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
  * someone else (its amending clause names only another member). Null when the person has an endorsement
@@ -401,6 +558,55 @@ function namedDocs(text: string, ctx: Ctx): string[] {
   const lowerText = text.toLowerCase();
   return [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const words = contentWords(n).filter((w) => w.length >= 4 && !/^(?:polic|plan|schedul|certificat|document|wording|scanned)/.test(w)); const hits = words.filter((w) => lowerText.includes(w)); return words.length > 0 && hits.length >= Math.min(2, words.length); }).map(([id]) => id);
 }
+/** PR #54 (after rc-live-9 FL5a: "can be claimed under either the Core Scheme or the Voluntary Scheme, but not both"):
+ * a restriction restated with a limit the cited wording does not print -- exclusivity ("but not both", "only one of"),
+ * a cap on how often or how many ("only once", "at most one"), a bar on combining -- is a condition the document does
+ * not state. The statement is omitted whole (the benefit's own printed terms say the restriction as printed); a
+ * qualifier its cited wording prints is kept. Quoted wording is the document's, not the sentence's addition. */
+const QUALIFIERS = /\b(?:but\s+not\s+both|not\s+both|only\s+one\s+of|one\s+or\s+the\s+other(?:\s+only)?|at\s+most\s+(?:one|once)|only\s+once|once\s+only|only\s+(?:be\s+)?(?:claimed|paid|payable|made)\s+once|no\s+more\s+than\s+(?:one|once)|cannot\s+be\s+(?:combined|claimed\s+(?:together|twice|under\s+both))|not\s+(?:be\s+)?(?:combined|claimed\s+(?:together|twice|under\s+both)))\b/gi;
+export function unprintedQualifier(text: string, cited: EvidenceRef[]): string | null {
+  const own = text.replace(/“[^”]*”|"[^"]*"/g, " ");
+  const printed = cited.map((e) => (e.passage?.text ?? "").toLowerCase().replace(/\s+/g, " ")).join(" \n ");
+  for (const m of own.matchAll(QUALIFIERS)) {
+    const q = m[0].toLowerCase().replace(/\s+/g, " ");
+    if (!printed.includes(q)) return `adds “${m[0]}”, which its cited wording does not print`;
+  }
+  return null;
+}
+/** PR #54 (rc-live-8): why a figure is stated for one document while its cited source is another (null when it is not):
+ * the clause stating the figure names a household document -- its whole product name, or a word of its name no other
+ * current document's name has ("Booklet", "Summary") -- and every cited passage printing that figure is from a
+ * document the clause does not name. A separate summary's "S$2,000" is never the booklet's amount. */
+export function wrongDocumentFigure(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "policyNames" | "state">): string | null {
+  const names = [...(ctx.policyNames ?? new Map<string, string>())];
+  if (names.length < 2) return null;
+  // (a document is named by its whole name, or by the KIND of document its name says -- "booklet", "summary" -- when no
+  // other current document's name says it; a benefit or product word is never a document's name)
+  const KIND = /^(?:booklets?|summary|summaries|certificates?|endorsements?|schedules?|brochures?|wordings?|statements?|contracts?|letters?)$/;
+  const words = (n: string) => new Set((n.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => KIND.test(w)));
+  const named = (raw: string) => {
+    // (a quotation is the document's wording, not the sentence naming a document)
+    const clause = raw.replace(/“[^”]*”|"[^"]*"/g, " ");
+    const lc = clause.toLowerCase(), have = words(clause);
+    return names.filter(([id, n]) => {
+      if (n.length >= 8 && lc.includes(n.toLowerCase())) return true;
+      const others = new Set(names.filter(([o]) => o !== id).flatMap(([, m]) => [...words(m)]));
+      return [...words(n)].some((w) => !others.has(w) && have.has(w));
+    }).map(([id]) => id);
+  };
+  for (const f of moneyFiguresIn(text)) {
+    const clause = text.split(/;\s+/).find((c) => c.includes(f.raw)) ?? text;
+    const docs = named(clause);
+    if (!docs.length) continue;
+    const digits = /\d[\d,]*(?:\.\d+)?/.exec(f.raw)?.[0]?.replace(/,$/, "") ?? "";
+    if (!digits) continue;
+    const printing = cited.filter((e) => (e.passage?.text ?? "").includes(digits));
+    if (!printing.length || printing.some((e) => docs.includes(e.policyId))) continue;
+    const nameOf = (id: string) => ctx.policyNames?.get(id) ?? ctx.state.docNames?.[id] ?? "another document";
+    return `states ${f.raw} for the ${nameOf(docs[0])}, but the cited passage printing it is from the ${nameOf(printing[0].policyId)}`;
+  }
+  return null;
+}
 /** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands), and
  * the read evidence of the documents it names (cited with it, so the household sees which document was checked). */
 /** V1.1 (grounded negatives): words that say what is absent, not which thing -- left out of the topic check. */
@@ -409,6 +615,15 @@ const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule",
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
 /** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
  * document (the save-time gate reads the same heading the same way). Null when none is printed. */
+/** A line continuing the sentence of the line above it (that line is unfinished prose). */
+function continuesPrevious(lines: string[], i: number): boolean {
+  for (let j = i - 1; j >= 0; j--) {
+    const p = lines[j].trim(); if (!p) return false;
+    // (prose: a sentence of eight or more words left unfinished -- never a table row ending in its figure)
+    return !/[.!?:;]["”’)]*$/.test(p) && !/\d\s?%?$/.test(p) && !isHeadingLine(p, lines[i]) && p.split(/\t+| {3,}/).length === 1 && p.split(/\s+/).length >= 8;
+  }
+  return false;
+}
 export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & Partial<Pick<Ctx, "people">>): string | null {
   const text = ctx.libraryText?.get(ref.policyId) ?? null;
   if (!text) return null;
@@ -422,7 +637,9 @@ export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText"> & 
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
     // V1.4: a line naming a household member (a name printed on its own line) is never a product heading.
     if (cells.length === 1 && (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)))) continue;
-    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
+    // (Actual-library findings: the first line of a wrapped sentence -- "... as a result of an Accident, which" -- is prose,
+    // not the heading the figure is printed under: skipped, so the section heading above the paragraph is found.)
+    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l) && isHeadingLine(l, lines[i + 1] ?? null) && !continuesPrevious(lines, i)) return l;
     if (cells.length >= 2 && !/\d/.test(l)) return null;
   }
   return null;
@@ -435,7 +652,10 @@ function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">
   const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(line)?.[1]?.trim();
   if (own) return own;
   // A table row's own first cell names it ("Daily hospital cash   S$150"), unless it is an identifier (a masked ID).
-  const first = line.trim().split(/\t+| {3,}/)[0] ?? "";
+  // (PR #54, rc-live-8: a bullet / tab row "•<TAB><name>*<TAB>Up to S$2,000" is named by its first text cell -- never
+  // the bullet -- without the footnote marker its name carries)
+  const cells = line.trim().split(/\t+| {3,}/);
+  const first = (/[A-Za-z]{2}/.test(cells[0] ?? "") ? cells[0] : cells.find((c) => /[A-Za-z]{3}/.test(c) && !/\d/.test(c)) ?? cells[0] ?? "").replace(/\s*[*^#†‡]+$/, "");
   // V1.4: never a cell naming a household member (a roster row's name cell).
   const isPerson = (ctx.people ?? []).some((p) => p.names.some((n) => n.length >= 3 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(first)));
   if (first && first !== line.trim() && !/\d/.test(first) && !isPerson && benefitWords(first).size > 0) return first;
@@ -444,14 +664,15 @@ function lineLabel(policyId: string, line: string, ctx: Pick<Ctx, "libraryText">
 /** Every label a document prints: its headings and its "Label:" lines. */
 function documentLabels(text: string): string[] {
   const out = new Set<string>();
-  for (const raw of text.split(/\n/)) {
+  const all = text.split(/\n/);
+  for (const [i, raw] of all.entries()) {
     const l = raw.trim(); if (!l) continue;
     const own = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim();
     if (own) { out.add(tidyLabel(own)); continue; }
     const cells = l.split(/\t+| {3,}/).filter(Boolean);
     // (V1.5: a bullet item -- "• Death due to Accident" under Compassionate Death Allowance -- is a case of the benefit
     // above it, not a benefit label of its own.)
-    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l)) out.add(tidyLabel(l));
+    if (cells.length === 1 && !/^[•▪●◦*–-]\s/.test(l) && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:,]$/.test(l) && isHeadingLine(l, all[i + 1] ?? null) && !continuesPrevious(all, i)) out.add(tidyLabel(l));
   }
   return [...out].filter((x) => benefitWords(x).size > 0);
 }
@@ -774,6 +995,9 @@ function printedColumn(ref: EvidenceRef, value: number): string | null {
 }
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
+  // (PR #54: the one benefit whose terms the answer states, for a statement that refers to it as "this benefit")
+  const answerBenefits = [...new Set(args.sentences.filter((x) => x?.kind === "benefit_terms" && typeof x.benefit === "string").map((x) => String(x.benefit)))];
+  const answerBenefit = answerBenefits.length === 1 ? answerBenefits[0] : null;
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
   const drops: DropInfo[] = [];
   let cur = -1, curEstimate = false;
@@ -843,13 +1067,33 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Permanent Dismemberment is never borrowed for Accidental Death because the two lines are adjacent in the passage.
     const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => ({ text: evidenceTextOf(e), doc: ctx.policyNames?.get(e.policyId) ?? ctx.state.docNames?.[e.policyId] ?? null })));
     if (borrowed) { drop(text, borrowed); continue; }
+    // PR #54: an amount or condition printed under a neighbouring numbered section of the same page.
+    const neighbour = neighbouringSectionClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+    if (neighbour) { drop(text, neighbour); continue; }
+    const otherDoc = wrongDocumentFigure(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+    if (otherDoc) { drop(text, otherDoc); continue; }
+    const qualifier = unprintedQualifier(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean));
+    if (qualifier) { drop(text, qualifier); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
+    let relatedCurrency = false;
     {
+      const asPrinted = bareAmountClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+      if (asPrinted) { text = asPrinted.text; if (asPrinted.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, asPrinted.basis, "compose")])]; }
+      relatedCurrency = !!asPrinted?.basis;
+    }
+    if (!relatedCurrency) {
       let bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
       // (the document's own currency statement is cited with it -- an addition; an unsupported currency claim omits the
       // statement whole)
       if (bare && !("dropped" in bare) && bare.basis) { evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, bare.basis, "compose")])]; text = bare.kept; bare = null; }
+      // PR #54: an S$ the document does not print for a bare "$" amount -- the benefit and its terms are kept, the amount
+      // said as printed (bareAmountClaim: its own same-benefit currency line, or "the document does not say which
+      // currency"); the unsupported S$ is recorded as taken out. Never the whole statement for the currency alone.
+      if (bare && "dropped" in bare && bare.asPrinted) {
+        const re = bareAmountClaim(bare.asPrinted, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+        if (re) { out.dropped.push({ sentence: text, reason: bare.dropped + "; said as printed instead" }); text = re.text; if (re.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, re.basis, "compose")])]; bare = re.basis ? null : bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx); if (bare && !("dropped" in bare) && bare.basis) bare = null; }
+      }
       if (bare) { drop(text, "dropped" in bare ? bare.dropped : bare.reason); continue; }
     }
     // V1.5: a trip conclusion (not covered / not shown) is checked against person, policy, dates, destination and source.
@@ -882,6 +1126,17 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // V1.5: "the documents do not provide X's <product> Sum Insured" while X's own certificate row prints it.
     const absentAmount = amountAbsenceContradiction(text, subjectId, ctx);
     if (absentAmount) { drop(text, absentAmount); continue; }
+    { const named = (typeof s.benefit === "string" && s.benefit.trim()) || answerBenefit;
+      const en = enrolmentAbsenceClaim(text, subjectId, [...evIds, ...out.evidenceIds].map((id) => ctx.state.evidence[id]).filter(Boolean), ctx, named || null);
+      if (en) {
+        out.dropped.push({ sentence: text, reason: en.reason });
+        // (an applicability statement names the documented benefit: that benefit's own wording is cited with the dated
+        // listing -- a passage read this turn that prints the benefit's name, outside the certificate)
+        const support = !/^.*; whether /.test(en.text) ? [] : en.benefit ? Object.values(ctx.state.evidence).filter((e) => e.policyId !== en.evidence.policyId && !ctx.stale?.has(e.id) && e.passage.text.toLowerCase().includes(en.benefit!.toLowerCase())).slice(0, 1).map((e) => e.id)
+          : evIds.filter((id) => ctx.state.evidence[id] && ctx.state.evidence[id].policyId !== en.evidence.policyId);
+        text = en.text; evIds = [evidenceIdOf(ctx.state, en.evidence, "compose"), ...support];
+        if (!out.notes.includes(LATER_DATE_NOTE)) out.notes.push(LATER_DATE_NOTE);
+      } }
     // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
     // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
     // own; the sentence is kept only if every one of them is.
@@ -1204,7 +1459,7 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
     const own = Object.values(ctx.state.evidence).filter((e) => e.policyId === rec.policyId && !ctx.stale?.has(e.id) && !e.table);
     // V1.2: a schedule row ("Death due to Accident     100%": laid out in columns, or ending in its percentage) is a
     // benefit, not a clause limiting cover to accidents.
-    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
+    const linesOf = (e: (typeof own)[number]) => paragraphs(withoutInstructions(e.passage.text)).flatMap((x) => x.split(/(?<=[.;])\s+/)).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
     // The clause that limits cover to accidents ("caused solely by an accident"), else one that says accident only.
     let pick: { e: (typeof own)[number]; line: string } | null = null;
     for (const test of [(l: string) => CAUSE_LIMIT.test(l), (l: string) => /\bonly\b/i.test(l)]) {
@@ -1428,7 +1683,7 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
     const noun = /\b([A-Za-z-]+)\s+benefit\b/i.exec(label)?.[1]?.toLowerCase() ?? null;
     for (const e of Object.values(ctx.state.evidence)) {
       if (e.policyId !== b.policyId || ctx.stale?.has(e.id) || e.table) continue;
-      for (const line of withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/)) {
+      for (const line of paragraphs(withoutInstructions(e.passage.text)).flatMap((x) => x.split(/(?<=[.;])\s+/))) {
         const sentence = line.replace(/\s+/g, " ").trim();
         if (!sentence || seen.has(sentence) || moneyFiguresIn(sentence).length) continue;
         const have = new Set(contentWords(sentence));
@@ -1528,6 +1783,8 @@ function settleAnswer(out: Composed, drops: DropInfo[], conditioned: { at: numbe
   // Notes: caveats the household needs (never "I left out ..."), or one accurate explanation when nothing is left.
   const notes: string[] = [];
   const add = (n: string | null | undefined) => { if (n && !notes.includes(n)) notes.push(n); };
+  // (a dated listing said in place of an enrolment caveat carries its limit: cover on a later date is not established)
+  if (out.notes.includes(LATER_DATE_NOTE) && out.sentences.some((x) => / certificate lists /.test(x.text))) add(LATER_DATE_NOTE);
   for (const d of drops) if (d.cat === "stale") add(d.note); // user-facing at the source (loop.ts revalidateEvidence)
   if (drops.some((d) => d.cat === "decision")) add(DECISION_NOTE);
   if (drops.some((d) => d.cat === "payout")) add(PAYOUT_NOTE);

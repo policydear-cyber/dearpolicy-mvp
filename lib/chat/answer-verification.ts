@@ -658,7 +658,9 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
   // A row with one value prints one figure for everyone it covers -- an item code ("A", "1") and the benefit's name are
   // not value columns ("No. | Benefit | Amount payable" is one amount column, not one column per person or tier). A
   // row that says in a cell of its own who it is for ("Category: Child (each)") is still checked for that person.
-  const valueCells = (r: string) => { const c = rowCells(r); return c.length > 1 && isRowCode(c[0]) ? c.slice(1) : c; };
+  // (PR #54, rc-live-8: a bullet in a cell of its own -- "•<TAB>Benefit*<TAB>Up to S$2,000" -- is an item marker like an
+  // item code, not a value column)
+  const valueCells = (r: string) => { const c = rowCells(r); return c.length > 1 && (isRowCode(c[0]) || /^[•▪●◦·*–-]$/.test(c[0].trim())) ? c.slice(1) : c; };
   if (rows.some((r) => valueCells(r).length < 3)) return rowCategoryProblem(rows, rangeText.split(/\n/), subject, opts.ownerId ?? null);
   const unbound = "the row prints one column per person or tier, and the figure is not bound to a column";
   const lines = rangeText.split(/\n/);

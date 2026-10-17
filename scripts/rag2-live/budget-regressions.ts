@@ -222,10 +222,12 @@ async function t(name: string, fn: () => Promise<void> | void) {
     assert.match((planRun(l, req2) as any).reason, /used up/);
     assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.51, preflight: false }), /<= 0.50/);
     assert.equal(entryFor(null, { runId: "p", testedSha: "a", requestSha: "b", capUsd: 0.5, preflight: true }).spent_usd, 0);
+    assert.throws(() => validateLedger({ exercise_cap_usd: 0.5, runs: [] }), /must be 1\.00/, "the recorded exercise cap must be the authorised US$1.00");
+    assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.6, preflight: false }), /<= 0.50/, "one run still asks for at most US$0.50");
   });
   await t("B16 a trial allocation in the ledger is reserved: automated runs cannot spend it; open/closed rules; focused ingest questions", () => {
-    const l: Ledger = validateLedger({ exercise_cap_usd: 0.5, runs: [
-      { ...entryFor({ budgetUsed: { spentUsd: 0.161222, reservedUsd: 0, calls: 1, refusals: 0, failed: 0 } }, { runId: "earlier", testedSha: "abc1234", requestSha: "def5678", capUsd: 0.2, preflight: false }) },
+    const l: Ledger = validateLedger({ exercise_cap_usd: 1.0, runs: [
+      { ...entryFor({ budgetUsed: { spentUsd: 0.661222, reservedUsd: 0, calls: 1, refusals: 0, failed: 0 } }, { runId: "earlier", testedSha: "abc1234", requestSha: "def5678", capUsd: 0.7, preflight: false }) },
       { run_id: "trial-codespace-1", kind: "trial_allocation", status: "open", tested_code_sha: "", request_sha: "", at: "x", preflight: false, run_cap_usd: 0.15, spent_usd: 0, reserved_unsettled_usd: 0.15, calls: 0, refused: 0, failed: 0 },
     ] });
     assert.equal(remainingUsd(l), 0.188778, "the allocation is counted as used");
@@ -234,7 +236,7 @@ async function t(name: string, fn: () => Promise<void> | void) {
     assert.equal(req.questions, "QUESTIONS-q2.json");
     assert.throws(() => validateRequest({ run_id: "x", run_cap_usd: 0.1, preflight: false, questions: "../EXPECTED.json" }, "ingest"), /questions/);
     assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.1, preflight: false, questions: "QUESTIONS-q2.json" }), /questions/);
-    const bad = (r: object) => assert.throws(() => validateLedger({ exercise_cap_usd: 0.5, runs: [{ run_id: "trial-codespace-1", kind: "trial_allocation", tested_code_sha: "", request_sha: "", at: "x", preflight: false, run_cap_usd: 0.15, calls: 0, refused: 0, failed: 0, ...r }] }), /trial allocation/);
+    const bad = (r: object) => assert.throws(() => validateLedger({ exercise_cap_usd: 1.0, runs: [{ run_id: "trial-codespace-1", kind: "trial_allocation", tested_code_sha: "", request_sha: "", at: "x", preflight: false, run_cap_usd: 0.15, calls: 0, refused: 0, failed: 0, ...r }] }), /trial allocation/);
     bad({ status: "open", spent_usd: 0, reserved_unsettled_usd: 0 }); bad({ status: "open", spent_usd: 0.01, reserved_unsettled_usd: 0.15 });
     bad({ status: "closed", spent_usd: 0.05, reserved_unsettled_usd: 0.15 }); bad({ status: "paused", spent_usd: 0, reserved_unsettled_usd: 0.15 });
   });

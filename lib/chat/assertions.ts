@@ -630,6 +630,14 @@ export function benefitRowProblem(amount: number, benefit: string, passage: stri
       break;
     }
   }
+  // PR #54: a line under a numbered section heading ("Section 5 - Compassionate Death Allowance Benefit") belongs to that
+  // section's benefit, as the page reads -- up to the next section heading (never across it).
+  const SECTION_ROW = /^\s*(?:section|part|clause)\s+[\w.]+\s*[-–—:]\s*\S/i;
+  let head = -1;
+  for (let j = 0; j < scored.length; j++) {
+    if (SECTION_ROW.test(scored[j].r)) { head = j; continue; }
+    if (head >= 0 && scored[j].has && scored[head].n > scored[j].n) scored[j] = { ...scored[j], n: scored[head].n };
+  }
   const best = Math.max(0, ...scored.map((x) => x.n));
   if (best === 0) return "the cited passage does not name the benefit the figure is stated for";
   return scored.some((x) => x.n === best && x.has) ? null : "the amount belongs to a different row of the passage than the benefit it is stated for";

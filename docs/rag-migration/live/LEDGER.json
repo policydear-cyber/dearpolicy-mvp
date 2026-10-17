@@ -1,5 +1,5 @@
 {
-  "exercise_cap_usd": 0.5,
+  "exercise_cap_usd": 1,
   "runs": [
     {
       "run_id": "live-L1-r2",
@@ -482,6 +482,71 @@
       "spent_usd": 0.005274,
       "reserved_unsettled_usd": 0,
       "calls": 17,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-5-booklet",
+      "tested_code_sha": "523efea21f107af9de99af283ed5d0596a2b370b",
+      "request_sha": "523efea21f107af9de99af283ed5d0596a2b370b",
+      "at": "2026-10-16T17:00:03.737Z",
+      "preflight": false,
+      "run_cap_usd": 0.0107,
+      "spent_usd": 0.007052,
+      "reserved_unsettled_usd": 0,
+      "calls": 16,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-6-booklet",
+      "tested_code_sha": "abe4ec128613a813f39f1202c63670f82b297bfa",
+      "request_sha": "abe4ec128613a813f39f1202c63670f82b297bfa",
+      "at": "2026-10-17T07:44:32.185Z",
+      "preflight": false,
+      "run_cap_usd": 0.15,
+      "spent_usd": 0.009206,
+      "reserved_unsettled_usd": 0,
+      "calls": 18,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-7-booklet-cda",
+      "tested_code_sha": "070c666ab03cab52846164a8eb56cb98a6b8c38f",
+      "request_sha": "070c666ab03cab52846164a8eb56cb98a6b8c38f",
+      "at": "2026-10-17T08:52:30.675Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.002558,
+      "reserved_unsettled_usd": 0,
+      "calls": 4,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-8-booklet-cda",
+      "tested_code_sha": "6386aaa84f401f0c443a96971e8a9f8add5bf907",
+      "request_sha": "6386aaa84f401f0c443a96971e8a9f8add5bf907",
+      "at": "2026-10-17T09:43:30.509Z",
+      "preflight": false,
+      "run_cap_usd": 0.015,
+      "spent_usd": 0.002416,
+      "reserved_unsettled_usd": 0,
+      "calls": 4,
+      "refused": 0,
+      "failed": 0
+    },
+    {
+      "run_id": "rc-live-9-booklet-cda",
+      "tested_code_sha": "c72905871c8d0322f2fb149fb08f97db94c1ccb5",
+      "request_sha": "c72905871c8d0322f2fb149fb08f97db94c1ccb5",
+      "at": "2026-10-17T12:16:56.212Z",
+      "preflight": false,
+      "run_cap_usd": 0.03,
+      "spent_usd": 0.003323,
+      "reserved_unsettled_usd": 0,
+      "calls": 8,
       "refused": 0,
       "failed": 0
     }

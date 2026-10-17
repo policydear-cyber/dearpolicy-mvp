@@ -14,7 +14,7 @@ import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, LATER_DATE_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -26,7 +26,8 @@ type Save = (args: { conversation: ChatContext["conversation"]; token: ChatConte
 export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.";
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 /** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
-const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE]);
+// (PR #54: a dated listing said before a question keeps its later-date limit, as it does in a final answer)
+const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE, LATER_DATE_NOTE]);
 
 // ------------------------------------------------------------------ Round 7 (A3): when the gate rejects a figure
 const squashT = (t: string) => (t ?? "").replace(/\s+/g, " ").trim();
@@ -212,7 +213,8 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     // V1.2: a fact question asked with nothing before it says briefly why the detail changes the answer -- the clause it
     // turns on, in the wording's own words (figure-free; a clause printing an amount is described, not quoted).
     const why = p.kind === "fact" ? String(p.why ?? "").split(/;\s*/)[0].replace(/\s*\(page \d+\)\s*$/, "").replace(/\s+/g, " ").trim() : "";
-    const whyText = why && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why.length > 160 ? why.slice(0, why.lastIndexOf(" ", 157)) + " …" : why}”` : "it changes which of the policy's benefits or amounts applies";
+    // (a clause is quoted whole or not at all: a cut sentence can lose its condition, exception or "not")
+    const whyText = why && why.length <= 240 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why}”` : "it changes which of the policy's benefits or amounts applies";
     const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : `I'm asking because ${whyText}.`;
     answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(reply.trailing ?? [])].join(" ") || lead;
     answer.questions = [q];
@@ -231,7 +233,10 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     answer.summary = [...notes, unknownPersonText(unknownPeople)].join(" ");
   } else if (reply.kind === "final") {
     const c = reply.composed;
-    const texts = c.sentences.map((s) => s.text);
+    // Actual-library findings: the useful result leads -- a verified calculation first, then the printed terms and
+    // conditions, then the rest (each statement is a whole unit, so their order changes no meaning).
+    const rank = (s: { kind?: string }) => (s.kind === "conditional_illustration" || s.kind === "indicative_estimate" ? 0 : s.kind === "requirement" ? 2 : 1);
+    const texts = c.sentences.map((s, i) => ({ s, i })).sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map((x) => x.s.text);
     // A correction is said first (what changed, and what no longer applies), then the answer.
     const lead = notes.length ? [notes.join(" "), ...texts] : texts;
     // Agent P (task 3): the composer's notes are user-facing caveats (or, when nothing could be kept, one accurate

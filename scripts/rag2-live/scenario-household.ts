@@ -19,6 +19,7 @@ import * as BINDING from "../fixtures/rag2-binding/household";
 import * as LIVELIB from "../fixtures/rag2-livelib/household";
 import * as PR50 from "../fixtures/rag2-pr50/household";
 import * as TAN from "../fixtures/reliable-chat/tan";
+import * as BOOKLET from "../fixtures/reliable-chat/booklet";
 import type { Scenario } from "./scenarios";
 
 export const SCENARIO_ACCOUNT = SCENARIO.ACCOUNT;
@@ -27,6 +28,7 @@ export const BINDING_ACCOUNT = BINDING.ACCOUNT;
 export const LIVELIB_ACCOUNT = LIVELIB.ACCOUNT;
 export const PR50_ACCOUNT = PR50.ACCOUNT;
 export const TAN_ACCOUNT = TAN.ACCOUNT;
+export const BOOKLET_ACCOUNT = BOOKLET.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
   "Desmond broke his leg.",
   "He fell down the stairs.",
@@ -128,9 +130,47 @@ export const RCW4b: Scenario = { ...RCW1a, id: "RCW4b", title: "rc-live-2: fixed
 export const RCX: Scenario = { id: "RCX", title: "rc-live-2 control: an unlisted case (a wrist) and who to contact", why: "rc-live-2 unlisted-case + reference-insurer control", turns: [{ user: "Adrian fractured his wrist falling off his bicycle. What can we claim for it from his accident cover, and who should I contact?", expect: {} }] };
 export const RC_TAN = [RCT1a, RCT1b, RCT2a, RCT2b];
 export const RC_WONG = [RCW1a, RCW1b, RCW2, RCW3, RCW4a, RCW4b, RCX];
+/** rc-live-5 (actual-library repairs; docs/rag-migration/reliable-chat/EXPECTED-rc-live-5.md): the anonymised booklet
+ * household (RAG2_LIVE_HOUSEHOLD=booklet). Fresh wording, not the scripted tests'. BKL1 (twice): an uncertain hip / tibia
+ * case -> one clarification -> the Simple Fracture illustration; BKL2: Other Fracture on the Personal Accident sum
+ * insured printed in a generic booklet; BKL3: the Compassionate Death Allowance Benefit (heading + wrapped paragraph,
+ * bare $). */
+const BKL1_TURNS = [
+  "Daniel slipped in the bathroom and broke a bone. The doctor thinks it is his hip but it could be his tibia; they are still checking. It is a closed fracture. What could his accident cover pay?",
+  "Update: the X-ray confirms it is his hip.",
+];
+export const BKL1a: Scenario = { id: "BKL1a", title: "rc-live-5: uncertain hip / tibia -> one clarification -> illustration (attempt 1)", why: "actual-library finding 1", turns: BKL1_TURNS.map((user) => ({ user, expect: {} })) };
+export const BKL1b: Scenario = { ...BKL1a, id: "BKL1b", title: "rc-live-5: uncertain hip / tibia (attempt 2)" };
+export const BKL2: Scenario = { id: "BKL2", title: "rc-live-5: Other Fracture on the Personal Accident sum insured in a generic booklet", why: "actual-library finding 2", turns: [{ user: "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?", expect: {} }] };
+export const BKL3: Scenario = { id: "BKL3", title: "rc-live-5: the Compassionate Death Allowance Benefit", why: "actual-library findings 3 and 4", turns: [{ user: "If Daniel died in an accident, is there an allowance for funeral expenses in our booklet, and what does it need?", expect: {} }] };
+/** rc-live-6 (applicability follow-up; docs/rag-migration/reliable-chat/EXPECTED-rc-live-6.md, written before the run):
+ * FL1a the rc-live-5 hip / tibia wording; FL1b a fresh paraphrase of it; FL2 closed -> corrected to open; FL3 the death
+ * allowance in fresh wording. */
+export const FL1a: Scenario = { ...BKL1a, id: "FL1a", title: "rc-live-6: uncertain hip / tibia (rc-live-5 wording) -> hip -> S$3,750 only", why: "applicability follow-up 1 and 2" };
+export const FL1b: Scenario = { id: "FL1b", title: "rc-live-6: uncertain hip / shin bone (fresh paraphrase) -> hip -> S$3,750 only", why: "applicability follow-up 1 and 2", turns: [
+  { user: "My husband Daniel tripped on the stairs at our flat last night. The hospital says it is a closed break - either his hip or his shin bone, the tibia; the scans are not back yet. What would his personal accident cover give him?", expect: {} },
+  { user: "The specialist has just told us it is definitely the hip.", expect: {} }] };
+export const FL2: Scenario = { id: "FL2", title: "rc-live-6: closed hip -> corrected to open: Simple Fracture withdrawn, Other Fracture evaluated", why: "applicability follow-up 1 (correction)", turns: [
+  { user: "Daniel came off his bicycle and broke his hip. It was a closed fracture. What could his accident cover pay?", expect: {} },
+  { user: "Sorry, I got that wrong - it was an open fracture; the bone came through the skin.", expect: {} }] };
+export const FL3: Scenario = { id: "FL3", title: "rc-live-6: the death allowance -- supported terms, honest currency, dated certificate evidence", why: "applicability follow-up 3", turns: [
+  { user: "If Daniel were killed in a road accident, would our booklet help with his funeral costs, and what would we need to send in?", expect: {} }] };
+/** rc-live-7 (pre-registered in EXPECTED-rc-live-7.md): the death question over the booklet page faithful to the
+ * RECORDED actual-library passage. Only listed when BOOKLET_CDA=recorded (and then alone), so FL4 can never run on
+ * the synthetic page and FL1-FL3 never run on the recorded one. */
+export const FL4: Scenario = { id: "FL4", title: "rc-live-7: the death allowance over the recorded passage -- printed conditions only, honest currency, dated certificate evidence", why: "recorded-passage evidence gap", turns: [
+  { user: "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?", expect: {} }] };
+/** rc-live-8 (EXPECTED-rc-live-8.md): the same question on the repaired code, graded with v6 (FL4's v5 grade kept). */
+export const FL4b: Scenario = { ...FL4, id: "FL4b", title: "rc-live-8: FL4's question on the repaired code -- allowance present, honest currency, no invented condition, Core / Voluntary vs certificate listing distinguished", why: "rc-live-7 repair check" };
+/** rc-live-9 (EXPECTED-rc-live-9.md, grader v7): after the benefit-record repair (bullet / tab rows; heading-and-paragraph
+ * benefits with a bare "$"), rc-live-8's real wording once more, and one fresh paraphrase written for this run. */
+export const FL5a: Scenario = { ...FL4, id: "FL5a", title: "rc-live-9: the real-wording death question after the benefit-record repair -- the booklet's allowance offered and stated, honest currency, next step", why: "rc-live-8 repair check" };
+export const FL5b: Scenario = { id: "FL5b", title: "rc-live-9: a fresh paraphrase of the death question", why: "rc-live-8 repair check (paraphrase)", turns: [
+  { user: "Say Daniel passed away after an accident. Would the booklet cover any of the funeral costs, and how much? What proof would the insurer ask us for?", expect: {} }] };
+export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4, FL4b, FL5a, FL5b] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : SCENARIO) as unknown as typeof SCENARIO;
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -139,7 +179,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : which === "booklet" ? "SYNTHETIC-DPTEST-booklet Household Lee (Daniel)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

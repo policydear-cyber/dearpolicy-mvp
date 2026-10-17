@@ -15,11 +15,13 @@ import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow } from "./store";
 import { percentTables, type PctTable } from "./calc/pct-rows";
 import { sharedTopic, topicStems } from "./loop/topic";
+import { productSection } from "./headings";
+import { definitionFor, definitionsIn, type Definition } from "./applicability";
 
 export type ScheduleRow = { id: string; label: string; percent: number; ppm: number; evidence: EvidenceRef };
 export type ScheduleBase =
   | { kind: "fixed_limit"; label: string; cents: number; currency: string; evidence: EvidenceRef }
-  | { kind: "sum_insured"; label: string; cents: number; currency: string; evidence: EvidenceRef; from: PersonBenefit }
+  | { kind: "sum_insured"; label: string; cents: number; currency: string; evidence: EvidenceRef; from: PersonBenefit; section?: string }
   | { kind: "unresolved"; words: string; why: string };
 export type BenefitRecord = {
   id: string;
@@ -39,6 +41,9 @@ export type BenefitRecord = {
   unknowns: string[];
   source: { page: number; evidence: EvidenceRef };
   personBenefit: PersonBenefit | null;
+  /** PR #54 follow-up: the definitions printed in this record's own document (and version) when one of them defines this
+   * benefit -- what evaluate_benefit checks the household's report against (lib/rag2/applicability.ts). */
+  definitions: Definition[];
 };
 
 const MONEY = /(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/;
@@ -57,7 +62,7 @@ function tableBenefit(t: PctTable): string | null {
 }
 
 /** What a schedule's percentages are OF, resolved from the document's own wording and the person's own rows. */
-function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, docs: DocRow[], own: PersonBenefit[], memberName: string): ScheduleBase {
+function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, docs: DocRow[], own: PersonBenefit[], memberName: string, before = ""): ScheduleBase {
   const base = t.base.replace(/\)+$/, "").trim();
   const m = MONEY.exec(base);
   if (m) {
@@ -79,6 +84,15 @@ function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, d
     const cands = own.filter((b) => b.applicability === "person_row" && b.printed.kind === "money" && !b.conflicts?.length
       && (family.has(b.policy.id) || [...words(b.benefit.label + " " + (b.policy.product ?? ""))].some((w) => want.has(w))));
     let distinct = [...new Map(cands.map((b) => [`${b.printed.kind === "money" ? b.printed.cents : 0}|${b.benefit.label}`, b])).values()];
+    // Actual-library findings: a document holding several products under a generic title ("Group Insurance Benefits
+    // Booklet"): the product section the table is printed in, as its own headings name it, binds the table to that
+    // product's certificate entry -- never the first, the largest, or one sharing only a policy number.
+    const section = productSection(`${before}\n${pageText.slice(0, t.start)}`, [...new Set(own.filter((b) => b.applicability === "person_row" && b.printed.kind === "money").map((b) => b.benefit.label))]);
+    if (section) {
+      const inSection = distinct.filter((b) => b.benefit.label === section.label);
+      if (inSection.length === 1) distinct = inSection;
+      else if (!inSection.length) return { kind: "unresolved", words: base, why: `the table is printed under “${section.heading}”, and no ${section.label} sum insured is printed for ${memberName} under this scheme in the household's documents` };
+    }
     // several products on one certificate (Group Term Life and Group Personal Accident): the one whose own label shares
     // the most distinctive words with this document's product -- a unique best only
     if (distinct.length > 1) {
@@ -88,9 +102,9 @@ function resolveBase(t: PctTable, pageText: string, doc: DocRow, page: number, d
     }
     if (distinct.length === 1 && distinct[0].printed.kind === "money") {
       const b = distinct[0];
-      return { kind: "sum_insured", label: `${memberName}'s ${b.benefit.label} sum insured`, cents: (b.printed as { cents: number }).cents, currency: (b.printed as { currency: string }).currency, evidence: b.source.evidence, from: b };
+      return { kind: "sum_insured", label: `${memberName}'s ${b.benefit.label} sum insured`, cents: (b.printed as { cents: number }).cents, currency: (b.printed as { currency: string }).currency, evidence: b.source.evidence, from: b, ...(section && section.label === b.benefit.label ? { section: section.heading } : {}) };
     }
-    return { kind: "unresolved", words: base, why: distinct.length ? `more than one personal sum insured could be the base (${distinct.map((b) => b.benefit.label).join(", ")})` : `no sum insured printed for ${memberName} under this policy was found in the household's documents` };
+    return { kind: "unresolved", words: base, why: distinct.length ? `the ${doc.productName ?? "document"} does not print this table under one of ${memberName}'s certificate products (${distinct.map((b) => b.benefit.label).join(", ")}), so which of those amounts is its Sum Insured is not established` : `no sum insured printed for ${memberName} under this policy was found in the household's documents` };
   }
   return { kind: "unresolved", words: base, why: `the table is a percentage of “${base}”, which is not a printed amount or the person's sum insured` };
 }
@@ -108,32 +122,47 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
   for (const b of view.benefits) {
     const d = docs.find((x) => x.id === b.policy.id); if (!d) continue;
     const kind = b.printed.kind === "money" ? "printed_amount" : b.printed.kind === "percent" ? "printed_percent" : "printed_reference";
+    // (PR #54, rc-live-8: an amount printed with a bare "$" the document never explains is kept with its benefit, its
+    // currency an explicit unknown -- the record is incomplete, never dropped and never given a currency)
+    const unstated = b.currency?.status === "unstated";
     out.push({ id: hid(accountId, memberId, b.key), householdId: accountId, memberId, memberName, policy: policyOf(d), benefit: b.benefit.label.replace(/^[•▪●◦*–-]\s*/, ""), kind, applicability: b.applicability, printed: b.printed, asOf: b.asOf, conditions: b.conditions,
-      schedule: null, status: b.conflicts?.length ? "conflicting" : "resolved", unknowns: b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : [],
-      source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b });
+      schedule: null, status: b.conflicts?.length ? "conflicting" : unstated ? "incomplete" : "resolved",
+      unknowns: [...(b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : []), ...(unstated ? [UNSTATED_CURRENCY] : [])],
+      source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b, definitions: [] });
   }
   // percentage schedules on the person's linked documents (the same documents personBenefits reads)
   const links = await loadLinks(accountId, docs.map((d) => d.id));
   const mine = docs.filter((d) => d.ownerId === memberId || links.some((l) => l.policyId === d.id && l.memberId === memberId));
   const pages = mine.length ? await loadPages(accountId, mine.map((d) => d.id)) : [];
+  const defsOf = new Map<string, Definition[]>();
+  const definitions = (docId: string, benefit: string): Definition[] => {
+    const d = docs.find((x) => x.id === docId);
+    if (!d) return [];
+    let defs = defsOf.get(docId);
+    if (!defs) { defs = definitionsIn(pages.filter((x) => x.policyId === docId).sort((a, b) => a.page - b.page), { id: d.id, hash: d.fileHash }); defsOf.set(docId, defs); }
+    return definitionFor(benefit, defs) ? defs : [];
+  };
   for (const d of mine) for (const p of pages.filter((x) => x.policyId === d.id)) {
+    // the document's text before this page, in page order (the product section a table sits in may start pages earlier)
+    const before = pages.filter((x) => x.policyId === d.id && x.page < p.page).sort((a, b) => a.page - b.page).map((x) => x.text).join("\n");
     for (const t of percentTables(p.text)) {
       const benefit = tableBenefit(t); if (!benefit) continue;
       const rows: ScheduleRow[] = t.rows.filter((r) => r.percents.length === 1).map((r, i) => ({ id: `${hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit)}r${i + 1}`, label: r.label, percent: r.percents[0], ppm: Math.round(r.percents[0] * 10_000),
         evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: r.start, end: r.end, subjectId: null }) }));
       if (!rows.length) continue;
-      const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName);
+      const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName, before);
       const id = hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit);
       out.push({ id, householdId: accountId, memberId, memberName, policy: policyOf(d), benefit, kind: "percentage_schedule", applicability: "shared_wording", printed: null, asOf: null, conditions: [],
         schedule: { header: t.header, base, rows, table: t, page: p.page, pageText: p.text },
         status: base.kind === "unresolved" ? "incomplete" : "resolved", unknowns: base.kind === "unresolved" ? [base.why] : [],
-        source: { page: p.page, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: t.start, end: t.end, subjectId: null }) }, personBenefit: null });
+        source: { page: p.page, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: t.start, end: t.end, subjectId: null }) }, personBenefit: null, definitions: definitions(d.id, benefit) });
     }
   }
   // a schedule's own rows are its cases, not separate benefits: the printed percentages inside a schedule's table are
   // listed only through the schedule
   const inSchedule = (r: BenefitRecord) => r.kind === "printed_percent" && out.some((x) => x.schedule && x.policy.id === r.policy.id && x.schedule.page === r.source.page
     && r.source.evidence.passage.start >= x.source.evidence.passage.start && r.source.evidence.passage.start <= x.source.evidence.passage.end);
+  for (const r of out) if (!r.definitions.length && mine.some((d) => d.id === r.policy.id)) r.definitions = definitions(r.policy.id, r.benefit);
   return out.filter((r) => !inSchedule(r));
 }
 
@@ -144,11 +173,19 @@ export function rankRecords(records: BenefitRecord[], topic: string): BenefitRec
   return records.map((r, i) => ({ r, i, s: score(r) })).sort((a, b) => b.s - a.s || a.i - b.i).map((x) => x.r);
 }
 
+/** PR #54 (rc-live-8): what is said for an amount printed with a bare "$" the document never explains. */
+export const UNSTATED_CURRENCY = "the document prints this amount with a bare “$” sign and does not say which currency";
+/** A printed amount as said to the household and the model: with its currency, or -- for a bare "$" the document never
+ * explains -- the figure with that currency stated as unknown (never "S$"). */
+export function printedAmount(p: { cents: number; currency: string; unit: string | null }): string {
+  if (!p.currency) return `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""} (printed with a bare “$” sign; the document does not say which currency)`;
+  return `${money(p.cents, p.currency)}${p.unit ? " " + p.unit : ""}`;
+}
 const money = (cents: number, currency: string) => `${currency === "SGD" ? "S$" : currency + " "}${(cents / 100).toLocaleString("en-SG", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 export const formatMoney = money;
 /** A compact record as the model sees it: identities, what is printed, the schedule rows and its base, what is unknown. */
 export function recordForModel(r: BenefitRecord): Record<string, unknown> {
-  const printed = r.printed?.kind === "money" ? `${money(r.printed.cents, r.printed.currency)}${r.printed.unit ? " " + r.printed.unit : ""}` : r.printed?.kind === "percent" ? `${r.printed.percent}%${r.printed.of ? " of the " + r.printed.of : ""}` : r.printed?.kind === "reference" ? `the ${r.printed.of}` : null;
+  const printed = r.printed?.kind === "money" ? printedAmount(r.printed) : r.printed?.kind === "percent" ? `${r.printed.percent}%${r.printed.of ? " of the " + r.printed.of : ""}` : r.printed?.kind === "reference" ? `the ${r.printed.of}` : null;
   const s = r.schedule;
   return { benefit_id: r.id, benefit: r.benefit, product: r.policy.product, insurer: r.policy.insurer, document: r.policy.personalProof ? "personal proof (lists this person)" : r.applicability === "amendment" ? "amendment" : "reference wording",
     kind: r.kind, ...(printed ? { printed } : {}), ...(r.asOf ? { as_of: r.asOf } : {}), ...(r.conditions.length ? { conditions: r.conditions } : {}), page: r.source.page,

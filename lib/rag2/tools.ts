@@ -18,7 +18,7 @@ import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
 // --- Agent K: calculation tool (separate block; coordinator merges) ---
 import { CALC_TOOLS } from "./calc/tool";
-import { rankRecords, recordForModel, resolveBenefitRecords, type BenefitRecord } from "./benefit-records";
+import { printedAmount, UNSTATED_CURRENCY, rankRecords, recordForModel, resolveBenefitRecords, type BenefitRecord } from "./benefit-records";
 import { evaluateBenefit } from "./evaluate";
 // --- end Agent K ---
 import { coInsurance, deductible, difference, householdFigure, minCap, perDay, percentage, product, sum, type ComputeOk, type Operand, type TableValueOperand } from "./compute";
@@ -34,6 +34,9 @@ export type ToolContext = {
   /** V1.4: the person's own row values person_benefits already issued (policy|subject|benefit -> value id): a
    * select_table_value for the same row reuses it instead of reading the table again. */
   personRows?: Map<string, string>;
+  /** Actual-library findings: sum-insured value ids the SERVER bound to a schedule by the product section the schedule is
+   * printed in (value id -> the certificate product it is printed under). Set by evaluate_benefit only. */
+  sectionBound?: Map<string, string>;
   /** V1.5: what the conversation is about (the household's messages), for ranking printed wording by relevance. */
   topicText?: string;
   /** V1.5: tool reads already returned this turn (person_benefits per person, read_page per page): repeats are answered
@@ -42,15 +45,28 @@ export type ToolContext = {
   /** Reliable chat: the benefit records shown to the model this turn (benefit id -> record), for server-rendered
    * statements. Evaluation never trusts this cache: evaluate_benefit re-resolves the records every time. */
   benefitRecords?: Map<string, BenefitRecord>;
+  /** Actual-library findings (latency): one resolution of a person's benefit records per turn (person_benefits,
+   * evaluate_benefit and its handler resolved them up to three times). The documents do not change within a turn. */
+  recordCache?: Map<string, Promise<BenefitRecord[]>>;
   /** Reliable chat: the household's own recorded words per person (the loop's facts), so evaluate_benefit's case is
    * checked against what they reported -- never only against the model's case words or option id. */
   reported?: Map<string, string[]>;
+  /** PR #54 follow-up: the household's reports per person (recorded facts, and their own messages), oldest first, with
+   * whether each corrected an earlier one -- what a benefit's definition is checked against (lib/rag2/applicability.ts). */
+  reportedFacts?: Map<string, import("./applicability").Reported[]>;
   /** Reliable chat: per `${memberId}|${benefitId}`, the reported parts an evaluation found none of the listed cases covers. */
   unlisted?: Map<string, string[]>;
 };
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };
 
+/** A person's benefit records, resolved once per turn (re-resolved on every turn: lifecycle, links and versions). */
+export function recordsFor(ctx: ToolContext, subjectId: string): Promise<BenefitRecord[]> {
+  const c = (ctx.recordCache ??= new Map());
+  let p = c.get(subjectId);
+  if (!p) { p = resolveBenefitRecords(ctx.accountId, subjectId); c.set(subjectId, p); p.catch(() => c.delete(subjectId)); }
+  return p;
+}
 export function createToolContext(args: { accountId: string; speakerId?: string | null; lastSubjectId?: string | null; asOf?: string | null }): ToolContext {
   if (!args.accountId) throw new Error("a tool context needs the household's account id");
   return { accountId: args.accountId, asOf: (args.asOf ?? new Date().toISOString()).slice(0, 10), conversation: { speakerId: args.speakerId ?? null, lastSubjectId: args.lastSubjectId ?? null, recentSubjectIds: [] }, values: new Map(), results: new Map(), seq: 0 };
@@ -150,11 +166,11 @@ export const RAG_TOOLS: ToolDef[] = [
       view.benefits = view.benefits.filter((b) => b.applicability !== "shared_wording" || keepShared.has(b));
       // Reliable chat: every benefit carries its server-resolved benefit_id; percentage schedules (a table of cases each
       // paying a percentage of a base the header names) are listed with their cases and resolved base.
-      const records = await resolveBenefitRecords(ctx.accountId, String(a.subject_id));
+      const records = await recordsFor(ctx, String(a.subject_id));
       for (const r of records) (ctx.benefitRecords ??= new Map()).set(r.id, r);
       const idOf = new Map(records.filter((r) => r.personBenefit).map((r) => [r.personBenefit!.key, r.id]));
       const schedules = rankRecords(records.filter((r) => r.kind === "percentage_schedule"), String(a.topic ?? "") + " " + (ctx.topicText ?? "")).slice(0, 4).map(recordForModel);
-      const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? `${b.printed.currency === "SGD" ? "S$" : b.printed.currency + " "}${b.printed.amount.toLocaleString("en-SG")}${b.printed.unit ? " " + b.printed.unit : ""}` : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
+      const fmt = (b: PersonBenefit) => b.printed.kind === "money" ? printedAmount(b.printed) : b.printed.kind === "percent" ? `${b.printed.percent}%${b.printed.of ? " of the " + b.printed.of : ""}` : `the ${b.printed.of}`;
       const byDoc = new Map<string, PersonBenefit[]>();
       for (const b of view.benefits) byDoc.set(b.policy.id, [...(byDoc.get(b.policy.id) ?? []), b]);
       const documents = [];
@@ -174,6 +190,8 @@ export const RAG_TOOLS: ToolDef[] = [
             }
           }
           benefits.push({ ...(idOf.get(b.key) ? { benefit_id: idOf.get(b.key) } : {}), benefit: b.benefit.label, printed: fmt(b), applies: b.applicability === "person_row" ? "printed on this person's own row" : b.applicability === "amendment" ? "an amendment naming this person" : "wording for every insured person (not a figure about this person alone)",
+            ...(b.benefit.section && b.benefit.section !== b.benefit.label ? { section: b.benefit.section } : {}),
+            ...(b.currency && b.currency.status !== "printed" ? { currency: b.currency.status === "unstated" ? UNSTATED_CURRENCY : `${b.printed.kind === "money" ? b.printed.currency : ""} (${b.currency.basis})` } : {}),
             as_of: b.asOf, conditions: b.conditions, page: b.source.page, ...(valueId ? { value_id: valueId } : {}), ...(b.amendedBy ? { amended: `amended to ${b.amendedBy.currency === "SGD" ? "S$" : b.amendedBy.currency + " "}${b.amendedBy.amount.toLocaleString("en-SG")} with effect from ${b.amendedBy.effective} by an endorsement of this policy (page ${b.amendedBy.page}); this row's amount is the amount before that date` } : {}),
             ...(b.amends ? { amends: `replaces ${b.amends.currency === "SGD" ? "S$" : b.amends.currency + " "}${b.amends.amount.toLocaleString("en-SG")}${b.amends.asOf ? ` (printed as of ${b.amends.asOf})` : ""} from ${b.asOf}, as this endorsement's wording says` } : {}),
             ...(b.conflicts?.length ? { conflicts: b.conflicts.map((c) => `${c.currency} ${c.amount.toLocaleString("en-SG")} on page ${c.page} of another document of this policy${c.effective ? ` (${c.effective})` : ""}`) } : {}), evidence: b.source.evidence });
@@ -185,7 +203,7 @@ export const RAG_TOOLS: ToolDef[] = [
   },
   {
     name: "evaluate_benefit",
-    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation. Results: needs_facts (reason missing: they have not said which case; ambiguous: their words fit more than one listed case -- ask which of THOSE), unlisted_case (what they reported is not a listed case: say so, ask nothing about the cases), case_conflict (the option is not what they reported).",
+    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation. Results: needs_facts (reason missing: they have not said which case; ambiguous: their words fit more than one listed case -- ask which of THOSE), unlisted_case (what they reported is not a listed case: say so, ask nothing about the cases), case_conflict (the option is not what they reported), not_applicable (its definition does not fit the report).",
     parameters: { type: "object", properties: {
       benefit_id: str("The benefit, as person_benefits identified it (b...)."),
       subject_id: str("The household member."),
@@ -200,7 +218,7 @@ export const RAG_TOOLS: ToolDef[] = [
     }, required: ["benefit_id", "subject_id", "purpose"], additionalProperties: false },
     handler: async (ctx, a) => {
       const res = await evaluateBenefit(ctx, a);
-      if (res.ok) { const recs = await resolveBenefitRecords(ctx.accountId, String(a.subject_id)); for (const r of recs) (ctx.benefitRecords ??= new Map()).set(r.id, r); }
+      if (res.ok) { const recs = await recordsFor(ctx, String(a.subject_id)); for (const r of recs) (ctx.benefitRecords ??= new Map()).set(r.id, r); }
       return res;
     },
   },

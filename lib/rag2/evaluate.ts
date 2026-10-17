@@ -9,7 +9,7 @@
  *     -> documented_terms | needs_facts | conditional_illustration (or indicative_estimate / not_payable / unresolved)
  *        | unresolved_evidence | unsupported_operation
  */
-import type { ToolContext, ToolResult } from "./tools";
+import { recordsFor, type ToolContext, type ToolResult } from "./tools";
 import type { EvidenceRef } from "./evidence";
 import type { TableValueOperand } from "./compute";
 import type { SelectedValue } from "./tables";
@@ -19,6 +19,7 @@ import { choosePercentRow } from "./calc/pct-rows";
 import { caseFor, partLabel, rowConsistent } from "./calc/case-terms";
 import { runCalculate } from "./calc/tool";
 import { formatMoney, recordForModel, resolveBenefitRecords, type BenefitRecord, type ScheduleRow } from "./benefit-records";
+import { applicabilityOf } from "./applicability";
 
 const ok = (data: unknown, evidence: EvidenceRef[]): ToolResult => ({ ok: true, data, evidence });
 const fail = (error: string, evidence: EvidenceRef[] = []): ToolResult => ({ ok: false, error, evidence });
@@ -52,7 +53,7 @@ const caseOptions = (rows: ScheduleRow[]) => rows.map((r) => ({ option_id: r.id,
 export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknown>): Promise<ToolResult> {
   const subjectId = String(a.subject_id ?? ""), benefitId = String(a.benefit_id ?? "").trim();
   if (!subjectId || !benefitId) return fail("evaluate_benefit needs subject_id and benefit_id (a benefit_id from person_benefits for this person)");
-  const records = await resolveBenefitRecords(ctx.accountId, subjectId);
+  const records = await recordsFor(ctx, subjectId);
   const rec = records.find((r) => r.id === benefitId);
   if (!rec) {
     const alts = records.filter((r) => r.kind === "percentage_schedule" || r.applicability === "person_row").slice(0, 6).map((r) => `${r.id} (${r.benefit}${r.policy.product ? `, ${r.policy.product}` : ""})`);
@@ -61,6 +62,20 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
   const purpose = ["what_if", "claim", "question"].includes(String(a.purpose)) ? String(a.purpose) : "what_if";
   const words = typeof a.assumption_words === "string" ? a.assumption_words : null;
   const summary = recordForModel(rec);
+  // PR #54 follow-up (rc-live-5 BKL1: Other Fracture evaluated, and asked about, for a fracture the household called
+  // closed): the benefit's OWN definition in its document, against what the household reported. An inconsistent benefit
+  // is neither calculated nor clarified; one whose definition turns on something not yet reported gets one household
+  // question for it. (A what-if is hypothetical: it is evaluated as asked.)
+  const app = rec.definitions.length ? applicabilityOf(rec.benefit, rec.definitions, ctx.reportedFacts?.get(subjectId) ?? []) : null;
+  const appEvidence = app && app.status !== "unconstrained" ? [app.definition.evidence, ...(app.via ? [app.via.evidence] : [])] : [];
+  if (app?.status === "inconsistent" && purpose !== "what_if")
+    return ok({ status: "not_applicable", benefit: rec.benefit, benefit_id: rec.id, definition: app.definition.text, ...(app.via ? { refers_to: app.via.text } : {}), reported: app.reported.words, why: app.why,
+      note: `What the household reported is not what this document's definition of ${rec.benefit} describes. Do not calculate this benefit, state its terms or ask about its cases; at most say once that, by the document's own definition, it is for ${app.allowed.map((v) => app.attribute.said(v)).join(" or ")}. This is the wording's scope, not an insurer decision.` }, appEvidence);
+  if (app?.status === "unresolved" && purpose !== "what_if")
+    return ok({ status: "needs_facts", reason: "applicability", benefit: rec.benefit, benefit_id: rec.id, need: app.attribute.label, fact_key: app.attribute.factKey, ask: app.attribute.question(rec.memberName),
+      options: app.attribute.values.map((v) => ({ option_id: `${app.attribute.id}:${v.id}`, case: v.label })), definition: app.definition.text, ...(app.via ? { refers_to: app.via.text } : {}), why: app.why,
+      note: "Whether this benefit fits depends on a detail the household can tell you (its definition is cited). Ask that one question (ask_user with this result's requirement_id); do not calculate or choose for them." }, appEvidence);
+  const applicability = app && app.status === "consistent" ? { status: "consistent", definition: app.definition.text, reported: app.reported.words, fact_keys: app.reported.keys } : undefined;
 
   if (rec.kind === "percentage_schedule" && rec.schedule) {
     const s = rec.schedule;
@@ -113,17 +128,18 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     if (s.base.kind === "sum_insured") {
       const vid = await personAmountValue(ctx, s.base.from, rec.memberName, subjectId);
       if (!vid) return ok({ status: "unresolved_evidence", benefit: rec.benefit, benefit_id: rec.id, why: `${rec.memberName}'s sum insured row could not be read as a printed amount` }, [rec.source.evidence]);
+      if (s.base.section) (ctx.sectionBound ??= new Map()).set(vid, s.base.from.benefit.label);
       args.sum_insured_value_id = vid;
     }
     const res = await runCalculate(ctx, args);
     if (!res.ok) return ok({ status: "unresolved_evidence", benefit: rec.benefit, benefit_id: rec.id, case: row.label, why: res.error.replace(/\b(?:percent_value_id|sum_insured_value_id|base_value_id)\b:?\s*/g, "") }, res.evidence);
     const d = res.data as Record<string, unknown>;
     const kind = String(d.kind);
-    return ok({ status: kind, result_id: d.calc_id, benefit: rec.benefit, benefit_id: rec.id, case: row.label, percent: row.percent,
+    return ok({ status: kind, result_id: d.calc_id, benefit: rec.benefit, benefit_id: rec.id, case: row.label, percent: row.percent, ...(applicability ? { applicability } : {}),
       base: s.base.kind === "fixed_limit" || s.base.kind === "sum_insured" ? { label: s.base.label, amount: formatMoney(s.base.cents, s.base.currency) } : null,
       amount: d.amount != null && d.currency ? formatMoney(Math.round(Number(d.amount) * 100), String(d.currency)) : null,
       conditions: d.conditions, requirements: d.requirements, missing: d.missing, suggested_evidence: d.suggested_evidence,
-      note: kind === "conditional_illustration" ? "State it with a statement of kind calculation citing result_id (the server writes the figures and their sources); it is an illustration, never a payment or decision." : undefined }, res.evidence);
+      note: kind === "conditional_illustration" ? "State it with a statement of kind calculation citing result_id (the server writes the figures and their sources); it is an illustration, never a payment or decision." : undefined }, [...res.evidence, ...appEvidence]);
   }
 
   // A printed daily rate with the stay the household reported: the existing hospital-cash calculator.

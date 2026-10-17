@@ -17,6 +17,8 @@
  * A household member's name, an address, a date or a salutation is NEVER a benefit label: labels come only from the
  * document's product headings and its own benefit rows / "Label: value" lines.
  */
+import { isHeadingLine, paragraphs, sentenceEndLine } from "./headings";
+import { currencyDeclarationLine, documentCurrency } from "@/lib/chat/answer-verification";
 import { endorsementScope } from "./endorsement-scope";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
@@ -38,11 +40,20 @@ export type PersonBenefit = {
   applicability: "person_row" | "shared_wording" | "amendment";
   policy: { id: string; product: string | null; insurer: string | null; policyNumber: string | null; groupPolicyNumber: string | null; documentRole: string | null; personalProof: boolean;
     version: { documentHash: string | null; documentDate: string | null; effectiveDate: string | null } };
-  benefit: { label: string; source: "product_heading" | "table_row" | "label_line" };
+  benefit: { label: string; source: "product_heading" | "table_row" | "label_line" | "section_heading";
+    /** PR #54 (rc-live-8): the section heading the benefit is printed under, as printed ("Section 5 - <name>"). */
+    section?: string };
   printed: PrintedValue;
   asOf: string | null;
   conditions: string[];
   source: { page: number; passage: string; row: { label: string; column: string | null } | null; evidence: EvidenceRef };
+  /** PR #54 (rc-live-8): where a condition printed apart from the benefit's own lines comes from (the footnote a row's
+   * marker points to): its own evidence, never a widened span taking in the neighbouring rows. */
+  conditionSources?: EvidenceRef[];
+  /** PR #54 (rc-live-8): how an amount's currency is known -- printed with it ("S$"), declared by the same document for
+   * its bare "$" amounts, printed by the same document for the same benefit and amount, or not stated (a bare "$" the
+   * document never explains: the amount is kept, its currency is an explicit unknown). */
+  currency?: { status: "printed" | "declared" | "same_document" | "unstated"; basis: string | null };
   /** Other documented amounts for the same person and benefit in the same policy (a certificate row and an endorsement
    * amending it): which applies is NOT decided here (amendment precedence is never guessed). */
   conflicts?: { key: string; policyId: string; amount: number; currency: string; page: number; effective: string | null }[];
@@ -56,6 +67,29 @@ export type PersonBenefitView = { householdId: string; member: { id: string; nam
 const MONEY_ONLY = /^(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d[\d,]*(?:\.\d+)?$/i;
 const HAS_MONEY = /(?:S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?\d/i;
 const CONDITION = /\b(?:if|unless|within|provided|subject to|from the \d+\w* day|payable (?:only|from|after|on)|after|up to|per (?:accident|policy year|day))\b/i;
+/** PR #54 (rc-live-8): a footnote marker after a row's name ("Benefit*"), a name left unfinished at a line's end, a
+ * numbered section heading, the sections that are never one benefit, and any printed amount (group 1: its currency
+ * when printed, group 2: a bare "$", group 3: the figure). */
+const MARKER = /\s*([*^#†‡]+)\s*$/;
+const WRAPS = /(?:&|,|\/|-|\b(?:and|or|of|upon|for|to|with|the|in|on|by|from))\s*$/i;
+const NUMBERED = /^(?:Section|Part|Clause|Article|Benefit)\s+\d+[A-Za-z]?\s*[-–—:.]\s*([A-Za-z].{2,80})$/i;
+const GENERIC_SECTION = /^(?:definitions?|interpretation|general (?:provisions|conditions)|conditions?|exclusions?|claims?(?: procedure)?|how to (?:make a )?claim|contents|schedule|important notes?|notes?)$/i;
+const AMOUNT_ANY = /(?:\b(SGD|USD|MYR|HKD|AUD|S\$|SG\$|US\$|HK\$|A\$|RM)\s?|(?<![A-Za-z])(\$)\s?)(\d[\d,]*(?:\.\d+)?)/g;
+/** The footnote a marker points to: the page's own line starting with that marker (not the marker doubled). */
+function footnoteOf(pageText: string, marker: string, notAt: number): { text: string; start: number; end: number } | null {
+  const lines = pageText.split("\n");
+  let at = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const start = at; at += lines[i].length + 1;
+    if (start === notAt) continue;
+    const t = lines[i].trimStart();
+    if (!t.startsWith(marker) || /^[*^#†‡]/.test(t.slice(marker.length)) || !/^\s*[A-Za-z(]/.test(t.slice(marker.length))) continue;
+    const last = sentenceEndLine(lines, i);
+    const end = start + lines.slice(i, last + 1).join("\n").length;
+    return { text: lines.slice(i, last + 1).map((x) => x.trim()).join(" ").slice(marker.length).trim(), start: start + (lines[i].length - t.length), end };
+  }
+  return null;
+}
 const namesOf = (m: MemberRow) => [...new Set([m.displayName, m.preferredName ?? "", m.displayName.split(/\s+/)[0] ?? ""].map((x) => x.trim()).filter((x) => x.length >= 2))];
 /** A printed product heading: one cell, no amount, no member's name, and either a "(POLICY NO." marker or upper case. */
 function isProductHeading(line: string, household: { id: string; names: string[] }[]): boolean {
@@ -132,9 +166,14 @@ export async function personBenefits(accountId: string, memberId: string, preloa
           : pct ? { kind: "percent", percent: Number(pct[1]), ppm: Math.round(Number(pct[1]) * 10000), of: pct[2] ? cut(pct[2]) : null }
           : ref ? { kind: "reference", of: ref[1].replace(/\s+/g, " ") } : null;
         if (!printed) continue;
-        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end: start + line.length, subjectId: memberId });
+        // (Actual-library findings: a line wrapped mid-sentence is read with its continuation -- the condition is the whole
+        // sentence, never its first line)
+        const last = sentenceEndLine(lines, i);
+        const end = start + lines.slice(i, last + 1).join("\n").length;
+        const whole = lines.slice(i, last + 1).map((x) => x.trim()).join(" ");
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end, subjectId: memberId });
         push({ key: `${d.id}:${p.page}:${start}`, applicability: "shared_wording", benefit: { label: ll.label, source: "label_line" }, printed, asOf: null,
-          conditions: CONDITION.test(ll.value) ? [line.trim()] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
+          conditions: CONDITION.test(whole) ? [whole] : [], source: { page: p.page, passage: evidence.passage.text, row: null, evidence } });
       }
     }
     // 2b. A roster stored ONE CELL PER LINE: reconstructed by its record structure (lib/claims/roster-layout.ts); what
@@ -158,16 +197,90 @@ export async function personBenefits(accountId: string, memberId: string, preloa
     }
     for (const g of cellRoster.gaps) unresolved.push(`${d.productName ?? "a document"} page ${g.page}: ${g.reason}`);
     // 4. Shared wording tables: a benefit row printing one amount or percentage (not a person's row).
+    // PR #54 (rc-live-8): a bullet / tab row ("•<TAB><name>*<TAB>Up to S$2,000") is named by its first text cell, never
+    // by the bullet; a name wrapped onto the next line ("... Total &" / "Permanent Disablement*") is read whole; the
+    // footnote its marker points to ("*This Benefit can only be claimed ...") is its condition, with its own source.
     for (const t of tables) for (const r of t.rows) {
-      if (rosterRows.has(r) || !r.label || memberNamedIn(r.label, household) || /\d/.test(r.label.replace(/\([^)]*\)/g, ""))) continue;
-      const vals = t.columns.map((c) => ({ c, x: r.cells[c.index] })).filter((y) => y.x && y.x !== r.labelCell && y.x.text !== r.label).map((y) => ({ ...y, v: parseCell(y.x!.text, y.c.currency, r.label) })).filter((y) => y.v.kind === "money" || y.v.kind === "percent");
-      if (vals.length !== 1) continue;
+      if (rosterRows.has(r)) continue;
+      let labelCell = r.labelCell, label = r.label;
+      if (!/[A-Za-z]{3}/.test(label)) {
+        const c = r.cells.find((x) => !!x && x !== r.labelCell && /[A-Za-z]{3}/.test(x.text) && !["money", "percent"].includes(parseCell(x.text).kind));
+        if (!c) continue;
+        labelCell = c; label = c.text;
+      }
       const pageText = dp.find((p) => p.page === r.page)?.text ?? "";
+      let end = r.lineEnd;
+      const nextLine = pageText.slice(r.lineEnd + 1).split("\n")[0] ?? "";
+      if (WRAPS.test(label.replace(MARKER, "")) && nextLine.trim() && !/\t|\s{3,}|\d|\$/.test(nextLine) && /^[A-Za-z(][A-Za-z ()'’/&,*^#†‡-]{1,60}$/.test(nextLine.trim())) {
+        label = `${label.trim()} ${nextLine.trim()}`; end = r.lineEnd + 1 + nextLine.length;
+      }
+      const marker = MARKER.exec(label)?.[1] ?? null;
+      label = label.replace(MARKER, "").trim();
+      if (!label || memberNamedIn(label, household) || /\d/.test(label.replace(/\([^)]*\)/g, ""))) continue;
+      const vals = t.columns.map((c) => ({ c, x: r.cells[c.index] })).filter((y) => y.x && y.x !== labelCell && y.x !== r.labelCell).map((y) => ({ ...y, v: parseCell(y.x!.text, y.c.currency, label) })).filter((y) => y.v.kind === "money" || y.v.kind === "percent");
+      if (vals.length !== 1) continue;
       const v = vals[0].v, of = /%\s+of\s+(?:the\s+)?([^)\n]{3,60})/i.exec(vals[0].c.header)?.[1]?.trim() ?? null;
       const printed: PrintedValue = v.kind === "money" ? { kind: "money", amount: v.amount, cents: v.cents, currency: v.currency, unit: v.unit, period: v.period } : { kind: "percent", percent: (v as { percent: number }).percent, ppm: (v as { ppm: number }).ppm, of };
-      const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: r.lineStart, end: r.lineEnd, subjectId: memberId });
-      push({ key: `${d.id}:${r.page}:${r.lineStart}`, applicability: "shared_wording", benefit: { label: r.label, source: "table_row" }, printed, asOf: null, conditions: [],
-        source: { page: r.page, passage: evidence.passage.text, row: { label: r.label, column: vals[0].c.header || null }, evidence } });
+      const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: r.lineStart, end, subjectId: memberId });
+      const note = marker ? footnoteOf(pageText, marker, r.lineStart) : null;
+      const conditionSources = note ? [evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: r.page, pageText, start: note.start, end: note.end, subjectId: memberId })] : undefined;
+      push({ key: `${d.id}:${r.page}:${r.lineStart}`, applicability: "shared_wording", benefit: { label, source: "table_row" }, printed, asOf: null, conditions: note ? [note.text] : [],
+        source: { page: r.page, passage: evidence.passage.text, row: { label, column: vals[0].c.header || null }, evidence }, ...(conditionSources ? { conditionSources } : {}),
+        ...(printed.kind === "money" ? { currency: { status: "printed" as const, basis: null } } : {}) });
+    }
+    // 6. PR #54 (rc-live-8): a benefit printed as a heading above its paragraph ("Section 5 - <name>" or a heading line of
+    // its own, then the wording that pays it). The section runs from its heading to the next heading; it is a benefit
+    // when its wording prints exactly one amount and no percentage table, and no label line / table row of the same
+    // lines is already a record. Its conditions are its own paragraphs; its source is the section's own span (never the
+    // neighbouring section). A bare "$" amount keeps its figure: its currency is the document's own declaration, else
+    // the same document's own explicit amount for the same benefit, else explicitly unstated -- never assumed.
+    const whole = [...dp].sort((a, b) => a.page - b.page).map((p) => p.text).join("\n");
+    const declared = documentCurrency(whole) ? currencyDeclarationLine(whole) : null;
+    for (const p of dp) {
+      const lines = p.text.split("\n"), starts: number[] = [];
+      { let at = 0; for (const l of lines) { starts.push(at); at += l.length + 1; } }
+      const headAt = (i: number): { name: string; heading: string } | null => {
+        const l = lines[i].trim();
+        if (!l || /\t|\s{3,}/.test(lines[i]) || memberNamedIn(l, household)) return null;
+        const prev = i ? lines[i - 1].trim() : "";
+        if (prev && !/[.!?:;]["”’)]*$/.test(prev) && !isHeadingLine(prev, l)) return null;
+        const m = NUMBERED.exec(l);
+        if (m) return /\$|\d\s?%/.test(m[1]) ? null : { name: m[1].trim(), heading: l };
+        return isHeadingLine(l, lines[i + 1] ?? null) && !isProductHeading(l, household) ? { name: l, heading: l } : null;
+      };
+      for (let i = 0; i < lines.length; i++) {
+        const h = headAt(i);
+        if (!h || GENERIC_SECTION.test(h.name)) continue;
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() && !headAt(j) && !/\t|\s{3,}/.test(lines[j])) j++;
+        const body = lines.slice(i + 1, j);
+        if (!body.length || !/^[A-Z(“"]/.test(body[0].trim()) || !/\s[a-z]{2,}\s/.test(body[0])) continue;
+        if (j < lines.length && lines[j].trim() && !headAt(j)) continue; // (a table or a layout this reading does not know)
+        const text = body.join("\n");
+        if (/\d\s?%/.test(text)) continue;
+        const start = starts[i], end = starts[j - 1] + lines[j - 1].length;
+        if (out.some((b) => b.policy.id === d.id && b.source.page === p.page && b.source.evidence.passage.start >= start && b.source.evidence.passage.start < end)) continue;
+        const amounts = [...text.matchAll(AMOUNT_ANY)];
+        if (amounts.length !== 1) continue;
+        const a = amounts[0], paras = paragraphs(text);
+        const para = paras.find((x) => x.includes(a[0].trim())) ?? text;
+        const bare = !a[1];
+        // (the figure's unit / period read from its own sentence; a bare "$" is read as a figure only)
+        const v = parseCell(bare ? para.replace(a[0], `S$${a[3]}`) : para);
+        if (v.kind !== "money") continue;
+        let currency: string = v.currency, cur: NonNullable<PersonBenefit["currency"]> = { status: "printed", basis: null };
+        if (bare) {
+          const same = [...new Set(whole.split("\n").filter((l) => l.toLowerCase().includes(h.name.toLowerCase())).flatMap((l) => [...l.matchAll(AMOUNT_ANY)].filter((x) => x[1]).map((x) => parseCell(x[0].trim())))
+            .filter((x) => x.kind === "money" && x.cents === v.cents).map((x) => (x as { currency: string }).currency))];
+          if (declared) { currency = "SGD"; cur = { status: "declared", basis: declared }; }
+          else if (same.length === 1) { currency = same[0]; cur = { status: "same_document", basis: `the same document prints the ${h.name} as ${same[0]} ${v.amount.toLocaleString("en-SG")}` }; }
+          else { currency = ""; cur = { status: "unstated", basis: null }; }
+        }
+        const evidence = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start, end, subjectId: memberId });
+        push({ key: `${d.id}:${p.page}:${start}`, applicability: "shared_wording", benefit: { label: h.name, source: "section_heading", section: h.heading },
+          printed: { kind: "money", amount: v.amount, cents: v.cents, currency, unit: v.unit, period: v.period }, asOf: null, conditions: paras,
+          source: { page: p.page, passage: evidence.passage.text, row: null, evidence }, currency: cur });
+      }
     }
   }
   // 5. An amendment of this person's documented amount (an endorsement line naming the person, a product heading of
