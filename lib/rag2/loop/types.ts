@@ -36,6 +36,8 @@ export interface LoopModel { readonly id: string; readonly kind: "hosted" | "scr
  * in those words) or "paraphrased" (the model's wording of them: a report, unconfirmed, never a calculation input).
  * Facts saved before provenance existed have neither field and count as user_reported / stated. */
 export type LoopFact = { value: string | number | boolean; words: string; turn: number; source?: "user_reported" | "document" | "medical_evidence"; basis?: "stated" | "paraphrased"; evidenceIds?: string[];
+  /** PR #54 follow-up: the household's message recording it corrected something ("actually", "sorry", "not ..."). */
+  cue?: boolean;
   previous?: { value: string | number | boolean; words: string; turn: number; source?: LoopFact["source"]; basis?: LoopFact["basis"] }[] };
 export type LoopClaim = { subjectId: string | null; facts: Record<string, LoopFact>; derived: LoopDerived[];
   /** Agent G: the calculations worked out for this claim (by calc id), with the facts and evidence each rests on, so a

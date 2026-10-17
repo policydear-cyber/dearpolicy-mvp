@@ -55,3 +55,21 @@ export function sentenceEndLine(lines: string[], i: number): number {
   }
   return j;
 }
+
+const productWords = (t: string) => new Set((t.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["policy", "wording", "summary", "benefits", "schedule", "certificate", "document", "insurance", "group", "scheme"].includes(w)));
+/** The product a schedule belongs to: of the person's certificate products, the one named by the nearest heading above
+ * the table in its own document (pages in order) -- "PART B - GROUP PERSONAL ACCIDENT" above Section 4 - Other Fracture.
+ * A heading naming another product nearer the table, or one naming two, decides nothing. Null when no heading names one. */
+export function productSection(before: string, labels: string[]): { label: string; heading: string } | null {
+  const lines = before.split("\n");
+  const want = labels.map((label) => ({ label, w: [...productWords(label)] })).filter((x) => x.w.length);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!isHeadingLine(lines[i], lines[i + 1] ?? null)) continue;
+    const have = productWords(lines[i]);
+    const named = want.filter((x) => x.w.every((w) => have.has(w)));
+    if (named.length === 1) return { label: named[0].label, heading: lines[i].trim() };
+    if (named.length > 1) return null;
+  }
+  return null;
+}
+

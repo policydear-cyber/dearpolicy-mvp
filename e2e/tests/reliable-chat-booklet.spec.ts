@@ -83,3 +83,33 @@ test("BK3: the Compassionate Death Allowance Benefit is kept; its bare-$ amount 
   expect(a.shown).not.toMatch(/S\$2,000/);
   expect(unfinished(a.shown)).toHaveLength(0);
 });
+
+// PR #54 follow-up: the rc-live-5 failures replayed with the model's recorded calls.
+for (const id of ["RL1a", "RL1b"]) test(`${id}: after "hip", the conditional S$3,750 and no Other Fracture question (recorded calls)`, async ({ page, request }) => {
+  const [u1, u2] = await scenario(request, id);
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a1 = await send(page, u1);
+  const s1 = await sameAsSaved(request, a1.shown, `${id} question`);
+  expect(s1.saved.questions ?? []).toHaveLength(1);
+  expect(a1.shown).toMatch(/Hip/);
+  expect(a1.shown).not.toMatch(/\bb[0-9a-f]{10}(?:r\d+)?\b/);
+  expect(a1.shown).not.toMatch(/S\$3,750|S\$225,000/);
+  const a2 = await send(page, u2);
+  const s2 = await sameAsSaved(request, a2.shown, `${id} hip`);
+  expect(a2.shown).toMatch(/conditional illustration is S\$3,750/);
+  expect(a2.shown).not.toMatch(/Other Fracture|225,000/);
+  expect(s2.saved.questions ?? []).toHaveLength(0);
+});
+test("RL3: no false enrolment caveat -- the certificate's dated listing, the allowance kept (recorded calls)", async ({ page, request }) => {
+  const [u] = await scenario(request, "RL3");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a = await send(page, u);
+  await sameAsSaved(request, a.shown, "RL3");
+  expect(a.shown).not.toMatch(/do not confirm/i);
+  expect(a.shown).toMatch(/Daniel's certificate lists Daniel under Group Personal Accident as of 01\/04\/2024/);
+  expect(a.shown).toMatch(/does not by itself establish cover on a later date/);
+  expect(a.shown).toMatch(/Compassionate Death Allowance Benefit/);
+  expect(a.shown).not.toMatch(/S\$2,000/);
+});

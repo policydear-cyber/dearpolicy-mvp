@@ -51,6 +51,9 @@ export type ToolContext = {
   /** Reliable chat: the household's own recorded words per person (the loop's facts), so evaluate_benefit's case is
    * checked against what they reported -- never only against the model's case words or option id. */
   reported?: Map<string, string[]>;
+  /** PR #54 follow-up: the household's reports per person (recorded facts, and their own messages), oldest first, with
+   * whether each corrected an earlier one -- what a benefit's definition is checked against (lib/rag2/applicability.ts). */
+  reportedFacts?: Map<string, import("./applicability").Reported[]>;
   /** Reliable chat: per `${memberId}|${benefitId}`, the reported parts an evaluation found none of the listed cases covers. */
   unlisted?: Map<string, string[]>;
 };
@@ -198,7 +201,7 @@ export const RAG_TOOLS: ToolDef[] = [
   },
   {
     name: "evaluate_benefit",
-    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation. Results: needs_facts (reason missing: they have not said which case; ambiguous: their words fit more than one listed case -- ask which of THOSE), unlisted_case (what they reported is not a listed case: say so, ask nothing about the cases), case_conflict (the option is not what they reported).",
+    description: "Work out what ONE benefit (a benefit_id from person_benefits) gives for this person, on the server: it reads the benefit's own operands from the documents (a schedule's row and the amount its header names as the base -- a fixed benefit limit or the person's own sum insured; a printed daily rate) and runs DearPolicy's calculators. Pass only what the household reported: the case in their own words (case) or the option_id of the listed case their words identify, the stay's admission / discharge for a daily rate, and their own words for the what-if or event. Never pass amounts, percentages, quotes or pages. Returns status documented_terms (the printed terms), needs_facts (what is still needed, with the listed options -- ask the household; never choose for them), conditional_illustration / indicative_estimate / not_payable / unresolved (with result_id: state it with a statement of kind calculation citing result_id), unresolved_evidence (what the documents do not establish) or unsupported_operation. Results: needs_facts (reason missing: they have not said which case; ambiguous: their words fit more than one listed case -- ask which of THOSE), unlisted_case (what they reported is not a listed case: say so, ask nothing about the cases), case_conflict (the option is not what they reported), not_applicable (its definition does not fit the report).",
     parameters: { type: "object", properties: {
       benefit_id: str("The benefit, as person_benefits identified it (b...)."),
       subject_id: str("The household member."),

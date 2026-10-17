@@ -193,7 +193,7 @@ jobs:
         run: npm run verify:gate-test
       - name: Conversational RAG retrieval tools behind DEARPOLICY_RAG_TOOLS (default off; household-scoped, active/released/current documents only; the subject's table column before the value; every value with its evidence -- page, row, column, passage offsets; integer-cent calculations labelled printed limit vs indicative estimate; bindings and records accepted by the save-time gate)
         run: npm run rag2:tools-test
-      - name: Reliable chat actual-library repairs (server-owned clarification requirements; percentage bases bound by product section; a heading bound to its wrapped paragraph; bare-$ currency kept unknown; complete clauses; batched lookups)
+      - name: Reliable chat actual-library repairs (server-owned clarification requirements; percentage bases bound by product section; a heading bound to its wrapped paragraph; bare-$ currency kept unknown; complete clauses; batched lookups; benefit applicability from the document's own definitions; household questions vs insurer assessments; enrolment statements checked against the person's certificate)
         run: npm run reliable-chat:booklet-test
       - name: Reliable chat conflicting and negated cases (no arbitrary row or saved estimate; an affirmative correction clears the question and saves a re-verifiable illustration)
         run: npm run reliable-chat:conflicts-test

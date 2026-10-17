@@ -9,7 +9,7 @@
  * dropped here -- with an honest note -- before the gate ever sees it. Nothing is added: no figure is ever written by
  * this code, only bound.
  */
-import { isHeadingLine } from "../headings";
+import { isHeadingLine, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
 import { RENDERED, RENDERED_STEPS } from "./statement-render";
@@ -264,6 +264,63 @@ export function amountAbsenceContradiction(text: string, subjectId: string | nul
   const who = ctx.people?.find((p) => p.id === subjectId)?.names[0] ?? "this person";
   const amount = hit.printed.currency === "SGD" ? `S$${hit.printed.amount.toLocaleString("en-US")}` : `${hit.printed.currency} ${hit.printed.amount.toLocaleString("en-US")}`;
   return `says the documents do not give ${who}'s ${hit.benefit.label} amount, but ${who}'s ${hit.policy.product ?? "certificate"} lists ${amount}${hit.asOf ? ` as of ${hit.asOf}` : ""} (page ${hit.source.page})`;
+}
+/**
+ * PR #54 follow-up (rc-live-5 BKL3: "the uploaded documents do not confirm Daniel's enrolment in the group scheme" while
+ * his certificate lists him): a negative or uncertain statement about whether a person is enrolled, listed or covered is
+ * checked against THAT person's own certificate rows in this household's documents. When a certificate lists them, the
+ * statement is replaced by the dated fact -- the certificate lists them under the product, as of its date -- and that
+ * this alone does not establish cover on a later date. A statement limited to a date ("cover on the date of death is not
+ * established") is kept; so is one about a person no certificate of theirs lists. Another household's certificate, or
+ * another member's row, never counts. The product scope of a wording passage cited in the answer (a paragraph benefit)
+ * comes from that document's own section headings, never from its title.
+ */
+export const LATER_DATE_NOTE = "A dated certificate shows who it listed on that date; it does not by itself establish cover on a later date.";
+const ENROL_NEG = [
+  /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|list|name|include|record|evidence|prove|mention|verify)\w*\b[^.;]{0,90}?\b(?:enrol\w*|membership|a member|insured person|is insured|participat\w*|(?:is|are|was) (?:listed|named|covered))\b/i,
+  /\b(?:enrol\w*|membership|participation)\b[^.;]{0,50}\b(?:is|are|was|were|remains?)\s+(?:not\s+(?:confirmed|established|shown|known|verified)|unconfirmed|unknown|unclear|unverified)\b/i,
+  /\bunconfirmed\s+(?:enrol\w*|membership|participation)\b/i,
+  /\b(?:not|never)\s+(?:listed|named|enrol\w*)\s+(?:on|in|under)\b/i,
+];
+export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages">): { text: string; evidence: EvidenceRef; reason: string } | null {
+  const m = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
+  if (!m || !subjectId || !ctx.benefits) return null;
+  if (DATED_LIMITATION.test(text)) return null;
+  const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.policy.personalProof && b.memberId === subjectId);
+  if (!rows.length) return null;
+  // What the enrolment is said to be IN: a certificate's listing shows the scheme and the products it lists. Enrolment
+  // for something else -- a particular benefit, the applicable / Core / Voluntary part of a scheme -- is not what the
+  // listing shows, and stays as said.
+  if (/\b(?:applicable|core|voluntary|optional|sub-?scheme)\b[^.;]{0,40}\benrol\w*/i.test(text)) return null;
+  const target = /\benrol\w*\s+(?:for|in|under|on|with|into)\s+([^,.;]{1,70})/i.exec(text)?.[1] ?? null;
+  if (target) {
+    const t = target.toLowerCase();
+    const listed = [...new Set(rows.map((b) => b.benefit.label))].some((l) => { const w = (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((x) => x !== "group"); return w.length > 0 && w.every((x) => t.includes(x)); });
+    const scheme = /\b(?:scheme|policy|certificate)\b/.test(t) && !/\b(?:benefit|allowance|core|voluntary|optional|section|part)\b/.test(t);
+    if (!listed && !scheme) return null;
+  }
+  // the product the answer's wording is about, as that wording's own section headings name it
+  const labels = [...new Set(rows.map((b) => b.benefit.label))];
+  let scope: string | null = null;
+  for (const e of cited) {
+    if (rows.some((b) => b.policy.id === e.policyId)) continue;
+    const lib = ctx.libraryPages?.get(e.policyId);
+    if (!lib) continue;
+    const before = [...lib.pages.filter((p) => p.page < e.passage.onPage).sort((a, b) => a.page - b.page).map((p) => p.text), (lib.pages.find((p) => p.page === e.passage.onPage)?.text ?? "").slice(0, e.passage.start)].join("\n");
+    const sec = productSection(before, labels);
+    if (sec) { scope = sec.label; break; }
+  }
+  const inScope = scope ? rows.filter((b) => b.benefit.label === scope) : rows;
+  if (!inScope.length) return null;
+  const latest = [...inScope].sort((a, b) => String(b.asOf ?? "").localeCompare(String(a.asOf ?? "")))[0];
+  const who = ctx.people?.find((p) => p.id === subjectId)?.names.at(-1) ?? "this person";
+  const under = [...new Set(inScope.filter((b) => b.policy.id === latest.policy.id).map((b) => b.benefit.label))];
+  const doc = latest.policy.product ?? "certificate";
+  // (the date as the certificate prints it on that row)
+  const printedDate = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{4}\b|\b\d{1,2}\s+[A-Z][a-z]+\s+\d{4}\b/.exec(latest.source.evidence.passage.text)?.[0] ?? latest.asOf;
+  return { evidence: latest.source.evidence,
+    text: `${who}'s certificate lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""}.`,
+    reason: `says ${who}'s enrolment or listing is not confirmed, but ${who}'s ${doc} lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""} (page ${latest.source.page})` };
 }
 const TRIP_NOT_COVERED = /\b(?:does not|do not|doesn['’]t|don['’]t|would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b|\b(?:is|are|was|were|would be)\s+not\s+(?:covered|insured)\b|\bisn['’]t covered\b|\bno cover(?:age)? (?:for|on|during)\b|\bexclud(?:es|ed)\b/i;
 const TRIP_NOT_SHOWN = /\b(?:does|do|did)\s+not\s+(?:document|show|establish|evidence|record|prove)\s+(?:any\s+)?(?:[\w’']+\s+){0,2}?cover(?:age)?\b|\bnot shown to (?:be )?cover(?:ed)?\b|\bno documented cover\b/i;
@@ -934,6 +991,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // V1.5: "the documents do not provide X's <product> Sum Insured" while X's own certificate row prints it.
     const absentAmount = amountAbsenceContradiction(text, subjectId, ctx);
     if (absentAmount) { drop(text, absentAmount); continue; }
+    { const en = enrolmentAbsenceClaim(text, subjectId, [...evIds, ...out.evidenceIds].map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+      if (en) { out.dropped.push({ sentence: text, reason: en.reason }); text = en.text; evIds = [evidenceIdOf(ctx.state, en.evidence, "compose")]; if (!out.notes.includes(LATER_DATE_NOTE)) out.notes.push(LATER_DATE_NOTE); } }
     // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
     // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
     // own; the sentence is kept only if every one of them is.
@@ -1580,6 +1639,8 @@ function settleAnswer(out: Composed, drops: DropInfo[], conditioned: { at: numbe
   // Notes: caveats the household needs (never "I left out ..."), or one accurate explanation when nothing is left.
   const notes: string[] = [];
   const add = (n: string | null | undefined) => { if (n && !notes.includes(n)) notes.push(n); };
+  // (a dated listing said in place of an enrolment caveat carries its limit: cover on a later date is not established)
+  if (out.notes.includes(LATER_DATE_NOTE) && out.sentences.some((x) => / certificate lists /.test(x.text))) add(LATER_DATE_NOTE);
   for (const d of drops) if (d.cat === "stale") add(d.note); // user-facing at the source (loop.ts revalidateEvidence)
   if (drops.some((d) => d.cat === "decision")) add(DECISION_NOTE);
   if (drops.some((d) => d.cat === "payout")) add(PAYOUT_NOTE);

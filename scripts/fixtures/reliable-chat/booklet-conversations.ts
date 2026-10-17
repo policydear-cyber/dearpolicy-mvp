@@ -6,6 +6,7 @@
  */
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { M, doc } from "./booklet";
+import { BKL1A, BKL1B, BKL3 as BKL3_RECORDED } from "./rc-live-5-recorded";
 
 export type BkScenario = { id: string; title: string; messages: string[]; turns: ScriptTurn[] };
 const call = (name: string, args: Record<string, unknown>) => ({ name, arguments: args });
@@ -101,4 +102,7 @@ export const BOOKLET_SCENARIOS = (): BkScenario[] => [
   { id: "BK1", title: "uncertain hip / tibia: the recorded ask_user (no fact_key, no subject_id) -> one question -> the clarified illustration", messages: [BK1_U1, BK1_U2], turns: bk1Turns("recorded") },
   { id: "BK2", title: "Other Fracture: the Personal Accident sum insured, bound by the booklet's product section", messages: [BK2_U], turns: bk2Turns() },
   { id: "BK3", title: "the Compassionate Death Allowance Benefit: heading + wrapped paragraph, bare $", messages: [BK3_U], turns: bk3Turns() },
+  // PR #54 follow-up: the rc-live-5 failures, with the model's recorded calls (./rc-live-5-recorded.ts)
+  ...([["RL1a", BKL1A], ["RL1b", BKL1B]] as const).map(([id, turns]) => ({ id, title: `rc-live-5 ${id === "RL1a" ? "BKL1a" : "BKL1b"} as recorded: closed hip / tibia -> one case question -> S$3,750, no Other Fracture question`, messages: turns.map((t) => t.user as string), turns: [...turns] })),
+  { id: "RL3", title: "rc-live-5 BKL3 as recorded: the allowance, and the dated certificate listing instead of a false enrolment caveat", messages: [BKL3_RECORDED[0].user as string], turns: BKL3_RECORDED },
 ];

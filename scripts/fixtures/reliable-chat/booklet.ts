@@ -30,6 +30,8 @@ const id = (n: number) => "7b000000-0000-4000-8000-" + String(n).padStart(12, "0
 export const M = {
   daniel: { id: id(1), name: "Daniel Lee Wei Ming", pref: "Daniel", rel: "self", notes: null, dob: "1981-04-02" },
   grace: { id: id(2), name: "Grace Tan Hui Min", pref: "Grace", rel: "spouse", notes: "wife", dob: "1983-09-15" },
+  // PR #54 follow-up: a member the booklet is linked to but no certificate lists (the enrolment-caveat control)
+  ethan: { id: id(3), name: "Ethan Lee Jun Kai", pref: "Ethan", rel: "child", notes: "son", dob: "2012-06-01" },
   other: { id: id(9), name: "Daniel Lee", pref: "Daniel", rel: "self", notes: null, dob: "1970-01-01", account: OTHER_ACCOUNT },
 } satisfies Record<string, FxMember>;
 
@@ -50,6 +52,9 @@ export const CERT_P1 = [
 
 export type CurrencyVariant = "none" | "related" | "unrelated";
 export const SECTIONS: "parts" | "none" = process.env.BOOKLET_SECTIONS === "none" ? "none" : "parts";
+/** PR #54 follow-up: BOOKLET_DEFS=alt -- a second policy's definitions (Simple Fracture "whether open or closed"; Other
+ * Fracture "an open (compound) fracture"): which benefit fits a closed or open report comes from the document. */
+export const DEFS: "booklet" | "alt" = process.env.BOOKLET_DEFS === "alt" ? "alt" : "booklet";
 export const CURRENCY: CurrencyVariant = (["related", "unrelated"].includes(process.env.BOOKLET_CURRENCY ?? "") ? process.env.BOOKLET_CURRENCY : "none") as CurrencyVariant;
 
 const BK_P1 = [
@@ -71,7 +76,7 @@ const BK_P3 = [
 const BK_P7 = [
   ...(SECTIONS === "parts" ? ["PART B - GROUP PERSONAL ACCIDENT"] : []),
   "Section 3 - Simple Fracture",
-  "Simple Fracture means a closed fracture where the skin is not broken.",
+  DEFS === "alt" ? "Simple Fracture means any fracture of a bone listed below, whether open or closed." : "Simple Fracture means a closed fracture where the skin is not broken.",
   "Simple Fracture Benefit Limit: S$5,000",
   "We will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.",
   "Bone fractured Compensation (% of S$5,000)",
@@ -82,7 +87,7 @@ const BK_P7 = [
 ].join("\n");
 const BK_P8 = [
   "Section 4 - Other Fracture",
-  "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.",
+  DEFS === "alt" ? "Other Fracture means an open (compound) fracture. We will pay the percentage of the Sum Insured shown below." : "Other Fracture means a fracture that is not a Simple Fracture, including a compound (open) fracture. We will pay the percentage of the Sum Insured shown below.",
   "Bone fractured Compensation (% of Sum Insured)",
   "Skull (Other Fracture) 100%",
   "Hip (Other Fracture) 75%",
@@ -102,7 +107,7 @@ export const BK_P9 = [
 const both = [{ id: M.daniel.id }, { id: M.grace.id }];
 export const DOCS: FxDoc[] = [
   { key: "CERT", id: id(101), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Civil Service Group Insurance Scheme - Certificate", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:bk-cert", effective: "2024-04-01", documentDate: "2024-04-01", pages: { 1: CERT_P1 } },
-  { key: "BOOKLET", id: id(102), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Group Insurance Benefits Booklet", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "policy_wording", personal: false, hash: "sha256:bk-booklet-" + CURRENCY, pages: { 1: BK_P1, 2: BK_P2, 3: BK_P3, 7: BK_P7, 8: BK_P8, 9: BK_P9 } },
+  { key: "BOOKLET", id: id(102), owner: M.daniel.id, members: [...both, { id: M.ethan.id }], insurer: "Aldermoor Life Ltd", product: "Group Insurance Benefits Booklet", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "policy_wording", personal: false, hash: "sha256:bk-booklet-" + CURRENCY + (DEFS === "alt" ? "-alt" : ""), pages: { 1: BK_P1, 2: BK_P2, 3: BK_P3, 7: BK_P7, 8: BK_P8, 9: BK_P9 } },
   // an earlier certificate, superseded (other amounts): never a base
   { key: "OLD_CERT", id: id(103), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Civil Service Group Insurance Scheme - Certificate (2022)", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:bk-old-cert", effective: "2022-04-01", documentDate: "2022-04-01", superseded: true, filename: "certificate_2022.pdf", pages: { 1: CERT_P1.replace(/S\$300,000/g, "S$200,000").replace(/S\$500,000/g, "S$400,000").replace(/01\/04\/2024/g, "01/04/2022") } },
   // another household: the same scheme, the same amounts -- never this household's evidence

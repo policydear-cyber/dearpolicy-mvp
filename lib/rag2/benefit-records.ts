@@ -15,7 +15,8 @@ import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow } from "./store";
 import { percentTables, type PctTable } from "./calc/pct-rows";
 import { sharedTopic, topicStems } from "./loop/topic";
-import { isHeadingLine } from "./headings";
+import { productSection } from "./headings";
+import { definitionFor, definitionsIn, type Definition } from "./applicability";
 
 export type ScheduleRow = { id: string; label: string; percent: number; ppm: number; evidence: EvidenceRef };
 export type ScheduleBase =
@@ -40,6 +41,9 @@ export type BenefitRecord = {
   unknowns: string[];
   source: { page: number; evidence: EvidenceRef };
   personBenefit: PersonBenefit | null;
+  /** PR #54 follow-up: the definitions printed in this record's own document (and version) when one of them defines this
+   * benefit -- what evaluate_benefit checks the household's report against (lib/rag2/applicability.ts). */
+  definitions: Definition[];
 };
 
 const MONEY = /(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s?(\d[\d,]*(?:\.\d+)?)/;
@@ -54,22 +58,6 @@ function tableBenefit(t: PctTable): string | null {
   const lines = t.heading.split("\n").map((l) => l.trim()).filter(Boolean).reverse();
   for (const l of lines) { const m = /^(.+?)\s+(?:benefit\s+)?(?:sub-?)?limit\b/i.exec(l); if (m && !/\d/.test(m[1])) return m[1].replace(/\s+benefit$/i, "").trim(); }
   for (const l of lines) if (!/\d/.test(l) && !/[.;]$/.test(l) && l.length <= 60 && !/\bpage\b/i.test(l) && /[A-Za-z]{3}/.test(l)) return l;
-  return null;
-}
-
-/** The product a schedule belongs to: of the person's certificate products, the one named by the nearest heading above
- * the table in its own document (pages in order) -- "PART B - GROUP PERSONAL ACCIDENT" above Section 4 - Other Fracture.
- * A heading naming another product nearer the table, or one naming two, decides nothing. Null when no heading names one. */
-function productSection(before: string, labels: string[]): { label: string; heading: string } | null {
-  const lines = before.split("\n");
-  const want = labels.map((label) => ({ label, w: [...words(label)] })).filter((x) => x.w.length);
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (!isHeadingLine(lines[i], lines[i + 1] ?? null)) continue;
-    const have = words(lines[i]);
-    const named = want.filter((x) => x.w.every((w) => have.has(w)));
-    if (named.length === 1) return { label: named[0].label, heading: lines[i].trim() };
-    if (named.length > 1) return null;
-  }
   return null;
 }
 
@@ -136,12 +124,20 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
     const kind = b.printed.kind === "money" ? "printed_amount" : b.printed.kind === "percent" ? "printed_percent" : "printed_reference";
     out.push({ id: hid(accountId, memberId, b.key), householdId: accountId, memberId, memberName, policy: policyOf(d), benefit: b.benefit.label.replace(/^[•▪●◦*–-]\s*/, ""), kind, applicability: b.applicability, printed: b.printed, asOf: b.asOf, conditions: b.conditions,
       schedule: null, status: b.conflicts?.length ? "conflicting" : "resolved", unknowns: b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : [],
-      source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b });
+      source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b, definitions: [] });
   }
   // percentage schedules on the person's linked documents (the same documents personBenefits reads)
   const links = await loadLinks(accountId, docs.map((d) => d.id));
   const mine = docs.filter((d) => d.ownerId === memberId || links.some((l) => l.policyId === d.id && l.memberId === memberId));
   const pages = mine.length ? await loadPages(accountId, mine.map((d) => d.id)) : [];
+  const defsOf = new Map<string, Definition[]>();
+  const definitions = (docId: string, benefit: string): Definition[] => {
+    const d = docs.find((x) => x.id === docId);
+    if (!d) return [];
+    let defs = defsOf.get(docId);
+    if (!defs) { defs = definitionsIn(pages.filter((x) => x.policyId === docId).sort((a, b) => a.page - b.page), { id: d.id, hash: d.fileHash }); defsOf.set(docId, defs); }
+    return definitionFor(benefit, defs) ? defs : [];
+  };
   for (const d of mine) for (const p of pages.filter((x) => x.policyId === d.id)) {
     // the document's text before this page, in page order (the product section a table sits in may start pages earlier)
     const before = pages.filter((x) => x.policyId === d.id && x.page < p.page).sort((a, b) => a.page - b.page).map((x) => x.text).join("\n");
@@ -155,13 +151,14 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
       out.push({ id, householdId: accountId, memberId, memberName, policy: policyOf(d), benefit, kind: "percentage_schedule", applicability: "shared_wording", printed: null, asOf: null, conditions: [],
         schedule: { header: t.header, base, rows, table: t, page: p.page, pageText: p.text },
         status: base.kind === "unresolved" ? "incomplete" : "resolved", unknowns: base.kind === "unresolved" ? [base.why] : [],
-        source: { page: p.page, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: t.start, end: t.end, subjectId: null }) }, personBenefit: null });
+        source: { page: p.page, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: t.start, end: t.end, subjectId: null }) }, personBenefit: null, definitions: definitions(d.id, benefit) });
     }
   }
   // a schedule's own rows are its cases, not separate benefits: the printed percentages inside a schedule's table are
   // listed only through the schedule
   const inSchedule = (r: BenefitRecord) => r.kind === "printed_percent" && out.some((x) => x.schedule && x.policy.id === r.policy.id && x.schedule.page === r.source.page
     && r.source.evidence.passage.start >= x.source.evidence.passage.start && r.source.evidence.passage.start <= x.source.evidence.passage.end);
+  for (const r of out) if (!r.definitions.length && mine.some((d) => d.id === r.policy.id)) r.definitions = definitions(r.policy.id, r.benefit);
   return out.filter((r) => !inSchedule(r));
 }
 

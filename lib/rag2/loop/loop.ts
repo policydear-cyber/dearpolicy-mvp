@@ -25,15 +25,16 @@ import { partsIn } from "../calc/case-terms";
 import { paragraphs } from "../headings";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
-import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
+import { createToolContext, RAG_TOOLS, recordsFor, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
 import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom, sameFactValue } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
-import { compoundQuestion, firstClauseOnly, relevantEvidence, statedInMessage } from "./questions";
+import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { renderStatements } from "./statement-render";
+import { applicabilityOf } from "../applicability";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
@@ -342,6 +343,26 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const gone = invalidated.filter((x) => x.kind === "estimate" && x.sentence).map((x) => x.sentence!);
     if (gone.length) scrubWithdrawn(gone);
   }
+  /** PR #54 follow-up: an illustration worked out earlier for a benefit whose own definition the household's (corrected)
+   * report now contradicts ("it was actually an open fracture" after a Simple Fracture illustration) is withdrawn --
+   * on the claim and in what the model is shown -- and the answer says so once. */
+  const withdrawInapplicable = (subj: string, benefitId: string, why: string) => {
+    const rec = ctx.benefitRecords?.get(benefitId);
+    const claim = state.claim?.subjectId === subj ? state.claim : state.otherClaims?.[subj];
+    if (!rec || !claim) return;
+    const gone = Object.entries(claim.calcs ?? {}).filter(([, r]) => !r.withdrawn && r.policyId === rec.policy.id && r.benefit.toLowerCase() === rec.benefit.toLowerCase());
+    if (!gone.length) return;
+    for (const [, r] of gone) r.withdrawn = { cause: "fact", key: "applicability", reason: `${rec.benefit} no longer fits what the household reported (${why})`, turn: state.turn };
+    const sentences = claim.derived.filter((d) => d.sentence.includes(rec.benefit)).map((d) => d.sentence);
+    claim.derived = claim.derived.filter((d) => !sentences.includes(d.sentence));
+    if (sentences.length) scrubWithdrawn(sentences);
+    const app = rec.definitions.length ? applicabilityOf(rec.benefit, rec.definitions, householdReports(subj, claim.facts)) : null;
+    const prior = app && app.status !== "unconstrained" ? app.attribute.values.map((v) => v.id).find((v) => v !== app.reported.value) ?? null : null;
+    const existing = corrections.find((c) => c.key !== "person" && c.withdrawn.length === 0 && app && app.status !== "unconstrained" && normalizeKey(c.key) === app.attribute.factKey);
+    if (existing) existing.withdrawn.push(...(sentences.length ? sentences : [rec.benefit]));
+    else if (!corrections.some((c) => c.key !== "person" && c.withdrawn.some((w) => w.includes(rec.benefit))))
+      corrections.push({ key: app && app.status !== "unconstrained" ? app.attribute.factKey : "applicability", from: prior ? app!.status !== "unconstrained" ? app!.attribute.said(prior) : prior : "earlier", to: app && app.status !== "unconstrained" && app.reported.value ? app.attribute.said(app.reported.value) : "changed", withdrawn: sentences.length ? sentences : [rec.benefit] });
+  };
   /** Agent F (D9 / S6a): the household corrected WHO the claim is about ("it was Chloe, not Ethan"): estimates worked
    * out for the first person are withdrawn, and the reply says which one and why. */
   const personCorrection = (to: string) => {
@@ -443,14 +464,34 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * (needs_facts / case_conflict) -- identified, scoped to one person and one benefit, with the state key the answer is
    * recorded under and the evidence that makes it matter. The model selects one (requirement_id) and phrases the question;
    * it never reconstructs this metadata. Open for this turn only: a requirement of an earlier turn is stale. */
-  type Requirement = { id: string; subjectId: string; benefitId: string; benefit: string; factKey: string; question: string; options: string[]; optionLabels?: Map<string, string>; evidenceIds: string[]; isCase: boolean };
+  type Requirement = { id: string; subjectId: string; benefitId: string; benefit: string; factKey: string; question: string; options: string[]; optionLabels?: Map<string, string>; evidenceIds: string[]; isCase: boolean;
+    /** PR #54 follow-up: who can resolve it -- the household (a fact they report or can observe) or the insurer (an
+     * assessment or approval: stated as a condition, never asked). */
+    resolvedBy: "household" | "insurer" };
   const requirements = new Map<string, Requirement>();
+  /** PR #54 follow-up: benefits whose own definition the household's report contradicts (per person|benefit, why). */
+  const notApplicable = new Map<string, string>();
   let reqSeq = 0;
   let budgetWarned = false;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
   const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, libraryPages, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  /** PR #54 follow-up: what the household reported about one person, oldest first -- the facts recorded for them (with
+   * their keys) and, for what no fact records, the sentences of their own messages that name no other member (a
+   * question or a what-if is not a report). Each says whether its message corrected something. */
+  const householdReports = (subj: string, facts: Record<string, import("./types").LoopFact>): import("../applicability").Reported[] => {
+    const out: import("../applicability").Reported[] = Object.entries(facts).filter(([, f]) => f && (f.source ?? "user_reported") === "user_reported")
+      .map(([key, f]) => ({ key, words: `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim(), turn: f.turn, cue: !!f.cue }));
+    const others = input.people.filter((p) => p.id !== subj).flatMap((p) => personNames(p.name)).filter((n) => !input.people.find((x) => x.id === subj && personNames(x.name).includes(n)));
+    const named = (t: string) => others.some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
+    userTexts.forEach((m, i) => {
+      if (named(m)) return;
+      const turn = state.turn - (userTexts.length - 1 - i);
+      for (const sent of m.split(/(?<=[.!?])\s+/)) if (sent.trim() && !/\?\s*$/.test(sent) && !/\b(?:if|what if|suppose|supposing|would|were it)\b/i.test(sent)) out.push({ key: null, words: sent.trim(), turn, cue: CORRECTION_CUE.test(m) });
+    });
+    return out.sort((a, b) => a.turn - b.turn);
+  };
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -730,7 +771,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         }
         const value = f.currency ? `${String(f.value)} ${f.currency.toUpperCase()}` : String(f.value);
         const words = docText != null ? (f.words?.trim() || state.evidence[docIds[0]].passage.text.slice(0, 160)) : String(f.words);
-        const entry = { value, words, turn: state.turn, source: chk.source, basis: chk.basis, ...(docIds.length ? { evidenceIds: docIds } : {}) };
+        const entry = { value, words, turn: state.turn, source: chk.source, basis: chk.basis, ...(docIds.length ? { evidenceIds: docIds } : {}), ...(CORRECTION_CUE.test(input.message) ? { cue: true } : {}) };
         // Agent G: the same fact recorded earlier under another key (admission_date / admitted_at, bill / bill_amount,
         // claim_amount / amount_claimed) with another value is a correction of it, not a second fact.
         const oldKey = claim.facts[key] ? key : sameFactKey(claim, key, value);
@@ -840,6 +881,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const openList = () => [...requirements.values()].map((r) => `${r.id} (${r.benefit}, for ${input.people.find((p) => p.id === r.subjectId)?.name ?? r.subjectId}: ${r.question})`).join("; ");
       if (reqId) {
         req = requirements.get(reqId) ?? null;
+        // PR #54 follow-up: nothing is open this turn -- the benefit the question would have been about was found not to
+        // fit what the household reported -- so there is no question to ask: what the ask states (composed and checked
+        // like any answer) is the answer.
+        if (!req && !requirements.size && notApplicable.size && Array.isArray(a.statements) && (a.statements as unknown[]).length) {
+          const fin = action({ id: call.id, name: "final_answer", arguments: { sentences: a.statements, subject_id: a.subject_id ?? null, ...(a.next_steps ? { next_steps: a.next_steps } : {}) } });
+          if (fin.terminal) { (trace.adjusted ??= []).push(`ask_user (${reqId}): no requirement is open (${[...notApplicable.values()].length} benefit(s) do not fit the report) -- answered with its statements instead of asking`); return fin; }
+        }
         if (!req) return { result: { ok: false, error: `requirement_id ${reqId} is not open this turn${requirements.size ? `; open: ${openList()}` : " (no evaluation this turn left one: call evaluate_benefit for the benefit first)"}` } };
         if (typeof a.subject_id === "string" && a.subject_id.trim() && a.subject_id !== req.subjectId) return { result: { ok: false, error: `requirement ${req.id} is for ${input.people.find((p) => p.id === req!.subjectId)?.name ?? "another person"}, not subject_id ${a.subject_id}` } };
         if (typeof a.fact_key === "string" && a.fact_key.trim() && normalizeKey(a.fact_key) !== req.factKey && !(req.isCase && /case|bone|fractur|site|part|injur/i.test(a.fact_key))) return { result: { ok: false, error: `requirement ${req.id} records its answer as ${req.factKey}, not ${a.fact_key}: pass requirement_id alone` } };
@@ -849,6 +897,20 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const fits = (r: Requirement) => relevantEvidence(question, r.factKey.replace(/_/g, " ") + " " + r.benefit, [r.question, ...r.options.map((o) => r.optionLabels?.get(o) ?? ""), ...r.evidenceIds.map((id) => state.evidence[id]?.passage.text ?? "")], input.people.map((p) => p.name));
         if (open.length === 1 && fits(open[0])) { req = open[0]; (trace.adjusted ??= []).push(`ask_user without fact_key: bound to requirement ${req.id} (${req.benefit}), the one open requirement this turn`); }
         else return { result: { ok: false, error: open.length ? `a fact question names what it asks: pass requirement_id (open: ${openList()})` : "a fact question needs the fact_key its answer is recorded under" } };
+      }
+      // PR #54 follow-up: who resolves it. A requirement the insurer resolves is stated as a condition, never asked. A
+      // server requirement asks a household fact by construction: worded as an assessment of the policy terms (or
+      // naming none of its options), its own question is asked instead. A free question asking for an assessment of the
+      // terms is the insurer's -- refused, with what is supported kept.
+      if (req && req.resolvedBy === "insurer") { noteFailure("ask_user"); return { result: { ok: false, error: `requirement ${req.id} is for the insurer to resolve (${req.question}): state it as a condition of the benefit, do not ask the household; end with final_answer` } }; }
+      if (req) {
+        const labels = req.options.map((o) => req!.optionLabels?.get(o) ?? "").filter(Boolean);
+        const names = (l: string) => (l.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !["the", "and", "was", "not", "other", "fracture", "listed", "case"].includes(w));
+        const offers = !labels.length || labels.some((l) => names(l).some((w) => question.toLowerCase().includes(w)));
+        if (resolverOf(question) === "insurer" || !offers) { (trace.adjusted ??= []).push(`asked requirement ${req.id}'s own question ("${req.question}") instead of "${question}"`); question = req.question; }
+      } else if (resolverOf(question, String(a.fact_key ?? "")) === "insurer") {
+        noteFailure("ask_user");
+        return { result: { ok: false, error: "that asks for the insurer's assessment of the policy terms (whether something meets a definition, qualifies, or is accepted or approved) -- not a fact the household can give. State it as a condition with what the documents support (statements, or final_answer); ask the household only for what they reported or can observe." } };
       }
       let key = req ? req.factKey : normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
@@ -940,7 +1002,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (more.length) { completionNudged = true; return { result: { ok: false, error: `before asking: ${more.join("; ")}. Then call ask_user again: those statements first, then the one question that most changes the result.` } }; }
       }
       const caseOf = req ? (req.isCase ? req.benefitId : undefined) : subject ? caseOpenNow.get(subject) : undefined;
-      const opts = req?.options.length ? req.options : Array.isArray(a.options) && a.options.length ? (a.options as string[]).map(String) : [];
+      // (a requirement's options are shown to the household as its listed cases' own words, never internal ids)
+      const opts = req?.options.length ? req.options.map((o) => req!.optionLabels?.get(o) ?? o) : Array.isArray(a.options) && a.options.length ? (a.options as string[]).map(String) : [];
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(opts.length ? { options: opts } : {}), ...(caseOf ? { caseOf } : {}), ...(req ? { requirementId: req.id, benefitId: req.benefitId } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface: redirectPreface, composed } };
     }
@@ -1151,6 +1214,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const answering = pendingBefore?.kind === "fact" && (pendingBefore.subjectId ?? subj) === subj && !!bid0 && (pendingBefore.caseOf === bid0 || (!!pendingBefore.options?.length && pendingBefore.options.every((o) => String(o).startsWith(bid0))));
       const answerWords = answering ? recordedNow.filter((r) => r.subject === subj).map((r) => r.words).filter((w) => partsIn(w).length) : [];
       (ctx.reported ??= new Map()).set(subj, answerWords.length ? answerWords : Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim()));
+      (ctx.reportedFacts ??= new Map()).set(subj, householdReports(subj, facts));
     }
     if (call.name === "evaluate_benefit" && !(typeof call.arguments.assumption_words === "string" && call.arguments.assumption_words.trim())) {
       const subj = String(call.arguments.subject_id ?? "");
@@ -1410,6 +1474,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         // Reliable chat (contract C): statements of kind calculation / benefit_terms and contact next steps are written
         // by the server from the saved calculation or the resolved record; an id this turn did not produce is sent back.
         if (call.name === "final_answer" || call.name === "ask_user") {
+          // PR #54 follow-up: the terms of a benefit whose own definition the household's report contradicts are left out
+          // (it does not apply to what they described); the rest of the answer is unchanged.
+          const field = call.name === "final_answer" ? "sentences" : "statements";
+          const given = call.arguments[field] as Record<string, unknown>[] | undefined;
+          if (Array.isArray(given) && notApplicable.size) {
+            const keep = given.filter((x) => !(x?.kind === "benefit_terms" && [...notApplicable.keys()].some((k) => k.endsWith(`|${String(x.benefit_id ?? "")}`))));
+            if (keep.length !== given.length) { (trace.adjusted ??= []).push(`${call.name}: left out the terms of ${given.length - keep.length} benefit(s) whose definition does not fit what the household reported`); call.arguments = { ...call.arguments, [field]: keep }; }
+          }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
           const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
@@ -1457,6 +1529,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
         const named = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String).filter((x) => facts[x]) : [];
         if (k) k.dependsOn = named.length ? named : [...new Set(recordedNow.filter((r) => r.subject === subj && facts[r.key]).map((r) => r.key))];
+        // PR #54 follow-up: the facts the benefit's definition was checked against are what the result rests on too
+        const appKeys = (((res.data as { applicability?: { fact_keys?: string[] } }).applicability?.fact_keys) ?? []).filter((x) => facts[x]);
+        if (k && appKeys.length) k.dependsOn = [...new Set([...(k.dependsOn ?? []), ...appKeys])];
         // rc-live-3 RCT2a: the open "which case?" question is answered once the server has settled the case from the
         // household's words (a result for one listed case, or the case is not listed) -- whatever key the model noted
         // the answer under ("fracture_bone_detail" for a question asked as "fracture_bone"). It is never put back.
@@ -1464,7 +1539,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const bid = String(call.arguments.benefit_id ?? "");
         const reason = (res.data as { reason?: string }).reason;
         if (bid && ((status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) || status === "case_conflict")) caseOpenNow.set(subj, bid);
-        const settles = !!bid && (!!rid || status === "unlisted_case");
+        const settles = !!bid && (!!rid || status === "unlisted_case" || status === "not_applicable");
+        if (bid && subj && status === "not_applicable") { notApplicable.set(`${subj}|${bid}`, (res.data as { why?: string }).why ?? ""); withdrawInapplicable(subj, bid, String((res.data as { why?: string }).why ?? "")); }
         if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
         if (settles) for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
         // (latency: the benefit stays addressable by its id in later turns -- re-resolved and re-checked on every call)
@@ -1472,17 +1548,20 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (bid && subj && (status === "needs_facts" || status === "case_conflict")) {
           const dd = res.data as { benefit?: string; ask?: string; need?: string; options?: { option_id: string; case: string }[]; matching_cases?: string[] };
           const isCase = reason === "missing" || reason === "ambiguous" || status === "case_conflict";
-          const optionList = isCase ? (dd.options ?? []) : [];
-          const factKey = isCase ? `listed_case_${bid}` : /admission/i.test(dd.need ?? "") ? "admission_datetime" : /discharge/i.test(dd.need ?? "") ? "discharge_datetime" : normalizeKey(dd.need ?? "") || `detail_${bid}`;
+          const isApp = reason === "applicability";
+          const optionList = isCase || isApp ? (dd.options ?? []) : [];
+          const factKey = isApp ? normalizeKey(String((res.data as { fact_key?: string }).fact_key ?? "")) || `detail_${bid}` : isCase ? `listed_case_${bid}` : /admission/i.test(dd.need ?? "") ? "admission_datetime" : /discharge/i.test(dd.need ?? "") ? "discharge_datetime" : normalizeKey(dd.need ?? "") || `detail_${bid}`;
           const question = dd.ask ?? (status === "case_conflict" && dd.matching_cases?.length ? `Which of these is it: ${dd.matching_cases.join(" or ")}?` : `What does ${dd.benefit ?? "this benefit"} still need: ${dd.need ?? "the missing detail"}?`);
           const reqIdNew = `q${state.turn}_${++reqSeq}`;
-          const reqNew: Requirement = { id: reqIdNew, subjectId: subj, benefitId: bid, benefit: dd.benefit ?? bid, factKey, question, options: optionList.map((o) => o.option_id), evidenceIds: [...ids], isCase, optionLabels: new Map(optionList.map((o) => [o.option_id, o.case])) };
+          // (every requirement the server creates here asks for something the household reports or can observe -- which
+          // listed case, the detail a definition turns on, a stay's dates -- never an insurer's assessment)
+          const reqNew: Requirement = { id: reqIdNew, subjectId: subj, benefitId: bid, benefit: dd.benefit ?? bid, factKey, question, options: optionList.map((o) => o.option_id), evidenceIds: [...ids], isCase, optionLabels: new Map(optionList.map((o) => [o.option_id, o.case])), resolvedBy: "household" };
           for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
           requirements.set(reqIdNew, reqNew);
           const sd = (shown as { data?: Record<string, unknown> }).data;
-          if (sd && typeof sd === "object") { sd.requirement_id = reqIdNew; sd.requirement_note = "To ask the household for this, call ask_user with requirement_id and your question (the server supplies the person, the fact and the evidence). Give the benefit's printed terms first (benefit_terms)."; }
+          if (sd && typeof sd === "object") { sd.requirement_id = reqIdNew; sd.resolved_by = reqNew.resolvedBy; sd.requirement_note = "To ask the household for this, call ask_user with requirement_id and your question (the server supplies the person, the fact and the evidence). Give the benefit's printed terms first (benefit_terms)."; }
         }
-        const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
+        const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || p.benefitId === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
         if (settles && asksCase(state.pending)) { state.pending = null; (trace.adjusted ??= []).push(`the open case question was answered (${bid})`); }
         if (settles && asksCase(state.parkedPending)) state.parkedPending = null;
       }
@@ -1639,15 +1718,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
-  if (!done && BUDGET_STOPS.has(stop?.kind ?? "turn_calls") && requirements.size) {
-    const r = [...requirements.values()].at(-1)!;
+  if (!done && BUDGET_STOPS.has(stop?.kind ?? "turn_calls") && [...requirements.values()].some((x) => x.resolvedBy === "household")) {
+    const r = [...requirements.values()].filter((x) => x.resolvedBy === "household").at(-1)!;
     const st: Record<string, unknown>[] = [{ kind: "benefit_terms", benefit_id: r.benefitId, subject_id: r.subjectId, text: "-" }];
     const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
     const composed = !problems.length ? composeFinal({ sentences: st, subjectId: r.subjectId }, composeCtx()) : null;
     const because = r.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
     if (because.length) {
       const why = because.map((id) => `${whyLine(state.evidence[id], r.question + " " + r.factKey)} (page ${state.evidence[id].passage.onPage})`).join("; ");
-      done = { kind: "ask", pending: { kind: "fact", question: r.question, factKey: r.factKey, subjectId: r.subjectId, why, evidenceIds: because, ...(r.options.length ? { options: r.options } : {}), ...(r.isCase ? { caseOf: r.benefitId } : {}), requirementId: r.id, benefitId: r.benefitId, turn: state.turn }, preface: null, composed: composed?.sentences.length ? composed : null };
+      done = { kind: "ask", pending: { kind: "fact", question: r.question, factKey: r.factKey, subjectId: r.subjectId, why, evidenceIds: because, ...(r.options.length ? { options: r.options.map((o) => r.optionLabels?.get(o) ?? o) } : {}), ...(r.isCase ? { caseOf: r.benefitId } : {}), requirementId: r.id, benefitId: r.benefitId, turn: state.turn }, preface: null, composed: composed?.sentences.length ? composed : null };
       (trace.adjusted ??= []).push(`model use blocked (${stop?.kind ?? "turn_calls"}): asked requirement ${r.id} from the server`);
       trace.limit = { kind: stop?.kind ?? "turn_calls", detail: stop?.detail ?? "the turn ended without an answer" };
     }
@@ -1723,6 +1802,21 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (final.kind === "ask" && final.pending.kind === "fact") {
     const p = final.pending;
     for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
+  }
+  // PR #54 follow-up: every earlier illustration of this conversation is re-checked against its benefit's definition with
+  // what the household has now reported (a correction may have changed it under any key): one that no longer fits is
+  // withdrawn. (Only on a turn that recorded something.)
+  if (recordedNow.length) for (const claim of [state.claim, ...Object.values(state.otherClaims ?? {})]) {
+    if (!claim?.subjectId) continue;
+    const live = Object.values(claim.calcs ?? {}).filter((r) => !r.withdrawn && r.turn < state.turn);
+    if (!live.length) continue;
+    const recs = await recordsFor(ctx, claim.subjectId).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    for (const r of live) {
+      const rec = recs.find((x) => x.policy.id === r.policyId && x.benefit.toLowerCase() === r.benefit.toLowerCase() && x.definitions.length);
+      if (!rec) continue;
+      const app = applicabilityOf(rec.benefit, rec.definitions, householdReports(claim.subjectId, claim.facts));
+      if (app.status === "inconsistent") { (ctx.benefitRecords ??= new Map()).set(rec.id, rec); withdrawInapplicable(claim.subjectId, rec.id, app.why); }
+    }
   }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
   // Round 7: the table values issued so far stay citable on later turns (the most recent ones).

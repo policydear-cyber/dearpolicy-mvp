@@ -108,3 +108,18 @@ export function statedInMessage(factKey: string, message: string): string | null
   }
   return null;
 }
+
+/**
+ * PR #54 follow-up (rc-live-5 BKL1: "Does Daniel's diagnosis meet the booklet's definition of “Hip” ..., as determined by
+ * the insurer's medical assessment?"): who can resolve what a question asks. The household reports what happened and
+ * what they can observe or were told (which bone, closed or open, dates, what the doctor said); whether that satisfies
+ * the policy's terms -- meets a definition, qualifies, is accepted or approved -- is the insurer's assessment. Used at the
+ * requirement / ask_user boundary: an insurer requirement is stated as a condition, never asked.
+ */
+const JUDGEMENT = /\b(?:meets?|met|satisf(?:y|ies|ied)|qualif(?:y|ies|ied)|falls? (?:with)?in|counts? as|(?:be|is|are|was|were|been) (?:classed|classified|treated|considered|regarded|accepted|approved|assessed|deemed|recognised|recognized|admitted)|eligib\w*|approv\w*|accept\w*|assess\w*|determin\w*|deem\w*|decid\w*|decision|adjudicat\w*)\b/i;
+const TERMS = /\b(?:definitions?|defined|policy|policies|booklet|wording|terms?|criteria|benefits?|insurer\w*|claims?|cover(?:ed|age)?|payable|underwrit\w*)\b/i;
+export function resolverOf(question: string, factKey = ""): "household" | "insurer" {
+  const t = `${question} ${factKey.replace(/_/g, " ")}`;
+  if (/\binsurer\b/i.test(factKey)) return "insurer";
+  return JUDGEMENT.test(t) && TERMS.test(t) ? "insurer" : "household";
+}
