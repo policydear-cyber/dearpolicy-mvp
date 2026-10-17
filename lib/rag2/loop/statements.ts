@@ -92,8 +92,18 @@ export type StatementCtx = {
   negativeVerified?: boolean;
 };
 const tokensOf = (name: string) => (name.match(/[A-Za-z][A-Za-z'-]{2,}/g) ?? []);
-/** The distinctive word of a product name ("KidSafe" in "KidSafe Family Accident Plan"). */
-const productKey = (name: string) => (tokensOf(name).find((w) => /[A-Z].*[A-Z]|[a-z][A-Z]/.test(w)) ?? tokensOf(name)[0] ?? "").toLowerCase();
+/** Words every insurance document title shares: never the distinctive word of a product name. */
+const GENERIC_TITLE_WORDS = new Set(["insurance", "group", "benefit", "benefits", "summary", "policy", "wording", "schedule", "certificate", "document", "scheme", "plan", "booklet", "table", "the", "and", "for", "of"]);
+/** The distinctive word of a product name ("KidSafe" in "KidSafe Family Accident Plan"). PR #54: a title made only of
+ * generic words ("Insurance Benefits Summary") has none, and is then named only by its whole title -- otherwise any
+ * sentence saying "Insurance" (e.g. "Group Insurance Benefits Booklet") would name it. */
+const productKey = (name: string) => (tokensOf(name).find((w) => /[A-Z].*[A-Z]|[a-z][A-Z]/.test(w)) ?? tokensOf(name).find((w) => !GENERIC_TITLE_WORDS.has(w.toLowerCase())) ?? "").toLowerCase();
+const namesProduct = (text: string, name: string) => {
+  const key = productKey(name);
+  if (key) return new RegExp("\\b" + key.replace(/[^a-z0-9]/g, "") + "\\b", "i").test(text);
+  const words = tokensOf(name);
+  return words.length > 0 && new RegExp("\\b" + words.map((w) => w.replace(/[^A-Za-z0-9]/g, "")).join("\\W+") + "\\b", "i").test(text);
+};
 
 /** Why a figure-free cited sentence is not supported by what it cites (null when it is). */
 export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: StatementCtx): string | null {
@@ -106,8 +116,8 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   const citedKeys = new Set([...citedPolicies].map((id) => productKey(ctx.policyNames.get(id) ?? "")).filter(Boolean));
   for (const [id, name] of ctx.policyNames) {
     const key = productKey(name);
-    if (!key || citedPolicies.has(id) || citedKeys.has(key)) continue;
-    if (new RegExp("\\b" + key.replace(/[^a-z0-9]/g, "") + "\\b", "i").test(text)) return `it names ${name} but cites another document`;
+    if (citedPolicies.has(id) || (key && citedKeys.has(key))) continue;
+    if (namesProduct(text, name)) return `it names ${name} but cites another document`;
   }
   // Person: a member named in the sentence whose evidence was all read for another member.
   const named = ctx.people.filter((p) => p.names.some((n) => n && new RegExp("\\b" + n.replace(/[^A-Za-z' -]/g, "") + "\\b", "i").test(text)));

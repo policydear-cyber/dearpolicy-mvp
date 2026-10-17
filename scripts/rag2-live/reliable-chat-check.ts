@@ -51,7 +51,7 @@ function finish(scenario: string, checks: Check[], b: ReturnType<typeof base>): 
 }
 /** Grader v2 (after rc-live-1, whose v1 grades passed answers that were not useful): questions the household cannot
  * answer, and contact / claim advice naming an insurer that is not behind one of the person's own policies. */
-export const GRADER_VERSION = "v4";
+export const GRADER_VERSION = "v5"; // v5 = v4 + FL4 (rc-live-7); the FL1-FL3 checks are unchanged
 /** v4 (applicability follow-up, rc-live-6, written before the run): every v3 check unchanged; adds gradeFL1 / gradeFL2 /
  * gradeFL3, which check the complete visible answers, the saved calculations, the withdrawals on the claim and the
  * pending state after each conversation -- not only the expected figures. */
@@ -288,7 +288,32 @@ export function gradeFL3(id: string, conv: any): Graded {
   return finish(id, checks, b);
 }
 
-export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
+/** FL4 (rc-live-7, booklet page faithful to the RECORDED actual-library passage, BOOKLET_CDA=recorded): the
+ * Compassionate Death Allowance Benefit with ONLY its printed conditions -- accidental death, proof of death and the
+ * relevant documents in the prescribed form, funeral expenses up to a bare $2,000, the Core / Voluntary Scheme
+ * restriction -- and none of the synthetic fixture's additions (365 days, original receipts, illness exclusion). A
+ * separate benefit summary prints "Up to S$2,000"; nothing links it to the booklet, so S$2,000 may appear only as that
+ * summary's figure, never as the booklet's. */
+export function gradeFL4(id: string, conv: any): Graded {
+  const b = base(conv); const checks: Check[] = [];
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  if (b.blocked || !b.turns.length) return finish(id, checks, b);
+  const t = b.turns[0];
+  const lines = t.v.split("\n");
+  add("A2K", "K", "the Compassionate Death Allowance Benefit is named with funeral expenses, death from an Accident, proof of death and the prescribed-form documents", /Compassionate Death Allowance/i.test(t.v) && /funeral/i.test(t.v) && /accident/i.test(t.v) && /proof of death/i.test(t.v) && /prescribed form/i.test(t.v), t.v);
+  add("A2S", "K", "the Core / Voluntary Scheme restriction is kept", /Core Scheme/i.test(t.v) && /Voluntary Scheme/i.test(t.v), t.v);
+  add("A2X", "C", "none of the synthetic additions: no 365-day condition, no 'original receipts', no illness exclusion", !/365|original receipts|illness/i.test(t.v), t.v);
+  const sgd = lines.filter((l) => /S\$\s?2,000|SGD\s?2,000/.test(l));
+  add("A2C", "C", "the booklet's amount is never S$2,000; a booklet 2,000 says its currency is not stated; S$2,000 only as the separate summary's figure; nothing from Repatriation ($5,000); no calculation", sgd.every((l) => /Insurance Benefits Summary/i.test(l) && !/Booklet/i.test(l)) && lines.filter((l) => /2,000/.test(l) && !/S\$\s?2,000|SGD/.test(l)).every((l) => /does not say which currency|currency is not stated|not state the currency/i.test(l)) && !/5,000/.test(lines.filter((l) => /Compassionate|funeral/i.test(l)).join(" ")) && !calcsOf(t.answer).length, t.v);
+  const caveat = lines.filter((l) => /\b(?:do(?:es)? not|don['’]t|doesn['’]t|cannot)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|list|verify)\w*\b[^.]*\benrol/i.test(l) && /Daniel/.test(l));
+  add("A2E", "C", "no false enrolment caveat (Daniel's certificate lists him); any listing said is the dated one", !caveat.length && (!/certificate lists Daniel/i.test(t.v) || /01\/04\/2024|1 April 2024|2024-04-01/.test(t.v)), caveat.join(" | ") + "\n" + t.v);
+  add("A2L", "C", "later cover is not asserted: no 'is covered' / 'currently covered' / 'is enrolled' for Daniel; if the dated listing is said, cover on a later date is not established", !/\b(?:is|remains|currently)\s+(?:covered|insured|enrolled)\b/i.test(t.v) && (!/certificate lists Daniel/i.test(t.v) || /later date|not establish|does not establish/i.test(t.v)), t.v);
+  add("A2U", "U", "useful: no 'couldn't confirm', no limit text, at most one question, no cut quotation", !NOT_CONFIRMED.test(t.v) && !LIMIT_TEXT.test(t.v) && questionsOf(t.answer).length <= 1 && !lines.some((l) => CUT_QUOTE.test(l)), t.v);
+  universal(add, b.turns, "", ["Aldermoor Life Ltd"]);
+  return finish(id, checks, b);
+}
+
+export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
   RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
 

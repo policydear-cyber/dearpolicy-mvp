@@ -93,6 +93,28 @@ const BK_P8 = [
   "Hip (Other Fracture) 75%",
   "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
 ].join("\n");
+/** PR #54 (after rc-live-6): BOOKLET_CDA=recorded -- page 9 faithful to the RECORDED actual-library passage: accidental
+ * death, the printed proof / prescribed-form requirement, funeral expenses up to a bare $2,000 and the Core / Voluntary
+ * Scheme restriction. It has NO 365-day condition, NO "original receipts" and NO illness exclusion (those are the
+ * synthetic default's additions, kept unchanged for FL3 / rc-live-6). The variant also adds a separate benefit summary
+ * printing "Up to S$2,000"; nothing in the household's documents links that summary to the booklet (no shared policy
+ * number), so its S$ is a separate source and never the booklet's currency. */
+export const CDA: "synthetic" | "recorded" = process.env.BOOKLET_CDA === "recorded" ? "recorded" : "synthetic";
+export const BK_P9_RECORDED = [
+  "Section 5 - Compassionate Death Allowance Benefit",
+  "If an Insured Person dies as a result of an Accident, we will pay the funeral expenses incurred, up to $2,000,",
+  "on receipt of proof of death and the relevant documents in our prescribed form.",
+  "This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+  "Section 6 - Repatriation",
+  "We will pay up to $5,000 for the cost of bringing the Insured Person's body home if death occurs overseas.",
+].join("\n");
+export const SUMMARY_P1 = [
+  "Insurance Benefits Summary",
+  "Insurance Benefits (continued)",
+  "\u2022\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+  "\u2022\tAmbulance Cost*\tUp to S$500 per incident",
+  "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+].join("\n");
 /** Page 9 as stored: the heading, then one paragraph wrapped over three lines (the first ends ", which"). */
 export const BK_P9 = [
   "Section 5 - Compassionate Death Allowance Benefit",
@@ -107,7 +129,9 @@ export const BK_P9 = [
 const both = [{ id: M.daniel.id }, { id: M.grace.id }];
 export const DOCS: FxDoc[] = [
   { key: "CERT", id: id(101), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Civil Service Group Insurance Scheme - Certificate", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:bk-cert", effective: "2024-04-01", documentDate: "2024-04-01", pages: { 1: CERT_P1 } },
-  { key: "BOOKLET", id: id(102), owner: M.daniel.id, members: [...both, { id: M.ethan.id }], insurer: "Aldermoor Life Ltd", product: "Group Insurance Benefits Booklet", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "policy_wording", personal: false, hash: "sha256:bk-booklet-" + CURRENCY + (DEFS === "alt" ? "-alt" : ""), pages: { 1: BK_P1, 2: BK_P2, 3: BK_P3, 7: BK_P7, 8: BK_P8, 9: BK_P9 } },
+  { key: "BOOKLET", id: id(102), owner: M.daniel.id, members: [...both, { id: M.ethan.id }], insurer: "Aldermoor Life Ltd", product: "Group Insurance Benefits Booklet", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "policy_wording", personal: false, hash: "sha256:bk-booklet-" + CURRENCY + (DEFS === "alt" ? "-alt" : "") + (CDA === "recorded" ? "-cda" : ""), pages: { 1: BK_P1, 2: BK_P2, 3: BK_P3, 7: BK_P7, 8: BK_P8, 9: CDA === "recorded" ? BK_P9_RECORDED : BK_P9 } },
+  // BOOKLET_CDA=recorded: a separate benefit summary (S$2,000), not linked to the booklet by any policy number
+  ...(CDA === "recorded" ? [{ key: "SUMMARY", id: id(104), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Insurance Benefits Summary", policyNumber: null, groupPolicyNumber: null, policyType: "Group insurance", role: "benefit_summary", personal: false, hash: "sha256:bk-summary", filename: "benefits_summary.pdf", pages: { 12: SUMMARY_P1 } } satisfies FxDoc] : []),
   // an earlier certificate, superseded (other amounts): never a base
   { key: "OLD_CERT", id: id(103), owner: M.daniel.id, members: both, insurer: "Aldermoor Life Ltd", product: "Civil Service Group Insurance Scheme - Certificate (2022)", policyNumber: "GIS-7000", groupPolicyNumber: "GIS-7000", policyType: "Group insurance", role: "schedule", personal: true, hash: "sha256:bk-old-cert", effective: "2022-04-01", documentDate: "2022-04-01", superseded: true, filename: "certificate_2022.pdf", pages: { 1: CERT_P1.replace(/S\$300,000/g, "S$200,000").replace(/S\$500,000/g, "S$400,000").replace(/01\/04\/2024/g, "01/04/2022") } },
   // another household: the same scheme, the same amounts -- never this household's evidence

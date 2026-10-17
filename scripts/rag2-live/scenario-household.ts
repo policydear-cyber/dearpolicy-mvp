@@ -155,7 +155,12 @@ export const FL2: Scenario = { id: "FL2", title: "rc-live-6: closed hip -> corre
   { user: "Sorry, I got that wrong - it was an open fracture; the bone came through the skin.", expect: {} }] };
 export const FL3: Scenario = { id: "FL3", title: "rc-live-6: the death allowance -- supported terms, honest currency, dated certificate evidence", why: "applicability follow-up 3", turns: [
   { user: "If Daniel were killed in a road accident, would our booklet help with his funeral costs, and what would we need to send in?", expect: {} }] };
-export const RC_BOOKLET = [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
+/** rc-live-7 (pre-registered in EXPECTED-rc-live-7.md): the death question over the booklet page faithful to the
+ * RECORDED actual-library passage. Only listed when BOOKLET_CDA=recorded (and then alone), so FL4 can never run on
+ * the synthetic page and FL1-FL3 never run on the recorded one. */
+export const FL4: Scenario = { id: "FL4", title: "rc-live-7: the death allowance over the recorded passage -- printed conditions only, honest currency, dated certificate evidence", why: "recorded-passage evidence gap", turns: [
+  { user: "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?", expect: {} }] };
+export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;
