@@ -1,0 +1,172 @@
+[
+  {
+    "scenario": "FL5a",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "A2K",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named with funeral expenses, death from an Accident, proof of death and the prescribed-form documents",
+        "ok": true
+      },
+      {
+        "id": "A2S",
+        "dim": "K",
+        "name": "the Core / Voluntary Scheme restriction is kept",
+        "ok": true
+      },
+      {
+        "id": "A2X",
+        "dim": "C",
+        "name": "none of the synthetic additions: no 365-day condition, no 'original receipts', no illness exclusion",
+        "ok": true
+      },
+      {
+        "id": "A2C",
+        "dim": "C",
+        "name": "the booklet's amount is never S$2,000; a booklet 2,000 says its currency is not stated; S$2,000 only as the separate summary's figure; nothing from Repatriation ($5,000); no calculation",
+        "ok": true
+      },
+      {
+        "id": "A3E",
+        "dim": "C",
+        "name": "no claim that the documents do not confirm / list / name Daniel in the scheme (a Core / Voluntary membership uncertainty is allowed); any listing said is the dated one",
+        "ok": true
+      },
+      {
+        "id": "A3L",
+        "dim": "C",
+        "name": "Daniel is never asserted to be covered / insured / enrolled (now, or in the Core or Voluntary Scheme); a stated listing carries the later-date limit",
+        "ok": true
+      },
+      {
+        "id": "A2U",
+        "dim": "U",
+        "name": "useful: no 'couldn't confirm', no limit text, at most one question, no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "N1",
+        "dim": "U",
+        "name": "a next step is shown: contacting the person's own insurer (Aldermoor Life Ltd) about a claim, with no amount",
+        "ok": true
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "FL5b",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "A2K",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named with funeral expenses, death from an Accident, proof of death and the prescribed-form documents",
+        "ok": true
+      },
+      {
+        "id": "A2S",
+        "dim": "K",
+        "name": "the Core / Voluntary Scheme restriction is kept",
+        "ok": true
+      },
+      {
+        "id": "A2X",
+        "dim": "C",
+        "name": "none of the synthetic additions: no 365-day condition, no 'original receipts', no illness exclusion",
+        "ok": true
+      },
+      {
+        "id": "A2C",
+        "dim": "C",
+        "name": "the booklet's amount is never S$2,000; a booklet 2,000 says its currency is not stated; S$2,000 only as the separate summary's figure; nothing from Repatriation ($5,000); no calculation",
+        "ok": true
+      },
+      {
+        "id": "A3E",
+        "dim": "C",
+        "name": "no claim that the documents do not confirm / list / name Daniel in the scheme (a Core / Voluntary membership uncertainty is allowed); any listing said is the dated one",
+        "ok": true
+      },
+      {
+        "id": "A3L",
+        "dim": "C",
+        "name": "Daniel is never asserted to be covered / insured / enrolled (now, or in the Core or Voluntary Scheme); a stated listing carries the later-date limit",
+        "ok": true
+      },
+      {
+        "id": "A2U",
+        "dim": "U",
+        "name": "useful: no 'couldn't confirm', no limit text, at most one question, no cut quotation",
+        "ok": true
+      },
+      {
+        "id": "R1",
+        "dim": "U",
+        "name": "turn 1: no question the household cannot answer (what the insurer has reviewed or decided)",
+        "ok": true
+      },
+      {
+        "id": "IN1",
+        "dim": "C",
+        "name": "turn 1: contact / claim advice names only the insurer of the person's own policy (Aldermoor Life Ltd)",
+        "ok": true
+      },
+      {
+        "id": "O1",
+        "dim": "U",
+        "name": "turn 1: no orphaned fragment (no line starting mid-sentence or with a dependent clause)",
+        "ok": true
+      },
+      {
+        "id": "P1",
+        "dim": "U",
+        "name": "turn 1: no promise of payment (a sentence saying it is NOT a promise is fine)",
+        "ok": true
+      },
+      {
+        "id": "G1",
+        "dim": "S",
+        "name": "turn 1: the save-time gate rejected nothing",
+        "ok": true
+      },
+      {
+        "id": "N1",
+        "dim": "U",
+        "name": "a next step is shown: contacting the person's own insurer (Aldermoor Life Ltd) about a claim, with no amount",
+        "ok": true
+      }
+    ],
+    "note": null
+  }
+]
