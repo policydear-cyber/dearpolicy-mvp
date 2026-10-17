@@ -14,7 +14,7 @@ import * as B from "./fixtures/reliable-chat/booklet";
 import { BKL1A, BKL1B, BKL3, OTHER, SIMPLE } from "./fixtures/reliable-chat/rc-live-5-recorded";
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
-import { gradeBKL1, gradeBKL3 } from "./rag2-live/reliable-chat-check";
+import { gradeBKL1, gradeBKL3, gradeFL1, gradeFL2, gradeFL3 } from "./rag2-live/reliable-chat-check";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 setEnv(B as any);
@@ -72,6 +72,8 @@ async function main() {
       check(`${name}: the model steps are the recorded ones (3, 2)`, b[0].trace.steps === 3 && b[1].trace.steps === 2, `${b[0].trace.steps}, ${b[1].trace.steps}`);
       const g = gradeBKL1(name, asConv(b));
       check(`${name}: the pre-registered grader v3 passes the replay`, g.verdict === "PASS", JSON.stringify(g.checks.filter((c: any) => !c.ok)));
+      const f = gradeFL1("FL1a", asConv(b));
+      check(`${name}: the rc-live-6 grader v4 (gradeFL1) passes the replay`, f.verdict === "PASS", JSON.stringify(f.checks.filter((c: any) => !c.ok)));
     }
     // 2. Open: Other Fracture fits, Simple Fracture does not
     {
@@ -119,6 +121,7 @@ async function main() {
       ], [U1, U2]);
       check(`corrected (${key}) turn 1: S$3,750 only`, /S\$3,750/.test(b[0].v) && !/225,000/.test(b[0].v), b[0].v);
       const calcs = Object.values(b[1].state.ragLoop.claim?.calcs ?? {}) as any[];
+      { const f = gradeFL2("FL2", asConv(b)); check(`corrected (${key}): the rc-live-6 grader v4 (gradeFL2) passes`, f.verdict === "PASS", JSON.stringify(f.checks.filter((c: any) => !c.ok))); }
       check(`corrected (${key}) turn 2: the earlier S$3,750 is withdrawn (said, and marked on the claim), S$225,000 shown, S$3,750 not restated`, /no longer applies/i.test(b[1].v) && /S\$225,000/.test(b[1].v) && !/3,750/.test(b[1].v) && calcs.some((r) => r.benefit === "Simple Fracture" && r.withdrawn), b[1].v + " | " + JSON.stringify(calcs.map((r) => [r.benefit, r.withdrawn?.reason ?? null])));
     }
     // 5. Insurer assessments at the ask_user boundary
@@ -146,6 +149,7 @@ async function main() {
       const b = await run("BKL3 (recorded calls)", BKL3, [BKL3[0].user as string]);
       check("BKL3: no false enrolment caveat; the certificate's dated listing is said instead (Group Personal Accident, as of 01/04/2024), with the later-date limit", !/do not confirm|not confirm\w* Daniel/i.test(b[0].v) && /Daniel's certificate lists Daniel under Group Personal Accident as of 01\/04\/2024/.test(b[0].v) && /later date/.test(b[0].v), b[0].v);
       check("BKL3: the allowance, its conditions and the bare-$ amount are kept", /Compassionate Death Allowance/.test(b[0].v) && /proof of death/.test(b[0].v) && /does not say which currency/.test(b[0].v) && !/S\$2,000/.test(b[0].v), b[0].v);
+      { const f = gradeFL3("FL3", asConv(b)); check("BKL3: the rc-live-6 grader v4 (gradeFL3) passes the replay", f.verdict === "PASS", JSON.stringify(f.checks.filter((c: any) => !c.ok))); }
       const g = gradeBKL3("BKL3", asConv(b));
       check("BKL3: the pre-registered grader v3 passes the replay", g.verdict === "PASS", JSON.stringify(g.checks.filter((c: any) => !c.ok)));
       const say = (subj: string, name: string, text: string) => run(`enrolment: ${name}`, [{ user: /funeral|enrol|listed/i, steps: [

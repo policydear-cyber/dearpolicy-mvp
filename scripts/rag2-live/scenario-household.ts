@@ -143,7 +143,19 @@ export const BKL1a: Scenario = { id: "BKL1a", title: "rc-live-5: uncertain hip /
 export const BKL1b: Scenario = { ...BKL1a, id: "BKL1b", title: "rc-live-5: uncertain hip / tibia (attempt 2)" };
 export const BKL2: Scenario = { id: "BKL2", title: "rc-live-5: Other Fracture on the Personal Accident sum insured in a generic booklet", why: "actual-library finding 2", turns: [{ user: "Daniel's hip fracture was an open (compound) fracture. What does the Other Fracture benefit work out to for him?", expect: {} }] };
 export const BKL3: Scenario = { id: "BKL3", title: "rc-live-5: the Compassionate Death Allowance Benefit", why: "actual-library findings 3 and 4", turns: [{ user: "If Daniel died in an accident, is there an allowance for funeral expenses in our booklet, and what does it need?", expect: {} }] };
-export const RC_BOOKLET = [BKL1a, BKL1b, BKL2, BKL3];
+/** rc-live-6 (applicability follow-up; docs/rag-migration/reliable-chat/EXPECTED-rc-live-6.md, written before the run):
+ * FL1a the rc-live-5 hip / tibia wording; FL1b a fresh paraphrase of it; FL2 closed -> corrected to open; FL3 the death
+ * allowance in fresh wording. */
+export const FL1a: Scenario = { ...BKL1a, id: "FL1a", title: "rc-live-6: uncertain hip / tibia (rc-live-5 wording) -> hip -> S$3,750 only", why: "applicability follow-up 1 and 2" };
+export const FL1b: Scenario = { id: "FL1b", title: "rc-live-6: uncertain hip / shin bone (fresh paraphrase) -> hip -> S$3,750 only", why: "applicability follow-up 1 and 2", turns: [
+  { user: "My husband Daniel tripped on the stairs at our flat last night. The hospital says it is a closed break - either his hip or his shin bone, the tibia; the scans are not back yet. What would his personal accident cover give him?", expect: {} },
+  { user: "The specialist has just told us it is definitely the hip.", expect: {} }] };
+export const FL2: Scenario = { id: "FL2", title: "rc-live-6: closed hip -> corrected to open: Simple Fracture withdrawn, Other Fracture evaluated", why: "applicability follow-up 1 (correction)", turns: [
+  { user: "Daniel came off his bicycle and broke his hip. It was a closed fracture. What could his accident cover pay?", expect: {} },
+  { user: "Sorry, I got that wrong - it was an open fracture; the bone came through the skin.", expect: {} }] };
+export const FL3: Scenario = { id: "FL3", title: "rc-live-6: the death allowance -- supported terms, honest currency, dated certificate evidence", why: "applicability follow-up 3", turns: [
+  { user: "If Daniel were killed in a road accident, would our booklet help with his funeral costs, and what would we need to send in?", expect: {} }] };
+export const RC_BOOKLET = [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;
