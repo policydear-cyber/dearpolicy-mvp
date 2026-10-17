@@ -497,6 +497,19 @@
       "calls": 16,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "rc-live-6-booklet",
+      "tested_code_sha": "abe4ec128613a813f39f1202c63670f82b297bfa",
+      "request_sha": "abe4ec128613a813f39f1202c63670f82b297bfa",
+      "at": "2026-10-17T07:44:32.185Z",
+      "preflight": false,
+      "run_cap_usd": 0.15,
+      "spent_usd": 0.009206,
+      "reserved_unsettled_usd": 0,
+      "calls": 18,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
