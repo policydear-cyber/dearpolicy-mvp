@@ -14,7 +14,7 @@ import * as B from "./fixtures/reliable-chat/booklet";
 import { D, hitOf } from "./fixtures/reliable-chat/booklet-conversations";
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
-import { gradeFL3, gradeFL4 } from "./rag2-live/reliable-chat-check";
+import { gradeFL3, gradeFL4, gradeFL4b } from "./rag2-live/reliable-chat-check";
 
 if (B.CDA !== "recorded") { console.error("run with BOOKLET_CDA=recorded"); process.exit(2); }
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
@@ -57,10 +57,20 @@ async function main() {
       const v = [s.answer.summary, ...(s.answer.details ?? []), ...(s.answer.questions ?? []).map((q: any) => q.text), ...uniqueSteps(s.answer.nextSteps)].filter(Boolean).join("\n");
       const trace = s.state.ragLoop.turns.at(-1);
       if (process.env.SHOW) console.log(`--- ${label}\n${v}\n  dropped: ${JSON.stringify(trace.dropped ?? [])}\n  gate: ${JSON.stringify(trace.gate ?? [])}`);
-      return { v, answer: s.answer, state: s.state, trace };
+      return { v, answer: s.answer, state: s.state, trace, returned: a };
     } finally { installLoopModel(null); }
   };
   const SYNTH = /365 days|original receipts|illness/i;
+  const LIVE7 = "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.";
+  if (B.CURRENCY === "related") {
+    const booklet = B.doc("BOOKLET").id;
+    // documented currency (the same booklet prints the same benefit in S$ in its own benefit table): S$2,000 kept
+    const rel = await run("related currency", turns([{ text: LIVE7, from: "booklet" }]));
+    check("currency proof (the booklet's own table prints this benefit as S$2,000): S$2,000 is kept with the benefit and its conditions", /S\$2,000/.test(rel.v) && /prescribed form/.test(rel.v) && /Core Scheme/.test(rel.v) && !/does not say which currency/.test(rel.v), rel.v);
+    check("currency proof (related): that table line is cited", (rel.answer.citations ?? []).some((c: any) => c.policyId === booklet && /Compassionate Death Allowance Benefit\s+S\$2,000/.test(c.excerpt ?? "")), JSON.stringify(rel.answer.citations));
+    console.log(`\nreliable-chat CDA (recorded passage, currency related): ${passed} passed, ${failed} failed`);
+    process.exit(failed ? 1 : 0);
+  }
 
   const f = await run("faithful", turns([{ text: FAITHFUL, from: "booklet" }]));
   check("recorded: the Compassionate Death Allowance Benefit is retained with funeral expenses and accidental death", /Compassionate Death Allowance/.test(f.v) && /funeral/i.test(f.v) && /Accident/i.test(f.v), f.v);
@@ -97,7 +107,6 @@ async function main() {
 
   // rc-live-7 (live, FAIL): the model wrote "up to S$2,000" for the booklet's bare "$2,000" and the whole supported
   // statement was dropped. Replayed with the live wording: the benefit and its terms are kept, the amount said as printed.
-  const LIVE7 = "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.";
   const l7 = await run("rc-live-7 wording", turns([{ text: LIVE7, from: "booklet" }]));
   check("rc-live-7 replay (S$ written for the bare $): the benefit, proof / prescribed form and Core / Voluntary terms are kept", /Compassionate Death Allowance/.test(l7.v) && /prescribed form/.test(l7.v) && /Core Scheme/.test(l7.v), l7.v);
   check("rc-live-7 replay: the amount is said as printed (currency unknown), never S$2,000", /2,000 \(printed with a “\$” sign; the document does not say which currency\)/.test(l7.v) && !/S\$2,000/.test(l7.v), l7.v);
@@ -105,12 +114,61 @@ async function main() {
   const g7 = gradeFL4("FL4", asConv(l7));
   check("rc-live-7 replay: the FL4 grader passes", g7.verdict === "PASS", JSON.stringify(g7.checks.filter((c: any) => !c.ok)));
 
+  // grader v6 (FL4b) controls: the scheme-membership expectation separates Core / Voluntary uncertainty from whether
+  // the certificate names Daniel. rc-live-7's actual answer still FAILS (no allowance) but not on A3E / A3L.
+  const rc7 = "The booklet does not specify which particular documents the prescribed form requires.\nThe uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.";
+  const v6 = (v: string) => gradeFL4b("FL4b", asConv(withText(v)));
+  { const g = v6(rc7); check("v6 control (rc-live-7's actual answer): still FAIL, on A2K / A2S and not on A3E / A3L", g.verdict === "FAIL" && g.checks.some((c: any) => c.id === "A2K" && !c.ok) && g.checks.every((c: any) => !["A3E", "A3L"].includes(c.id) || c.ok), JSON.stringify(g.checks.filter((c: any) => !c.ok).map((c: any) => c.id))); }
+  { const g = gradeFL4("FL4", asConv(withText(rc7))); check("v6 control: v5 (FL4) still grades rc-live-7's answer FAIL on A2E / A2L (the earlier grade is preserved)", g.verdict === "FAIL" && g.checks.some((c: any) => c.id === "A2E" && !c.ok), JSON.stringify(g.checks.filter((c: any) => !c.ok).map((c: any) => c.id))); }
+  { const g = v6(l7.v + "\nThe uploaded documents do not establish whether Daniel is in the Core or the Voluntary Scheme."); check("v6 control (allowance + Core / Voluntary uncertainty): PASS", g.verdict === "PASS", JSON.stringify(g.checks.filter((c: any) => !c.ok))); }
+  const v6fail = (name: string, v: string, idWanted: string) => { const g = v6(v); check(`v6 control (${name}): fails on ${idWanted}`, g.verdict === "FAIL" && g.checks.some((c: any) => c.id === idWanted && !c.ok), JSON.stringify(g.checks.filter((c: any) => !c.ok).map((c: any) => c.id))); };
+  v6fail("the documents do not confirm Daniel's enrolment in the scheme", l7.v + "\nThe uploaded documents do not confirm Daniel's enrolment in the group scheme.", "A3E");
+  v6fail("the certificate does not name Daniel", l7.v + "\nThe certificate does not name Daniel as an insured person.", "A3E");
+  v6fail("Daniel is enrolled in the Core Scheme", l7.v + "\nDaniel is enrolled in the Core Scheme.", "A3L");
+  v6fail("Daniel is currently covered", l7.v + "\nDaniel is currently covered under the scheme.", "A3L");
+  v6fail("365 days added", l7.v.replace("if Daniel dies as a result of an accident", "if Daniel dies as a result of an accident within 365 days"), "A2X");
+  v6fail("allowance missing", "The booklet does not specify which particular documents the prescribed form requires.", "A2K");
+
   const e = await run("enrolment", turns([{ text: FAITHFUL, from: "booklet" }, { text: FALSE_CAVEAT, from: "cert" }, { text: CURRENT, from: "cert" }]));
   check("enrolment: the false caveat is replaced by the certificate's dated listing (as of 01/04/2024) with the later-date limit", !/do not confirm|not confirm\w* Daniel/i.test(e.v) && /certificate lists Daniel/.test(e.v) && /01\/04\/2024/.test(e.v) && /later date/.test(e.v), e.v);
   check("enrolment: no current-cover claim", !/\b(?:is|remains|currently) (?:covered|insured|enrolled)\b/i.test(e.v), e.v);
   check("enrolment: still none of the synthetic additions", !SYNTH.test(e.v), e.v);
 
-  console.log(`\nreliable-chat CDA (recorded passage): ${passed} passed, ${failed} failed`);
+  // ---------------------------------------------------------------- currency correction: a complete, validated statement
+  // (PR #54 after rc-live-7). The correction is not a blanket "S$" -> "$" replacement: only the figure whose own cited
+  // source line prints that value with a bare "$" is restated as printed, and the rewritten statement then goes through
+  // every later check (figures, conditions, paperwork, person, statement support) like any other.
+  const booklet = B.doc("BOOKLET").id;
+  const cites = (x: any, page: number) => (x.answer.citations ?? []).some((c: any) => c.policyId === booklet && Number(c.pageStart) === page);
+  const kept = (x: any) => /Compassionate Death Allowance/.test(x.v);
+  {
+    const p1 = l7;
+    check("currency proof: the corrected statement keeps the benefit, Daniel, the 2,000 figure and every printed condition", /Compassionate Death Allowance Benefit/.test(p1.v) && /Daniel/.test(p1.v) && /2,000 \(printed with a “\$” sign/.test(p1.v) && /accident/i.test(p1.v) && /proof of death/.test(p1.v) && /prescribed form/.test(p1.v) && /Core Scheme/.test(p1.v), p1.v);
+    check("currency proof: the corrected statement cites the booklet's page 9 (the benefit's own section)", cites(p1, 9), JSON.stringify(p1.answer.citations));
+    check("currency proof: the answer the household was sent is the answer saved", p1.returned.summary === p1.answer.summary && JSON.stringify(p1.returned.details ?? []) === JSON.stringify(p1.answer.details ?? []), JSON.stringify([p1.returned.summary, p1.answer.summary]));
+    check("currency proof: only the S$ figure changed -- the rest of the model's wording is unchanged", p1.v.includes(LIVE7.replace("S$2,000", "2,000 (printed with a “$” sign; the document does not say which currency)")), p1.v);
+    // rejections: a wrong amount, an unsupported condition, a neighbouring benefit's amount or condition
+    const wrong = await run("wrong amount", turns([{ text: LIVE7.replace("S$2,000", "S$3,000"), from: "booklet" }]));
+    check("currency proof (wrong amount S$3,000): never restated as printed -- the statement is not shown", !/3,000/.test(wrong.v) && !kept(wrong), wrong.v);
+    const cond = await run("unsupported condition", turns([{ text: LIVE7.replace("if Daniel dies as a result of an accident", "if Daniel dies as a result of an accident within 365 days"), from: "booklet" }]));
+    check("currency proof (S$ + an unsupported 365-day condition): the statement is not shown, and 365 days never appears", !/365/.test(cond.v) && !kept(cond), cond.v);
+    const nb = await run("neighbouring amount", turns([{ text: "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays up to S$5,000 if Daniel dies as a result of an accident.", from: "booklet" }]));
+    check("currency proof (Repatriation's $5,000 put under the death allowance as S$5,000): never shown", !/5,000/.test(nb.v), nb.v);
+    const nbc = await run("neighbouring condition", turns([{ text: "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses up to S$2,000 if Daniel's death occurs overseas.", from: "booklet" }]));
+    check("currency proof (Repatriation's 'death occurs overseas' condition under the death allowance): never shown", !/overseas/i.test(nbc.v), nbc.v);
+    const sum = await run("summary cited for the booklet", turns([{ text: LIVE7, from: "summary" }]));
+    check("currency proof (the booklet sentence citing only the separate summary): no booklet statement and no S$2,000 for it", !/Booklet/.test(sum.v.split("\n").filter((l) => /2,000/.test(l)).join(" ")), sum.v);
+    // documented currency: the booklet's own currency statement on file -> S$2,000 kept, the statement quoted and cited
+    const pg = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=1", [booklet])).rows[0].text as string;
+    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [booklet, pg + "\nCurrency: All amounts in this booklet are in Singapore Dollars."]);
+    let doc: any;
+    try { doc = await run("documented currency", turns([{ text: LIVE7, from: "booklet" }])); }
+    finally { await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [booklet, pg]); }
+    check("currency proof (the booklet states its currency): S$2,000 is kept with the benefit and its conditions", /S\$2,000/.test(doc.v) && /prescribed form/.test(doc.v) && /Core Scheme/.test(doc.v) && !/does not say which currency/.test(doc.v), doc.v);
+    check("currency proof (the booklet states its currency): that statement is quoted and cited", /All amounts in this booklet are in Singapore Dollars/.test(doc.v) && (doc.answer.citations ?? []).some((c: any) => c.policyId === booklet && /Singapore Dollars/.test(c.excerpt ?? "")), doc.v + JSON.stringify(doc.answer.citations));
+  }
+
+  console.log(`\nreliable-chat CDA (recorded passage, currency ${B.CURRENCY}): ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

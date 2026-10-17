@@ -51,7 +51,7 @@ function finish(scenario: string, checks: Check[], b: ReturnType<typeof base>): 
 }
 /** Grader v2 (after rc-live-1, whose v1 grades passed answers that were not useful): questions the household cannot
  * answer, and contact / claim advice naming an insurer that is not behind one of the person's own policies. */
-export const GRADER_VERSION = "v5"; // v5 = v4 + FL4 (rc-live-7); the FL1-FL3 checks are unchanged
+export const GRADER_VERSION = "v6"; // v6 = v5 + FL4b (rc-live-8, scheme-membership expectation corrected); FL1-FL4 checks unchanged
 /** v4 (applicability follow-up, rc-live-6, written before the run): every v3 check unchanged; adds gradeFL1 / gradeFL2 /
  * gradeFL3, which check the complete visible answers, the saved calculations, the withdrawals on the claim and the
  * pending state after each conversation -- not only the expected figures. */
@@ -313,7 +313,35 @@ export function gradeFL4(id: string, conv: any): Graded {
   return finish(id, checks, b);
 }
 
-export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
+/** FL4b (rc-live-8): FL4's checks, with the scheme-membership expectation corrected (v6). v5's A2E / A2L treated "the
+ * documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme" as the false enrolment caveat;
+ * it is not: the certificate names Daniel under the scheme's products as of 01/04/2024 but prints neither Core nor
+ * Voluntary. v6 separates the two:
+ *  - A3E: never that the documents / certificate do not confirm, list or name Daniel (as enrolled, insured, covered or
+ *    listed) in the scheme; an uncertainty that names Core / Voluntary membership is allowed;
+ *  - A3L: Daniel is never asserted to be covered / insured / enrolled (now, or in a Core / Voluntary scheme) -- a
+ *    "whether ..." uncertainty asserts nothing; a stated certificate listing is the dated one with the later-date limit.
+ * FL4 (rc-live-7) keeps its v5 grade. */
+export function gradeFL4b(id: string, conv: any): Graded {
+  const g = gradeFL4(id, conv);
+  const b = base(conv);
+  if (b.blocked || !b.turns.length) return g;
+  const t = b.turns[0];
+  const lines = t.v.split("\n");
+  const checks = g.checks.filter((c) => c.id !== "A2E" && c.id !== "A2L");
+  const add = (cid: string, dim: Check["dim"], name: string, ok: boolean, detail = "") => checks.push({ id: cid, dim, name, ok, ...(!ok ? { detail: detail.slice(0, 1200) } : {}) });
+  const NOT = /\b(?:do(?:es)? not|don['’]t|doesn['’]t|cannot|can['’]t|fails? to|not)\s+(?:\w+\s+){0,3}?(?:confirm|show|establish|list|name|verify|include|mention)\w*\b/i;
+  const PERSON_IN_SCHEME = /\b(?:enrol\w*|insured|covered|listed|named|member\w*)\b/i;
+  const caveat = lines.filter((l) => /Daniel/.test(l) && NOT.test(l) && PERSON_IN_SCHEME.test(l) && !/\bCore\b[^.]*\bVoluntary\b|\bVoluntary\b[^.]*\bCore\b/i.test(l));
+  add("A3E", "C", "no claim that the documents do not confirm / list / name Daniel in the scheme (a Core / Voluntary membership uncertainty is allowed); any listing said is the dated one", !caveat.length && (!/certificate lists Daniel/i.test(t.v) || /01\/04\/2024|1 April 2024|2024-04-01/.test(t.v)), caveat.join(" | ") + "\n" + t.v);
+  const asserted = t.v.replace(/\bwhether\b[^.;]*/gi, "").replace(/\b(?:is|are) not (?:established|confirmed|stated|shown)\b[^.;]*/gi, "");
+  add("A3L", "C", "Daniel is never asserted to be covered / insured / enrolled (now, or in the Core or Voluntary Scheme); a stated listing carries the later-date limit", !/\b(?:is|remains|currently)\s+(?:\w+\s+)?(?:covered|insured|enrolled)\b/i.test(asserted) && (!/certificate lists Daniel/i.test(t.v) || /later date|not establish|does not establish/i.test(t.v)), t.v);
+  const order = ["A2K", "A2S", "A2X", "A2C", "A3E", "A3L"];
+  checks.sort((x, y) => (order.indexOf(x.id) + 1 || 99) - (order.indexOf(y.id) + 1 || 99));
+  return finish(id, checks, b);
+}
+
+export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, FL4b: gradeFL4b, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
   RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
 

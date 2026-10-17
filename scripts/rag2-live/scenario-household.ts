@@ -160,7 +160,9 @@ export const FL3: Scenario = { id: "FL3", title: "rc-live-6: the death allowance
  * the synthetic page and FL1-FL3 never run on the recorded one. */
 export const FL4: Scenario = { id: "FL4", title: "rc-live-7: the death allowance over the recorded passage -- printed conditions only, honest currency, dated certificate evidence", why: "recorded-passage evidence gap", turns: [
   { user: "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?", expect: {} }] };
-export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
+/** rc-live-8 (EXPECTED-rc-live-8.md): the same question on the repaired code, graded with v6 (FL4's v5 grade kept). */
+export const FL4b: Scenario = { ...FL4, id: "FL4b", title: "rc-live-8: FL4's question on the repaired code -- allowance present, honest currency, no invented condition, Core / Voluntary vs certificate listing distinguished", why: "rc-live-7 repair check" };
+export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4, FL4b] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;

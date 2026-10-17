@@ -431,6 +431,55 @@ export function borrowedCondition(text: string, passages: (string | { text: stri
   }
   return null;
 }
+/** PR #54 (after rc-live-7): the numbered sections of a page ("Section 5 - Compassionate Death Allowance Benefit",
+ * "Section 6 - Repatriation"), each with the lines under it. */
+const SECTION_HEAD = /^\s*(?:section|part|clause)\s+[\w.]+\s*[-–—:]\s*(.+?)\s*$/i;
+function sectionsOf(pageText: string): { heading: string; text: string }[] {
+  const out: { heading: string; text: string }[] = [];
+  for (const line of pageText.split(/\n+/)) {
+    const m = SECTION_HEAD.exec(line);
+    if (m) out.push({ heading: m[1], text: "" });
+    else if (out.length) out[out.length - 1].text += line + "\n";
+  }
+  return out;
+}
+const CONDITION_CLAUSE = /\b(?:if|when|where|provided(?: that)?|only if)\b[^,;.]*/gi;
+const CONDITION_STOP = new Set(["their", "there", "would", "could", "should", "about", "under", "being", "after", "before", "which", "these", "those", "result", "results", "person", "insured"]);
+/**
+ * A statement naming ONE numbered section's benefit of a cited page that states an amount, or a condition, the page
+ * prints only under ANOTHER section (Repatriation's "$5,000" or "if death occurs overseas" stated for the Compassionate
+ * Death Allowance because the two sections share a page). Null when the sentence names no single section of the page,
+ * or when what it states is printed under the section it names.
+ */
+export function neighbouringSectionClaim(text: string, cited: EvidenceRef[], ctx: Pick<Ctx, "libraryPages" | "people">): string | null {
+  const names = new Set((ctx.people ?? []).flatMap((p) => p.names).flatMap((n) => (n ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? []));
+  for (const e of cited) {
+    const pg = ctx.libraryPages?.get(e.policyId)?.pages.find((x) => x.page === e.page.start);
+    if (!pg) continue;
+    const secs = sectionsOf(pg.text);
+    if (secs.length < 2) continue;
+    const named = secs.filter((x) => benefitWords(x.heading).size > 0 && namesBenefit(text, x.heading));
+    if (named.length !== 1) continue;
+    const own = named[0], others = secs.filter((x) => x !== own);
+    for (const f of moneyFiguresIn(text)) {
+      const inOwn = !!printedForm(own.text, f.value);
+      const elsewhere = others.find((x) => printedForm(x.text, f.value));
+      if (!inOwn && elsewhere) return `states ${f.raw} for ${own.heading}, but the page prints that amount only under ${elsewhere.heading}`;
+    }
+    // A condition clause is another section's when ALL its content words are printed under that section and some of
+    // them are not printed under the section the sentence names ("if death occurs overseas": Repatriation's own words).
+    const has = (t: string, w: string) => t.includes(w.replace(/s$/, ""));
+    const ownLower = (own.heading + "\n" + own.text).toLowerCase();
+    for (const m of text.matchAll(CONDITION_CLAUSE)) {
+      const words = (m[0].toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !CONDITION_STOP.has(w) && !names.has(w) && !["only", "when", "where", "provided"].includes(w));
+      const missing = words.filter((w) => !has(ownLower, w));
+      if (!words.length || !missing.length) continue;
+      const other = others.find((x) => { const o = (x.heading + "\n" + x.text).toLowerCase(); return words.every((w) => has(o, w)); });
+      if (other) return `states “${m[0].trim()}” for ${own.heading}, but the page prints that condition only under ${other.heading}`;
+    }
+  }
+  return null;
+}
 const ENDORSEMENT_WORDS = /\b(?:endorsements?|amend(?:ed|ment|ments|s|ing)?|alteration)\b/i;
 /** A statement about `subjectId` that relies on an endorsement when every endorsement in the household belongs to
  * someone else (its amending clause names only another member). Null when the person has an endorsement
@@ -949,6 +998,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Permanent Dismemberment is never borrowed for Accidental Death because the two lines are adjacent in the passage.
     const borrowed = borrowedCondition(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean).map((e) => ({ text: evidenceTextOf(e), doc: ctx.policyNames?.get(e.policyId) ?? ctx.state.docNames?.[e.policyId] ?? null })));
     if (borrowed) { drop(text, borrowed); continue; }
+    // PR #54: an amount or condition printed under a neighbouring numbered section of the same page.
+    const neighbour = neighbouringSectionClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
+    if (neighbour) { drop(text, neighbour); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
     let relatedCurrency = false;
@@ -967,7 +1019,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // currency"); the unsupported S$ is recorded as taken out. Never the whole statement for the currency alone.
       if (bare && "dropped" in bare && bare.asPrinted) {
         const re = bareAmountClaim(bare.asPrinted, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
-        if (re) { out.dropped.push({ sentence: text, reason: bare.dropped + "; said as printed instead" }); text = re.text; if (re.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, re.basis, "compose")])]; bare = bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx); if (bare && !("dropped" in bare) && bare.basis) bare = null; }
+        if (re) { out.dropped.push({ sentence: text, reason: bare.dropped + "; said as printed instead" }); text = re.text; if (re.basis) evIds = [...new Set([...evIds, evidenceIdOf(ctx.state, re.basis, "compose")])]; bare = re.basis ? null : bareCurrencyClaim(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx); if (bare && !("dropped" in bare) && bare.basis) bare = null; }
       }
       if (bare) { drop(text, "dropped" in bare ? bare.dropped : bare.reason); continue; }
     }
