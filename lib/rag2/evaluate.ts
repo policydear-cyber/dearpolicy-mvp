@@ -85,7 +85,13 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     const optionId = typeof a.option_id === "string" ? a.option_id.trim() : "";
     if (optionId) { row = s.rows.find((r) => r.id === optionId) ?? null; if (!row) return fail(`option_id ${optionId} is not one of ${rec.benefit}'s listed cases; the cases are: ${s.rows.map((r) => `${r.id} = ${r.label} ${r.percent}%`).join("; ")}`); }
     const caseWords = typeof a.case === "string" ? a.case.trim() : "";
-    const reported = ctx.reported?.get(subjectId) ?? [];
+    // (structured-answers release, sa-live-2 SBp: a LATER report that names exactly one listed case settles the case; an EARLIER
+    // report that left it open between several cases is history -- whatever fact key either was recorded under and whether or
+    // not a question was pending. Reports that named one case, and everything else the household said, stay in play.)
+    const heardAll = [...(ctx.reportedFacts?.get(subjectId) ?? [])];
+    const latestOne = heardAll.filter((r) => caseFor(s.rows, r.words).kind === "row").sort((x, y) => y.turn - x.turn)[0];
+    const history = latestOne ? heardAll.filter((r) => r.turn < latestOne.turn && caseFor(s.rows, r.words).kind === "ambiguous").map((r) => r.words) : [];
+    const reported = (ctx.reported?.get(subjectId) ?? []).filter((w) => !history.some((h) => w.startsWith(h)));
     const printed = s.rows.map((r) => `${r.label} ${r.percent}%`).join("; ");
     const pct_of = summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of;
     const unlisted = (parts: string[]) => (ctx.unlisted ??= new Map()).set(`${subjectId}|${rec.id}`, parts.map(partLabel)) && ok({ status: "unlisted_case", benefit: rec.benefit, benefit_id: rec.id, named: parts.map(partLabel), listed_cases: printed, percentage_of: pct_of,

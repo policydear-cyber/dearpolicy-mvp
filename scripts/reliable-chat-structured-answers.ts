@@ -13,7 +13,7 @@ import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
 import { gradeSAcorrection, gradeSAambiguity, gradeSAcompare, gradeSAdeath, gradeSAperson } from "./rag2-live/structured-check";
 
-import { D, G, CERT, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
+import { D, G, CERT, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 setEnv(A as any);
 let failed = 0, passed = 0;
@@ -84,6 +84,13 @@ async function main() {
   check("J3 turn 2: the question is not asked again; nothing pending", !(j3b.answer.questions ?? []).length && !j3b.state?.pending, JSON.stringify([j3b.answer.questions, j3b.state?.pending]));
   check("J3: returned = saved = reopened (both turns)", agrees(j3a) && agrees(j3b), JSON.stringify([j3a.shown === j3a.v, j3a.reopened === j3a.v, j3b.shown === j3b.v, j3b.reopened === j3b.v]));
 
+  // ===== J3b: sa-live-2 SBp (real model): the clarification is recorded under another key and no question was pending
+  const [j3ca, j3cb] = await converse("J3b", [J3B_U1, J3B_U2], j3bTurns());
+  const tib2 = lines(j3cb.v).find((l) => /S\$2,500/.test(l)) ?? "";
+  check("J3b turn 1: no amount before the case is known; the supported terms are given", !/conditional illustration is S\$/.test(j3ca.v) && /S\$5,000/.test(j3ca.v), j3ca.v);
+  check("J3b turn 2: the clarification settles the case although it was recorded under another fact key and no question was pending (no case_conflict): the leg row, S$2,500, conditional", /^If the Simple Fracture/.test(tib2) && /Leg/.test(tib2) && complete(j3cb.v) && !NOT_CONFIRMED.test(j3cb.v), j3cb.v + "\n" + JSON.stringify(j3cb.trace?.toolCalls?.filter((t: any) => t.name === "evaluate_benefit").map((t: any) => t.summary)));
+  check("J3b: returned = saved = reopened (both turns)", agrees(j3ca) && agrees(j3cb), "");
+
   // ===== J4: Simple vs Other comparison -> separate bases, honest relationship
   const [j4] = await converse("J4", [J4_U], [j4Turn()]);
   const s4 = lines(j4.v).find((l) => /S\$2,500/.test(l)) ?? "", o4 = lines(j4.v).find((l) => /S\$300,000/.test(l)) ?? "";
@@ -140,6 +147,13 @@ async function main() {
     check("grader v8 control: an unfinished quotation fails G2", failsOn(gradeSAcorrection("SAa", tw([j1, bad("If the Simple Fracture benefit applies to Daniel's case “Hip” (as you described: “Correction: it was his hip, not his tibia.")])), "G2"));
     check("grader v8 control: the withdrawn S$2,500 still shown fails K3", failsOn(gradeSAcorrection("SAa", tw([j1, bad("If the Simple Fracture benefit applies, the conditional illustration is S$2,500. If it applies to the Hip, S$3,750 (75% of S$5,000), not a payment.")])), "K3"));
     check("grader v8 control: a total of the two alternatives fails C3", failsOn(gradeSAcompare("SC", tw([bad("Simple Fracture S$2,500 under the Group Insurance Product Summary (S$5,000 limit); Other Fracture S$300,000 under the Group Personal Accident Benefit Summary (S$600,000), S$302,500 in total.")])), "C3"));
+    // v8.2: sa-live-2's real answers (anonymised fixture): an honest NEGATED statement and the contact step's document name are not failures
+    const SC_REAL = "If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe uploaded documents do not establish that both benefits can be claimed together, so these illustrations should not be added.\nNeither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.";
+    check("grader v8.2: sa-live-2's real comparison (a negated 'claimed together') passes C3", gradeSAcompare("SC", tw([bad(SC_REAL)])).checks.find((c) => c.id === "C3")?.ok === true);
+    check("grader v8.2 control: 'both can be claimed together' still fails C3", failsOn(gradeSAcompare("SC", tw([bad(SC_REAL.replace("do not establish that both benefits can be claimed together, so these illustrations should not be added", "show that both benefits can be claimed together"))])), "C3"));
+    const SE_REAL = "If the Simple Fracture benefit applies to Grace's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.";
+    check("grader v8.2: sa-live-2's real person-switch answer (the contact step names the certificate document) passes P1 and P2", gradeSAperson("SE", tw([j1, bad(SE_REAL)])).checks.filter((c) => c.id === "P1" || c.id === "P2").every((c) => c.ok));
+    check("grader v8.2 control: Grace's certificate cover stated with Daniel's figure still fails P2", failsOn(gradeSAperson("SE", tw([j1, bad(SE_REAL + "\nHer certificate lists S$600,000.")])), "P2"));
     check("grader v8 control: Daniel's amount in Grace's answer fails P2", failsOn(gradeSAperson("SE", tw([j1, bad("If the benefit applies to Grace, S$3,750. Her certificate lists S$600,000.")])), "P2"));
   }
 

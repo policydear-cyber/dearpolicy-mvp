@@ -53,6 +53,24 @@ export const j3Turns = (): ScriptTurn[] => [
     (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: ["contact:" + CERT] })],
   ] },
 ];
+/** J3b (sa-live-2 SBp, the real model): the uncertain report is recorded under one fact key and NO question is pending when the
+ * household clarifies; the clarification is recorded under ANOTHER key. It still settles the case. */
+export const J3B_U1 = "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?";
+export const J3B_U2 = "Update: it is definitely the lower leg, the tibia.";
+export const j3bTurns = (): ScriptTurn[] => [
+  { user: J3B_U1, steps: [
+    () => [call("resolve_person", { mention: "Daniel" }), call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "fell at home", words: "hurt himself in a fall at home last night" }, { key: "fracture_site_uncertain", value: "hip or lower leg bone", words: "The hospital thinks he broke either his hip or the lower leg bone" }] })],
+    () => [call("person_benefits", { subject_id: D, topic: "accident fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "either his hip or the lower leg bone", fact_keys: ["fracture_site_uncertain", "how_it_happened"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }, { kind: "uncertainty", text: "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.", evidence_ids: [] }] })],
+  ] },
+  { user: J3B_U2, steps: [
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "fracture_site_detail", value: "tibia (lower leg)", words: "it is definitely the lower leg, the tibia" }] })],
+    () => [call("person_benefits", { subject_id: D, topic: "closed tibia fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "the tibia (lower leg)", assumption_words: "it is definitely the lower leg, the tibia", fact_keys: ["fracture_site_detail", "how_it_happened"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: ["contact:" + CERT] })],
+  ] },
+];
 export const j4Turn = (): ScriptTurn => ({ user: J4_U, steps: [
   () => [call("resolve_person", { mention: "Daniel" }), call("person_benefits", { subject_id: D, topic: "simple fracture other fracture leg" })],
   (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "what_if", case: "leg" }), call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "what_if", case: "leg (Other Fracture)" })],

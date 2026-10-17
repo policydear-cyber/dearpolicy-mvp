@@ -197,7 +197,13 @@ export const SD: Scenario = { id: "SD", title: "structured: the death allowance"
 export const SE: Scenario = { id: "SE", title: "structured: person switch to Grace", why: "release journey 6", turns: [
   { user: "Daniel fractured his tibia in an accident, a closed fracture. What would his accident cover pay?", expect: {} },
   { user: "And if Grace fractured her hip, what would the Simple Fracture benefit pay for her?", expect: {} }] };
-export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SBp, SC, SD, SE];
+/** SAq (after sa-live-2): SAp's wording said "My husband Daniel" while the fixture lists Daniel as the account holder ("self"), so the
+ * app rightly asked who was meant and the paraphrase never tested the correction. SAq is the same paraphrase without that contradiction;
+ * SAp stays in the record as run. */
+export const SAq: Scenario = { id: "SAq", title: "structured: closed tibia -> corrected to hip (fresh paraphrase, consistent with the fixture)", why: "release journey 1 and 2 (paraphrase)", turns: [
+  { user: "Daniel slipped on wet stairs at home and the doctor says he has a closed break of the shin bone. What could his personal accident cover pay out for that?", expect: {} },
+  { user: "Sorry, I had that wrong - the break is in his hip, not his shin. Same closed fracture, still just asking what it could be worth.", expect: {} }] };
+export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SBp, SC, SD, SE];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : SCENARIO) as unknown as typeof SCENARIO;
