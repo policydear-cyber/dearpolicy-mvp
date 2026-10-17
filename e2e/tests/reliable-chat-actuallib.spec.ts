@@ -126,3 +126,19 @@ test("SA7: the model identified the ambiguity but never asked -- the server asks
   await page.reload();
   await expect(page.locator(".message.assistant").last()).toContainText("conditional illustration is S$2,500", { timeout: 60_000 });
 });
+
+test("SA8: the first report sat under two keys; the correction still settles the case (no case_conflict, no question), reload-safe", async ({ page, request }) => {
+  const [u1, u2] = await scenario(request, "SA8");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a1 = await send(page, u1);
+  await sameAsSaved(request, a1.shown, "SA8 first", a1.visibleMs);
+  expect(a1.shown).toMatch(/conditional illustration is S\$2,500/);
+  const a2 = await send(page, u2);
+  const s2 = await sameAsSaved(request, a2.shown, "SA8 corrected", a2.visibleMs);
+  expect(a2.shown).toMatch(/conditional illustration is S\$3,750/);
+  expect(a2.shown).not.toMatch(/conditional illustration is S\$(?:2,500|300,000)/);
+  expect(s2.questions ?? []).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator(".message.assistant").last()).toContainText("conditional illustration is S$3,750", { timeout: 60_000 });
+});

@@ -116,6 +116,6 @@ export function gradeSAperson(id: string, conv: any): Graded {
   ] as Check[];
   return finish(id, checks, b);
 }
-export const STRUCTURED_GRADERS: Record<string, (id: string, conv: any) => Graded> = { SAa: gradeSAcorrection, SAb: gradeSAcorrection, SAp: gradeSAcorrection, SAq: gradeSAcorrection, SAr: gradeSAcorrection, SBa: gradeSAambiguity, SBb: gradeSAambiguity, SBp: gradeSAambiguity, SC: gradeSAcompare, SD: gradeSAdeath, SE: gradeSAperson };
+export const STRUCTURED_GRADERS: Record<string, (id: string, conv: any) => Graded> = { SAa: gradeSAcorrection, SAb: gradeSAcorrection, SAp: gradeSAcorrection, SAq: gradeSAcorrection, SAr: gradeSAcorrection, SAs: gradeSAcorrection, SBa: gradeSAambiguity, SBb: gradeSAambiguity, SBp: gradeSAambiguity, SC: gradeSAcompare, SD: gradeSAdeath, SE: gradeSAperson };
 /** v8.1 = v8 + crash-safe details (after sa-live-2); v8.2 = v8.1 + C3 accepts a NEGATED statement ("cannot be claimed together") and P2 does not count the contact step's document name as a statement of Grace's cover (both false positives found in sa-live-2's SC and SE answers; sa-live-2 stays graded by v8 as written, controls below show a real total and a real wrong-certificate still fail). */
 export const STRUCTURED_GRADER_VERSION = "v8.2";

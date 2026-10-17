@@ -16,8 +16,9 @@ import { gradeSAcorrection, gradeSAambiguity, gradeSAcompare, gradeSAdeath, grad
 import { P_A_U2, pSecondInjuryTurn, P_B_U1, P_B_U2, P_B_U3, pSwitchTurns, P_C_U2, P_C_U3, pSideQuestionTurns } from "./fixtures/reliable-chat/actual-lib-conversations";
 import { sentencesOf } from "@/lib/chat/answer-verification";
 import { gradeV9, nextStepRequired, claimsATotal } from "./rag2-live/structured-regrade";
+import { caseFor } from "@/lib/rag2/calc/case-terms";
 import { requirementToAsk, type OpenRequirement } from "@/lib/rag2/loop/requirement-question";
-import { D, G, CERT, SBA_U1, SBA_U2, sbaTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
+import { D, G, CERT, SBA_U1, SBA_U2, sbaTurns, SAR_U1, SAR_U2, sarTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 setEnv(A as any);
 let failed = 0, passed = 0;
@@ -103,6 +104,20 @@ async function main() {
   check("SBa replay turn 1: pending state is the requirement's person, benefit and options (not an insurer question)", sba1.state?.ragLoop?.pending?.kind === "fact" && sba1.state.ragLoop.pending.subjectId === D && (sba1.state.ragLoop.pending.options ?? []).length >= 2 && !!sba1.state.ragLoop.pending.requirementId && !!sba1.state.ragLoop.pending.benefitId && !/insurer (?:accept|approve)|accepted by the insurer|approved by the insurer/i.test(sq.map((x) => x.text).join(" ")), JSON.stringify(sba1.state?.ragLoop?.pending));
   check("SBa replay turn 1: returned = saved = reopened; complete", agrees(sba1) && complete(sba1.v), sba1.v);
   check("SBa replay turn 2: the clarification settles it -- both illustrations (S$2,500 and S$300,000) as separate complete conditional statements, no question repeated, nothing pending", /S\$2,500/.test(sba2.v) && /S\$300,000/.test(sba2.v) && complete(sba2.v) && !(sba2.answer.questions ?? []).length && !sba2.state?.ragLoop?.pending, sba2.v + JSON.stringify(sba2.state?.ragLoop?.pending));
+
+  // ===== SAr replay (round 3, sa-live-4): the first report recorded under two keys; the correction replaces dependents, whatever key it came under
+  {
+    const [sr1, sr2] = await converse("SAr", [SAR_U1, SAR_U2], sarTurns());
+    check("SAr replay turn 1: both tibia illustrations (S$2,500 and S$300,000) given", /S\$2,500/.test(sr1.v) && /S\$300,000/.test(sr1.v) && agrees(sr1), sr1.v);
+    check("SAr replay turn 2: the correction settles the case although the old report sits under another key -- no case_conflict, no question, one complete conditional S$3,750", /conditional illustration is S\$3,750/.test(sr2.v) && !(sr2.answer.questions ?? []).length && !sr2.state?.ragLoop?.pending && complete(sr2.v), sr2.v + JSON.stringify(sr2.trace?.toolCalls?.filter((t: any) => t.name === "evaluate_benefit").map((t: any) => t.summary)));
+    {
+      const rows = [{ id: "r2", label: "Hip" }, { id: "r3", label: "Jaw, Pelvis, Leg, Ankle or Knee" }, { id: "r5", label: "Arm, Elbow, Wrist or Ribs" }] as any;
+      const kind = (w: string) => { const c = caseFor(rows, w) as any; return c.kind === "row" ? c.row.id : c.kind; };
+      check("negation: “not the lower leg” negates the leg (with its qualifier) -- the hip is the one case named; “not the upper arm” likewise", kind("the break is actually at the hip, not the lower leg.") === "r2" && kind("it is the wrist, not the upper arm") === "r5");
+      check("negation control: an affirmed “lower leg” still names the leg row, and “hip or lower leg” stays ambiguous", kind("a closed break in his lower leg") === "r3" && kind("his hip or the lower leg") === "ambiguous");
+    }
+    check("SAr replay turn 2: the tibia amounts are withdrawn, not current", !lines(sr2.v).some((l) => /conditional illustration is S\$(?:2,500|300,000)/.test(l)) && agrees(sr2), sr2.v);
+  }
 
   // ===== Round 3: when the server owes the household a question (negative controls of the finalisation rule)
   {

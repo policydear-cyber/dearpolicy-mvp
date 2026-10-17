@@ -207,7 +207,11 @@ export const SAq: Scenario = { id: "SAq", title: "structured: closed tibia -> co
 export const SAr: Scenario = { id: "SAr", title: "structured: closed lower-leg break -> corrected to hip (held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase)", turns: [
   { user: "Daniel came off his bicycle this morning and the doctor says he has a closed break in his lower leg, the tibia. If we claimed on his accident cover, what could that be worth?", expect: {} },
   { user: "The doctor has corrected it: the break is actually at the hip, not the lower leg. Same closed fracture. What does that change?", expect: {} }] };
-export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SBp, SC, SD, SE];
+/** SAs (round 3, written before sa-live-5): a second held-back correction paraphrase -- different cause, wording and trigger; same bones, so the original grader applies. */
+export const SAs: Scenario = { id: "SAs", title: "structured: broken shin bone -> corrected to hip (second held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase 2)", turns: [
+  { user: "Daniel slipped on a wet floor in the kitchen and the hospital says his shin bone, the tibia, is broken cleanly - a closed fracture. If we made a claim under his accident insurance, roughly what would it be worth?", expect: {} },
+  { user: "Sorry, the hospital rang back: it is the hip that is broken, not the shin bone. Still a closed fracture. What would it be worth now?", expect: {} }] };
+export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SAs, SBp, SC, SD, SE];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : SCENARIO) as unknown as typeof SCENARIO;

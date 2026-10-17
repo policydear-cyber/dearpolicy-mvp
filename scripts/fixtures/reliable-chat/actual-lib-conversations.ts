@@ -103,6 +103,7 @@ export const ACTUAL_SCENARIOS = (): ActualScenario[] => [
   { id: "SA5", title: "death allowance", messages: [J5_U], turns: [j5Turn()] },
   { id: "SA6", title: "person switch to Grace", messages: [J1_U, J6_U], turns: [j1Turn(), j6Turn()] },
   { id: "SA7", title: "SBa replay: the model never asked the question", messages: [SBA_U1, SBA_U2], turns: sbaTurns() },
+  { id: "SA8", title: "SAr replay: the first report was recorded under two keys, the correction replaced one", messages: [SAR_U1, SAR_U2], turns: sarTurns() },
 ];
 
 /** Round 3 (PR #55 follow-up): sa-live-3 SBa replayed from its recorded tool calls (docs/rag-migration/live/RUN-sa-live-3-<timestamp>/conv-SBa.json,
@@ -124,6 +125,25 @@ export const sbaTurns = (): ScriptTurn[] => [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "injury_detail", value: "tibia", words: "it is the tibia" }] }), call("person_benefits", { subject_id: D, topic: "closed tibia fracture" })],
     (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "the tibia", assumption_words: "it is the tibia", fact_keys: ["injury_detail"] }), call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "the tibia", assumption_words: "it is the tibia", fact_keys: ["injury_detail"] })],
     (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: ["contact:" + CERT] })],
+  ] },
+];
+
+/** Round 3 (sa-live-4 SAr, the real model): the first report was recorded under TWO keys ("injury" with the whole sentence and
+ * "fracture_site": tibia); the correction replaced only "fracture_site", so the old "injury" report still competed with the hip
+ * and every evaluation came back case_conflict. Replayed from the recorded arguments (evidence ids are the fixture's own). */
+export const SAR_U1 = "Daniel came off his bicycle this morning and the doctor says he has a closed break in his lower leg, the tibia. If we claimed on his accident cover, what could that be worth?";
+export const SAR_U2 = "The doctor has corrected it: the break is actually at the hip, not the lower leg. Same closed fracture. What does that change?";
+export const sarTurns = (): ScriptTurn[] => [
+  { user: SAR_U1, steps: [
+    () => [call("resolve_person", { mention: "Daniel" }), call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "came off his bicycle this morning", words: "Daniel came off his bicycle this morning" }, { key: "injury", value: "closed break in his lower leg, the tibia", words: "the doctor says he has a closed break in his lower leg, the tibia" }, { key: "fracture_site", value: "tibia", words: "the tibia" }, { key: "fracture_type", value: "closed", words: "closed break" }] })],
+    () => [call("person_benefits", { subject_id: D, topic: "accident fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "closed break in his lower leg, the tibia", fact_keys: ["injury", "fracture_site", "fracture_type", "how_it_happened"] }), call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "closed break in his lower leg, the tibia", fact_keys: ["injury", "fracture_site", "fracture_type", "how_it_happened"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: ["contact:" + CERT] })],
+  ] },
+  { user: SAR_U2, steps: [
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "fracture_site", value: "hip", words: "The doctor has corrected it: the break is actually at the hip, not the lower leg." }, { key: "fracture_type", value: "closed", words: "Same closed fracture." }] }), call("person_benefits", { subject_id: D, topic: "accident fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "closed fracture at the hip", assumption_words: "The doctor has corrected it: the break is actually at the hip, not the lower leg.", fact_keys: ["fracture_site", "fracture_type", "how_it_happened"] }), call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "closed fracture at the hip", assumption_words: "The doctor has corrected it: the break is actually at the hip, not the lower leg.", fact_keys: ["fracture_site", "fracture_type", "how_it_happened"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: [] })],
   ] },
 ];
 

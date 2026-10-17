@@ -92,7 +92,15 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     // PR #55 follow-up: it settles only an open report whose candidates INCLUDE that one case ("hip or tibia" is settled by
     // "the tibia"); a report of a different injury (a wrist) is a second event, and replaces nothing of the open one.
     const latestOne = heardAll.map((r) => ({ r, c: caseFor(s.rows, r.words) })).filter((x) => x.c.kind === "row").sort((x, y) => y.r.turn - x.r.turn)[0];
-    const history = latestOne && latestOne.c.kind === "row" ? heardAll.filter((r) => { const c = caseFor(s.rows, r.words); return r.turn < latestOne.r.turn && c.kind === "ambiguous" && c.rows.some((x) => x.id === (latestOne.c as { row: { id: string } }).row.id); }).map((r) => r.words) : [];
+    // A CORRECTION replaces what it corrects whatever key the old report sits under (sa-live-4 SAr: the tibia had been recorded
+    // under "injury" AND "fracture_site"; the correction replaced one and the other made every evaluation a case_conflict): when
+    // the latest one-case report carries the household's correction cue, an earlier report of a DIFFERENT single case of this
+    // benefit is history. Without the cue a different injury is a second event and replaces nothing.
+    const history = latestOne && latestOne.c.kind === "row" ? heardAll.filter((r) => {
+      if (r.turn >= latestOne.r.turn) return false;
+      const c = caseFor(s.rows, r.words), id = (latestOne.c as { row: { id: string } }).row.id;
+      return c.kind === "ambiguous" ? c.rows.some((x) => x.id === id) : c.kind === "row" && latestOne.r.cue && c.row.id !== id;
+    }).map((r) => r.words) : [];
     const reported = (ctx.reported?.get(subjectId) ?? []).filter((w) => !history.some((h) => w.startsWith(h)));
     const printed = s.rows.map((r) => `${r.label} ${r.percent}%`).join("; ");
     const pct_of = summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of;
