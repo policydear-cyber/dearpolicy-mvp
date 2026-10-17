@@ -285,8 +285,16 @@ const ENROL_NEG = [
   /\bunconfirmed\s+(?:enrol\w*|membership|participation)\b/i,
   /\b(?:not|never)\s+(?:listed|named|enrol\w*)\s+(?:on|in|under)\b/i,
 ];
-export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages">): { text: string; evidence: EvidenceRef; reason: string } | null {
-  const m = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
+/** PR #54 (after rc-live-9 FL5b): "these documents do not establish that this funeral benefit applies to him" -- a
+ * statement about whether a documented benefit applies to the person, which runs together three different things: the
+ * benefit the wording documents, the person's DATED certificate listing, and eligibility for the event now. */
+const APPLIES_NEG = /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|prove|verify)\w*\s+(?:that\s+|whether\s+)?(?:this|the|that|his|her|their|any)\s+(?:[\w’'-]+\s+){0,4}?(?:benefit|allowance|cover|coverage)\s+(?:\w+\s+){0,2}?(?:applies|apply|would apply|is payable|covers)\s+(?:to|for)\b/i;
+export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages">, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
+  // (a statement that also says the person's enrolment or listing is unconfirmed is answered by the dated listing, as
+  // before; an applicability statement alone keeps its own question beside the listing)
+  const enrol = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
+  const applies = !enrol && APPLIES_NEG.test(text);
+  const m = enrol ?? (applies ? APPLIES_NEG.exec(text) : null);
   if (!m || !subjectId || !ctx.benefits) return null;
   if (DATED_LIMITATION.test(text)) return null;
   const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.policy.personalProof && b.memberId === subjectId);
@@ -294,8 +302,8 @@ export function enrolmentAbsenceClaim(text: string, subjectId: string | null, ci
   // What the enrolment is said to be IN: a certificate's listing shows the scheme and the products it lists. Enrolment
   // for something else -- a particular benefit, the applicable / Core / Voluntary part of a scheme -- is not what the
   // listing shows, and stays as said.
-  if (/\b(?:applicable|core|voluntary|optional|sub-?scheme)\b[^.;]{0,40}\benrol\w*/i.test(text)) return null;
-  const target = /\benrol\w*\s+(?:for|in|under|on|with|into)\s+([^,.;]{1,70})/i.exec(text)?.[1] ?? null;
+  if (!applies && /\b(?:applicable|core|voluntary|optional|sub-?scheme)\b[^.;]{0,40}\benrol\w*/i.test(text)) return null;
+  const target = applies ? null : /\benrol\w*\s+(?:for|in|under|on|with|into)\s+([^,.;]{1,70})/i.exec(text)?.[1] ?? null;
   if (target) {
     const t = target.toLowerCase();
     const listed = [...new Set(rows.map((b) => b.benefit.label))].some((l) => { const w = (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((x) => x !== "group"); return w.length > 0 && w.every((x) => t.includes(x)); });
@@ -321,8 +329,14 @@ export function enrolmentAbsenceClaim(text: string, subjectId: string | null, ci
   const doc = latest.policy.product ?? "certificate";
   // (the date as the certificate prints it on that row)
   const printedDate = /\b\d{1,2}[/.-]\d{1,2}[/.-]\d{4}\b|\b\d{1,2}\s+[A-Z][a-z]+\s+\d{4}\b/.exec(latest.source.evidence.passage.text)?.[0] ?? latest.asOf;
+  const listing = `${who}'s certificate lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""}`;
+  // (an applicability statement keeps its own question -- whether the benefit applies to the event now -- stated apart
+  // from the dated listing, never merged into "not covered" or "covered")
+  if (applies) return { evidence: latest.source.evidence, benefit: benefitName,
+    text: `${listing}; whether ${benefitName ? `the ${benefitName}` : "this benefit"} applies to ${who} for this event is not established by the documents.`,
+    reason: `runs together the documented benefit, ${who}'s dated certificate listing (${doc}, page ${latest.source.page}) and eligibility for this event; said as those separate terms instead` };
   return { evidence: latest.source.evidence,
-    text: `${who}'s certificate lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""}.`,
+    text: `${listing}.`,
     reason: `says ${who}'s enrolment or listing is not confirmed, but ${who}'s ${doc} lists ${who} under ${under.join(" and ")}${printedDate ? ` as of ${printedDate}` : ""} (page ${latest.source.page})` };
 }
 const TRIP_NOT_COVERED = /\b(?:does not|do not|doesn['’]t|don['’]t|would not|will not|won['’]t)\s+(?:cover|insure|apply to|extend to|pay for)\b|\b(?:is|are|was|were|would be)\s+not\s+(?:covered|insured)\b|\bisn['’]t covered\b|\bno cover(?:age)? (?:for|on|during)\b|\bexclud(?:es|ed)\b/i;
@@ -543,6 +557,21 @@ const SAYS_NOT_LISTED = /\b(?:is|are)\s+not\s+(?:listed|named|insured|included|s
 function namedDocs(text: string, ctx: Ctx): string[] {
   const lowerText = text.toLowerCase();
   return [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const words = contentWords(n).filter((w) => w.length >= 4 && !/^(?:polic|plan|schedul|certificat|document|wording|scanned)/.test(w)); const hits = words.filter((w) => lowerText.includes(w)); return words.length > 0 && hits.length >= Math.min(2, words.length); }).map(([id]) => id);
+}
+/** PR #54 (after rc-live-9 FL5a: "can be claimed under either the Core Scheme or the Voluntary Scheme, but not both"):
+ * a restriction restated with a limit the cited wording does not print -- exclusivity ("but not both", "only one of"),
+ * a cap on how often or how many ("only once", "at most one"), a bar on combining -- is a condition the document does
+ * not state. The statement is omitted whole (the benefit's own printed terms say the restriction as printed); a
+ * qualifier its cited wording prints is kept. Quoted wording is the document's, not the sentence's addition. */
+const QUALIFIERS = /\b(?:but\s+not\s+both|not\s+both|only\s+one\s+of|one\s+or\s+the\s+other(?:\s+only)?|at\s+most\s+(?:one|once)|only\s+once|once\s+only|only\s+(?:be\s+)?(?:claimed|paid|payable|made)\s+once|no\s+more\s+than\s+(?:one|once)|cannot\s+be\s+(?:combined|claimed\s+(?:together|twice|under\s+both))|not\s+(?:be\s+)?(?:combined|claimed\s+(?:together|twice|under\s+both)))\b/gi;
+export function unprintedQualifier(text: string, cited: EvidenceRef[]): string | null {
+  const own = text.replace(/“[^”]*”|"[^"]*"/g, " ");
+  const printed = cited.map((e) => (e.passage?.text ?? "").toLowerCase().replace(/\s+/g, " ")).join(" \n ");
+  for (const m of own.matchAll(QUALIFIERS)) {
+    const q = m[0].toLowerCase().replace(/\s+/g, " ");
+    if (!printed.includes(q)) return `adds “${m[0]}”, which its cited wording does not print`;
+  }
+  return null;
 }
 /** PR #54 (rc-live-8): why a figure is stated for one document while its cited source is another (null when it is not):
  * the clause stating the figure names a household document -- its whole product name, or a word of its name no other
@@ -966,6 +995,9 @@ function printedColumn(ref: EvidenceRef, value: number): string | null {
 }
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
+  // (PR #54: the one benefit whose terms the answer states, for a statement that refers to it as "this benefit")
+  const answerBenefits = [...new Set(args.sentences.filter((x) => x?.kind === "benefit_terms" && typeof x.benefit === "string").map((x) => String(x.benefit)))];
+  const answerBenefit = answerBenefits.length === 1 ? answerBenefits[0] : null;
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
   const drops: DropInfo[] = [];
   let cur = -1, curEstimate = false;
@@ -1040,6 +1072,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (neighbour) { drop(text, neighbour); continue; }
     const otherDoc = wrongDocumentFigure(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
     if (otherDoc) { drop(text, otherDoc); continue; }
+    const qualifier = unprintedQualifier(text, evIds.map((id) => ctx.state.evidence[id]).filter(Boolean));
+    if (qualifier) { drop(text, qualifier); continue; }
     // V1.5: an S$ amount restated from a line that prints it with a bare "$" -- only on that document's own currency
     // statement (cited and quoted with it); otherwise that clause is taken out.
     let relatedCurrency = false;
@@ -1092,8 +1126,17 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // V1.5: "the documents do not provide X's <product> Sum Insured" while X's own certificate row prints it.
     const absentAmount = amountAbsenceContradiction(text, subjectId, ctx);
     if (absentAmount) { drop(text, absentAmount); continue; }
-    { const en = enrolmentAbsenceClaim(text, subjectId, [...evIds, ...out.evidenceIds].map((id) => ctx.state.evidence[id]).filter(Boolean), ctx);
-      if (en) { out.dropped.push({ sentence: text, reason: en.reason }); text = en.text; evIds = [evidenceIdOf(ctx.state, en.evidence, "compose")]; if (!out.notes.includes(LATER_DATE_NOTE)) out.notes.push(LATER_DATE_NOTE); } }
+    { const named = (typeof s.benefit === "string" && s.benefit.trim()) || answerBenefit;
+      const en = enrolmentAbsenceClaim(text, subjectId, [...evIds, ...out.evidenceIds].map((id) => ctx.state.evidence[id]).filter(Boolean), ctx, named || null);
+      if (en) {
+        out.dropped.push({ sentence: text, reason: en.reason });
+        // (an applicability statement names the documented benefit: that benefit's own wording is cited with the dated
+        // listing -- a passage read this turn that prints the benefit's name, outside the certificate)
+        const support = !/^.*; whether /.test(en.text) ? [] : en.benefit ? Object.values(ctx.state.evidence).filter((e) => e.policyId !== en.evidence.policyId && !ctx.stale?.has(e.id) && e.passage.text.toLowerCase().includes(en.benefit!.toLowerCase())).slice(0, 1).map((e) => e.id)
+          : evIds.filter((id) => ctx.state.evidence[id] && ctx.state.evidence[id].policyId !== en.evidence.policyId);
+        text = en.text; evIds = [evidenceIdOf(ctx.state, en.evidence, "compose"), ...support];
+        if (!out.notes.includes(LATER_DATE_NOTE)) out.notes.push(LATER_DATE_NOTE);
+      } }
     // V1.2: one sentence may compare alternatives -- several calculations of the same person ("If it is the lower leg:
     // S$18,000 if compound (open), S$9,000 if simple (closed)"). Each result is composed and checked exactly as on its
     // own; the sentence is kept only if every one of them is.

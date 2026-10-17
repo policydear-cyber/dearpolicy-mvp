@@ -137,3 +137,31 @@ test("RC8: the booklet's allowance by name, its own conditions and honest curren
   expect(a.shown).not.toMatch(/couldn['’]t confirm|haven['’]t stated|prints\s*:/);
   expect(unfinished(a.shown)).toHaveLength(0);
 });
+
+// PR #54 (after rc-live-9), recorded passage: the two saved FL5 answers replayed with the model's recorded moves, through
+// the real chat page -- displayed = saved, with the two statement checks applied.
+test("FL5A: the saved FL5a answer, without the unprinted \"but not both\" (displayed = saved)", async ({ page, request }) => {
+  test.skip(process.env.BOOKLET_CDA !== "recorded", "recorded-passage fixture only (BOOKLET_CDA=recorded)");
+  const [u] = await scenario(request, "FL5A");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a = await send(page, u);
+  await sameAsSaved(request, a.shown, "FL5A");
+  expect(a.shown).toMatch(/prints the Compassionate Death Allowance Benefit for the funeral expenses incurred, up to 2,000 \(printed with a bare “\$” sign/);
+  expect(a.shown).toContain("This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.");
+  expect(a.shown).not.toMatch(/not both/);
+  expect(a.shown).toContain("Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme)");
+});
+test("FL5B: the saved FL5b answer, the dated listing and this-event eligibility said apart (displayed = saved)", async ({ page, request }) => {
+  test.skip(process.env.BOOKLET_CDA !== "recorded", "recorded-passage fixture only (BOOKLET_CDA=recorded)");
+  const [u] = await scenario(request, "FL5B");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a = await send(page, u);
+  await sameAsSaved(request, a.shown, "FL5B");
+  expect(a.shown).toContain("Daniel's certificate lists Daniel under Group Personal Accident as of 01/04/2024; whether the Compassionate Death Allowance Benefit applies to Daniel for this event is not established by the documents.");
+  expect(a.shown).toMatch(/does not by itself establish cover on a later date/);
+  expect(a.shown).toContain("The uploaded certificate does not show whether Daniel is enrolled in the Core or Voluntary Scheme.");
+  expect(a.shown).not.toMatch(/S\$2,000/);
+  expect(a.shown).toContain("Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme)");
+});
