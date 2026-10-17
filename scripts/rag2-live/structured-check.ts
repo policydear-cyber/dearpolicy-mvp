@@ -19,6 +19,8 @@ const PROMISE = /\b(?:will (?:pay|receive|get)|you(?:'ll| will) be paid|is payab
 const FOREIGN = /S\$\s?(?:7,000|4,000|900,000|3,500|10,000|500\b)|Singlife|MINDEF/;
 const DEFINITION = /Simple Fracture means|means a closed|not a Simple Fracture|skin is not broken/i;
 const SCHEDULE_ID = /“Schedule”|\bSchedule benefit\b|^•|\s•\s/m;
+/** (v8.1, after sa-live-2: a crash-safe stringify -- an answer with no `calculations` made the detail of K5 throw instead of FAIL; no expectation changed) */
+const J = (x: unknown): string => JSON.stringify(x) ?? "undefined";
 const lines = (v: string) => v.split("\n").filter(Boolean);
 const ends = (l: string) => /[.?!]["”’)]?$/.test(l.trim());
 const balanced = (l: string) => (l.match(/“/g) ?? []).length === (l.match(/”/g) ?? []).length && (l.match(/\(/g) ?? []).length === (l.match(/\)/g) ?? []).length;
@@ -44,7 +46,7 @@ function common(b: ReturnType<typeof base>): Check[] {
     { id: "G3", dim: "K", name: "no other household's / superseded version's / other document's figure", ok: !FOREIGN.test(all), detail: all.slice(0, 900) },
     { id: "G4", dim: "K", name: "no “Schedule” / bullet identity and no imported definition of Simple / Other Fracture", ok: !SCHEDULE_ID.test(all) && !DEFINITION.test(all), detail: all.slice(0, 900) },
     { id: "G5", dim: "S", name: "no payment promise", ok: !PROMISE.test(all.replace(/not a payment[^.]*/gi, "")), detail: all.slice(0, 600) },
-    { id: "G6", dim: "U", name: "returned = saved: every saved calculation's sentence is shown whole", ok: b.turns.every((t) => ((t.answer?.calculations ?? []) as any[]).every((k) => lines(t.v).includes(k.sentence))), detail: JSON.stringify(b.turns.map((t) => (t.answer?.calculations ?? []).map((k: any) => k.sentence))).slice(0, 900) },
+    { id: "G6", dim: "U", name: "returned = saved: every saved calculation's sentence is shown whole", ok: b.turns.every((t) => ((t.answer?.calculations ?? []) as any[]).every((k) => lines(t.v).includes(k.sentence))), detail: J(b.turns.map((t) => (t.answer?.calculations ?? []).map((k: any) => k.sentence))).slice(0, 900) },
   ];
 }
 const contact = (v: string) => /Contact Aldermoor Life Ltd/.test(v);
@@ -60,7 +62,7 @@ export function gradeSAcorrection(id: string, conv: any): Graded {
     { id: "K2", dim: "K", name: "final turn: one complete conditional sentence for S$3,750 (If … Hip … 75% … S$5,000 … not a payment)", ok: /^If\b/.test(hip) && /Hip/.test(hip) && /75%/.test(hip) && /S\$5,000/.test(hip) && /not a payment/.test(hip) && ends(hip), detail: last.v.slice(0, 900) },
     { id: "K3", dim: "K", name: "final turn: the withdrawn tibia amount (S$2,500) is not presented as current", ok: !/S\$2,500/.test(last.v), detail: last.v.slice(0, 700) },
     { id: "K4", dim: "K", name: "final turn: the household's message is not quoted into the calculation", ok: !/Correction:|as you described|not his tibia/i.test(last.v), detail: last.v.slice(0, 700) },
-    { id: "K5", dim: "K", name: "final turn: the saved calculation exists, is the displayed sentence and recomputes to S$3,750", ok: !!k && lines(last.v).includes(k.sentence) && recomputes(k, 375000), detail: JSON.stringify(last.answer?.calculations?.map((x: any) => [x.result?.value, x.sentence])).slice(0, 600) },
+    { id: "K5", dim: "K", name: "final turn: the saved calculation exists, is the displayed sentence and recomputes to S$3,750", ok: !!k && lines(last.v).includes(k.sentence) && recomputes(k, 375000), detail: J(last.answer?.calculations?.map((x: any) => [x.result?.value, x.sentence])).slice(0, 600) },
     { id: "U1", dim: "U", name: "final turn: a contact step for the person's own insurer and no pending question", ok: contact(last.v) && !(last.answer?.questions ?? []).length, detail: last.v.slice(0, 700) },
   ] as Check[];
   return finish(id, checks, b);
@@ -71,9 +73,9 @@ export function gradeSAambiguity(id: string, conv: any): Graded {
   const [t1, t2] = b.turns;
   const q = (t1.answer?.questions ?? []) as any[];
   const checks = [...common(b),
-    { id: "Q1", dim: "U", name: "turn 1: exactly one question, about the hip or the lower-leg case, never whether the insurer accepts or approves", ok: q.length === 1 && /hip/i.test(q[0].text) && /leg|tibia|knee/i.test(q[0].text) && !/insurer (?:accept|approv)|(?:accept|approv)ed? by/i.test(q[0].text), detail: JSON.stringify(q) },
+    { id: "Q1", dim: "U", name: "turn 1: exactly one question, about the hip or the lower-leg case, never whether the insurer accepts or approves", ok: q.length === 1 && /hip/i.test(q[0].text) && /leg|tibia|knee/i.test(q[0].text) && !/insurer (?:accept|approv)|(?:accept|approv)ed? by/i.test(q[0].text), detail: J(q) },
     { id: "Q2", dim: "K", name: "turn 1: the supported Simple Fracture terms come first (the S$5,000 limit and its hip and leg rows) and no amount is asserted before the case is known", ok: /S\$5,000/.test(t1.v) && /Hip/.test(t1.v) && !/conditional illustration is S\$/.test(t1.v), detail: t1.v.slice(0, 900) },
-    { id: "Q3", dim: "K", name: "turn 1: no unrelated row is cited as the reason for the question (Cheekbone / Shoulder / Arm)", ok: !/Cheekbone|Shoulder|Arm, Elbow/.test(q.map((x) => x.text).join(" ")), detail: JSON.stringify(q) },
+    { id: "Q3", dim: "K", name: "turn 1: no unrelated row is cited as the reason for the question (Cheekbone / Shoulder / Arm)", ok: !/Cheekbone|Shoulder|Arm, Elbow/.test(q.map((x) => x.text).join(" ")), detail: J(q) },
     { id: "Q4", dim: "K", name: "turn 2: the illustration is for the clarified case (leg row, S$2,500), conditional and saved", ok: /\bIf\b[^\n]*S\$2,500/.test(t2.v) && ((t2.answer?.calculations ?? []) as any[]).some((k) => k.result?.value === 2500 && recomputes(k, 250000)), detail: t2.v.slice(0, 900) },
     { id: "Q5", dim: "K", name: "turn 2: the earlier uncertain report is not the assumption (no “possibly”, “not sure”, “hip, or”)", ok: !/possibly|not sure|hip, or|hip or possibly/i.test(t2.v), detail: t2.v.slice(0, 700) },
     { id: "Q6", dim: "U", name: "turn 2: the question is not asked again; a contact step is shown", ok: !(t2.answer?.questions ?? []).length && contact(t2.v), detail: t2.v.slice(0, 700) },
