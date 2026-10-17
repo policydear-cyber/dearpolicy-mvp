@@ -13,11 +13,15 @@
  * NO definition of "Simple Fracture" or "Other Fracture" (the synthetic booklet's "Simple means closed" / "Other means
  * not Simple" are NOT imported here).
  *
- * INFERRED (not read from the actual library; labelled as such in the expectations): the certificate's Group Personal
- * Accident sum insured S$600,000 (the report's S$300,000 illustration for a "(Other Fracture) 50%" row implies it), the
- * certificate's date, and the two summaries' document metadata (both name the scheme's group policy number, as the
- * real summaries name the scheme; neither says whether it amends, replaces or complements the other).
- *
+ * Reconciled against the actual-library verification report (DearPolicy PR54, 17 Oct 2026; docs/rag-migration/reliable-chat/
+ * FIXTURE-RECONCILIATION.md lists each item):
+ * VERIFIED by that report: the certificate's Group Personal Accident sum insured S$600,000 (and Term Life S$1,000,000) for the
+ * two members read, "as of" a certificate date; the combined section heading "Simple Fracture or Other Fracture due to
+ * Accident" with explicit "(Other Fracture)" row labels; the Simple Fracture S$5,000 table rows and percentages; the footnote
+ * markers ("Leg^", "# Arm"); the Compassionate Death Allowance "up to S$2,000" in the summary and the booklet's bare "$2,000"; the
+ * Core-or-Voluntary condition; and that the real pages print NO definition of "Simple" or "Other" Fracture.
+ * STILL INFERRED here: the page numbers of the PA summary (the report names page 13 for the product summary), the certificate DATES
+ * (the report's are 06/10/2022 for its members; this fixture uses its own), and both summaries' document metadata.
  * Deliberately INVENTED controls (never faithful reproductions): another household's copy, a superseded earlier product
  * summary with another limit, and Grace's certificate row (her own date and amount).
  */

@@ -10,6 +10,7 @@
  * break the conversation rules (a second question, a fact already known, a question no evidence makes relevant).
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
+import { requirementToAsk } from "./requirement-question";
 import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
@@ -21,7 +22,7 @@ import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { choosePercentRow, percentTables } from "../calc/pct-rows";
-import { partsIn } from "../calc/case-terms";
+import { caseFor, partsIn } from "../calc/case-terms";
 import { paragraphs } from "../headings";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
@@ -185,6 +186,16 @@ function resultForModel(res: { ok: boolean; data?: unknown; error?: string; evid
   // The evidence list repeats what the data already showed only as references (id, page, row), never in full.
   const evidence = forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as unknown[];
   return res.ok ? { ok: true, data, evidence } : { ok: false, error: res.error, evidence };
+}
+
+/** PR #55 follow-up (PR #54 live finding: a hip-or-leg question explained itself with the Cheekbone row): the line that says
+ * why a CASE question matters is the table's own rows for the options being asked about -- “Hip 75%”; “Jaw, Pelvis, Leg, Ankle
+ * or Knee 50%” -- never another row of the table. Null when the passage does not print every option as a row. */
+export function optionRowsWhy(e: EvidenceRef, labels: string[]): string | null {
+  const key = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const lines = e.passage.text.split(/\n+/).map((l) => l.replace(/[\^#*†]+/g, "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const rows = labels.map((lab) => lines.find((l) => key(l).startsWith(key(lab)) && /\d+(?:\.\d+)?\s*%/.test(l)));
+  return rows.every((r) => !!r) ? rows.map((r) => "“" + r + "”").join("; ") : null;
 }
 
 /** The line of a cited passage that says why a question matters: a table row's label, else the passage line sharing
@@ -1013,7 +1024,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
-      const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
+      const caseLabels = req?.isCase && req.options.length ? req.options.map((o) => req!.optionLabels?.get(o) ?? o) : null;
+      const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
       // V1.2: the household speaks about this person in the third person ("Desmond broke his leg"): the question names
@@ -1238,7 +1250,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       // of this benefit settles the case -- the uncertain report it answers no longer competes with it. (Only an answer
       // naming a part; anything else leaves every report in play.)
       const answering = pendingBefore?.kind === "fact" && (pendingBefore.subjectId ?? subj) === subj && !!bid0 && (pendingBefore.caseOf === bid0 || (!!pendingBefore.options?.length && pendingBefore.options.every((o) => String(o).startsWith(bid0))));
-      const answerWords = answering ? recordedNow.filter((r) => r.subject === subj).map((r) => r.words).filter((w) => partsIn(w).length) : [];
+      const answerWords = answering ? recordedNow.filter((r) => r.subject === subj).map((r) => r.words).filter((w) => pendingBefore?.kind === "fact" && pendingBefore.options?.length ? caseFor(pendingBefore.options.map((o) => ({ id: String(o), label: String(o) })), w).kind === "row" : partsIn(w).length) : [];
       (ctx.reported ??= new Map()).set(subj, answerWords.length ? answerWords : Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim()));
       (ctx.reportedFacts ??= new Map()).set(subj, householdReports(subj, facts));
     }
@@ -1764,7 +1776,26 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const res = await runTool(ctx, "household_documents", {}, loopToolEnv(env)).catch(() => null);
     if (res?.ok) { inventoryNow = res.data as Inventory; record("household_documents", { by: "server" }, true, []); }
   }
-  let done = conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null)));
+  /** PR #55 follow-up (sa-live-3 SBa): the reply identified an ambiguity the household can resolve but ended without the
+   * question: the server-owned requirement becomes the turn's one question (see requirement-question.ts for when). */
+  const requirementQuestion = async (r: LoopReply | null): Promise<LoopReply | null> => {
+    if (!r || r.kind !== "final") return r;
+    const subject = r.composed.subjectId ?? state.claim?.subjectId ?? state.subjectId ?? null;
+    const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
+    const req = requirementToAsk(requirements.values(), {
+      alreadyPending: !!state.pending, subjectId: subject,
+      presented: new Set(r.composed.sentences.map((x) => x.benefit).filter((b): b is string => !!b)),
+      withAmount: new Set(r.composed.calculations.map((k) => (k as { benefit?: string }).benefit).filter((b): b is string => !!b)),
+      known: (k) => !!(claim && knownFactFor(k, claim.facts)), message: input.message });
+    if (!req) return r;
+    const because = req.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
+    if (!because.length) return r;
+    const labels = req.options.map((o) => req.optionLabels?.get(o) ?? o);
+    const why = because.map((id) => `${(req.isCase && optionRowsWhy(state.evidence[id], labels)) || whyLine(state.evidence[id], req.question + " " + req.factKey)} (page ${state.evidence[id].passage.onPage})`).join("; ");
+    (trace.adjusted ??= []).push(`the reply ended without the question requirement ${req.id} (${req.benefit}) leaves open: asked it from the server`);
+    return { kind: "ask", pending: { kind: "fact", question: req.question, factKey: req.factKey, subjectId: req.subjectId, why, evidenceIds: because, ...(req.options.length ? { options: req.options.map((o) => req.optionLabels?.get(o) ?? o) } : {}), ...(req.isCase ? { caseOf: req.benefitId } : {}), requirementId: req.id, benefitId: req.benefitId, turn: state.turn }, preface: null, composed: r.composed };
+  };
+  let done = await requirementQuestion(conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null))));
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
@@ -1775,7 +1806,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const composed = !problems.length ? composeFinal({ sentences: st, subjectId: r.subjectId }, composeCtx()) : null;
     const because = r.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
     if (because.length) {
-      const why = because.map((id) => `${whyLine(state.evidence[id], r.question + " " + r.factKey)} (page ${state.evidence[id].passage.onPage})`).join("; ");
+      const why = because.map((id) => `${(r.isCase && optionRowsWhy(state.evidence[id], r.options.map((o) => r.optionLabels?.get(o) ?? o))) || whyLine(state.evidence[id], r.question + " " + r.factKey)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       done = { kind: "ask", pending: { kind: "fact", question: r.question, factKey: r.factKey, subjectId: r.subjectId, why, evidenceIds: because, ...(r.options.length ? { options: r.options.map((o) => r.optionLabels?.get(o) ?? o) } : {}), ...(r.isCase ? { caseOf: r.benefitId } : {}), requirementId: r.id, benefitId: r.benefitId, turn: state.turn }, preface: null, composed: composed?.sentences.length ? composed : null };
       (trace.adjusted ??= []).push(`model use blocked (${stop?.kind ?? "turn_calls"}): asked requirement ${r.id} from the server`);
       trace.limit = { kind: stop?.kind ?? "turn_calls", detail: stop?.detail ?? "the turn ended without an answer" };

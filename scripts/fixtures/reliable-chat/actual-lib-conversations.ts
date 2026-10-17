@@ -80,6 +80,12 @@ export const j5Turn = (): ScriptTurn => ({ user: J5_U, steps: [
   () => [call("resolve_person", { mention: "Daniel" }), call("person_benefits", { subject_id: D, topic: "death after an accident; funeral expenses" })],
   (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: cdaOf(v) }, { kind: "uncertainty", text: "The booklet does not list the specific documents required beyond proof of death and the relevant documents in the insurer's prescribed form.", evidence_ids: [] }], next_steps: ["contact:" + CERT] })],
 ] });
+/** J5s (PR #54 report: the product summary's footnote quote stopped at "Core Scheme or Voluntary"): the same death question stated from the PRODUCT SUMMARY's Compassionate Death Allowance row, whose footnote wraps onto the next line. */
+const cdaOfSummary = (v: ScriptView) => { for (const o of [...v.turn].reverse()) if (o.name === "person_benefits") for (const d of o.result?.data?.documents ?? []) if (d.policy_id === A.doc("PRODUCT_SUMMARY").id) for (const b of d.benefits ?? []) if (/Compassionate Death/.test(b.benefit)) return b.benefit_id; return null; };
+export const j5sTurn = (): ScriptTurn => ({ user: J5_U, steps: [
+  () => [call("resolve_person", { mention: "Daniel" }), call("person_benefits", { subject_id: D, topic: "death after an accident; funeral expenses" })],
+  (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: cdaOfSummary(v) }], next_steps: ["contact:" + CERT] })],
+] });
 export const j6Turn = (): ScriptTurn => ({ user: J6_U, steps: [
   () => [call("resolve_person", { mention: "Grace" }), call("person_benefits", { subject_id: G, topic: "hip fracture personal accident" })],
   (v: ScriptView) => [call("evaluate_benefit", { subject_id: G, benefit_id: sfOf(v)?.benefit_id, purpose: "what_if", case: "hip" })],
@@ -96,4 +102,65 @@ export const ACTUAL_SCENARIOS = (): ActualScenario[] => [
   { id: "SA4", title: "Simple versus Other comparison", messages: [J4_U], turns: [j4Turn()] },
   { id: "SA5", title: "death allowance", messages: [J5_U], turns: [j5Turn()] },
   { id: "SA6", title: "person switch to Grace", messages: [J1_U, J6_U], turns: [j1Turn(), j6Turn()] },
+  { id: "SA7", title: "SBa replay: the model never asked the question", messages: [SBA_U1, SBA_U2], turns: sbaTurns() },
+];
+
+/** Round 3 (PR #55 follow-up): sa-live-3 SBa replayed from its recorded tool calls (docs/rag-migration/live/RUN-sa-live-3-<timestamp>/conv-SBa.json,
+ * turn 1, saved trace): the model identified the ambiguity, called ask_user for the requirement (refused by the server: the cause
+ * "how it happened" had not been recorded -- the model's first note_facts quoted the message with an ellipsis), retried with a second
+ * refused note_facts, and ended with final_answer and NO question. The recorded evidence ids are replaced by the fixture's own;
+ * everything else is the recorded arguments. */
+export const SBA_U1 = "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?";
+export const SBA_U2 = "The scan shows it is the tibia.";
+export const sbaTurns = (): ScriptTurn[] => [
+  { user: SBA_U1, steps: [
+    () => [call("resolve_person", { mention: "Daniel" }), call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "fell at home", words: "Daniel fell ... from an accident at home" }, { key: "injury", value: "fractured his hip, or possibly his tibia - they are not sure yet", words: "fractured his hip, or possibly his tibia - they are not sure yet" }, { key: "fracture_type", value: "closed fracture", words: "It is a closed fracture" }, { key: "cause_words", value: "from an accident at home", words: "from an accident at home" }] }), call("person_benefits", { subject_id: D, topic: "accident fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "hip or possibly tibia; they are not sure yet", assumption_words: "fractured his hip, or possibly his tibia - they are not sure yet", fact_keys: ["injury", "fracture_type", "cause_words"] }), call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "hip or possibly tibia; they are not sure yet", assumption_words: "fractured his hip, or possibly his tibia - they are not sure yet", fact_keys: ["injury", "fracture_type", "cause_words"] })],
+    (v: ScriptView) => [call("ask_user", { kind: "fact", subject_id: D, requirement_id: evals(v)[0]?.requirement_id, question: "Has the doctor confirmed whether Daniel’s fracture is in his hip or his lower leg (shin/tibia)?", statements: [{ kind: "benefit_terms", benefit_id: paOf(v)?.benefit_id }, { kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }] })],
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "Daniel fell at home", words: "Daniel fell at home" }] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: paOf(v)?.benefit_id }, { kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }, { kind: "uncertainty", text: "The doctor has not yet settled which listed case applies, so the documents do not establish which percentage applies or an amount for Daniel; the certificate’s dated sum insured does not confirm cover on a later date.", evidence_ids: [] }], next_steps: [] })],
+  ] },
+  { user: SBA_U2, steps: [
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury_detail", value: "tibia", words: "it is the tibia" }] }), call("person_benefits", { subject_id: D, topic: "closed tibia fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "the tibia", assumption_words: "it is the tibia", fact_keys: ["injury_detail"] }), call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "the tibia", assumption_words: "it is the tibia", fact_keys: ["injury_detail"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: ["contact:" + CERT] })],
+  ] },
+];
+
+/** Round 3: clarification-provenance controls. Each keeps a relationship scoped to person, event and benefit. */
+// (a) a SECOND injury reported after a first one: it is reported under its own key, evaluated for its own case
+export const P_A_U2 = "He also hurt his wrist in the same fall - another closed fracture. What would the Simple Fracture benefit give for the wrist?";
+export const pSecondInjuryTurn = (): ScriptTurn => ({ user: P_A_U2, steps: [
+  () => [call("note_facts", { subject_id: D, facts: [{ key: "second_injury", value: "closed wrist fracture", words: "He also hurt his wrist in the same fall - another closed fracture" }] }), call("person_benefits", { subject_id: D, topic: "wrist fracture" })],
+  (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "wrist", assumption_words: "He also hurt his wrist in the same fall - another closed fracture", fact_keys: ["second_injury"] })],
+  (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [...calcs(v), { kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }], next_steps: [] })],
+] });
+// (b) Daniel's hip/tibia question is pending; the household asks about GRACE's hip. Grace's hip must not settle Daniel's case.
+export const P_B_U1 = J3_U1;
+export const P_B_U2 = "And if Grace fractured her hip, what would the Simple Fracture benefit pay for her?";
+export const P_B_U3 = "Back to Daniel - what would his Simple Fracture benefit give for the fracture? Same closed fracture.";
+export const pSwitchTurns = (): ScriptTurn[] => [
+  j3Turns()[0] && { user: P_B_U1, steps: j3Turns()[0].steps },
+  { user: P_B_U2, steps: j6Turn().steps },
+  { user: P_B_U3, steps: [
+    () => [call("person_benefits", { subject_id: D, topic: "closed fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "hip or possibly his tibia", fact_keys: ["injury"] })],
+    // the model forgets the question: the server owes it (Daniel's case is still open; Grace's hip settled nothing of his)
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }], next_steps: [] })],
+  ] },
+];
+// (c) a side QUESTION mentioning a body part is not an injury correction
+export const P_C_U2 = "Separately, does the Simple Fracture benefit cover a broken hip as well? I am only asking about the policy.";
+export const P_C_U3 = "OK. So what would the Simple Fracture benefit work out to for his injury?";
+export const pSideQuestionTurns = (): ScriptTurn[] => [
+  j1Turn(),
+  { user: P_C_U2, steps: [
+    () => [call("person_benefits", { subject_id: D, topic: "hip fracture" })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [{ kind: "benefit_terms", benefit_id: sfOf(v)?.benefit_id }], next_steps: [] })],
+  ] },
+  { user: P_C_U3, steps: [
+    () => [call("person_benefits", { subject_id: D, topic: "closed tibia fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "tibia", fact_keys: ["injury"] })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: [] })],
+  ] },
 ];

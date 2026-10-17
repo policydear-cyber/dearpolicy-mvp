@@ -89,8 +89,10 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
     // report that left it open between several cases is history -- whatever fact key either was recorded under and whether or
     // not a question was pending. Reports that named one case, and everything else the household said, stay in play.)
     const heardAll = [...(ctx.reportedFacts?.get(subjectId) ?? [])];
-    const latestOne = heardAll.filter((r) => caseFor(s.rows, r.words).kind === "row").sort((x, y) => y.turn - x.turn)[0];
-    const history = latestOne ? heardAll.filter((r) => r.turn < latestOne.turn && caseFor(s.rows, r.words).kind === "ambiguous").map((r) => r.words) : [];
+    // PR #55 follow-up: it settles only an open report whose candidates INCLUDE that one case ("hip or tibia" is settled by
+    // "the tibia"); a report of a different injury (a wrist) is a second event, and replaces nothing of the open one.
+    const latestOne = heardAll.map((r) => ({ r, c: caseFor(s.rows, r.words) })).filter((x) => x.c.kind === "row").sort((x, y) => y.r.turn - x.r.turn)[0];
+    const history = latestOne && latestOne.c.kind === "row" ? heardAll.filter((r) => { const c = caseFor(s.rows, r.words); return r.turn < latestOne.r.turn && c.kind === "ambiguous" && c.rows.some((x) => x.id === (latestOne.c as { row: { id: string } }).row.id); }).map((r) => r.words) : [];
     const reported = (ctx.reported?.get(subjectId) ?? []).filter((w) => !history.some((h) => w.startsWith(h)));
     const printed = s.rows.map((r) => `${r.label} ${r.percent}%`).join("; ");
     const pct_of = summary.schedule && (summary.schedule as { percentage_of: string }).percentage_of;
@@ -112,7 +114,9 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
       }
     }
     if (row && reported.length) {
-      const consistent = rowConsistent(s.rows, row, reported);
+      // Each report must fit the chosen case on its own: a joined reading would let a second injury ("also his wrist") make
+      // an open "hip or tibia" report look compatible with the wrist row and silently drop it.
+      const consistent = reported.map((w) => rowConsistent(s.rows, row!, [w])).find((x) => !x.ok) ?? rowConsistent(s.rows, row, reported);
       if (!consistent.ok) {
         const c = caseFor(s.rows, reported.join(" ; "));
         if (c.kind === "unlisted") return unlisted(c.parts);

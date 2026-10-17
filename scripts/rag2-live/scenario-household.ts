@@ -203,7 +203,11 @@ export const SE: Scenario = { id: "SE", title: "structured: person switch to Gra
 export const SAq: Scenario = { id: "SAq", title: "structured: closed tibia -> corrected to hip (fresh paraphrase, consistent with the fixture)", why: "release journey 1 and 2 (paraphrase)", turns: [
   { user: "Daniel slipped on wet stairs at home and the doctor says he has a closed break of the shin bone. What could his personal accident cover pay out for that?", expect: {} },
   { user: "Sorry, I had that wrong - the break is in his hip, not his shin. Same closed fracture, still just asking what it could be worth.", expect: {} }] };
-export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SBp, SC, SD, SE];
+/** SAr (round 3, written before its first run): a held-back correction paraphrase -- different cause, bone and wording from SAa/SAb/SAq. */
+export const SAr: Scenario = { id: "SAr", title: "structured: closed lower-leg break -> corrected to hip (held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase)", turns: [
+  { user: "Daniel came off his bicycle this morning and the doctor says he has a closed break in his lower leg, the tibia. If we claimed on his accident cover, what could that be worth?", expect: {} },
+  { user: "The doctor has corrected it: the break is actually at the hip, not the lower leg. Same closed fracture. What does that change?", expect: {} }] };
+export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SBp, SC, SD, SE];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : SCENARIO) as unknown as typeof SCENARIO;

@@ -50,7 +50,10 @@ export function sentenceEndLine(lines: string[], i: number): number {
   while (j < lines.length - 1 && j - i < 4) {
     const cur = lines[j].trim(), next = lines[j + 1].trim();
     if (!next || /[.!?]["”’)]*$/.test(cur) || /\t|\s{3,}/.test(next)) break;
-    if (!(/^[a-z(]/.test(next) || (/(?:,|\b[a-z]+)$/.test(cur) && !isHeadingLine(next, lines[j + 2] ?? null)))) break;
+    // (PR #54 report: "...under the Core Scheme or Voluntary" / "Scheme." -- a capitalised word that ends the line is carried
+    // on by a short closing fragment that ends the sentence.)
+    const closing = /[A-Za-z]$/.test(cur) && next.split(/\s+/).length <= 3 && /^[A-Z][A-Za-z-]*(?:\s+[A-Za-z-]+){0,2}[.!?]$/.test(next) && !isHeadingLine(next, lines[j + 2] ?? null);
+    if (!(/^[a-z(]/.test(next) || closing || (/(?:,|\b[a-z]+)$/.test(cur) && !isHeadingLine(next, lines[j + 2] ?? null)))) break;
     j++;
   }
   return j;

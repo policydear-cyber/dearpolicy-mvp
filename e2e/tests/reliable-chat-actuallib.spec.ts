@@ -106,3 +106,23 @@ test("SA6: a person switch uses Grace's own certificate row and date", async ({ 
   expect(a2.shown).toMatch(/1 July 2024/);
   expect(a2.shown).not.toMatch(/S\$600,000/);
 });
+
+test("SA7: the model identified the ambiguity but never asked -- the server asks the one question, and the clarification settles it (reload-safe)", async ({ page, request }) => {
+  const [u1, u2] = await scenario(request, "SA7");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a1 = await send(page, u1);
+  const s1 = await sameAsSaved(request, a1.shown, "SA7 question", a1.visibleMs);
+  expect(s1.questions ?? []).toHaveLength(1);
+  expect(a1.shown).toMatch(/Which of these cases is it: Hip or Jaw, Pelvis, Leg, Ankle or Knee(?: \(Other Fracture\))?\?/);
+  expect(a1.shown).toContain("Hip 75%");
+  expect(a1.shown).not.toMatch(/Cheekbone[^\n]*#/);
+  expect(a1.shown).not.toMatch(/conditional illustration is S\$/);
+  const a2 = await send(page, u2);
+  const s2 = await sameAsSaved(request, a2.shown, "SA7 clarified", a2.visibleMs);
+  expect(a2.shown).toMatch(/conditional illustration is S\$2,500/);
+  expect(a2.shown).toMatch(/conditional illustration is S\$300,000/);
+  expect(s2.questions ?? []).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator(".message.assistant").last()).toContainText("conditional illustration is S$2,500", { timeout: 60_000 });
+});

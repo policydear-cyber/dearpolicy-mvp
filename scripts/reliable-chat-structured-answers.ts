@@ -13,7 +13,11 @@ import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
 import { gradeSAcorrection, gradeSAambiguity, gradeSAcompare, gradeSAdeath, gradeSAperson } from "./rag2-live/structured-check";
 
-import { D, G, CERT, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
+import { P_A_U2, pSecondInjuryTurn, P_B_U1, P_B_U2, P_B_U3, pSwitchTurns, P_C_U2, P_C_U3, pSideQuestionTurns } from "./fixtures/reliable-chat/actual-lib-conversations";
+import { sentencesOf } from "@/lib/chat/answer-verification";
+import { gradeV9, nextStepRequired, claimsATotal } from "./rag2-live/structured-regrade";
+import { requirementToAsk, type OpenRequirement } from "@/lib/rag2/loop/requirement-question";
+import { D, G, CERT, SBA_U1, SBA_U2, sbaTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 setEnv(A as any);
 let failed = 0, passed = 0;
@@ -91,6 +95,58 @@ async function main() {
   check("J3b turn 2: the clarification settles the case although it was recorded under another fact key and no question was pending (no case_conflict): the leg row, S$2,500, conditional", /^If the Simple Fracture/.test(tib2) && /Leg/.test(tib2) && complete(j3cb.v) && !NOT_CONFIRMED.test(j3cb.v), j3cb.v + "\n" + JSON.stringify(j3cb.trace?.toolCalls?.filter((t: any) => t.name === "evaluate_benefit").map((t: any) => t.summary)));
   check("J3b: returned = saved = reopened (both turns)", agrees(j3ca) && agrees(j3cb), "");
 
+  // ===== SBa replay (round 3): sa-live-3's recorded calls -- the model identified the ambiguity and ended WITHOUT the question
+  const [sba1, sba2] = await converse("SBa", [SBA_U1, SBA_U2], sbaTurns());
+  const sq = (sba1.answer.questions ?? []) as any[];
+  check("SBa replay turn 1: the supported terms of BOTH fracture tables come first (S$5,000 base and Daniel's own S$600,000 sum insured), no amount chosen", /S\$5,000/.test(sba1.v) && /S\$600,000/.test(sba1.v) && !/conditional illustration is S\$/.test(sba1.v), sba1.v);
+  check("SBa replay turn 1: exactly one question, naming the hip and the leg cases, though the model never asked (server-owned requirement)", sq.length === 1 && /Hip/.test(sq[0].text) && /Leg/.test(sq[0].text), JSON.stringify(sq) + "\n" + sba1.v);
+  check("SBa replay turn 1: pending state is the requirement's person, benefit and options (not an insurer question)", sba1.state?.ragLoop?.pending?.kind === "fact" && sba1.state.ragLoop.pending.subjectId === D && (sba1.state.ragLoop.pending.options ?? []).length >= 2 && !!sba1.state.ragLoop.pending.requirementId && !!sba1.state.ragLoop.pending.benefitId && !/insurer (?:accept|approve)|accepted by the insurer|approved by the insurer/i.test(sq.map((x) => x.text).join(" ")), JSON.stringify(sba1.state?.ragLoop?.pending));
+  check("SBa replay turn 1: returned = saved = reopened; complete", agrees(sba1) && complete(sba1.v), sba1.v);
+  check("SBa replay turn 2: the clarification settles it -- both illustrations (S$2,500 and S$300,000) as separate complete conditional statements, no question repeated, nothing pending", /S\$2,500/.test(sba2.v) && /S\$300,000/.test(sba2.v) && complete(sba2.v) && !(sba2.answer.questions ?? []).length && !sba2.state?.ragLoop?.pending, sba2.v + JSON.stringify(sba2.state?.ragLoop?.pending));
+
+  // ===== Round 3: when the server owes the household a question (negative controls of the finalisation rule)
+  {
+    const R = (o: Partial<OpenRequirement> = {}): OpenRequirement => ({ id: "q1_1", subjectId: D, benefit: "Simple Fracture", benefitId: "b1", factKey: "fracture_site", resolvedBy: "household", ...o });
+    const F = (o: Partial<Parameters<typeof requirementToAsk>[1]> = {}) => ({ alreadyPending: false, subjectId: D, presented: new Set(["Simple Fracture"]), withAmount: new Set<string>(), known: () => false, message: "What would his accident cover pay?", ...o });
+    check("requirement rule: an unresolved household requirement the reply presents, with no amount, is asked", requirementToAsk([R()], F())?.id === "q1_1");
+    check("requirement rule: nothing is added when the reply already asks (no second question)", requirementToAsk([R()], F({ alreadyPending: true })) === null);
+    check("requirement rule: an insurer-only requirement is never asked", requirementToAsk([R({ resolvedBy: "insurer" })], F()) === null);
+    check("requirement rule: another person's requirement is not asked in this person's answer", requirementToAsk([R({ subjectId: G })], F()) === null);
+    check("requirement rule: a settled question (the fact is known) is not asked again", requirementToAsk([R()], F({ known: (k) => k === "fracture_site" })) === null);
+    check("requirement rule: a requirement for a benefit the reply does not present (irrelevant) is not asked", requirementToAsk([R({ benefit: "Hospital Cash" })], F()) === null);
+    check("requirement rule: a benefit the reply already gives an amount for needs no clarification", requirementToAsk([R()], F({ withAmount: new Set(["Simple Fracture"]) })) === null);
+    check("requirement rule: an explicit comparison of hypothetical alternatives needs no compulsory question", requirementToAsk([R()], F({ message: "Can you compare what the Simple Fracture and the Other Fracture benefits would pay?" })) === null && requirementToAsk([R()], F({ message: "Simple Fracture versus Other Fracture for a broken leg?" })) === null);
+    check("requirement rule: two open requirements give exactly one question (the earliest)", requirementToAsk([R(), R({ id: "q1_2", benefit: "Other" })], F({ presented: new Set(["Simple Fracture", "Other"]) }))?.id === "q1_1");
+  }
+
+  // ===== Round 3: clarification provenance stays scoped to person, event and benefit
+  {
+    const factsOf = (t: Turn, subject = D) => Object.entries((subject === t.state?.ragLoop?.claim?.subjectId ? t.state?.ragLoop?.claim?.facts : t.state?.ragLoop?.otherClaims?.[subject]?.facts) ?? {}).map(([k, f]: any) => `${k}: ${f.words}`);
+    // (a) a second injury is its own event: it replaces nothing, and nothing is computed over the conflict
+    const [pa1, pa2] = await converse("P-a", [J1_U, P_A_U2], [j1Turn(), pSecondInjuryTurn()]);
+    check("provenance (a) second injury: the first injury report is kept alongside it (recorded under its own key), not replaced", factsOf(pa2).some((f) => /tibia/.test(f)) && factsOf(pa2).some((f) => /wrist/.test(f)), JSON.stringify(factsOf(pa2)));
+    check("provenance (a) second injury: it is not presented as a correction (no “Updated: injury is now”, no “no longer applies”)", !/Updated:|no longer applies|earlier estimate/i.test(pa2.v), pa2.v);
+    check("provenance (a) second injury: no amount is computed over the unresolved tibia/wrist conflict, and no figure is invented for either", !(pa2.answer.calculations ?? []).length && !/conditional illustration is S\$/.test(pa2.v), pa2.v);
+    check("provenance (a) second injury: returned = saved = reopened; complete", agrees(pa1) && agrees(pa2) && complete(pa2.v), pa2.v);
+    // (b) Daniel's question is pending; Grace's hip answers Grace's question only
+    const [pb1, pb2, pb3] = await converse("P-b", [P_B_U1, P_B_U2, P_B_U3], pSwitchTurns());
+    check("provenance (b) person switch: Grace's own hip illustration (S$3,750, named for Grace) is given", /^If the Simple Fracture benefit applies to Grace's case “Hip”/m.test(pb2.v) && /S\$3,750/.test(pb2.v), pb2.v);
+    const pend2 = pb2.state?.ragLoop?.pending;
+    check("provenance (b) person switch: Daniel's open case question is still his (not settled by Grace's hip)", pend2?.kind === "fact" && pend2.subjectId === D && /Hip/.test(pend2.question) && /Jaw, Pelvis, Leg/.test(pend2.question), JSON.stringify(pend2));
+    check("provenance (b) person switch: Grace's words are not recorded as Daniel's report", !factsOf(pb2).some((f) => /Grace/i.test(f)) && !factsOf(pb3).some((f) => /Grace/i.test(f)), JSON.stringify(factsOf(pb3)));
+    check("provenance (b) person switch: back on Daniel the case is still open -- supported terms and ONE question (hip or leg), no amount for Daniel", (pb3.answer.questions ?? []).length === 1 && /Hip/.test(pb3.answer.questions[0].text) && !lines(pb3.v).some((l) => /Daniel/.test(l) && /S\$3,750/.test(l)) && !/conditional illustration is S\$/.test(pb3.v), pb3.v);
+    check("provenance (b): returned = saved = reopened (all turns)", agrees(pb1) && agrees(pb2) && agrees(pb3), "");
+    // (c) a side question that mentions a body part is not an injury report
+    const [pc1, pc2, pc3] = await converse("P-c", [J1_U, P_C_U2, P_C_U3], pSideQuestionTurns());
+    check("provenance (c) side question: no correction is declared, and the hip is not recorded as Daniel's injury", !/Updated:|no longer applies|earlier estimate/i.test(pc2.v) && factsOf(pc3).length === 1 && /tibia/.test(factsOf(pc3)[0]) && !factsOf(pc3).some((f) => /hip/i.test(f)), JSON.stringify(factsOf(pc3)) + pc2.v);
+    check("provenance (c) side question: the earlier tibia case still decides the illustration (leg row, S$2,500), never the hip's S$3,750", /conditional illustration is S\$2,500/.test(pc3.v) && !/S\$3,750/.test(pc3.v), pc3.v);
+    check("provenance (c): returned = saved = reopened (all turns)", agrees(pc1) && agrees(pc2) && agrees(pc3), "");
+    // (d) an unresolved hip-or-tibia report is settled only by a report of THOSE cases; a different injury settles nothing of it
+    const [, pd2] = await converse("P-d", [J3_U1, P_A_U2], [j3Turns()[0], pSecondInjuryTurn()]);
+    check("provenance (d) unresolved hip-or-tibia, then a wrist: the wrist does not silently settle (or replace) the open hip/leg report -- no amount is computed", !(pd2.answer.calculations ?? []).length && !/conditional illustration is S\$/.test(pd2.v) && !/Updated:|no longer applies/i.test(pd2.v), pd2.v + JSON.stringify(pd2.trace?.toolCalls?.filter((t: any) => t.name === "evaluate_benefit").map((t: any) => t.summary)));
+    void pa1; void pb1; void pc1;
+  }
+
   // ===== J4: Simple vs Other comparison -> separate bases, honest relationship
   const [j4] = await converse("J4", [J4_U], [j4Turn()]);
   const s4 = lines(j4.v).find((l) => /S\$2,500/.test(l)) ?? "", o4 = lines(j4.v).find((l) => /S\$300,000/.test(l)) ?? "";
@@ -105,6 +161,11 @@ async function main() {
   check("J5: the booklet's Compassionate Death Allowance is retained by name with its complete printed conditions", /Compassionate Death Allowance Benefit/.test(j5.v) && /proof of death and the relevant documents in our prescribed form/.test(j5.v) && /Core Scheme or the Voluntary Scheme/.test(j5.v), j5.v);
   check("J5: the booklet's bare $2,000 is said with its currency unstated, never as S$2,000 for the booklet", /2,000 \(printed with a bare “\$” sign/.test(j5.v) && !/booklet[^\n]*S\$2,000/i.test(j5.v), j5.v);
   check("J5: the contact step names the person's own insurer; complete; returned = saved = reopened", /Contact Aldermoor Life Ltd/.test(j5.v) && complete(j5.v) && agrees(j5), j5.v);
+
+  // ===== J5s: the product summary's wrapped footnote is quoted in full (PR #54 report: it stopped at "Core Scheme or Voluntary")
+  const [j5s] = await converse("J5s", [J5_U], [j5sTurn()]);
+  const cda5s = lines(j5s.v).find((l) => /Compassionate Death/.test(l)) ?? "";
+  check("J5s: the product summary's Compassionate Death Allowance keeps its whole printed footnote (“... Core Scheme or Voluntary Scheme.”), not a cut quotation", /Compassionate Death Allowance/.test(cda5s) && /S\$2,000/.test(cda5s) && /Core Scheme or Voluntary Scheme/.test(j5s.v) && complete(j5s.v) && agrees(j5s), j5s.v);
 
   // ===== J6: person switch -> Grace's own certificate row and date
   const [, j6] = await converse("J6", [J1_U, J6_U], [j1Turn(), j6Turn()]);
@@ -155,6 +216,42 @@ async function main() {
     check("grader v8.2: sa-live-2's real person-switch answer (the contact step names the certificate document) passes P1 and P2", gradeSAperson("SE", tw([j1, bad(SE_REAL)])).checks.filter((c) => c.id === "P1" || c.id === "P2").every((c) => c.ok));
     check("grader v8.2 control: Grace's certificate cover stated with Daniel's figure still fails P2", failsOn(gradeSAperson("SE", tw([j1, bad(SE_REAL + "\nHer certificate lists S$600,000.")])), "P2"));
     check("grader v8 control: Daniel's amount in Grace's answer fails P2", failsOn(gradeSAperson("SE", tw([j1, bad("If the benefit applies to Grace, S$3,750. Her certificate lists S$600,000.")])), "P2"));
+  }
+
+  // ===== a validated calculation keeps its COMPLETE conditions through validation, save, display and reopen
+  {
+    const calcTurns: [string, Turn][] = [["J2", j2], ["J3 turn 2", j3b], ["J3b turn 2", j3cb], ["J4", j4], ["J6", j6], ["SBa replay turn 2", sba2]];
+    for (const [label, t] of calcTurns) {
+      const ks = (t.answer.calculations ?? []) as any[];
+      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
+      const shownWhole = ks.every((k) => lines(t.v).includes(k.sentence) && lines(t.shown).includes(k.sentence) && lines(t.reopened).includes(k.sentence));
+      check(`complete conditions (${label}): every saved calculation is ONE complete conditional sentence (subject, case, percentage, base, document, not-a-payment) the splitter does not divide, and is displayed and reopened whole`, whole && shownWhole, JSON.stringify(ks.map((k) => k.sentence)));
+    }
+    const Q = "If the Simple Fracture benefit applies to Daniel's case “Hip” (as you described: “Correction: it was his hip, not his tibia. Keep this as a hypothetical closed fracture.”), the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision.";
+    check("quote-aware splitter: a multi-sentence household quotation inside a conditional sentence does not split it", sentencesOf(Q).length === 1, JSON.stringify(sentencesOf(Q)));
+    check("quote-aware splitter control: two real sentences are still two", sentencesOf("If it is the hip, the illustration is S$3,750. It is not a payment.").length === 2);
+    check("quote-aware splitter control: an unclosed quotation does not swallow the rest of a later sentence", sentencesOf("He said “it was his hip. Then it is S$3,750. It is not a payment.").length >= 1);
+  }
+
+  // ===== grader v9 (separate revised assessment; the v8/v8.2 verdicts above are untouched) -- positive and negative controls
+  {
+    const asConv2 = (ts: Turn[], users: string[]) => ({ turns: users.map((user) => ({ user })), loaded: { turns: ts.map((t) => ({ answer: t.answer })), state: {} }, saved: { traces: ts.map((t) => t.trace) } } as any);
+    const bad = (summary: string, extra: any = {}) => ({ answer: { summary, details: [], nextSteps: [], questions: [], calculations: [], ...extra }, trace: {} } as Turn);
+    const tw = (t: Turn[]) => asConv2(t, t.map(() => ""));
+    const u = (g: any, id: string) => g.checks.find((c: any) => c.id === id)?.ok;
+    const SAB_REAL = "Updated: injury is now fractured his hip (you said fractured his tibia at first). The earlier estimate worked out from it no longer applies.\nIf the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.";
+    const CORR = "Sorry, I had that wrong - the break is in his hip, not his shin. Same closed fracture, still just asking what it could be worth.";
+    const calc3750 = (j2.answer.calculations ?? []);
+    check("v9 rule R2 positive: a direct numerical correction needs no contact step", nextStepRequired(CORR, SAB_REAL) === false);
+    check("v9 rule R2 negative: asking what to do requires a next step", nextStepRequired("Sorry, wrong bone. What should we do now?", SAB_REAL) === true && nextStepRequired("What documents would the insurer want from us?", "x") === true);
+    check("v9 rule R2 negative: an unresolved issue only the insurer can settle requires a next step (not a numerical correction)", nextStepRequired("Daniel broke his leg. What would it pay?", "Neither document says whether one amends the other.") === true);
+    check("v9: sa-live-3's SAb (corrected illustration, no contact step, no pending question) passes U1 by v9 where v8.2 failed it", u(gradeV9("SAb", asConv2([j1, bad(SAB_REAL, { calculations: calc3750 })], [J1_U, CORR])), "U1") === true && u(gradeSAcorrection("SAb", tw([j1, bad(SAB_REAL, { calculations: calc3750 })])), "U1") === false);
+    check("v9 control: the same correction answer still fails U1 when a question is pending", u(gradeV9("SAb", asConv2([j1, bad(SAB_REAL, { questions: [{ text: "Which one?" }] })], [J1_U, CORR])), "U1") === false);
+    check("v9 control: when the household asks what to do, the missing contact step fails U1", u(gradeV9("SAb", asConv2([j1, bad(SAB_REAL)], [J1_U, "Sorry, it was his hip. What should we do now?"])), "U1") === false);
+    const SC_PAYABLE = "If the Simple Fracture benefit applies, the conditional illustration is S$2,500.\nIf the Simple Fracture or Other Fracture due to Accident benefit applies, it is S$300,000.\nThe uploaded wording does not establish that these two benefits are payable together.\nNeither document says whether one amends, replaces or adds to the other, so these are alternatives from separate documents, never a total.";
+    check("v9 positive: sa-live-3's SC wording (“does not establish ... payable together”) passes C3 while v8.2 fails it", u(gradeV9("SC", asConv2([bad(SC_PAYABLE)], [J4_U])), "C3") === true && u(gradeSAcompare("SC", tw([bad(SC_PAYABLE)])), "C3") === false);
+    check("v9 negative control: an AFFIRMED “payable together” fails C3", u(gradeV9("SC", asConv2([bad(SC_PAYABLE.replace("does not establish that these two benefits are payable together", "confirms that these two benefits are payable together"))], [J4_U])), "C3") === false);
+    check("v9 negative control: a total or a combined amount fails C3", claimsATotal("Together they come to S$302,500 in total.") && claimsATotal("The two are combined into one amount.") && !claimsATotal("They are alternatives, never a total, and are not established as payable together."));
   }
 
   console.log(`\nstructured answers (seven journeys, faithful actual-library fixture): ${passed} passed, ${failed} failed`);
