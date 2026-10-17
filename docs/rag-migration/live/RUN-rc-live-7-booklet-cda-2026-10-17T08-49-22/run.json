@@ -1,0 +1,3227 @@
+{
+  "testedCodeSha": "070c666ab03cab52846164a8eb56cb98a6b8c38f",
+  "requestSha": null,
+  "modelsRequested": {
+    "CHAT_MODEL": "openai:gpt-6-luna",
+    "JUDGEMENT_MODEL": null,
+    "NARRATION_MODEL": null,
+    "READING_MODEL": null
+  },
+  "providerModels": [
+    "gpt-6-luna"
+  ],
+  "requestSettingsSent": [
+    {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  ],
+  "budgetUsed": {
+    "capUsd": 0.05,
+    "spentUsd": 0.0025582300000000003,
+    "reservedUsd": 0,
+    "remainingUsd": 0.04744177,
+    "calls": 4,
+    "refusals": 0,
+    "open": 0,
+    "failed": 0
+  },
+  "perCall": [
+    {
+      "seq": 1,
+      "scenario": "FL4",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 7507,
+      "output": 136,
+      "cached": 0,
+      "reasoning": 0,
+      "reservedUsd": 0.002562,
+      "chargedUsd": 0.0008187,
+      "upstreamMs": 3160
+    },
+    {
+      "seq": 2,
+      "scenario": "FL4",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 9844,
+      "output": 217,
+      "cached": 7381,
+      "reasoning": 0,
+      "reservedUsd": 0.0028797,
+      "chargedUsd": 0.00042861,
+      "upstreamMs": 2647
+    },
+    {
+      "seq": 3,
+      "scenario": "FL4",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 16450,
+      "output": 337,
+      "cached": 9718,
+      "reasoning": 0,
+      "reservedUsd": 0.0037813,
+      "chargedUsd": 0.0009388800000000001,
+      "upstreamMs": 4876
+    },
+    {
+      "seq": 4,
+      "scenario": "FL4",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 17022,
+      "output": 278,
+      "cached": 16324,
+      "reasoning": 0,
+      "reservedUsd": 0.0038865,
+      "chargedUsd": 0.00037204,
+      "upstreamMs": 3080
+    }
+  ],
+  "promptObserved": {
+    "systemPromptSha256": [
+      "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674"
+    ],
+    "toolSchemaSha256": [
+      "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6"
+    ],
+    "settings": [
+      {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      }
+    ]
+  },
+  "availability": null,
+  "label": "LIVE MODEL RUN",
+  "runId": "rc-live-7-booklet-cda",
+  "mode": "relay",
+  "preflight": false,
+  "keyNote": null,
+  "startedAt": "2026-10-17T08:49:22.809Z",
+  "commit": null,
+  "tree": null,
+  "dirty": false,
+  "buildId": "T2txBVTyKswR9Y5QjxPIl",
+  "model": {
+    "requested": "openai:gpt-6-luna",
+    "pricePerMillion": {
+      "input": 0.1,
+      "output": 0.5,
+      "cachedInput": 0.01
+    },
+    "settings": {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  },
+  "prompt": {
+    "version": "rag2-loop-v18-applicability",
+    "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+    "toolSchemaSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+    "tools": 13
+  },
+  "budget": {
+    "runCapUsd": 0.05,
+    "meterRunMaxUsd": 0.05,
+    "turnMaxUsd": 0.05,
+    "maxCallsPerTurn": 12,
+    "maxTokensPerTurn": 80000,
+    "maxOutputTokensPerCall": 2000,
+    "retries": 1
+  },
+  "relay": {
+    "url": "http://127.0.0.1:8787",
+    "mode": "live",
+    "log": "/home/user/rag2-live-relay.jsonl"
+  },
+  "conversations": [
+    {
+      "scenario": "FL4",
+      "title": "rc-live-7: the death allowance over the recorded passage -- printed conditions only, honest currency, dated certificate evidence",
+      "conversationId": "2b569923-1d03-4d52-8915-7ee7e3f6d4f3",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "The booklet does not specify which particular documents the prescribed form requires.\nThe uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+          "timings": {
+            "acceptedMs": 447,
+            "firstAssistantPersistedMs": 14648,
+            "answerSeenMs": 14678,
+            "modelMs": 13775,
+            "upstreamMs": 13689,
+            "relayMs": 13711
+          },
+          "calls": [
+            {
+              "seq": 1,
+              "at": "2026-10-17T08:49:25.384Z",
+              "estInputTokens": 15392,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0025391999999999997,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 13,
+              "messages": 2,
+              "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 7507,
+                "output": 136,
+                "cached": 0
+              },
+              "latencyMs": 3165,
+              "upstreamMs": 3164,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-17T08:49:28.625Z",
+              "estInputTokens": 18542,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0028542,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 13,
+              "messages": 6,
+              "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 9844,
+                "output": 217,
+                "cached": 7381
+              },
+              "latencyMs": 2650,
+              "upstreamMs": 2650,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 3,
+              "at": "2026-10-17T08:49:31.330Z",
+              "estInputTokens": 27528,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0037528,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 13,
+              "messages": 11,
+              "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 16450,
+                "output": 337,
+                "cached": 9718
+              },
+              "latencyMs": 4878,
+              "upstreamMs": 4878,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-17T08:49:36.278Z",
+              "estInputTokens": 28550,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.003855,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 13,
+              "messages": 13,
+              "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 17022,
+                "output": 278,
+                "cached": 16324
+              },
+              "latencyMs": 3082,
+              "upstreamMs": 3082,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 1,
+              "at": "2026-10-17T08:49:25.387Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 15620,
+              "reservedUsd": 0.002562,
+              "chargedUsd": 0.0008187,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "9abb9acca3230d21",
+              "kind": "loop",
+              "upstreamMs": 3160,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "providerRequestId": "chatcmpl-EZuOVzzzPQppa6wjva9Hygz7uIzIE",
+              "usage": {
+                "input": 7507,
+                "output": 136,
+                "cached": 0,
+                "reasoning": 0
+              },
+              "scenario": "FL4",
+              "turn": 1
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-17T08:49:28.626Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 18797,
+              "reservedUsd": 0.0028797,
+              "chargedUsd": 0.00042861,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "9abb9acca3230d21",
+              "kind": "loop",
+              "upstreamMs": 2647,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "providerRequestId": "chatcmpl-EZuOXdGFriqdXq9atimq97KpT6CzN",
+              "usage": {
+                "input": 9844,
+                "output": 217,
+                "cached": 7381,
+                "reasoning": 0
+              },
+              "scenario": "FL4",
+              "turn": 1
+            },
+            {
+              "seq": 3,
+              "at": "2026-10-17T08:49:31.332Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 27813,
+              "reservedUsd": 0.0037813,
+              "chargedUsd": 0.0009388800000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "9abb9acca3230d21",
+              "kind": "loop",
+              "upstreamMs": 4876,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "providerRequestId": "chatcmpl-EZuOZEcbyQkN2avCvBElMDhn2cGnp",
+              "usage": {
+                "input": 16450,
+                "output": 337,
+                "cached": 9718,
+                "reasoning": 0
+              },
+              "scenario": "FL4",
+              "turn": 1
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-17T08:49:36.280Z",
+              "host": "127.0.0.1",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 28865,
+              "reservedUsd": 0.0038865,
+              "chargedUsd": 0.00037204,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "systemSha": "9abb9acca3230d21",
+              "kind": "loop",
+              "upstreamMs": 3080,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "providerRequestId": "chatcmpl-EZuOfpQuhMeCK6dOlzuL2b1d3zvIt",
+              "usage": {
+                "input": 17022,
+                "output": 278,
+                "cached": 16324,
+                "reasoning": 0
+              },
+              "scenario": "FL4",
+              "turn": 1
+            }
+          ],
+          "modelExecutions": [],
+          "relay": [
+            {
+              "at": "2026-10-17T08:49:25Z",
+              "t": 1792226965.432,
+              "mode": "live",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 2,
+              "tools": 13,
+              "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "upstream_ms": 3100,
+              "provider_model": "gpt-6-luna",
+              "provider_request_id": "chatcmpl-EZuOVzzzPQppa6wjva9Hygz7uIzIE",
+              "usage": {
+                "prompt_tokens": 7507,
+                "completion_tokens": 136,
+                "total_tokens": 7643,
+                "cached_tokens": 0,
+                "reasoning_tokens": 0
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "resolve_person",
+                "note_facts",
+                "person_benefits"
+              ],
+              "status": 200,
+              "relay_ms": 3116
+            },
+            {
+              "at": "2026-10-17T08:49:28Z",
+              "t": 1792226968.629,
+              "mode": "live",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 6,
+              "tools": 13,
+              "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "upstream_ms": 2645,
+              "provider_model": "gpt-6-luna",
+              "provider_request_id": "chatcmpl-EZuOXdGFriqdXq9atimq97KpT6CzN",
+              "usage": {
+                "prompt_tokens": 9844,
+                "completion_tokens": 217,
+                "total_tokens": 10061,
+                "cached_tokens": 7381,
+                "reasoning_tokens": 0
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "search_passages",
+                "search_passages",
+                "search_passages",
+                "policies_for"
+              ],
+              "status": 200,
+              "relay_ms": 2649
+            },
+            {
+              "at": "2026-10-17T08:49:31Z",
+              "t": 1792226971.336,
+              "mode": "live",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 11,
+              "tools": 13,
+              "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "upstream_ms": 4871,
+              "provider_model": "gpt-6-luna",
+              "provider_request_id": "chatcmpl-EZuOZEcbyQkN2avCvBElMDhn2cGnp",
+              "usage": {
+                "prompt_tokens": 16450,
+                "completion_tokens": 337,
+                "total_tokens": 16787,
+                "cached_tokens": 9718,
+                "reasoning_tokens": 0
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 4872
+            },
+            {
+              "at": "2026-10-17T08:49:36Z",
+              "t": 1792226976.283,
+              "mode": "live",
+              "method": "POST",
+              "endpoint": "/v1/chat/completions",
+              "requested_model": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "messages": 13,
+              "tools": 13,
+              "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+              "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+              "upstream_ms": 3073,
+              "provider_model": "gpt-6-luna",
+              "provider_request_id": "chatcmpl-EZuOfpQuhMeCK6dOlzuL2b1d3zvIt",
+              "usage": {
+                "prompt_tokens": 17022,
+                "completion_tokens": 278,
+                "total_tokens": 17300,
+                "cached_tokens": 16324,
+                "reasoning_tokens": 0
+              },
+              "finish_reason": "tool_calls",
+              "tool_calls": [
+                "final_answer"
+              ],
+              "status": 200,
+              "relay_ms": 3074
+            }
+          ],
+          "tokens": {
+            "input": 50823,
+            "output": 968
+          },
+          "costUsd": {
+            "charged": 0.0025582300000000003,
+            "reserved": 0.0131095,
+            "ledger": 0
+          },
+          "reconciliation": {
+            "pairs": [],
+            "rowsWithoutCall": [],
+            "callsWithoutRow": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "guardUsd": 0.0025582300000000003,
+            "rowsUsd": 0
+          }
+        }
+      ],
+      "totalMs": 14694,
+      "firstUsefulResponseMs": 14648,
+      "tokens": {
+        "input": 50823,
+        "output": 968
+      },
+      "costUsd": 0.0025582300000000003,
+      "calls": 4,
+      "loaded": {
+        "conversationId": "2b569923-1d03-4d52-8915-7ee7e3f6d4f3",
+        "state": {
+          "intent": "policy_question",
+          "ragLoop": {
+            "v": 1,
+            "seq": 2,
+            "turn": 1,
+            "claim": {
+              "facts": {
+                "event": {
+                  "turn": 1,
+                  "basis": "stated",
+                  "value": "died in an accident",
+                  "words": "If Daniel died in an accident",
+                  "source": "user_reported"
+                }
+              },
+              "derived": [],
+              "subjectId": "7b000000-0000-4000-8000-000000000001"
+            },
+            "turns": [
+              {
+                "gate": [],
+                "turn": 1,
+                "calls": [
+                  {
+                    "ok": true,
+                    "input": 7507,
+                    "output": 136,
+                    "attempt": 1,
+                    "costUsd": 0.0008187,
+                    "latencyMs": 3167
+                  },
+                  {
+                    "ok": true,
+                    "input": 9844,
+                    "output": 217,
+                    "attempt": 1,
+                    "costUsd": 0.00042861,
+                    "latencyMs": 2651
+                  },
+                  {
+                    "ok": true,
+                    "input": 16450,
+                    "output": 337,
+                    "attempt": 1,
+                    "costUsd": 0.0009388800000000001,
+                    "latencyMs": 4879
+                  },
+                  {
+                    "ok": true,
+                    "input": 17022,
+                    "output": 278,
+                    "attempt": 1,
+                    "costUsd": 0.00037204,
+                    "latencyMs": 3085
+                  }
+                ],
+                "limit": null,
+                "steps": 4,
+                "usage": {
+                  "input": 50823,
+                  "output": 968
+                },
+                "dropped": [
+                  {
+                    "reason": "states S$2,000 from Group Insurance Benefits Booklet, which prints that amount with a bare $ and does not state its currency",
+                    "sentence": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme."
+                  }
+                ],
+                "modelId": "openai:gpt-6-luna",
+                "outcome": "final_answer",
+                "composed": [
+                  "The booklet does not specify which particular documents the prescribed form requires.",
+                  "The uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved."
+                ],
+                "latencyMs": 14007,
+                "modelKind": "hosted",
+                "toolCalls": [
+                  {
+                    "ok": true,
+                    "args": {
+                      "mention": "Daniel"
+                    },
+                    "name": "resolve_person",
+                    "summary": "{\"status\":\"ok\"}",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "facts": [
+                        {
+                          "key": "event",
+                          "value": "died in an accident",
+                          "words": "If Daniel died in an accident"
+                        }
+                      ],
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "note_facts",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "topic": "accidental death funeral expenses and claim documents",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "person_benefits",
+                    "summary": "{}",
+                    "evidenceIds": [
+                      "e1",
+                      "e2",
+                      "e3",
+                      "e4",
+                      "e5",
+                      "e6",
+                      "e7"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Compassionate Death Allowance Benefit funeral expenses accidental death eligibility amount claim documents required death certificate police report accident claim form",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":8}",
+                    "evidenceIds": [
+                      "e8",
+                      "e9",
+                      "e10",
+                      "e11",
+                      "e12",
+                      "e13",
+                      "e14",
+                      "e15"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "Group Personal Accident death benefit accidental death funeral expenses documents required claim",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":8}",
+                    "evidenceIds": [
+                      "e8",
+                      "e13",
+                      "e12",
+                      "e15",
+                      "e9",
+                      "e11",
+                      "e10",
+                      "e14"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "query": "claim documents death claim death certificate proof of accident funeral expenses",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "search_passages",
+                    "summary": "{\"hits\":8}",
+                    "evidenceIds": [
+                      "e8",
+                      "e10",
+                      "e12",
+                      "e11",
+                      "e9",
+                      "e13",
+                      "e14",
+                      "e15"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "topic": "accidental death funeral or compassionate death allowance",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "policies_for",
+                    "summary": "{}",
+                    "evidenceIds": [
+                      "e16",
+                      "e17"
+                    ]
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "by": "composition (figure identity)",
+                      "want": "amount",
+                      "benefit": "Group Personal Accident",
+                      "policy_id": "7b000000-0000-4000-8000-000000000101",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "select_table_value",
+                    "summary": "{\"status\":\"ok\",\"value\":300000,\"key\":\"vb1_1\"}",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": false,
+                    "args": {
+                      "sentences": [
+                        {
+                          "kind": "fact",
+                          "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                          "benefit": "Compassionate Death Allowance Benefit",
+                          "subject_id": "7b000000-0000-4000-8000-000000000001",
+                          "evidence_ids": [
+                            "e8"
+                          ]
+                        },
+                        {
+                          "kind": "uncertainty",
+                          "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                          "subject_id": "7b000000-0000-4000-8000-000000000001",
+                          "evidence_ids": [
+                            "e8"
+                          ]
+                        },
+                        {
+                          "kind": "fact",
+                          "text": "Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.",
+                          "subject_id": "7b000000-0000-4000-8000-000000000001",
+                          "evidence_ids": [
+                            "e15"
+                          ]
+                        }
+                      ],
+                      "next_steps": [
+                        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                      ],
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "final_answer",
+                    "error": "the save-time check would not show this sentence: \"Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.\" -- S$300,000: the figure is printed on another insured person’s row, not the one it is stated for (it cites e15). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+                    "evidenceIds": []
+                  },
+                  {
+                    "ok": true,
+                    "args": {
+                      "sentences": [
+                        {
+                          "kind": "fact",
+                          "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                          "benefit": "Compassionate Death Allowance Benefit",
+                          "subject_id": "7b000000-0000-4000-8000-000000000001",
+                          "evidence_ids": [
+                            "e8"
+                          ]
+                        },
+                        {
+                          "kind": "uncertainty",
+                          "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                          "subject_id": "7b000000-0000-4000-8000-000000000001",
+                          "evidence_ids": [
+                            "e8"
+                          ]
+                        }
+                      ],
+                      "next_steps": [
+                        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                      ],
+                      "subject_id": "7b000000-0000-4000-8000-000000000001"
+                    },
+                    "name": "final_answer",
+                    "evidenceIds": []
+                  }
+                ],
+                "userMessage": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+                "evidenceChosen": [
+                  "e8"
+                ]
+              }
+            ],
+            "values": {
+              "v1": {
+                "operand": {
+                  "ppm": null,
+                  "kind": "table_value",
+                  "cents": 50000000,
+                  "count": null,
+                  "period": null,
+                  "benefit": "Group Term Life",
+                  "currency": "SGD",
+                  "evidence": {
+                    "page": {
+                      "end": 1,
+                      "start": 1
+                    },
+                    "table": {
+                      "row": {
+                        "cells": [
+                          {
+                            "end": 363,
+                            "text": "S****411A",
+                            "start": 354,
+                            "header": ""
+                          },
+                          {
+                            "end": 384,
+                            "text": "Lee Wei Ming, Daniel",
+                            "start": 364,
+                            "header": ""
+                          },
+                          {
+                            "end": 394,
+                            "text": "S$500,000",
+                            "start": 385,
+                            "header": ""
+                          },
+                          {
+                            "end": 400,
+                            "text": "As of",
+                            "start": 395,
+                            "header": ""
+                          },
+                          {
+                            "end": 411,
+                            "text": "01/04/2024",
+                            "start": 401,
+                            "header": ""
+                          }
+                        ]
+                      },
+                      "asOf": "2024-04-01",
+                      "cell": {
+                        "end": 394,
+                        "text": "S$500,000",
+                        "start": 385
+                      },
+                      "layout": "person_row",
+                      "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                      "rowLabel": "S****411A",
+                      "appliesTo": {
+                        "kind": "everyone",
+                        "value": "everyone"
+                      },
+                      "rowPerson": {
+                        "end": 384,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 364,
+                        "memberId": "7b000000-0000-4000-8000-000000000001"
+                      },
+                      "columnLeaf": "",
+                      "columnHeader": ""
+                    },
+                    "passage": {
+                      "end": 411,
+                      "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                      "start": 354,
+                      "onPage": 1
+                    },
+                    "policyId": "7b000000-0000-4000-8000-000000000101",
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-cert"
+                  },
+                  "valueKind": "money"
+                },
+                "selected": {
+                  "ppm": null,
+                  "unit": null,
+                  "cents": 50000000,
+                  "notes": [],
+                  "value": 500000,
+                  "period": null,
+                  "status": "ok",
+                  "benefit": "Group Term Life",
+                  "version": null,
+                  "currency": "SGD",
+                  "evidence": {
+                    "page": {
+                      "end": 1,
+                      "start": 1
+                    },
+                    "table": {
+                      "row": {
+                        "cells": [
+                          {
+                            "end": 363,
+                            "text": "S****411A",
+                            "start": 354,
+                            "header": ""
+                          },
+                          {
+                            "end": 384,
+                            "text": "Lee Wei Ming, Daniel",
+                            "start": 364,
+                            "header": ""
+                          },
+                          {
+                            "end": 394,
+                            "text": "S$500,000",
+                            "start": 385,
+                            "header": ""
+                          },
+                          {
+                            "end": 400,
+                            "text": "As of",
+                            "start": 395,
+                            "header": ""
+                          },
+                          {
+                            "end": 411,
+                            "text": "01/04/2024",
+                            "start": 401,
+                            "header": ""
+                          }
+                        ]
+                      },
+                      "asOf": "2024-04-01",
+                      "cell": {
+                        "end": 394,
+                        "text": "S$500,000",
+                        "start": 385
+                      },
+                      "layout": "person_row",
+                      "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                      "rowLabel": "S****411A",
+                      "appliesTo": {
+                        "kind": "everyone",
+                        "value": "everyone"
+                      },
+                      "rowPerson": {
+                        "end": 384,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 364,
+                        "memberId": "7b000000-0000-4000-8000-000000000001"
+                      },
+                      "columnLeaf": "",
+                      "columnHeader": ""
+                    },
+                    "passage": {
+                      "end": 411,
+                      "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                      "start": 354,
+                      "onPage": 1
+                    },
+                    "policyId": "7b000000-0000-4000-8000-000000000101",
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-cert"
+                  },
+                  "rowLabel": "Group Term Life",
+                  "valueKind": "money",
+                  "conditions": [
+                    "under “Group Term Life”",
+                    "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+                  ],
+                  "columnBasis": {
+                    "basis": "document",
+                    "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP TERM LIFE(POLICY NO.GTL-7001)”",
+                    "evidence": {
+                      "page": {
+                        "end": 1,
+                        "start": 1
+                      },
+                      "table": {
+                        "row": {
+                          "cells": [
+                            {
+                              "end": 363,
+                              "text": "S****411A",
+                              "start": 354,
+                              "header": ""
+                            },
+                            {
+                              "end": 384,
+                              "text": "Lee Wei Ming, Daniel",
+                              "start": 364,
+                              "header": ""
+                            },
+                            {
+                              "end": 394,
+                              "text": "S$500,000",
+                              "start": 385,
+                              "header": ""
+                            },
+                            {
+                              "end": 400,
+                              "text": "As of",
+                              "start": 395,
+                              "header": ""
+                            },
+                            {
+                              "end": 411,
+                              "text": "01/04/2024",
+                              "start": 401,
+                              "header": ""
+                            }
+                          ]
+                        },
+                        "asOf": "2024-04-01",
+                        "cell": {
+                          "end": 394,
+                          "text": "S$500,000",
+                          "start": 385
+                        },
+                        "layout": "person_row",
+                        "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                        "rowLabel": "S****411A",
+                        "appliesTo": {
+                          "kind": "everyone",
+                          "value": "everyone"
+                        },
+                        "rowPerson": {
+                          "end": 384,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 364,
+                          "memberId": "7b000000-0000-4000-8000-000000000001"
+                        },
+                        "columnLeaf": "",
+                        "columnHeader": ""
+                      },
+                      "passage": {
+                        "end": 411,
+                        "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                        "start": 354,
+                        "onPage": 1
+                      },
+                      "policyId": "7b000000-0000-4000-8000-000000000101",
+                      "subjectId": "7b000000-0000-4000-8000-000000000001",
+                      "documentHash": "sha256:bk-cert"
+                    }
+                  },
+                  "columnHeader": ""
+                },
+                "subjectId": "7b000000-0000-4000-8000-000000000001"
+              },
+              "vb1_1": {
+                "operand": {
+                  "ppm": null,
+                  "kind": "table_value",
+                  "cents": 30000000,
+                  "count": null,
+                  "period": null,
+                  "benefit": "Group Personal Accident",
+                  "currency": "SGD",
+                  "evidence": {
+                    "page": {
+                      "end": 1,
+                      "start": 1
+                    },
+                    "table": {
+                      "row": {
+                        "cells": [
+                          {
+                            "end": 522,
+                            "text": "S****411A",
+                            "start": 513,
+                            "header": ""
+                          },
+                          {
+                            "end": 543,
+                            "text": "Lee Wei Ming, Daniel",
+                            "start": 523,
+                            "header": ""
+                          },
+                          {
+                            "end": 553,
+                            "text": "S$300,000",
+                            "start": 544,
+                            "header": ""
+                          },
+                          {
+                            "end": 559,
+                            "text": "As of",
+                            "start": 554,
+                            "header": ""
+                          },
+                          {
+                            "end": 570,
+                            "text": "01/04/2024",
+                            "start": 560,
+                            "header": ""
+                          }
+                        ]
+                      },
+                      "asOf": "2024-04-01",
+                      "cell": {
+                        "end": 553,
+                        "text": "S$300,000",
+                        "start": 544
+                      },
+                      "layout": "person_row",
+                      "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                      "rowLabel": "S****411A",
+                      "appliesTo": {
+                        "kind": "everyone",
+                        "value": "everyone"
+                      },
+                      "rowPerson": {
+                        "end": 543,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 523,
+                        "memberId": "7b000000-0000-4000-8000-000000000001"
+                      },
+                      "columnLeaf": "",
+                      "columnHeader": ""
+                    },
+                    "passage": {
+                      "end": 570,
+                      "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                      "start": 513,
+                      "onPage": 1
+                    },
+                    "policyId": "7b000000-0000-4000-8000-000000000101",
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-cert"
+                  },
+                  "valueKind": "money"
+                },
+                "selected": {
+                  "ppm": null,
+                  "unit": null,
+                  "cents": 30000000,
+                  "notes": [],
+                  "value": 300000,
+                  "period": null,
+                  "status": "ok",
+                  "benefit": "Group Personal Accident",
+                  "version": null,
+                  "currency": "SGD",
+                  "evidence": {
+                    "page": {
+                      "end": 1,
+                      "start": 1
+                    },
+                    "table": {
+                      "row": {
+                        "cells": [
+                          {
+                            "end": 522,
+                            "text": "S****411A",
+                            "start": 513,
+                            "header": ""
+                          },
+                          {
+                            "end": 543,
+                            "text": "Lee Wei Ming, Daniel",
+                            "start": 523,
+                            "header": ""
+                          },
+                          {
+                            "end": 553,
+                            "text": "S$300,000",
+                            "start": 544,
+                            "header": ""
+                          },
+                          {
+                            "end": 559,
+                            "text": "As of",
+                            "start": 554,
+                            "header": ""
+                          },
+                          {
+                            "end": 570,
+                            "text": "01/04/2024",
+                            "start": 560,
+                            "header": ""
+                          }
+                        ]
+                      },
+                      "asOf": "2024-04-01",
+                      "cell": {
+                        "end": 553,
+                        "text": "S$300,000",
+                        "start": 544
+                      },
+                      "layout": "person_row",
+                      "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                      "rowLabel": "S****411A",
+                      "appliesTo": {
+                        "kind": "everyone",
+                        "value": "everyone"
+                      },
+                      "rowPerson": {
+                        "end": 543,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 523,
+                        "memberId": "7b000000-0000-4000-8000-000000000001"
+                      },
+                      "columnLeaf": "",
+                      "columnHeader": ""
+                    },
+                    "passage": {
+                      "end": 570,
+                      "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                      "start": 513,
+                      "onPage": 1
+                    },
+                    "policyId": "7b000000-0000-4000-8000-000000000101",
+                    "subjectId": "7b000000-0000-4000-8000-000000000001",
+                    "documentHash": "sha256:bk-cert"
+                  },
+                  "rowLabel": "Group Personal Accident",
+                  "valueKind": "money",
+                  "conditions": [
+                    "under “Group Personal Accident”",
+                    "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+                  ],
+                  "columnBasis": {
+                    "basis": "document",
+                    "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP PERSONAL ACCIDENT(POLICY NO. GPA-7002)”",
+                    "evidence": {
+                      "page": {
+                        "end": 1,
+                        "start": 1
+                      },
+                      "table": {
+                        "row": {
+                          "cells": [
+                            {
+                              "end": 522,
+                              "text": "S****411A",
+                              "start": 513,
+                              "header": ""
+                            },
+                            {
+                              "end": 543,
+                              "text": "Lee Wei Ming, Daniel",
+                              "start": 523,
+                              "header": ""
+                            },
+                            {
+                              "end": 553,
+                              "text": "S$300,000",
+                              "start": 544,
+                              "header": ""
+                            },
+                            {
+                              "end": 559,
+                              "text": "As of",
+                              "start": 554,
+                              "header": ""
+                            },
+                            {
+                              "end": 570,
+                              "text": "01/04/2024",
+                              "start": 560,
+                              "header": ""
+                            }
+                          ]
+                        },
+                        "asOf": "2024-04-01",
+                        "cell": {
+                          "end": 553,
+                          "text": "S$300,000",
+                          "start": 544
+                        },
+                        "layout": "person_row",
+                        "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                        "rowLabel": "S****411A",
+                        "appliesTo": {
+                          "kind": "everyone",
+                          "value": "everyone"
+                        },
+                        "rowPerson": {
+                          "end": 543,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 523,
+                          "memberId": "7b000000-0000-4000-8000-000000000001"
+                        },
+                        "columnLeaf": "",
+                        "columnHeader": ""
+                      },
+                      "passage": {
+                        "end": 570,
+                        "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                        "start": 513,
+                        "onPage": 1
+                      },
+                      "policyId": "7b000000-0000-4000-8000-000000000101",
+                      "subjectId": "7b000000-0000-4000-8000-000000000001",
+                      "documentHash": "sha256:bk-cert"
+                    }
+                  },
+                  "columnHeader": ""
+                },
+                "subjectId": "7b000000-0000-4000-8000-000000000001"
+              }
+            },
+            "history": [
+              {
+                "user": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+                "assistant": "The booklet does not specify which particular documents the prescribed form requires. The uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved."
+              }
+            ],
+            "pending": null,
+            "docNames": {
+              "7b000000-0000-4000-8000-000000000101": "Civil Service Group Insurance Scheme - Certificate",
+              "7b000000-0000-4000-8000-000000000102": "Group Insurance Benefits Booklet",
+              "7b000000-0000-4000-8000-000000000104": "Insurance Benefits Summary"
+            },
+            "evidence": {
+              "e1": {
+                "id": "e1",
+                "via": "person_benefits",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 363,
+                        "text": "S****411A",
+                        "start": 354,
+                        "header": ""
+                      },
+                      {
+                        "end": 384,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 364,
+                        "header": ""
+                      },
+                      {
+                        "end": 394,
+                        "text": "S$500,000",
+                        "start": 385,
+                        "header": ""
+                      },
+                      {
+                        "end": 400,
+                        "text": "As of",
+                        "start": 395,
+                        "header": ""
+                      },
+                      {
+                        "end": 411,
+                        "text": "01/04/2024",
+                        "start": 401,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 394,
+                    "text": "S$500,000",
+                    "start": 385
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "Group Term Life",
+                  "appliesTo": null,
+                  "rowPerson": {
+                    "end": 384,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 364,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "e2": {
+                "id": "e2",
+                "via": "person_benefits",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 522,
+                        "text": "S****411A",
+                        "start": 513,
+                        "header": ""
+                      },
+                      {
+                        "end": 543,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 523,
+                        "header": ""
+                      },
+                      {
+                        "end": 553,
+                        "text": "S$300,000",
+                        "start": 544,
+                        "header": ""
+                      },
+                      {
+                        "end": 559,
+                        "text": "As of",
+                        "start": 554,
+                        "header": ""
+                      },
+                      {
+                        "end": 570,
+                        "text": "01/04/2024",
+                        "start": 560,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 553,
+                    "text": "S$300,000",
+                    "start": 544
+                  },
+                  "layout": "person_row",
+                  "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "Group Personal Accident",
+                  "appliesTo": null,
+                  "rowPerson": {
+                    "end": 543,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 523,
+                    "memberId": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "context": null,
+                "passage": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 570,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+                  "start": 513,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "e3": {
+                "id": "e3",
+                "via": "person_benefits",
+                "page": {
+                  "end": 7,
+                  "start": 7
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 169,
+                  "text": "Simple Fracture Benefit Limit: S$5,000",
+                  "start": 131,
+                  "onPage": 7
+                },
+                "support": {
+                  "end": 169,
+                  "text": "Simple Fracture Benefit Limit: S$5,000",
+                  "start": 131,
+                  "onPage": 7
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e4": {
+                "id": "e4",
+                "via": "person_benefits",
+                "page": {
+                  "end": 12,
+                  "start": 12
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 239,
+                    "role": "footnote",
+                    "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                    "start": 156,
+                    "onPage": 12
+                  }
+                ],
+                "passage": {
+                  "end": 112,
+                  "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+                  "start": 58,
+                  "onPage": 12
+                },
+                "support": {
+                  "end": 112,
+                  "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+                  "start": 58,
+                  "onPage": 12
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000104",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-summary"
+              },
+              "e5": {
+                "id": "e5",
+                "via": "person_benefits",
+                "page": {
+                  "end": 12,
+                  "start": 12
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 239,
+                    "role": "footnote",
+                    "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                    "start": 156,
+                    "onPage": 12
+                  }
+                ],
+                "passage": {
+                  "end": 155,
+                  "text": "•\tAmbulance Cost*\tUp to S$500 per incident",
+                  "start": 113,
+                  "onPage": 12
+                },
+                "support": {
+                  "end": 155,
+                  "text": "•\tAmbulance Cost*\tUp to S$500 per incident",
+                  "start": 113,
+                  "onPage": 12
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000104",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-summary"
+              },
+              "e6": {
+                "id": "e6",
+                "via": "person_benefits",
+                "page": {
+                  "end": 7,
+                  "start": 7
+                },
+                "table": null,
+                "passage": {
+                  "end": 432,
+                  "text": "Bone fractured Compensation (% of S$5,000)\nSkull 100%\nHip 75%\nJaw, Pelvis, Leg, Ankle or Knee 50%\nArm, Wrist or Elbow 40%",
+                  "start": 311,
+                  "onPage": 7
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": null,
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e7": {
+                "id": "e7",
+                "via": "person_benefits",
+                "page": {
+                  "end": 8,
+                  "start": 8
+                },
+                "table": null,
+                "passage": {
+                  "end": 339,
+                  "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+                  "start": 187,
+                  "onPage": 8
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": null,
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e8": {
+                "id": "e8",
+                "via": "search_passages",
+                "page": {
+                  "end": 9,
+                  "start": 9
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 459,
+                  "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the funeral expenses incurred, up to $2,000,\non receipt of proof of death and the relevant documents in our prescribed form.\nThis Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.\nSection 6 - Repatriation\nWe will pay up to $5,000 for the cost of bringing the Insured Person's body home if death occurs overseas.",
+                  "start": 0,
+                  "onPage": 9
+                },
+                "support": {
+                  "end": 327,
+                  "text": "This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+                  "start": 241,
+                  "onPage": 9
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e9": {
+                "id": "e9",
+                "via": "search_passages",
+                "page": {
+                  "end": 12,
+                  "start": 12
+                },
+                "table": null,
+                "context": [
+                  {
+                    "end": 239,
+                    "role": "footnote",
+                    "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                    "start": 156,
+                    "onPage": 12
+                  }
+                ],
+                "passage": {
+                  "end": 239,
+                  "text": "Insurance Benefits Summary\nInsurance Benefits (continued)\n•\tCompassionate Death Allowance Benefit*\tUp to S$2,000\n•\tAmbulance Cost*\tUp to S$500 per incident\n*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                  "start": 0,
+                  "onPage": 12
+                },
+                "support": {
+                  "end": 112,
+                  "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+                  "start": 58,
+                  "onPage": 12
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000104",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-summary"
+              },
+              "e10": {
+                "id": "e10",
+                "via": "search_passages",
+                "page": {
+                  "end": 2,
+                  "start": 2
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 240,
+                  "text": "Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+                  "start": 0,
+                  "onPage": 2
+                },
+                "support": {
+                  "end": 240,
+                  "text": "Sum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+                  "start": 117,
+                  "onPage": 2
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e11": {
+                "id": "e11",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 234,
+                  "text": "Group Insurance Benefits Booklet\nCivil Service Group Insurance Scheme (Group Policy No. GIS-7000)\nThis booklet describes the products of the scheme. Your Certificate of Group Insurance shows the products and amounts that apply to you.",
+                  "start": 0,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 234,
+                  "text": "Your Certificate of Group Insurance shows the products and amounts that apply to you.",
+                  "start": 149,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e12": {
+                "id": "e12",
+                "via": "search_passages",
+                "page": {
+                  "end": 3,
+                  "start": 3
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 116,
+                  "text": "PART A - GROUP TERM LIFE\nDeath Benefit\nWe will pay 100% of the Sum Insured if the Insured Person dies while covered.",
+                  "start": 0,
+                  "onPage": 3
+                },
+                "support": {
+                  "end": 38,
+                  "text": "Death Benefit",
+                  "start": 25,
+                  "onPage": 3
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e13": {
+                "id": "e13",
+                "via": "search_passages",
+                "page": {
+                  "end": 7,
+                  "start": 7
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 353,
+                  "text": "PART B - GROUP PERSONAL ACCIDENT\nSection 3 - Simple Fracture\nSimple Fracture means a closed fracture where the skin is not broken.\nSimple Fracture Benefit Limit: S$5,000\nWe will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.\nBone fractured Compensation (% of S$5,000)",
+                  "start": 0,
+                  "onPage": 7
+                },
+                "support": {
+                  "end": 310,
+                  "text": "We will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.",
+                  "start": 170,
+                  "onPage": 7
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-booklet-none-cda"
+              },
+              "e14": {
+                "id": "e14",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 411,
+                  "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Aldermoor Life Ltd.\" for cover(s) as indicated:\nCIVIL SERVICE GROUP INSURANCE SCHEME (GROUP POLICY NO. GIS-7000)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date\nGROUP TERM LIFE(POLICY NO.GTL-7001)\nS****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 0,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 30,
+                  "text": "CERTIFICATE OF GROUP INSURANCE",
+                  "start": 0,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "e15": {
+                "id": "e15",
+                "via": "search_passages",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 626,
+                  "text": "S****822B\tTan Hui Min, Grace\tS$500,000\tAs of\t01/04/2024\nGROUP PERSONAL ACCIDENT(POLICY NO. GPA-7002)\nS****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024\nS****822B\tTan Hui Min, Grace\tS$300,000\tAs of\t01/04/2024",
+                  "start": 412,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 502,
+                  "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+                  "start": 468,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "e16": {
+                "id": "e16",
+                "via": "policies_for",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 317,
+                  "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+                  "start": 230,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 317,
+                  "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+                  "start": 230,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              },
+              "e17": {
+                "id": "e17",
+                "via": "policies_for",
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": null,
+                "context": null,
+                "passage": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "support": {
+                  "end": 411,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 354,
+                  "onPage": 1
+                },
+                "policyId": "7b000000-0000-4000-8000-000000000101",
+                "subjectId": "7b000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:bk-cert"
+              }
+            },
+            "speakerId": "7b000000-0000-4000-8000-000000000001",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "recentSubjectIds": [
+              "7b000000-0000-4000-8000-000000000001"
+            ]
+          },
+          "subjects": {}
+        },
+        "turns": [
+          {
+            "index": 0,
+            "user": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+            "answer": {
+              "mode": "answer",
+              "details": [
+                "The uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved."
+              ],
+              "summary": "The booklet does not specify which particular documents the prescribed form requires.",
+              "citations": [
+                {
+                  "chunkId": "rag2:e8",
+                  "excerpt": "This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+                  "insurer": "Aldermoor Life Ltd",
+                  "pageEnd": 9,
+                  "policyId": "7b000000-0000-4000-8000-000000000102",
+                  "pageStart": 9,
+                  "policyName": "Group Insurance Benefits Booklet",
+                  "documentRole": "policy_wording"
+                }
+              ],
+              "nextSteps": [
+                "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+              ],
+              "questions": [],
+              "claimItems": [],
+              "confidence": null,
+              "disclaimer": "",
+              "knownFacts": [],
+              "computations": [],
+              "missingFacts": [],
+              "claimSessionId": null,
+              "conversationId": "2b569923-1d03-4d52-8915-7ee7e3f6d4f3",
+              "figureBindings": [],
+              "payoutQualifiers": [],
+              "policyStatedLimits": [],
+              "conversationRevision": 1,
+              "potentialPayoutTotals": [],
+              "resolvedFamilyMemberId": "7b000000-0000-4000-8000-000000000001"
+            },
+            "content": "The booklet does not specify which particular documents the prescribed form requires.",
+            "visible": "The booklet does not specify which particular documents the prescribed form requires.\nThe uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim.",
+            "questions": [],
+            "userAt": "2026-10-17T08:49:39.410Z",
+            "assistantAt": "2026-10-17T08:49:39.410Z",
+            "trace": {
+              "gate": [],
+              "turn": 1,
+              "calls": [
+                {
+                  "ok": true,
+                  "input": 7507,
+                  "output": 136,
+                  "attempt": 1,
+                  "costUsd": 0.0008187,
+                  "latencyMs": 3167
+                },
+                {
+                  "ok": true,
+                  "input": 9844,
+                  "output": 217,
+                  "attempt": 1,
+                  "costUsd": 0.00042861,
+                  "latencyMs": 2651
+                },
+                {
+                  "ok": true,
+                  "input": 16450,
+                  "output": 337,
+                  "attempt": 1,
+                  "costUsd": 0.0009388800000000001,
+                  "latencyMs": 4879
+                },
+                {
+                  "ok": true,
+                  "input": 17022,
+                  "output": 278,
+                  "attempt": 1,
+                  "costUsd": 0.00037204,
+                  "latencyMs": 3085
+                }
+              ],
+              "limit": null,
+              "steps": 4,
+              "usage": {
+                "input": 50823,
+                "output": 968
+              },
+              "dropped": [
+                {
+                  "reason": "states S$2,000 from Group Insurance Benefits Booklet, which prints that amount with a bare $ and does not state its currency",
+                  "sentence": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme."
+                }
+              ],
+              "modelId": "openai:gpt-6-luna",
+              "outcome": "final_answer",
+              "composed": [
+                "The booklet does not specify which particular documents the prescribed form requires.",
+                "The uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved."
+              ],
+              "latencyMs": 14007,
+              "modelKind": "hosted",
+              "toolCalls": [
+                {
+                  "ok": true,
+                  "args": {
+                    "mention": "Daniel"
+                  },
+                  "name": "resolve_person",
+                  "summary": "{\"status\":\"ok\"}",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "facts": [
+                      {
+                        "key": "event",
+                        "value": "died in an accident",
+                        "words": "If Daniel died in an accident"
+                      }
+                    ],
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "note_facts",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "topic": "accidental death funeral expenses and claim documents",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "person_benefits",
+                  "summary": "{}",
+                  "evidenceIds": [
+                    "e1",
+                    "e2",
+                    "e3",
+                    "e4",
+                    "e5",
+                    "e6",
+                    "e7"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Compassionate Death Allowance Benefit funeral expenses accidental death eligibility amount claim documents required death certificate police report accident claim form",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":8}",
+                  "evidenceIds": [
+                    "e8",
+                    "e9",
+                    "e10",
+                    "e11",
+                    "e12",
+                    "e13",
+                    "e14",
+                    "e15"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "Group Personal Accident death benefit accidental death funeral expenses documents required claim",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":8}",
+                  "evidenceIds": [
+                    "e8",
+                    "e13",
+                    "e12",
+                    "e15",
+                    "e9",
+                    "e11",
+                    "e10",
+                    "e14"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "query": "claim documents death claim death certificate proof of accident funeral expenses",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "search_passages",
+                  "summary": "{\"hits\":8}",
+                  "evidenceIds": [
+                    "e8",
+                    "e10",
+                    "e12",
+                    "e11",
+                    "e9",
+                    "e13",
+                    "e14",
+                    "e15"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "topic": "accidental death funeral or compassionate death allowance",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "policies_for",
+                  "summary": "{}",
+                  "evidenceIds": [
+                    "e16",
+                    "e17"
+                  ]
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "by": "composition (figure identity)",
+                    "want": "amount",
+                    "benefit": "Group Personal Accident",
+                    "policy_id": "7b000000-0000-4000-8000-000000000101",
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "select_table_value",
+                  "summary": "{\"status\":\"ok\",\"value\":300000,\"key\":\"vb1_1\"}",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": false,
+                  "args": {
+                    "sentences": [
+                      {
+                        "kind": "fact",
+                        "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                        "benefit": "Compassionate Death Allowance Benefit",
+                        "subject_id": "7b000000-0000-4000-8000-000000000001",
+                        "evidence_ids": [
+                          "e8"
+                        ]
+                      },
+                      {
+                        "kind": "uncertainty",
+                        "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                        "subject_id": "7b000000-0000-4000-8000-000000000001",
+                        "evidence_ids": [
+                          "e8"
+                        ]
+                      },
+                      {
+                        "kind": "fact",
+                        "text": "Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.",
+                        "subject_id": "7b000000-0000-4000-8000-000000000001",
+                        "evidence_ids": [
+                          "e15"
+                        ]
+                      }
+                    ],
+                    "next_steps": [
+                      "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                    ],
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "final_answer",
+                  "error": "the save-time check would not show this sentence: \"Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.\" -- S$300,000: the figure is printed on another insured person’s row, not the one it is stated for (it cites e15). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+                  "evidenceIds": []
+                },
+                {
+                  "ok": true,
+                  "args": {
+                    "sentences": [
+                      {
+                        "kind": "fact",
+                        "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                        "benefit": "Compassionate Death Allowance Benefit",
+                        "subject_id": "7b000000-0000-4000-8000-000000000001",
+                        "evidence_ids": [
+                          "e8"
+                        ]
+                      },
+                      {
+                        "kind": "uncertainty",
+                        "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                        "subject_id": "7b000000-0000-4000-8000-000000000001",
+                        "evidence_ids": [
+                          "e8"
+                        ]
+                      }
+                    ],
+                    "next_steps": [
+                      "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                    ],
+                    "subject_id": "7b000000-0000-4000-8000-000000000001"
+                  },
+                  "name": "final_answer",
+                  "evidenceIds": []
+                }
+              ],
+              "userMessage": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+              "evidenceChosen": [
+                "e8"
+              ]
+            }
+          }
+        ]
+      },
+      "verdict": {
+        "scenario": "FL4",
+        "verdict": "INCOMPLETE",
+        "failureStage": null,
+        "incomplete": "graded by scenario-check.ts",
+        "checks": []
+      },
+      "saved": {
+        "subjectId": "7b000000-0000-4000-8000-000000000001",
+        "speakerId": "7b000000-0000-4000-8000-000000000001",
+        "pending": null,
+        "claim": {
+          "facts": {
+            "event": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "died in an accident",
+              "words": "If Daniel died in an accident",
+              "source": "user_reported"
+            }
+          },
+          "derived": [],
+          "subjectId": "7b000000-0000-4000-8000-000000000001"
+        },
+        "traces": [
+          {
+            "turn": 1,
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "steps": 4,
+            "usage": {
+              "input": 50823,
+              "output": 968
+            },
+            "latencyMs": 14007,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "event",
+                      "value": "died in an accident",
+                      "words": "If Daniel died in an accident"
+                    }
+                  ],
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accidental death funeral expenses and claim documents",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "query": "Compassionate Death Allowance Benefit funeral expenses accidental death eligibility amount claim documents required death certificate police report accident claim form",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":8}",
+                "evidenceIds": [
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13",
+                  "e14",
+                  "e15"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "query": "Group Personal Accident death benefit accidental death funeral expenses documents required claim",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":8}",
+                "evidenceIds": [
+                  "e8",
+                  "e13",
+                  "e12",
+                  "e15",
+                  "e9",
+                  "e11",
+                  "e10",
+                  "e14"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "query": "claim documents death claim death certificate proof of accident funeral expenses",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":8}",
+                "evidenceIds": [
+                  "e8",
+                  "e10",
+                  "e12",
+                  "e11",
+                  "e9",
+                  "e13",
+                  "e14",
+                  "e15"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accidental death funeral or compassionate death allowance",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e16",
+                  "e17"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "by": "composition (figure identity)",
+                  "want": "amount",
+                  "benefit": "Group Personal Accident",
+                  "policy_id": "7b000000-0000-4000-8000-000000000101",
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "select_table_value",
+                "summary": "{\"status\":\"ok\",\"value\":300000,\"key\":\"vb1_1\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": false,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "fact",
+                      "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                      "benefit": "Compassionate Death Allowance Benefit",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e8"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e8"
+                      ]
+                    },
+                    {
+                      "kind": "fact",
+                      "text": "Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e15"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "error": "the save-time check would not show this sentence: \"Daniel’s certificate lists Group Personal Accident of S$300,000 as of 1 April 2024, but that dated amount does not establish the funeral benefit or confirm cover on a later date.\" -- S$300,000: the figure is printed on another insured person’s row, not the one it is stated for (it cites e15). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "fact",
+                      "text": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme.",
+                      "benefit": "Compassionate Death Allowance Benefit",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e8"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The booklet does not specify which particular documents the prescribed form requires, and the uploaded documents do not establish whether Daniel is enrolled in the Core or Voluntary Scheme, so the funeral benefit’s applicability to him is unresolved.",
+                      "subject_id": "7b000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e8"
+                      ]
+                    }
+                  ],
+                  "next_steps": [
+                    "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Civil Service Group Insurance Scheme - Certificate to ask what it needs for a claim."
+                  ],
+                  "subject_id": "7b000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [
+              "e8"
+            ],
+            "dropped": [
+              {
+                "reason": "states S$2,000 from Group Insurance Benefits Booklet, which prints that amount with a bare $ and does not state its currency",
+                "sentence": "The Group Insurance Benefits Booklet says its Compassionate Death Allowance Benefit pays funeral expenses incurred up to S$2,000 if Daniel dies as a result of an accident, on receipt of proof of death and the relevant documents in the insurer’s prescribed form; it can be claimed only under either the Core Scheme or the Voluntary Scheme."
+              }
+            ],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          }
+        ],
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 363,
+                    "text": "S****411A",
+                    "start": 354,
+                    "header": ""
+                  },
+                  {
+                    "end": 384,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 364,
+                    "header": ""
+                  },
+                  {
+                    "end": 394,
+                    "text": "S$500,000",
+                    "start": 385,
+                    "header": ""
+                  },
+                  {
+                    "end": 400,
+                    "text": "As of",
+                    "start": 395,
+                    "header": ""
+                  },
+                  {
+                    "end": 411,
+                    "text": "01/04/2024",
+                    "start": 401,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 394,
+                "text": "S$500,000",
+                "start": 385
+              },
+              "layout": "person_row",
+              "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 384,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 364,
+                "memberId": "7b000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "support": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 522,
+                    "text": "S****411A",
+                    "start": 513,
+                    "header": ""
+                  },
+                  {
+                    "end": 543,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 523,
+                    "header": ""
+                  },
+                  {
+                    "end": 553,
+                    "text": "S$300,000",
+                    "start": 544,
+                    "header": ""
+                  },
+                  {
+                    "end": 559,
+                    "text": "As of",
+                    "start": 554,
+                    "header": ""
+                  },
+                  {
+                    "end": 570,
+                    "text": "01/04/2024",
+                    "start": 560,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 553,
+                "text": "S$300,000",
+                "start": 544
+              },
+              "layout": "person_row",
+              "tableId": "7b000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 543,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 523,
+                "memberId": "7b000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 570,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+              "start": 513,
+              "onPage": 1
+            },
+            "support": {
+              "end": 570,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024",
+              "start": 513,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 169,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 131,
+              "onPage": 7
+            },
+            "support": {
+              "end": 169,
+              "text": "Simple Fracture Benefit Limit: S$5,000",
+              "start": 131,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 12,
+              "start": 12
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 239,
+                "role": "footnote",
+                "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                "start": 156,
+                "onPage": 12
+              }
+            ],
+            "passage": {
+              "end": 112,
+              "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+              "start": 58,
+              "onPage": 12
+            },
+            "support": {
+              "end": 112,
+              "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+              "start": 58,
+              "onPage": 12
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000104",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-summary"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 12,
+              "start": 12
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 239,
+                "role": "footnote",
+                "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                "start": 156,
+                "onPage": 12
+              }
+            ],
+            "passage": {
+              "end": 155,
+              "text": "•\tAmbulance Cost*\tUp to S$500 per incident",
+              "start": 113,
+              "onPage": 12
+            },
+            "support": {
+              "end": 155,
+              "text": "•\tAmbulance Cost*\tUp to S$500 per incident",
+              "start": 113,
+              "onPage": 12
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000104",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "passage": {
+              "end": 432,
+              "text": "Bone fractured Compensation (% of S$5,000)\nSkull 100%\nHip 75%\nJaw, Pelvis, Leg, Ankle or Knee 50%\nArm, Wrist or Elbow 40%",
+              "start": 311,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "passage": {
+              "end": 339,
+              "text": "Bone fractured Compensation (% of Sum Insured)\nSkull (Other Fracture) 100%\nHip (Other Fracture) 75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%",
+              "start": 187,
+              "onPage": 8
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "search_passages",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 459,
+              "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the funeral expenses incurred, up to $2,000,\non receipt of proof of death and the relevant documents in our prescribed form.\nThis Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.\nSection 6 - Repatriation\nWe will pay up to $5,000 for the cost of bringing the Insured Person's body home if death occurs overseas.",
+              "start": 0,
+              "onPage": 9
+            },
+            "support": {
+              "end": 327,
+              "text": "This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+              "start": 241,
+              "onPage": 9
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "search_passages",
+            "page": {
+              "end": 12,
+              "start": 12
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 239,
+                "role": "footnote",
+                "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+                "start": 156,
+                "onPage": 12
+              }
+            ],
+            "passage": {
+              "end": 239,
+              "text": "Insurance Benefits Summary\nInsurance Benefits (continued)\n•\tCompassionate Death Allowance Benefit*\tUp to S$2,000\n•\tAmbulance Cost*\tUp to S$500 per incident\n*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+              "start": 0,
+              "onPage": 12
+            },
+            "support": {
+              "end": 112,
+              "text": "•\tCompassionate Death Allowance Benefit*\tUp to S$2,000",
+              "start": 58,
+              "onPage": 12
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000104",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 240,
+              "text": "Definitions\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nSum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+              "start": 0,
+              "onPage": 2
+            },
+            "support": {
+              "end": 240,
+              "text": "Sum Insured means the amount shown for the Insured Person under the relevant product in the Certificate of Group Insurance.",
+              "start": 117,
+              "onPage": 2
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 234,
+              "text": "Group Insurance Benefits Booklet\nCivil Service Group Insurance Scheme (Group Policy No. GIS-7000)\nThis booklet describes the products of the scheme. Your Certificate of Group Insurance shows the products and amounts that apply to you.",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 234,
+              "text": "Your Certificate of Group Insurance shows the products and amounts that apply to you.",
+              "start": 149,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "search_passages",
+            "page": {
+              "end": 3,
+              "start": 3
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 116,
+              "text": "PART A - GROUP TERM LIFE\nDeath Benefit\nWe will pay 100% of the Sum Insured if the Insured Person dies while covered.",
+              "start": 0,
+              "onPage": 3
+            },
+            "support": {
+              "end": 38,
+              "text": "Death Benefit",
+              "start": 25,
+              "onPage": 3
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "search_passages",
+            "page": {
+              "end": 7,
+              "start": 7
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 353,
+              "text": "PART B - GROUP PERSONAL ACCIDENT\nSection 3 - Simple Fracture\nSimple Fracture means a closed fracture where the skin is not broken.\nSimple Fracture Benefit Limit: S$5,000\nWe will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.\nBone fractured Compensation (% of S$5,000)",
+              "start": 0,
+              "onPage": 7
+            },
+            "support": {
+              "end": 310,
+              "text": "We will pay the percentage of the Simple Fracture Benefit Limit shown below for a Simple Fracture of a nature listed, caused by an Accident.",
+              "start": 170,
+              "onPage": 7
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000102",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-booklet-none-cda"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Aldermoor Life Ltd.\" for cover(s) as indicated:\nCIVIL SERVICE GROUP INSURANCE SCHEME (GROUP POLICY NO. GIS-7000)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date\nGROUP TERM LIFE(POLICY NO.GTL-7001)\nS****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 30,
+              "text": "CERTIFICATE OF GROUP INSURANCE",
+              "start": 0,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e15": {
+            "id": "e15",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 626,
+              "text": "S****822B\tTan Hui Min, Grace\tS$500,000\tAs of\t01/04/2024\nGROUP PERSONAL ACCIDENT(POLICY NO. GPA-7002)\nS****411A\tLee Wei Ming, Daniel\tS$300,000\tAs of\t01/04/2024\nS****822B\tTan Hui Min, Grace\tS$300,000\tAs of\t01/04/2024",
+              "start": 412,
+              "onPage": 1
+            },
+            "support": {
+              "end": 502,
+              "text": "GROUP PERSONAL ACCIDENT(POLICY NO.",
+              "start": 468,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e16": {
+            "id": "e16",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 317,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 230,
+              "onPage": 1
+            },
+            "support": {
+              "end": 317,
+              "text": "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured\tEffective Date",
+              "start": 230,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          },
+          "e17": {
+            "id": "e17",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "support": {
+              "end": 411,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 354,
+              "onPage": 1
+            },
+            "policyId": "7b000000-0000-4000-8000-000000000101",
+            "subjectId": "7b000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:bk-cert"
+          }
+        },
+        "answers": [
+          {
+            "turn": 1,
+            "resolvedFamilyMemberId": "7b000000-0000-4000-8000-000000000001",
+            "citations": [
+              {
+                "chunkId": "rag2:e8",
+                "excerpt": "This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+                "insurer": "Aldermoor Life Ltd",
+                "pageEnd": 9,
+                "policyId": "7b000000-0000-4000-8000-000000000102",
+                "pageStart": 9,
+                "policyName": "Group Insurance Benefits Booklet",
+                "documentRole": "policy_wording"
+              }
+            ],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-17T08:49:39.469Z",
+  "promptMatchesSource": true,
+  "httpCalls": [
+    {
+      "seq": 1,
+      "at": "2026-10-17T08:49:25.387Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 15620,
+      "reservedUsd": 0.002562,
+      "chargedUsd": 0.0008187,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "9abb9acca3230d21",
+      "kind": "loop",
+      "upstreamMs": 3160,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "providerRequestId": "chatcmpl-EZuOVzzzPQppa6wjva9Hygz7uIzIE",
+      "usage": {
+        "input": 7507,
+        "output": 136,
+        "cached": 0,
+        "reasoning": 0
+      },
+      "scenario": "FL4",
+      "turn": 1
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-17T08:49:28.626Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 18797,
+      "reservedUsd": 0.0028797,
+      "chargedUsd": 0.00042861,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "9abb9acca3230d21",
+      "kind": "loop",
+      "upstreamMs": 2647,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "providerRequestId": "chatcmpl-EZuOXdGFriqdXq9atimq97KpT6CzN",
+      "usage": {
+        "input": 9844,
+        "output": 217,
+        "cached": 7381,
+        "reasoning": 0
+      },
+      "scenario": "FL4",
+      "turn": 1
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-17T08:49:31.332Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 27813,
+      "reservedUsd": 0.0037813,
+      "chargedUsd": 0.0009388800000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "9abb9acca3230d21",
+      "kind": "loop",
+      "upstreamMs": 4876,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "providerRequestId": "chatcmpl-EZuOZEcbyQkN2avCvBElMDhn2cGnp",
+      "usage": {
+        "input": 16450,
+        "output": 337,
+        "cached": 9718,
+        "reasoning": 0
+      },
+      "scenario": "FL4",
+      "turn": 1
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-17T08:49:36.280Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 28865,
+      "reservedUsd": 0.0038865,
+      "chargedUsd": 0.00037204,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "systemSha": "9abb9acca3230d21",
+      "kind": "loop",
+      "upstreamMs": 3080,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "providerRequestId": "chatcmpl-EZuOfpQuhMeCK6dOlzuL2b1d3zvIt",
+      "usage": {
+        "input": 17022,
+        "output": 278,
+        "cached": 16324,
+        "reasoning": 0
+      },
+      "scenario": "FL4",
+      "turn": 1
+    }
+  ]
+}
