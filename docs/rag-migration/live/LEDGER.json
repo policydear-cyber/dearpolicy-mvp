@@ -1,5 +1,5 @@
 {
-  "exercise_cap_usd": 0.5,
+  "exercise_cap_usd": 1,
   "runs": [
     {
       "run_id": "live-L1-r2",

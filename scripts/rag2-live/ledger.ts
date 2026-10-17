@@ -1,6 +1,7 @@
 /**
  * Live-model smoke: the CUMULATIVE ledger of the whole exercise (docs/rag-migration/live/LEDGER.json). All live runs
- * together stay within exercise_cap_usd (US$0.50): a run's cap is min(request cap, 0.50 - sum of every earlier run's
+ * together stay within exercise_cap_usd (US$1.00; raised from US$0.50 on DC's authorisation, 17 Oct 2026): a run's cap is
+ * min(request cap <= US$0.50, exercise cap - sum of every earlier run's
  * spent + reserved-but-unsettled); a run is refused when nothing remains or when its run_id was already used. Each run
  * appends its own entry, committed together with its results (.github/workflows/rag2-live-smoke.yml).
  *   node --import tsx scripts/rag2-live/ledger.ts plan   --ledger <LEDGER.json> --request <run-request.json>
@@ -12,7 +13,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const EXERCISE_CAP_USD = 0.5;
+export const EXERCISE_CAP_USD = 1.0;
+/** One run may never ask for more than this, whatever the exercise cap. */
+export const RUN_CAP_MAX_USD = 0.5;
 export type LedgerRun = {
   run_id: string; tested_code_sha: string; request_sha: string; at: string; preflight: boolean; run_cap_usd: number;
   spent_usd: number; reserved_unsettled_usd: number; calls: number; refused: number; failed: number; note?: string;
@@ -36,7 +39,7 @@ export function validateRequest(r: any, kind: "rag2" | "ingest" = "rag2"): RunRe
   if (kind === "ingest") r = { ...r, scenarios: ["ingest"] };
   else if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s: unknown) => typeof s === "string" && /^L[1-6][a-z]?$/.test(s))) fail("scenarios: a non-empty list of scenario ids (L1..L6, optional letter suffix)");
   const cap = Number(r.run_cap_usd);
-  if (!Number.isFinite(cap) || cap <= 0 || cap > EXERCISE_CAP_USD) fail("run_cap_usd must be > 0 and <= 0.50");
+  if (!Number.isFinite(cap) || cap <= 0 || cap > RUN_CAP_MAX_USD) fail("run_cap_usd must be > 0 and <= 0.50");
   if (typeof r.preflight !== "boolean") fail("preflight must be true or false");
   // A focused ingest run: another questions file of the fixture, sealed with its own EXPECTED-<name>.json.
   if (r.questions !== undefined && (kind !== "ingest" || typeof r.questions !== "string" || !/^QUESTIONS-[a-z0-9]{1,20}\.json$/.test(r.questions))) fail("questions: only for an ingest run, a fixture file named QUESTIONS-<lowercase letters/digits>.json");
@@ -44,7 +47,7 @@ export function validateRequest(r: any, kind: "rag2" | "ingest" = "rag2"): RunRe
 }
 export function validateLedger(l: any): Ledger {
   if (!l || typeof l !== "object" || !Array.isArray(l.runs)) throw new Error("LEDGER.json: { exercise_cap_usd, runs: [] } expected");
-  if (Number(l.exercise_cap_usd) !== EXERCISE_CAP_USD) throw new Error("LEDGER.json: exercise_cap_usd must be 0.50");
+  if (Number(l.exercise_cap_usd) !== EXERCISE_CAP_USD) throw new Error("LEDGER.json: exercise_cap_usd must be 1.00");
   for (const r of l.runs as LedgerRun[]) {
     if (r.kind === undefined) continue;
     if (r.kind !== "trial_allocation") throw new Error(`LEDGER.json: unknown entry kind "${r.kind}" (${r.run_id})`);

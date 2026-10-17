@@ -1,6 +1,6 @@
 # rc-live-6 pre-registration (written before any model call)
 
-Status: **registered, not started.** The run needs budget authorisation (see "Budget").
+Status: **registered; authorised 17 Oct (see "Authorisation").**
 
 ## Frozen code
 
@@ -83,3 +83,13 @@ Max single call US$0.003127. Expected actual about US$0.008 (rc-live-5 averaged 
 - Strict bound from the meter's per-turn ceilings: about US$0.143.
 
 Start rule: the batch starts only if authorised unreserved budget ≥ the chosen cap and the guard admits each call; otherwise the result is "live check pending".
+
+## Authorisation (added before the run, 17 Oct 14:47 SGT)
+
+- DC raised the exercise allowance to **US$1.00** ("RAISE To $1"). `LEDGER.json` `exercise_cap_usd` 0.50 → 1.00 and
+  `scripts/rag2-live/ledger.ts` `EXERCISE_CAP_USD` 1.00; one run may still ask for at most US$0.50 (`RUN_CAP_MAX_USD`).
+  Exercise remaining after the raise: US$0.503738.
+- Run cap for `rc-live-6-booklet`: **US$0.15** (`RAG2_LIVE_RUN_CAP_USD` and `DEARPOLICY_RAG_LOOP_RUN_MAX_USD`), above
+  the strict per-turn bound of about US$0.143, so the batch cannot be stopped by its own allowance.
+- Per-call admission, meter limits and every scenario, turn and check above are unchanged.
+- `trial-codespace-1` stays open at US$0.15 reserved; it is not released or spent.
