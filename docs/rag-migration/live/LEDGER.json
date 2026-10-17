@@ -523,6 +523,19 @@
       "calls": 4,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "rc-live-8-booklet-cda",
+      "tested_code_sha": "6386aaa84f401f0c443a96971e8a9f8add5bf907",
+      "request_sha": "6386aaa84f401f0c443a96971e8a9f8add5bf907",
+      "at": "2026-10-17T09:43:30.509Z",
+      "preflight": false,
+      "run_cap_usd": 0.015,
+      "spent_usd": 0.002416,
+      "reserved_unsettled_usd": 0,
+      "calls": 4,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
