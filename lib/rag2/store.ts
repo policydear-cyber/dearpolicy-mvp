@@ -14,6 +14,8 @@ export type DocRow = {
   id: string; ownerId: string; insurer: string | null; productName: string | null; policyNumber: string | null; groupPolicyNumber: string | null;
   policyType: string | null; documentRole: string | null; personalCoverageConfirmed: boolean; status: string | null;
   fileHash: string | null; effectiveDate: string | null; expiryDate: string | null; documentDate: string | null; createdAt: string | null; pageCount: number | null;
+  /** Lifecycle version + last-update stamp of the document row: any change to the row (reprocess, relink, supersede, restore) changes it. */
+  rev?: string | null;
 };
 export type MemberRow = { id: string; displayName: string; preferredName: string | null; relationship: string; notes: string | null; dateOfBirth: string | null };
 export type LinkRow = { policyId: string; memberId: string; source: string | null; tier: string | null };
@@ -39,7 +41,7 @@ const iso = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOStrin
 // Nothing is shared across turns, households or processes; outside runLoop the readers behave exactly as before.
 // ---------------------------------------------------------------------------------------------------------------
 type TurnStoreState = {
-  accountId: string; docs: DocRow[] | null; members: MemberRow[] | null; links: Map<string, LinkRow[]>;
+  accountId: string; docs: DocRow[] | null; members: MemberRow[] | null; metaDigest: string | null; links: Map<string, LinkRow[]>;
   pages: Map<string, PageRow[]>; memo: Map<string, unknown>;
   stats: { docsSql: number; docsServed: number; membersSql: number; linksSql: number; pagesSql: number; pagesServed: number; pageChars: number; memoHits: number; memoMisses: number; rounds: number };
 };
@@ -48,23 +50,31 @@ const activeTurn = (accountId: string): TurnStoreState | null => { const t = tur
 export function withTurnStore<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
   // (re-entrant: the turn's outer scope -- the chat hook, which also covers the answer's citations, verification and saving -- is joined, not replaced)
   if (activeTurn(accountId)) return fn();
-  return turnStore.run({ accountId, docs: null, members: null, links: new Map(), pages: new Map(), memo: new Map(),
+  return turnStore.run({ accountId, docs: null, members: null, metaDigest: null, links: new Map(), pages: new Map(), memo: new Map(),
     stats: { docsSql: 0, docsServed: 0, membersSql: 0, linksSql: 0, pagesSql: 0, pagesServed: 0, pageChars: 0, memoHits: 0, memoMisses: 0, rounds: 0 } }, fn);
 }
 /** The start of a tool call or model step: the readable documents, members and links are read again on next use. */
 export function newToolRound(): void {
   const t = turnStore.getStore();
   if (!t) return;
-  t.docs = null; t.members = null; t.links.clear(); t.stats.rounds++;
+  t.docs = null; t.members = null; t.metaDigest = null; t.links.clear(); t.stats.rounds++;
 }
 export function turnStoreStats(): TurnStoreState["stats"] | null { return turnStore.getStore()?.stats ?? null; }
-const docKey = (d: DocRow) => [d.id, d.fileHash ?? "", d.pageCount ?? "", d.status ?? "", d.createdAt ?? "", d.documentRole ?? "", d.productName ?? ""].join("|");
+const docKey = (d: DocRow) => [d.id, d.fileHash ?? "", d.pageCount ?? "", d.status ?? "", d.createdAt ?? "", d.documentRole ?? "", d.productName ?? "", d.rev ?? ""].join("|");
 /** What a result derived from the household's documents depends on: the readable documents (version and role), the policy
  * links and the members. Part of every memo key. */
 export async function derivedFingerprint(accountId: string): Promise<string | null> {
-  if (!activeTurn(accountId)) return null;
+  const t = activeTurn(accountId);
+  if (!t) return null;
   const docs = await loadDocs(accountId), members = await loadMembers(accountId), links = await loadLinks(accountId, docs.map((d) => d.id));
-  return [docs.map(docKey).join(","), members.map((m) => [m.id, m.displayName, m.preferredName ?? "", m.relationship, m.notes ?? ""].join(":")).join(","), links.map((l) => `${l.policyId}:${l.memberId}:${l.tier ?? ""}`).sort().join(",")].join("#");
+  // EVERY field a benefit resolution reads is part of the fingerprint (not only identity): the owner, insurer, product and policy
+  // numbers (policy families), type, role, confirmation flag, dates, version stamp; each member's name, relation, notes and date of
+  // birth; each link's person, tier and source; and the household's removed / superseded document metadata (an amendment that was
+  // deleted or reversed changes what a policy's terms are even though it is no longer a readable document).
+  if (t.metaDigest == null) t.metaDigest = (await loadDocMeta(accountId)).map((m) => [m.id, m.role ?? "", m.policyNumber ?? "", m.groupPolicyNumber ?? "", m.active ? 1 : 0, m.superseded ? 1 : 0, m.supersededById ?? "", m.removedOn ?? "", m.effectiveDate ?? "", m.documentDate ?? ""].join(":")).sort().join(",");
+  return [docs.map((d) => JSON.stringify([d.id, d.ownerId, d.insurer, d.productName, d.policyNumber, d.groupPolicyNumber, d.policyType, d.documentRole, d.personalCoverageConfirmed, d.status, d.fileHash, d.effectiveDate, d.expiryDate, d.documentDate, d.createdAt, d.pageCount, d.rev ?? null])).join(","),
+    members.map((m) => JSON.stringify([m.id, m.displayName, m.preferredName, m.relationship, m.notes, m.dateOfBirth])).join(","),
+    links.map((l) => JSON.stringify([l.policyId, l.memberId, l.tier, l.source])).sort().join(","), t.metaDigest].join("#");
 }
 /** A result derived from ONE document version (its parsed tables, say), kept for the turn: independent of who it is read for. */
 export function turnMemoByDoc<T>(accountId: string, d: DocRow, key: string, build: () => T): T {
@@ -107,7 +117,8 @@ async function queryDocs(accountId: string, policyIds?: string[] | null): Promis
     `SELECT p.id::text AS id, p.family_member_id::text AS owner_id, p.insurer, p.product_name, p.policy_number,
             to_jsonb(p)->>'group_policy_number' AS group_policy_number, p.policy_type, p.document_role, p.personal_coverage_confirmed,
             p.status, to_jsonb(p)->>'file_hash' AS file_hash, to_jsonb(p)->>'effective_date' AS effective_date,
-            to_jsonb(p)->>'renewal_or_expiry_date' AS expiry_date, to_jsonb(p)->>'document_date' AS document_date, p.created_at, p.page_count
+            to_jsonb(p)->>'renewal_or_expiry_date' AS expiry_date, to_jsonb(p)->>'document_date' AS document_date, p.created_at, p.page_count,
+            COALESCE(to_jsonb(p)->>'lifecycle_version','') || '@' || COALESCE(to_jsonb(p)->>'updated_at','') AS rev
        FROM policies p
       WHERE p.account_id=$1 AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} AND p.processing_status='ready'
         AND ($2::text[] IS NULL OR p.id::text = ANY($2::text[]))
@@ -117,7 +128,7 @@ async function queryDocs(accountId: string, policyIds?: string[] | null): Promis
     policyNumber: (r.policy_number as string) ?? null, groupPolicyNumber: (r.group_policy_number as string) ?? null, policyType: (r.policy_type as string) ?? null,
     documentRole: (r.document_role as string) ?? null, personalCoverageConfirmed: !!r.personal_coverage_confirmed, status: (r.status as string) ?? null,
     fileHash: (r.file_hash as string) ?? null, effectiveDate: iso(r.effective_date), expiryDate: iso(r.expiry_date), documentDate: iso(r.document_date),
-    createdAt: r.created_at == null ? null : r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at), pageCount: r.page_count == null ? null : Number(r.page_count),
+    createdAt: r.created_at == null ? null : r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at), pageCount: r.page_count == null ? null : Number(r.page_count), rev: (r.rev as string) ?? null,
   }));
 }
 

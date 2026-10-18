@@ -296,8 +296,10 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
   delete next.pending;
   await opts.check?.();
   lap("checkMs");
+  // MEASUREMENT BOUNDARY: the trace is persisted BY the save below, so `trace.phases` holds only what was measured before it
+  // (loop, gate/rescue/verification, check). The duration of the save itself cannot be inside the record it writes and is not
+  // recorded here -- it is observed from outside (request wall time minus loopMs, or the browser's send -> visible time).
   trace.phases = { ...phases, ...(turnStoreStats() ? { storeSql: turnStoreStats()!.docsSql + turnStoreStats()!.linksSql + turnStoreStats()!.pagesSql + turnStoreStats()!.membersSql } : {}) };
   await opts.save({ conversation, token: context.token, state: next, message, answer, jobId: opts.jobId });
-  lap("saveMs");
   return { answer, retrieved: [] };
 }

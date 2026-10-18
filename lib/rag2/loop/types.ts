@@ -78,7 +78,7 @@ export type TraceTurn = {
   turn: number; userMessage: string; modelId: string; modelKind: "hosted" | "scripted"; steps: number;
   usage: ModelUsage; latencyMs: number; toolCalls: TraceToolCall[];
   /** Where the loop's time went: model calls, each tool (calls, ms), benefit-record resolution (it is also inside the tool times), the rest. */
-  /** Phase times of the turn in ms (loop, composition, figure gate, save): where the application's time went. */
+  /** Phase times of the turn in ms (loop, gate report, rescue, figure gate, check) measured BEFORE the save that persists this record. The save's own duration is not in it (it cannot be: it is measured after the record is written). */
   phases?: Record<string, number>;
   timings?: { modelMs: number; toolMs: Record<string, { n: number; ms: number }>; resolve: { n: number; ms: number }; otherMs: number; /** the turn store's reads (lib/rag2/store.ts): SQL statements issued and reads served from the turn */ store?: Record<string, number> };
   /** The evidence the visible answer rests on (ids into RagLoopState.evidence). */

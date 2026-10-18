@@ -21,6 +21,7 @@ import * as PR50 from "../fixtures/rag2-pr50/household";
 import * as BOOKLET from "../fixtures/reliable-chat/booklet";
 import { gradeP50A } from "./pr50a-check";
 import { STRUCTURED_GRADERS } from "./structured-check";
+import { DEATH_GRADERS, deathControls } from "./death-check";
 
 type Check = { id: string; dim: "C" | "K" | "S" | "U"; name: string; ok: boolean; detail?: string };
 type Verdict = "PASS" | "FAIL" | "BLOCKED" | "INCOMPLETE";
@@ -359,7 +360,7 @@ export function gradeFL5(id: string, conv: any): Graded {
 
 export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, FL4b: gradeFL4b, FL5a: gradeFL5, FL5b: gradeFL5, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
-  RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX, ...STRUCTURED_GRADERS };
+  RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX, ...STRUCTURED_GRADERS, ...DEATH_GRADERS };
 
 /** v2 controls on the ACTUAL rc-live-1 transcripts (committed): answers the v1 grader passed that were not useful now
  * fail on the intended check. The v1 grades themselves are kept as they were (live/rc-live-1-grade.md). */
@@ -404,6 +405,7 @@ function controls() {
     ["v4 FL3 a bare $ shown as S$2,000", gradeFL3("FL3", conv([{ summary: "The booklet's Compassionate Death Allowance Benefit pays funeral expenses incurred, up to S$2,000, if death results from an Accident, on receipt of proof of death." }])), "FAIL", "A1C"],
     ["v4 FL3 good", gradeFL3("FL3", conv([{ summary: "The booklet's Compassionate Death Allowance Benefit pays funeral expenses incurred, up to 2,000 (printed with a “$” sign; the document does not say which currency), if death results from an Accident within 365 days, on receipt of proof of death and the original receipts.", details: ["Daniel's certificate lists Daniel under Group Personal Accident as of 01/04/2024.", "A dated certificate shows who it listed on that date; it does not by itself establish cover on a later date."] }])), "PASS", null],
     ...liveControls(),
+    ...(deathControls() as unknown as [string, Graded, Verdict, string | null][]),
   ];
   let ok = true;
   for (const [name, g, want, failing] of cases) {

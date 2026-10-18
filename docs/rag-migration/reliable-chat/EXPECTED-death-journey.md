@@ -95,3 +95,30 @@ Node 22.
 In the actual library Term Life is S$1,000,000 and Personal Accident S$600,000, both dated 6 October 2022 (06/10/2022). The offline
 death checks run on two households: `death-journey-actual-values.ts` (those values) and `death-journey.ts` (Term Life S$500,000,
 dated 1 April 2024), kept as a **deliberately different control** and never described as reproducing the actual values.
+
+## Live batch addendum (written 18 Oct 2026, before any paid call of this batch)
+
+* **Fixture:** `death-journey-actual-values.ts` (DJR): Daniel's certificate rows Group Term Life S$1,000,000 and Group Personal
+  Accident S$600,000, both "As of" 06/10/2022; Grace's own rows S$200,000 / S$100,000; the Compassionate Death Allowance printed in
+  the booklet as a bare `$2,000` (currency unstated) and in the product summary as `up to S$2,000`; the invented adjacent
+  dismemberment/fracture sections of `death-journey.ts` are retained as the borrowing control. This is the anonymised synthetic
+  household, **not the actual library**: the batch cannot show the actual library is fixed.
+* **Scenarios, run once each in this order** (`RAG2_LIVE_HOUSEHOLD=deathjourney --scenarios D1,D2,D3,F1`): D1 and D2 = "What happens if
+  Daniel dies? What would the family receive from his insurance, and what should we do?" (two independent attempts, fresh
+  conversations); D3 = "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and
+  what do I need to do first?"; F1 = "If Daniel breaks his hip in an accident, what does the Simple Fracture benefit pay, what condition
+  applies to it, and is it separate from the death benefits?". Wording is fixed in `scenario-household.ts`.
+* **Grader `death-v1`** (`scripts/rag2-live/death-check.ts`, 53 controls in `reliable-chat-check.ts --controls`, all passing before the
+  run). Death turns require: Term Life S$1,000,000 on a sentence naming Term Life and Daniel; Personal Accident S$600,000 on a sentence
+  naming Personal Accident; the 6 October 2022 date and no current-cover claim; the two kept separate; none of Grace's figures attached to
+  Daniel; accident-dependence stated; the Compassionate Death Allowance with accident, proof of death / prescribed form and Core-or-Voluntary
+  conditions; the booklet `$2,000` never shown as S$2,000; no dismemberment/fracture benefit evaluated; a visible contact step; no
+  question; no invented paperwork; no payment promise; no raw ids; no budget dead end; returned = saved = displayed. F1 requires: the
+  conditional hip illustration S$3,750 (75% of S$5,000), the fracture's own condition with no borrowed 365-day/death/dismemberment text,
+  separation from the death benefits, no question, a contact step.
+* **Not changed after seeing answers.** A grader FAIL is kept; a grader PASS does not override reading the full transcript, which is done
+  separately and recorded separately (correctness, completeness, questions, latency).
+* **Worst-case admission:** the guard reserves each call's worst case (input estimated high + max output tokens at the configured model's
+  price, `openai:gpt-6-luna` US$0.10 / US$0.50 per million) and refuses a call that would exceed the US$0.05 run cap or the ledger's
+  unreserved allowance. The batch is one run id (`dj-live-1`), cap US$0.05, one ledger entry appended once from the actual result. The
+  US$0.15 reservation is never counted as available.

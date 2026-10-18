@@ -16,6 +16,17 @@ export const RESULT_ALLOWANCE = 2600;
 /** Consecutive searches adding nothing new after which another is not admitted. */
 export const MAX_IDLE_SEARCHES = 2;
 
+/** True when the union of `spans` covers [start, end) completely. */
+export function covers(spans: [number, number][], start: number, end: number): boolean {
+  let at = start;
+  for (const [s, e] of [...spans].sort((a, b) => a[0] - b[0])) {
+    if (s > at) return false;
+    if (e > at) at = e;
+    if (at >= end) return true;
+  }
+  return at >= end;
+}
+
 export type ShownSpans = Map<string, [number, number][]>;
 export type SearchProgress = { hits: number; novel: number; repeated: number; dropped: number; /** evidence of the hits not shown (their ids are still allocated in order, so ids recorded in earlier turns keep their meaning) */ omitted: any[] };
 
@@ -31,12 +42,15 @@ export function compactSearch(res: { ok: boolean; data?: unknown; evidence: unkn
   for (const h of d.hits) {
     const p = h?.evidence?.passage as { start: number; end: number; onPage: number } | undefined;
     if (!p || typeof p.start !== "number") { out.push(h); full.push(h); continue; }
-    const key = `${h.evidence.policyId}#${p.onPage}`;
+    // Identity of the shown text: document, ITS VERSION (file hash) and page. Offsets of one version mean nothing in another, so a
+    // replaced document's passage is never matched against what the old version showed.
+    const key = `${h.evidence.policyId}#${h.evidence.documentHash ?? ""}#${p.onPage}`;
     const seen = spans.get(key) ?? [];
-    const len = Math.max(1, p.end - p.start);
-    const overlap = seen.reduce((n, [s, e]) => n + Math.max(0, Math.min(e, p.end) - Math.max(s, p.start)), 0);
     const stub = (why: string) => ({ evidence_id: idOf(h.evidence), page: h.page, excerpt: why });
-    if (overlap / len >= 0.5) { repeated++; out.push(stub("(overlaps a passage already returned this turn)")); continue; }
+    // A passage is replaced by a reference ONLY when every character of it was already returned (the union of the shown spans
+    // covers it entirely). A partial overlap -- however large -- may hold a new condition, exclusion, amount or heading in its
+    // remaining part, and a safe subtraction of text is not attempted: the complete passage is returned.
+    if (p.end > p.start && covers(seen, p.start, p.end)) { repeated++; out.push(stub("(already returned in full earlier in this turn)")); continue; }
     seen.push([p.start, p.end]); spans.set(key, seen);
     const kept = { policyId: h.policyId, productName: h.productName, page: h.page, text: h.text, evidence: h.evidence };
     out.push(kept); full.push(kept);
