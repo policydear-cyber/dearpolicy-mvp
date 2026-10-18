@@ -717,6 +717,20 @@
       "refused": 0,
       "failed": 0,
       "note": "Four live attempts (D1, D2 repeated broad death question; D3 husband-passed-away paraphrase; F1 fracture control) on the synthetic death-journey household (DJR), not the actual library, through the existing dedicated connection and relay. Actual spend from the run's own budgetUsed. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
+    },
+    {
+      "run_id": "dj-live-2",
+      "tested_code_sha": "605f677d25428d29055897fdfc5b5336029ad9fd",
+      "request_sha": "605f677d25428d29055897fdfc5b5336029ad9fd",
+      "at": "2026-10-18T17:21:06.006Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.011186,
+      "reserved_unsettled_usd": 0,
+      "calls": 21,
+      "refused": 0,
+      "failed": 0,
+      "note": "Death-journey live batch 2: D1, D2, D3, F1, DI once each; exact tested SHA 605f677 (cause/applicability repair); original death-v1 grader unchanged"
     }
   ]
 }

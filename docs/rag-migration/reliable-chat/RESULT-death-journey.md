@@ -103,3 +103,12 @@ real S$500,000 (regex tightened to `S$500(?![\d,])`, a false-positive fix; the d
 **Remaining gaps (unproven):** the repairs are not live-tested (no second batch authorised); the actual library was never tested, only the synthetic
 DJR household (whose shared group policy number is a fixture property); accident-only death benefits are still listed for a death by illness
 (recorded in the test); the unchanged grader would still grade the live answers FAIL; model behaviour after the repairs is unknown.
+
+
+## Cause / applicability repair and live batch 2 (dj-live-2)
+
+Repair (offline, commit 605f677): each benefit's own printed accident condition now decides applicability by the reported cause. Reported illness: accident-only benefits are named with their printed condition and no amount, never offered as potentially payable; Term Life information is kept; unknown cause: the accident condition is stated without assuming it; a correction from accident to illness withdraws the dependent illustration; narrow questions stay narrow. This supersedes the earlier known gap "accident-only death benefits listed for illness". Offline evidence: `reliable-chat:death-cause-test` (C1-C7, returned = saved = displayed; mutation fails 7 checks), full offline run 62 suites pass except the known `rag2:s52-replay`, typecheck clean, build clean, browser journeys deathjourney 3, actuallib 8, booklet 6 (+3 skipped by design), rc8 3, tan 3 all pass, run on the frozen tree without edits.
+
+Actual-model batch dj-live-2 (live-tested SHA `605f677d25428d29055897fdfc5b5336029ad9fd`, `openai:gpt-6-luna`, D1, D2, D3, F1, DI once each, US$0.011186, 21 calls; ledger spent US$0.501213 of US$1, the US$0.15 reservation untouched): original grades are all FAIL (D1 A6, D2 A6, D3 G1+A6, F1 F3, DI G2+I1+I2). Reading the complete answers (`docs/rag-migration/live/dj-live-2-regrade.md`): D1, D2, D3 and F1 are substantively correct (the failed checks are literal-grader misses or moderate repetition); DI has a critical failure: the applicable Group Term Life S$1,000,000 is missing (its statements were dropped by verification and the certificate amount was not re-added) and a Personal Accident S$600,000 certificate line survives without an accident-only caveat.
+
+Recommendation: HOLD. Critical usefulness/correctness failure remaining: reported-illness answer lacks the applicable benefit's amount and surfaces an accident-only figure. No second paid batch was started; PR #56 stays an unmerged draft; main and production are unchanged.
