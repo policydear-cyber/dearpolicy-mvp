@@ -281,7 +281,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   state.speakerId = state.speakerId ?? input.speakerId ?? null;
   if (!state.subjectId && input.initialSubjectId) state.subjectId = input.initialSubjectId;
   const householdIds = new Set(input.people.map((p) => p.id));
-  const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
+  const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, speakerConfirmed: !!state.speakerConfirmed, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
   ctx.topicText = [...state.history.map((h) => h.user), input.message].join(" ");
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
@@ -341,7 +341,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   // meant), before the model is called; the model is told who was chosen.
   if (pendingBefore?.kind === "person" && input.personChoiceId && pendingBefore.options.some((o) => o.id === input.personChoiceId)) {
     const id = input.personChoiceId;
-    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; }
+    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; ctx.conversation.speakerConfirmed = true; }
     else { state.subjectId = id; state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5); ctx.conversation.lastSubjectId = id; }
     unsettled = new Set();
     state.pending = null;
@@ -718,6 +718,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   let followUp = false;
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
+  let deathToppedUp = false;
+  let relationNoted = false;
   /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
    * leaves out what it rejects, as it would have without the repair. */
   let beforeRepair: LoopReply | null = null;
@@ -1461,11 +1463,29 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
    * supported disposition: its printed terms, written by the server from its resolved record. What was not read is named: a
    * claims procedure no retrieved passage prints is never invented. Event/product relationships come from event-relations.ts. */
   const CLAIMS_PROCEDURE = /\b(?:claims? (?:procedure|process|forms?|documents?|requirements?)|how to (?:make (?:a )?)?claim|notice of claim|documents? (?:required|needed)|submit(?:ting)? (?:a )?claim)\b/i;
-  const deathCompletion = async (subject: string, given: Record<string, unknown>[]): Promise<{ extra: Record<string, unknown>[]; steps: string[]; gap: string | null; rows: string[] } | null> => {
-    if (chatContract(env) !== "benefits" || !subject || !familiesOf(input.message).has("death")) return null;
+  // `shown` = the text of the sentences that SURVIVED composing: a death benefit the reply names there is covered; one whose
+  // sentence was omitted whole by validation (or never written) is not, and its server-written terms are added.
+  const namedIn = (benefit: string, shown: string[]) => {
+    const norm = (t: string) => t.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+    const hay = " " + shown.map(norm).join(" | ") + " ";
+    const parts = [benefit, ...benefit.split(":")].map(norm).filter((p) => p.length >= 8);
+    return parts.some((p) => hay.includes(" " + p + " "));
+  };
+  const deathCompletion = async (subject: string, given: Record<string, unknown>[], shown: string[] = [], broadOnly = false): Promise<{ extra: Record<string, unknown>[]; steps: string[]; gap: string | null; rows: string[] } | null> => {
+    // (only when the question is ABOUT a death: a comparison that mentions "the death benefits" beside a fracture, hospital stay or
+    // dismemberment is not turned into a broad death assessment)
+    const asked = familiesOf(input.message);
+    if (chatContract(env) !== "benefits" || !subject || !asked.has("death") || asked.size > 1) return null;
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    // (a question that NAMES one benefit or product -- "what does Daniel's Term Life pay?" -- is narrow: the other death benefits are
+    // not added to it; only a broad question about what happens on a death is answered for every documented death benefit)
+    if (broadOnly) {
+      const asks = " " + input.message.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+      const labelled = recs.some((r) => [r.benefit, ...r.benefit.split(":")].map((x) => x.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim()).some((x) => x.length >= 8 && asks.includes(" " + x + " ")));
+      if (labelled || /\b(?:term life|personal accident|accidental death|compassionate death|repatriation|funeral|burial|booklet|handbook|brochure|wording)\b/i.test(input.message)) return null;
+    }
     const covered = new Set(given.filter((x) => x && x.kind === "benefit_terms").map((x) => String(x.benefit_id)));
-    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && (familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
+    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && !namedIn(r.benefit, shown) &&(familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
     const seen = new Set<string>();
     const extra: Record<string, unknown>[] = [];
     const rows: string[] = [];
@@ -1490,6 +1510,40 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       rows.push("(no death benefit established)");
     }
     return extra.length || gap ? { extra, steps, gap, rows } : null;
+  };
+  /** dj-live-1 F1: "is it separate from the death benefits?" -- a question about how two benefits relate. What the documents establish
+   * is stated from the resolved records (each benefit, its document and page); whether both can be paid for the same event is
+   * said as open unless a passage read this turn prints a stacking rule. Nothing is added or totalled, and the death benefits
+   * are NAMED, not expanded (a comparison is not turned into a death assessment). */
+  const STACK_Q = /\b(?:separate(?:ly)?(?:\s+(?:from|to))?|in addition to|on top of|as well as|together with|combined with|alongside|in total|add(?:ed)? (?:up|together|to)|both|stack\w*|cumulative|as well)\b/i;
+  const STACK_WORDING = /\b(?:in addition to|additional to|on top of|cumulative|only one of|whichever is (?:higher|greater)|(?:not|never) (?:be )?(?:payable|paid) (?:together|in addition|concurrently|for the same)|aggregate|no more than one|separate(?:ly)? from)\b/i;
+  const relationNote = async (subject: string, composedText: string[]): Promise<Record<string, unknown> | null> => {
+    const asked = familiesOf(input.message);
+    if (chatContract(env) !== "benefits" || !subject || asked.size < 2 || !STACK_Q.test(input.message)) return null;
+    if (composedText.some((t) => /\b(?:same event|paid together|payable together|in addition|separate from)\b/i.test(t))) return null;
+    const read = [...shownThisTurn].map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e).map((e) => evidenceTextOf(e));
+    if (read.some((t) => STACK_WORDING.test(t))) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const core = (t: string) => t.replace(/\s*\(.*$/, "").replace(/\s+(?:benefit\s+)?limit\b.*$/i, "").replace(/\s+benefit$/i, "").trim();
+    const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const asks = " " + norm(input.message) + " ";
+    const usable = recs.filter((r) => r.status !== "unsupported" && r.status !== "conflicting" && !r.policy.personalProof);
+    // The benefit(s) the question NAMES (by label) are stated with their page; a family it only mentions in general ("the death
+    // benefits") is named by its benefits' labels, not expanded.
+    const named: typeof recs = [], general = new Map<string, string[]>();
+    for (const f of asked) {
+      const ofF = usable.filter((r) => familiesOf(r.benefit).has(f) && familiesOf(r.benefit).size === 1);
+      const hit = ofF.filter((r) => { const c = norm(core(r.benefit)); return c.length >= 8 && asks.includes(" " + c + " "); });
+      if (hit.length) { const seen = new Set<string>(); for (const r of hit) { const k = norm(core(r.benefit)); if (!seen.has(k)) { seen.add(k); named.push(r); } } }
+      else if (ofF.length) general.set(f, [...new Set(ofF.map((r) => core(r.benefit)).filter(Boolean))].slice(0, 4));
+    }
+    if (!named.length || !general.size) return null;
+    const join = (xs: string[]) => xs.length <= 2 ? xs.join(" and ") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
+    const what = named.map((r) => `${core(r.benefit)} (page ${r.source.page})`);
+    const products = [...new Set(named.map((r) => r.policy.product).filter(Boolean))];
+    const against = [...general.entries()].map(([f, labels]) => `the ${f} benefits (${join(labels)})`);
+    const ev = [...named.map((r) => r.source.evidence), ...usable.filter((r) => [...general.values()].some((ls) => ls.includes(core(r.benefit)))).map((r) => r.source.evidence)];
+    return { kind: "fact", subject_id: subject, text: `${products.length === 1 ? `The ${products[0]}` : "The documents"} lists ${join(what)} separately from ${join(against)}, each with its own printed terms; the passages I read do not say whether they can be paid for the same event, so that is not established and no total is given.`, evidence_ids: [...new Set(ev.map((e) => evidenceIdOf(state, e, "statement")))] };
   };
   const deathStopAnswer = async (): Promise<Composed | null> => {
     const subject = String(state.subjectId ?? "");
@@ -1790,6 +1844,39 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             }
           }
         }
+        // Death-journey live repair (dj-live-1 D2): a death question is answered for every documented death benefit of the person.
+        // One the reply left out, or whose sentence validation omitted whole, is added from its resolved record (the server's
+        // wording, never the model's); a benefit the reply already states is not repeated.
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences) && !deathToppedUp) {
+          deathToppedUp = true;
+          const sentences = call.arguments.sentences as Record<string, unknown>[];
+          const subj2 = String(call.arguments.subject_id ?? state.subjectId ?? "");
+          const dc2 = await deathCompletion(subj2, sentences, r.terminal.composed.sentences.map((x) => x.text), true);
+          if (dc2?.extra.length && !dc2.rows.includes("(no death benefit established)")) {
+            const nextSteps = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : dc2.steps;
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...dc2.extra], next_steps: nextSteps } };
+            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p3.length) {
+              await bindCitedFigures(again);
+              const r3 = action(again);
+              if (r3.terminal?.kind === "final") { r = r3; call.arguments = again.arguments; (trace.adjusted ??= []).push(`final_answer: added the printed terms of ${dc2.rows.join("; ")} (death benefits of this person the reply did not state)`); }
+            }
+          }
+        }
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences) && !relationNoted) {
+          relationNoted = true;
+          const note = await relationNote(String(call.arguments.subject_id ?? state.subjectId ?? ""), r.terminal.composed.sentences.map((x) => x.text));
+          if (note) {
+            const sentences = call.arguments.sentences as Record<string, unknown>[];
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, note] } };
+            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p4.length) {
+              await bindCitedFigures(again);
+              const r4 = action(again);
+              if (r4.terminal?.kind === "final" && r4.terminal.composed.sentences.some((x) => x.text === note.text)) { r = r4; call.arguments = again.arguments; (trace.adjusted ??= []).push("final_answer: stated what the documents establish about how the benefits asked about relate (listed separately) and that whether they can be paid together is open"); }
+            }
+          }
+        }
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
           if (repair) { gateRepaired = true; beforeRepair = r.terminal; meter.grantRepairCall(); r = { result: { ok: false, error: repair } }; }
@@ -1858,7 +1945,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const id = r.person.id;
           if (pendingBefore?.kind === "person" && pendingBefore.purpose === "speaker" && pendingBefore.options.some((o) => o.id === id) && !state.speakerId) {
             // The household said who is typing: that is the speaker, not who the conversation is about.
-            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id;
+            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; ctx.conversation.speakerConfirmed = true;
           } else setSubject(id, r.via === "self");
           unsettled = new Set();
           if (state.pending?.kind === "person") state.pending = null;

@@ -66,7 +66,14 @@ const UNCERTAINTY = new RegExp(String.raw`(?:\b${NEGATOR}${FILLER}\s+(?:establis
 // is a statement that something is not known, set aside like "does not establish whether".
 // V1.5 (review of the s52 travel conclusion): "does not document / show cover for X" says cover is NOT PROVEN -- an
 // uncertainty, not an exclusion -- and is set aside like "does not establish whether".
-export function withoutUncertainty(text: string): string { return String(text ?? "").replace(UNCERTAINTY, " "); }
+// Death-journey live repair (dj-live-1 D2): two more ways of saying "this is not known" were read as exclusions, so the
+// Compassionate Death Allowance and Repatriation sentences ("the document does not say which currency) ... if an insured
+// person dies") and "a dated amount is not confirmation of current cover" were dropped whole:
+//  - silence about the currency of a printed amount ("does not say / state / print which currency");
+//  - "is not confirmation / proof / evidence of (current) cover": a dated amount is not proof of cover now.
+const CURRENCY_SILENCE = /\b(?:do|does|did)\s+not\s+(?:say|state|print|name|give|identify|show|specify)\s+(?:which|what|the)\s+currency\b[^;.):!?]*\)?/gi;
+const NOT_PROOF_OF_COVER = /\b(?:is|are|was|were)\s+not\s+(?:a\s+|any\s+)?(?:confirmation|proof|evidence|guarantee)\s+of\s+(?:\w+\s+){0,2}?(?:cover|coverage|enrol?lment)\b/gi;
+export function withoutUncertainty(text: string): string { return String(text ?? "").replace(UNCERTAINTY, " ").replace(CURRENCY_SILENCE, " ").replace(NOT_PROOF_OF_COVER, " "); }
 /** V1.4: an affirmative claim that cover IS / WAS in force (or active / current). */
 const IN_FORCE_CLAIM = /\b(?:is|was|were|are|remains?|remained|has been|had been)\s+(?:still\s+|then\s+)?(?:in force|in effect|active|current)\b/i;
 const VALIDITY_PASSAGE = /\bperiod of (?:insurance|cover)\b|\bvalid (?:from|until|till|to)\b|\bin force\b|\bexpir\w*\b|\brenew\w*\b|\b(?:from|commencing)\s+\d{1,2}[\s\/.-]\w+[\s\/.-]\d{2,4}\s+(?:to|until|-)\s+\d/i;

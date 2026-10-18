@@ -24,6 +24,8 @@ export type Person = { id: string; name: string; preferredName: string | null; r
 export type ConversationContext = {
   /** The household member who is speaking ("me" / "my"); defaults to the member whose relationship is self. */
   speakerId?: string | null;
+  /** True when the person typing was SAID or ASKED (the household answered who is typing); false when speakerId is only inferred from the single "self" member. */
+  speakerConfirmed?: boolean;
   /** The person the conversation was last about (what "she" / "he" / "they" can mean). */
   lastSubjectId?: string | null;
   /** People mentioned recently, newest first (used only to detect that a pronoun is ambiguous). */
@@ -196,6 +198,13 @@ export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: 
     if (exact.length && also.length) {
       const options = [...exact, ...also];
       return { status: "ambiguous", options, question: `Which ${rel.word} do you mean — ${listRel(options)}?`, reason: `more than one household member may be meant by “${rel.word}” (including a ${also.map((p) => p.relationLabel ?? relationWord(p.relation, p.gender)).filter((w, i, a) => a.indexOf(w) === i).join(" / ")})` };
+    }
+    // The relation word is stated from the SPEAKER's side, and the speaker is unknown when it was only inferred from the
+    // household's "self" label (no explicit speaker in the conversation). If the one person the name matches IS that
+    // inferred "self" member, a relation word that cannot describe oneself ("my husband Daniel") does not contradict the
+    // name: the typist is someone else, and the name picks the person. No question is asked and nobody is guessed.
+    if (byName.length === 1 && !exact.length && !ctx?.speakerConfirmed && byName[0].relation === "self" && rel.cls !== "self" && speaker?.id === byName[0].id) {
+      return { status: "ok", person: byName[0], via: "name" };
     }
     if (byName.length && !exact.length) {
       const near = byName.filter(relNear);

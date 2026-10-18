@@ -144,6 +144,7 @@
     "reliable-chat:live-regressions-test": "node --import tsx scripts/reliable-chat-live-regressions.ts && HH=wong node --import tsx scripts/reliable-chat-live-regressions.ts",
     "reliable-chat:death-journey-test": "node --import tsx scripts/reliable-chat-death-journey.ts",
     "reliable-chat:cache-compaction-test": "node --import tsx scripts/reliable-chat-cache-compaction.ts",
+    "reliable-chat:death-live-repairs-test": "node --import tsx scripts/reliable-chat-death-live-repairs.ts",
     "reliable-chat:cases-test": "node --import tsx scripts/reliable-chat-cases.ts && HH=wong node --import tsx scripts/reliable-chat-cases.ts",
     "reliable-chat:conflicts-test": "node --import tsx scripts/reliable-chat-case-selection-regressions.ts && node --import tsx scripts/reliable-chat-conflicts.ts",
     "reliable-chat:booklet-test": "node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_CURRENCY=related node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_CURRENCY=unrelated node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_SECTIONS=none node --import tsx scripts/reliable-chat-booklet.ts && node --import tsx scripts/reliable-chat-batched-steps.ts && npm run -s reliable-chat:applicability-test && npm run -s reliable-chat:cda-recorded-test",

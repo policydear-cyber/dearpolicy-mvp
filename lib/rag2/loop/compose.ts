@@ -289,7 +289,7 @@ const ENROL_NEG = [
  * statement about whether a documented benefit applies to the person, which runs together three different things: the
  * benefit the wording documents, the person's DATED certificate listing, and eligibility for the event now. */
 const APPLIES_NEG = /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|prove|verify)\w*\s+(?:that\s+|whether\s+)?(?:this|the|that|his|her|their|any)\s+(?:[\w’'-]+\s+){0,4}?(?:benefit|allowance|cover|coverage)\s+(?:\w+\s+){0,2}?(?:applies|apply|would apply|is payable|covers)\s+(?:to|for)\b/i;
-export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages">, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
+export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages"> & { docFacts?: Map<string, string> }, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
   // (a statement that also says the person's enrolment or listing is unconfirmed is answered by the dated listing, as
   // before; an applicability statement alone keeps its own question beside the listing)
   const enrol = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
@@ -307,7 +307,17 @@ export function enrolmentAbsenceClaim(text: string, subjectId: string | null, ci
   if (target) {
     const t = target.toLowerCase();
     const listed = [...new Set(rows.map((b) => b.benefit.label))].some((l) => { const w = (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((x) => x !== "group"); return w.length > 0 && w.every((x) => t.includes(x)); });
-    const scheme = /\b(?:scheme|policy|certificate)\b/.test(t) && !/\b(?:benefit|allowance|core|voluntary|optional|section|part)\b/.test(t);
+    let scheme = /\b(?:scheme|policy|certificate)\b/.test(t) && !/\b(?:benefit|allowance|core|voluntary|optional|section|part)\b/.test(t);
+    // dj-live-1 D1: "enrolment in that booklet". A booklet / summary / wording is a DOCUMENT, not something one enrols in; when it
+    // is printed under the same group policy number as the person's own certificate (the cited document's face states that
+    // number), the certificate's dated listing under that group policy answers the denial. What stays open -- the Core or
+    // Voluntary Scheme, whether a particular benefit is among their covers, cover on the event date -- is other wording and is
+    // not touched here (the "applicable / core / voluntary" and "benefit / allowance" targets above are still returned as said).
+    if (!scheme && /\b(?:booklet|handbook|brochure|summary|wording|document|guide)\b/.test(t) && !/\b(?:benefit|allowance|core|voluntary|optional|section|part)\b/.test(t)) {
+      const norm = (x: string | null | undefined) => String(x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const groups = new Set(rows.map((b) => norm(b.policy.groupPolicyNumber)).filter(Boolean));
+      scheme = cited.some((e) => !rows.some((b) => b.policy.id === e.policyId) && String(ctx.docFacts?.get(e.policyId) ?? "").split(/\s+/).some((w) => groups.has(norm(w))));
+    }
     if (!listed && !scheme) return null;
   }
   // the product the answer's wording is about, as that wording's own section headings name it

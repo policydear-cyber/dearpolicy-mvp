@@ -75,9 +75,9 @@ export function recordsFor(ctx: ToolContext, subjectId: string): Promise<Benefit
   }
   return p;
 }
-export function createToolContext(args: { accountId: string; speakerId?: string | null; lastSubjectId?: string | null; asOf?: string | null }): ToolContext {
+export function createToolContext(args: { accountId: string; speakerId?: string | null; speakerConfirmed?: boolean; lastSubjectId?: string | null; asOf?: string | null }): ToolContext {
   if (!args.accountId) throw new Error("a tool context needs the household's account id");
-  return { accountId: args.accountId, asOf: (args.asOf ?? new Date().toISOString()).slice(0, 10), conversation: { speakerId: args.speakerId ?? null, lastSubjectId: args.lastSubjectId ?? null, recentSubjectIds: [] }, values: new Map(), results: new Map(), seq: 0 };
+  return { accountId: args.accountId, asOf: (args.asOf ?? new Date().toISOString()).slice(0, 10), conversation: { speakerId: args.speakerId ?? null, speakerConfirmed: !!args.speakerConfirmed, lastSubjectId: args.lastSubjectId ?? null, recentSubjectIds: [] }, values: new Map(), results: new Map(), seq: 0 };
 }
 
 const str = (d: string): JsonSchema => ({ type: "string", description: d });

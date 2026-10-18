@@ -72,3 +72,34 @@ read a claims procedure ... so none is listed").
   `person_benefits` 93 ms, 2 searches 105 ms. Remote-database round trips were not measured.
 * Death answer, scale 1: outcome `final_answer`, model calls with inputs 10,965 / 14,896 / 16,237 / 14,229 tokens, 2 of 7
   scripted searches admitted (limit 80,000 unchanged).
+
+## Live batch dj-live-1 and the repairs it demanded (added after the paid batch)
+**Status: HOLD.** The batch ran once (4 attempts: D1, D2 = two death attempts, D3 = fresh "my husband Daniel" paraphrase, F1 = fracture
+control with a death-benefit mention); no second paid batch is authorised or has run. Spend US$0.00545 over 14 calls, recorded once in
+`docs/rag-migration/live/LEDGER.json` (earlier entries and the US$0.15 reservation unchanged; spent US$0.49002720, reserved US$0.15,
+unreserved allowance US$0.3599728). Live-tested SHA `e7c6c6546ff0843324675c8a226ade955d24c929` (model `openai:gpt-6-luna`). The original grader
+(`death-check.ts`, death-v1) and grades (all four FAIL) are unchanged: `dj-live-1-grade.md/.json`. The separate reading, with each failed check's
+actual sentence, is `dj-live-1-regrade.md` (4 product failures incl. one critical, 4 grader false positives, kept apart).
+
+| run | live result | boundary repaired (shared, not phrase-specific) | replay |
+|---|---|---|---|
+| D3 | **critical**: only "who is this about?", no benefits | `resolvePersonAmong`: a speaker inferred from the single "self" member is not treated as a conflict with "my husband Daniel"; a confirmed speaker keeps the strict rule (`speakerConfirmed`) | fails without the repair, passes with it, through the real route |
+| D2 | Compassionate Death Allowance (and Repatriation) missing | `statements.ts`: "does not say which currency" and "is not confirmation/proof of cover" are uncertainty, not exclusions; plus a server death top-up after verification adds only a record's printed terms | fails without, passes with |
+| D1 | "enrolment in that booklet is not confirmed" | `compose.ts`: a booklet/summary printed under the same group policy number as the person's own certificate is the wording of that scheme, so the denial is replaced by the certificate's dated listing; Core/Voluntary and cover-on-event-date stay unresolved, as said | fails without, passes with; unsupported-denial and legitimate-uncertainty controls |
+| F1 | "is it separate from the death benefits?" unanswered | a comparison that mentions death benefits is not expanded into a death assessment; the server states the documented distinction and leaves payment together open unless wording prints it (`relationNote`) | fails without, passes with; no total or stacking conclusion |
+
+Death top-up controls (`scripts/reliable-chat-death-live-repairs.ts`, 8 groups): another person's figure, a booklet S$ currency, a wrong-document
+statement and a superseded summary are not restored; a narrow Term Life question, a two-benefit comparison, a fracture question that only mentions
+the death cover, and a funeral/booklet question are not expanded. Mutation runs fail the intended checks.
+
+**Verification (Node 22, scripted model).** `tsc --noEmit` clean; `next build` OK. Full offline run: 61 of 62 suites pass; the one failure is
+`rag2:s52-replay`, pre-existing and unchanged. Browser: deathjourney 3/3, actual-library 8/8, RC8/FL5 3/3, Tan 3/3, booklet 6 (3 skipped by design).
+Two existing tests broke on the first run because the top-up legitimately added death lines: a funeral/booklet question was wrongly treated as
+broad (fixed in the product: such questions are narrow), and the structured-answers N3 / grader FOREIGN pattern `S$500\b` matched Daniel's
+real S$500,000 (regex tightened to `S$500(?![\d,])`, a false-positive fix; the death-journey grader is untouched).
+
+**Latency in the live run** (sandbox, local DB): D1 18.2 s (model 16.9 s), D2 12.5 s (11.2 s), D3 8.3 s, F1 13.8 s (12.3 s). The application part is ~1-1.5 s; the rest is model time.
+
+**Remaining gaps (unproven):** the repairs are not live-tested (no second batch authorised); the actual library was never tested, only the synthetic
+DJR household (whose shared group policy number is a fixture property); accident-only death benefits are still listed for a death by illness
+(recorded in the test); the unchanged grader would still grade the live answers FAIL; model behaviour after the repairs is unknown.
