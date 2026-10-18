@@ -1,0 +1,68 @@
+{
+  "version": "v9.1",
+  "source": "/home/user/wt/docs/rag-migration/live/RUN-sa-live-3-2026-10-17T16-07-45",
+  "scenarios": {
+    "SAa": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SAb": {
+      "v8_2": "FAIL",
+      "v9": "PASS",
+      "failed_v8_2": [
+        "U1"
+      ],
+      "failed_v9": []
+    },
+    "SAq": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SBa": {
+      "v8_2": "FAIL",
+      "v9": "FAIL",
+      "failed_v8_2": [
+        "Q1"
+      ],
+      "failed_v9": [
+        "Q1: turn 1: exactly one question, about the hip or the lower-leg case, never whether the insurer accepts or approves"
+      ]
+    },
+    "SBb": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SBp": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SC": {
+      "v8_2": "FAIL",
+      "v9": "PASS",
+      "failed_v8_2": [
+        "C3"
+      ],
+      "failed_v9": []
+    },
+    "SD": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    },
+    "SE": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    }
+  }
+}

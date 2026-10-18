@@ -1,0 +1,20 @@
+{
+  "scenario": "SD",
+  "title": "structured: the death allowance",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 12,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

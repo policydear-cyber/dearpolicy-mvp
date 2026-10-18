@@ -1,0 +1,20 @@
+{
+  "scenario": "SE",
+  "title": "structured: person switch to Grace",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel fractured his tibia in an accident, a closed fracture. What would his accident cover pay?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 20,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

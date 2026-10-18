@@ -122,7 +122,8 @@ async function t(name: string, fn: () => Promise<void> | void) {
   });
   await t("B10 direct mode: only in GitHub Actions, only api.openai.com, key required; relay rules unchanged", () => {
     const base = { NODE_ENV: "test", DATABASE_URL: "postgres://u:p@localhost:5432/x", CHAT_MODEL: "openai:gpt-6-luna", RAG2_LIVE_EXPECT_MODEL: "openai:gpt-6-luna",
-      RAG2_LIVE_RUN_CAP_USD: "0.50", DEARPOLICY_RAG_LOOP_RUN_MAX_USD: "0.50", DEARPOLICY_RAG_LOOP_REQUIRE_PRICE: "1", OPENAI_API_KEY: "test-value-not-a-key" } as Record<string, string>;
+      RAG2_LIVE_RUN_CAP_USD: "0.50", DEARPOLICY_RAG_LOOP_RUN_MAX_USD: "0.50", DEARPOLICY_RAG_LOOP_REQUIRE_PRICE: "1", OPENAI_API_KEY: "test-value-not-a-key",
+      RAG2_LIVE_RUN_ID: "b10-admission-test", RAG2_LIVE_LEDGER: "docs/rag-migration/live/LEDGER.json" } as Record<string, string>;
     const saved = { ...process.env };
     const run = (extra: Record<string, string | undefined>) => {
       for (const k of Object.keys(process.env)) delete process.env[k];

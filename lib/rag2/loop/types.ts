@@ -77,6 +77,8 @@ export type TraceToolCall = { name: string; args: Record<string, unknown>; ok: b
 export type TraceTurn = {
   turn: number; userMessage: string; modelId: string; modelKind: "hosted" | "scripted"; steps: number;
   usage: ModelUsage; latencyMs: number; toolCalls: TraceToolCall[];
+  /** Where the loop's time went: model calls, each tool (calls, ms), benefit-record resolution (it is also inside the tool times), the rest. */
+  timings?: { modelMs: number; toolMs: Record<string, { n: number; ms: number }>; resolve: { n: number; ms: number }; otherMs: number };
   /** The evidence the visible answer rests on (ids into RagLoopState.evidence). */
   evidenceChosen: string[];
   outcome: "final_answer" | "ask_user" | "budget_exhausted" | "limit_reached" | "timeout" | "error";
@@ -84,6 +86,8 @@ export type TraceTurn = {
   incomplete?: string[];
   /** V1.2: how the model's question was adjusted before it was shown (one clause, the person named, an unanswered earlier question). */
   adjusted?: string[];
+  /** PR #55 (SBb): what became of each percentage schedule the lookup returned for the reply's person -- explained, evaluated, excluded (with the reason) or unresolved (with the uncertainty). */
+  schedules?: { benefitId: string; benefit: string; disposition: "explained" | "evaluated" | "excluded" | "unresolved"; reason: string }[];
   /** Every model call this turn (attempts, including failed and retried ones), as metered (usage-meter.ts). */
   calls?: { attempt: number; ok: boolean; input: number; output: number; costUsd: number | null; latencyMs: number; error?: string; retry?: boolean }[];
   /** Which limit stopped the turn, when one did. */
@@ -135,6 +139,8 @@ export type RagLoopState = {
   /** Actual-library findings (latency): the benefits evaluated in this conversation, so a later turn evaluates the same
    * benefit again by its id (re-resolved and re-checked by the server) without listing every benefit again. */
   evaluated?: { id: string; benefit: string; product: string | null; subjectId: string }[];
+  /** PR #55 (SBb): the percentage schedules a benefit lookup returned for a person (newest last), so a later turn of the same event still knows which relevant schedules were discovered. */
+  discovered?: { id: string; benefit: string; subjectId: string }[];
   /** Calculations left unresolved for missing household facts, per subject|calculator|benefit, re-run when the facts arrive. */
   openCalcs?: Record<string, { args: Record<string, unknown>; missing: string[]; turn: number }>;
 };

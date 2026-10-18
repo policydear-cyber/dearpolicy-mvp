@@ -1,0 +1,4846 @@
+{
+  "scenario": "SBp",
+  "title": "structured: uncertain hip / tibia (fresh paraphrase)",
+  "conversationId": "f94b868b-925f-4d9e-aa37-1d42beff6658",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.\nThe scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.",
+      "nextSteps": [],
+      "timings": {
+        "acceptedMs": 8,
+        "firstAssistantPersistedMs": 18069,
+        "answerSeenMs": 18157,
+        "modelMs": 16876,
+        "upstreamMs": 16688,
+        "relayMs": 16691
+      },
+      "calls": [
+        {
+          "seq": 36,
+          "at": "2026-10-17T15:47:00.230Z",
+          "estInputTokens": 15402,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025402,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7497,
+            "output": 208,
+            "cached": 7319
+          },
+          "latencyMs": 3037,
+          "upstreamMs": 3037,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 37,
+          "at": "2026-10-17T15:47:03.307Z",
+          "estInputTokens": 21362,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0031362000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 6,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11833,
+            "output": 84,
+            "cached": 7371
+          },
+          "latencyMs": 1750,
+          "upstreamMs": 1750,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 38,
+          "at": "2026-10-17T15:47:05.062Z",
+          "estInputTokens": 22044,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0032044,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 8,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 12250,
+            "output": 160,
+            "cached": 11707
+          },
+          "latencyMs": 2826,
+          "upstreamMs": 2826,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 39,
+          "at": "2026-10-17T15:47:07.895Z",
+          "estInputTokens": 22549,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0032549000000000002,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 10,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 12581,
+            "output": 66,
+            "cached": 12124
+          },
+          "latencyMs": 2168,
+          "upstreamMs": 2168,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 40,
+          "at": "2026-10-17T15:47:10.073Z",
+          "estInputTokens": 23203,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0033203,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 12,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 12941,
+            "output": 190,
+            "cached": 12455
+          },
+          "latencyMs": 3020,
+          "upstreamMs": 3020,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 41,
+          "at": "2026-10-17T15:47:13.098Z",
+          "estInputTokens": 23691,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0033691,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 14,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 13260,
+            "output": 272,
+            "cached": 12815
+          },
+          "latencyMs": 4075,
+          "upstreamMs": 4075,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 36,
+          "at": "2026-10-17T15:47:00.231Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15630,
+          "reservedUsd": 0.002563,
+          "chargedUsd": 0.00019499,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 3036,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uagDdcMLA68pOR4w10z9Fcqw5Q",
+          "usage": {
+            "input": 7497,
+            "output": 208,
+            "cached": 7319,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        },
+        {
+          "seq": 37,
+          "at": "2026-10-17T15:47:03.307Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 21630,
+          "reservedUsd": 0.003163,
+          "chargedUsd": 0.0005619100000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 1749,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0ud2WgtIoDBfz6KjFtbwKHhLObF",
+          "usage": {
+            "input": 11833,
+            "output": 84,
+            "cached": 7371,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        },
+        {
+          "seq": 38,
+          "at": "2026-10-17T15:47:05.063Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 22328,
+          "reservedUsd": 0.0032328,
+          "chargedUsd": 0.00025137,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2783,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0ufs2sJ5uYWcIuL7teUTPBHYoaR",
+          "usage": {
+            "input": 12250,
+            "output": 160,
+            "cached": 11707,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        },
+        {
+          "seq": 39,
+          "at": "2026-10-17T15:47:07.901Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 22859,
+          "reservedUsd": 0.0032859,
+          "chargedUsd": 0.00019993999999999999,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2126,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uil6UjggXNzGYNnIPxmrtYCtqc",
+          "usage": {
+            "input": 12581,
+            "output": 66,
+            "cached": 12124,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        },
+        {
+          "seq": 40,
+          "at": "2026-10-17T15:47:10.073Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 23526,
+          "reservedUsd": 0.0033526,
+          "chargedUsd": 0.00026815,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2978,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0ukR3DSfkS4Aq7zTWIFc9jdl4wd",
+          "usage": {
+            "input": 12941,
+            "output": 190,
+            "cached": 12455,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        },
+        {
+          "seq": 41,
+          "at": "2026-10-17T15:47:13.099Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 24038,
+          "reservedUsd": 0.0034038000000000002,
+          "chargedUsd": 0.00030865,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 4031,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0unBYbP89R6ZLj4i1YlDcHD5CsL",
+          "usage": {
+            "input": 13260,
+            "output": 272,
+            "cached": 12815,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-17T15:47:00Z",
+          "t": 1792252020.232,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 3034,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uagDdcMLA68pOR4w10z9Fcqw5Q",
+          "usage": {
+            "prompt_tokens": 7497,
+            "completion_tokens": 208,
+            "total_tokens": 7705,
+            "cached_tokens": 7319,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person",
+            "note_facts",
+            "person_benefits"
+          ],
+          "status": 200,
+          "relay_ms": 3034
+        },
+        {
+          "at": "2026-10-17T15:47:03Z",
+          "t": 1792252023.31,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 6,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 1746,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0ud2WgtIoDBfz6KjFtbwKHhLObF",
+          "usage": {
+            "prompt_tokens": 11833,
+            "completion_tokens": 84,
+            "total_tokens": 11917,
+            "cached_tokens": 7371,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 1747
+        },
+        {
+          "at": "2026-10-17T15:47:05Z",
+          "t": 1792252025.065,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 8,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2780,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0ufs2sJ5uYWcIuL7teUTPBHYoaR",
+          "usage": {
+            "prompt_tokens": 12250,
+            "completion_tokens": 160,
+            "total_tokens": 12410,
+            "cached_tokens": 11707,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2781
+        },
+        {
+          "at": "2026-10-17T15:47:07Z",
+          "t": 1792252027.903,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 10,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2125,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uil6UjggXNzGYNnIPxmrtYCtqc",
+          "usage": {
+            "prompt_tokens": 12581,
+            "completion_tokens": 66,
+            "total_tokens": 12647,
+            "cached_tokens": 12124,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "note_facts"
+          ],
+          "status": 200,
+          "relay_ms": 2125
+        },
+        {
+          "at": "2026-10-17T15:47:10Z",
+          "t": 1792252030.075,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 12,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2976,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0ukR3DSfkS4Aq7zTWIFc9jdl4wd",
+          "usage": {
+            "prompt_tokens": 12941,
+            "completion_tokens": 190,
+            "total_tokens": 13131,
+            "cached_tokens": 12455,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2977
+        },
+        {
+          "at": "2026-10-17T15:47:13Z",
+          "t": 1792252033.103,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 14,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 4027,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0unBYbP89R6ZLj4i1YlDcHD5CsL",
+          "usage": {
+            "prompt_tokens": 13260,
+            "completion_tokens": 272,
+            "total_tokens": 13532,
+            "cached_tokens": 12815,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 4027
+        }
+      ],
+      "tokens": {
+        "input": 70362,
+        "output": 980
+      },
+      "costUsd": {
+        "charged": 0.00178501,
+        "reserved": 0.0190011,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          36,
+          37,
+          38,
+          39,
+          40,
+          41
+        ],
+        "guardUsd": 0.00178501,
+        "rowsUsd": 0
+      }
+    },
+    {
+      "turn": 2,
+      "user": "Update: it is definitely the lower leg, the tibia.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.\nThe scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount.",
+      "nextSteps": [],
+      "timings": {
+        "acceptedMs": 13,
+        "firstAssistantPersistedMs": 15091,
+        "answerSeenMs": 15294,
+        "modelMs": 14679,
+        "upstreamMs": 14448,
+        "relayMs": 14454
+      },
+      "calls": [
+        {
+          "seq": 42,
+          "at": "2026-10-17T15:47:17.626Z",
+          "estInputTokens": 16449,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026449,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 4,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8153,
+            "output": 202,
+            "cached": 0
+          },
+          "latencyMs": 2813,
+          "upstreamMs": 2813,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 43,
+          "at": "2026-10-17T15:47:20.456Z",
+          "estInputTokens": 18111,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028111000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 8,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9274,
+            "output": 43,
+            "cached": 8027
+          },
+          "latencyMs": 1725,
+          "upstreamMs": 1725,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 44,
+          "at": "2026-10-17T15:47:22.186Z",
+          "estInputTokens": 18329,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028329,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 10,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9382,
+            "output": 142,
+            "cached": 9148
+          },
+          "latencyMs": 2235,
+          "upstreamMs": 2235,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 45,
+          "at": "2026-10-17T15:47:24.435Z",
+          "estInputTokens": 18807,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028807,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 12,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9703,
+            "output": 81,
+            "cached": 9256
+          },
+          "latencyMs": 1967,
+          "upstreamMs": 1967,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 46,
+          "at": "2026-10-17T15:47:26.407Z",
+          "estInputTokens": 19362,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029362,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 14,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10044,
+            "output": 191,
+            "cached": 9577
+          },
+          "latencyMs": 2606,
+          "upstreamMs": 2606,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 47,
+          "at": "2026-10-17T15:47:29.020Z",
+          "estInputTokens": 19972,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029971999999999998,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 16,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10429,
+            "output": 263,
+            "cached": 9918
+          },
+          "latencyMs": 3333,
+          "upstreamMs": 3333,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 42,
+          "at": "2026-10-17T15:47:17.626Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16676,
+          "reservedUsd": 0.0026676000000000004,
+          "chargedUsd": 0.0009163000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 2813,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uszX4TTcwxEk0LIpVneSbhizvR",
+          "usage": {
+            "input": 8153,
+            "output": 202,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        },
+        {
+          "seq": 43,
+          "at": "2026-10-17T15:47:20.457Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18378,
+          "reservedUsd": 0.0028378,
+          "chargedUsd": 0.00022647,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 1684,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uvR0IiU7S4XTTY3mAQXyZlwVGH",
+          "usage": {
+            "input": 9274,
+            "output": 43,
+            "cached": 8027,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        },
+        {
+          "seq": 44,
+          "at": "2026-10-17T15:47:22.187Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18608,
+          "reservedUsd": 0.0028608,
+          "chargedUsd": 0.00018588,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 2193,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uweo5pu774EParujlnPFUhcpMx",
+          "usage": {
+            "input": 9382,
+            "output": 142,
+            "cached": 9148,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        },
+        {
+          "seq": 45,
+          "at": "2026-10-17T15:47:24.436Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 19114,
+          "reservedUsd": 0.0029114,
+          "chargedUsd": 0.00017775999999999998,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 1922,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0uzhziiGEDmzZnPVHwfCk6YVNVc",
+          "usage": {
+            "input": 9703,
+            "output": 81,
+            "cached": 9256,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        },
+        {
+          "seq": 46,
+          "at": "2026-10-17T15:47:26.408Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 19685,
+          "reservedUsd": 0.0029685,
+          "chargedUsd": 0.00023797,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 2568,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0v1XKUOoLRojU8mfF3EYpeY78h6",
+          "usage": {
+            "input": 10044,
+            "output": 191,
+            "cached": 9577,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        },
+        {
+          "seq": 47,
+          "at": "2026-10-17T15:47:29.021Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 20319,
+          "reservedUsd": 0.0030319,
+          "chargedUsd": 0.00028178,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "e1aac6bf910265bc",
+          "kind": "loop",
+          "upstreamMs": 3289,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-Ea0v3CPfCA0zaS7ATYojfYrfqrufk",
+          "usage": {
+            "input": 10429,
+            "output": 263,
+            "cached": 9918,
+            "reasoning": 0
+          },
+          "scenario": "SBp",
+          "turn": 2
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-17T15:47:17Z",
+          "t": 1792252037.628,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 4,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2810,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uszX4TTcwxEk0LIpVneSbhizvR",
+          "usage": {
+            "prompt_tokens": 8153,
+            "completion_tokens": 202,
+            "total_tokens": 8355,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person",
+            "note_facts",
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 2811
+        },
+        {
+          "at": "2026-10-17T15:47:20Z",
+          "t": 1792252040.459,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 8,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 1682,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uvR0IiU7S4XTTY3mAQXyZlwVGH",
+          "usage": {
+            "prompt_tokens": 9274,
+            "completion_tokens": 43,
+            "total_tokens": 9317,
+            "cached_tokens": 8027,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 1682
+        },
+        {
+          "at": "2026-10-17T15:47:22Z",
+          "t": 1792252042.189,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 10,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2191,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uweo5pu774EParujlnPFUhcpMx",
+          "usage": {
+            "prompt_tokens": 9382,
+            "completion_tokens": 142,
+            "total_tokens": 9524,
+            "cached_tokens": 9148,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2192
+        },
+        {
+          "at": "2026-10-17T15:47:24Z",
+          "t": 1792252044.438,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 12,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 1919,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0uzhziiGEDmzZnPVHwfCk6YVNVc",
+          "usage": {
+            "prompt_tokens": 9703,
+            "completion_tokens": 81,
+            "total_tokens": 9784,
+            "cached_tokens": 9256,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "evaluate_benefit"
+          ],
+          "status": 200,
+          "relay_ms": 1920
+        },
+        {
+          "at": "2026-10-17T15:47:26Z",
+          "t": 1792252046.412,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 14,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2560,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0v1XKUOoLRojU8mfF3EYpeY78h6",
+          "usage": {
+            "prompt_tokens": 10044,
+            "completion_tokens": 191,
+            "total_tokens": 10235,
+            "cached_tokens": 9577,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2561
+        },
+        {
+          "at": "2026-10-17T15:47:29Z",
+          "t": 1792252049.022,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 16,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 3286,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-Ea0v3CPfCA0zaS7ATYojfYrfqrufk",
+          "usage": {
+            "prompt_tokens": 10429,
+            "completion_tokens": 263,
+            "total_tokens": 10692,
+            "cached_tokens": 9918,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3288
+        }
+      ],
+      "tokens": {
+        "input": 56985,
+        "output": 922
+      },
+      "costUsd": {
+        "charged": 0.00202616,
+        "reserved": 0.017278,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          42,
+          43,
+          44,
+          45,
+          46,
+          47
+        ],
+        "guardUsd": 0.00202616,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 33461,
+  "firstUsefulResponseMs": 18069,
+  "tokens": {
+    "input": 127347,
+    "output": 1902
+  },
+  "costUsd": 0.00381117,
+  "calls": 12,
+  "loaded": {
+    "conversationId": "f94b868b-925f-4d9e-aa37-1d42beff6658",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 3,
+        "turn": 2,
+        "claim": {
+          "facts": {
+            "injury": {
+              "turn": 1,
+              "basis": "paraphrased",
+              "value": "possible fracture",
+              "words": "The hospital thinks he broke either his hip or the lower leg bone",
+              "source": "user_reported"
+            },
+            "fracture_status": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "closed",
+              "words": "it looks like a closed fracture",
+              "source": "user_reported"
+            },
+            "how_it_happened": {
+              "turn": 1,
+              "basis": "paraphrased",
+              "value": "fell at home",
+              "words": "hurt himself in a fall at home last night",
+              "source": "user_reported"
+            },
+            "fracture_confirmed": {
+              "turn": 2,
+              "basis": "paraphrased",
+              "value": "yes",
+              "words": "it is definitely the lower leg, the tibia",
+              "source": "user_reported"
+            },
+            "fracture_site_detail": {
+              "turn": 2,
+              "basis": "stated",
+              "value": "tibia (lower leg)",
+              "words": "it is definitely the lower leg, the tibia",
+              "source": "user_reported"
+            },
+            "fracture_site_uncertain": {
+              "turn": 1,
+              "basis": "stated",
+              "value": "hip or lower leg bone",
+              "words": "either his hip or the lower leg bone",
+              "source": "user_reported"
+            }
+          },
+          "derived": [],
+          "subjectId": "7c000000-0000-4000-8000-000000000001"
+        },
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7497,
+                "output": 208,
+                "attempt": 1,
+                "costUsd": 0.00019499,
+                "latencyMs": 3037
+              },
+              {
+                "ok": true,
+                "input": 11833,
+                "output": 84,
+                "attempt": 1,
+                "costUsd": 0.0005619100000000001,
+                "latencyMs": 1751
+              },
+              {
+                "ok": true,
+                "input": 12250,
+                "output": 160,
+                "attempt": 1,
+                "costUsd": 0.00025137,
+                "latencyMs": 2827
+              },
+              {
+                "ok": true,
+                "input": 12581,
+                "output": 66,
+                "attempt": 1,
+                "costUsd": 0.00019993999999999999,
+                "latencyMs": 2174
+              },
+              {
+                "ok": true,
+                "input": 12941,
+                "output": 190,
+                "attempt": 1,
+                "costUsd": 0.00026815,
+                "latencyMs": 3021
+              },
+              {
+                "ok": true,
+                "input": 13260,
+                "output": 272,
+                "attempt": 1,
+                "costUsd": 0.00030865,
+                "latencyMs": 4075
+              }
+            ],
+            "limit": null,
+            "steps": 6,
+            "usage": {
+              "input": 70362,
+              "output": 980
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "timings": {
+              "toolMs": {
+                "resolve_person": {
+                  "n": 1,
+                  "ms": 2
+                },
+                "person_benefits": {
+                  "n": 1,
+                  "ms": 31
+                },
+                "evaluate_benefit": {
+                  "n": 1,
+                  "ms": 1
+                }
+              },
+              "modelMs": 16885,
+              "otherMs": 34,
+              "resolve": {
+                "n": 1,
+                "ms": 10
+              }
+            },
+            "composed": [
+              "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+              "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to."
+            ],
+            "latencyMs": 16953,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "how_it_happened",
+                      "value": "fell at home",
+                      "words": "hurt himself in a fall at home last night"
+                    },
+                    {
+                      "key": "injury",
+                      "value": "possible fracture",
+                      "words": "The hospital thinks he broke either his hip or the lower leg bone"
+                    },
+                    {
+                      "key": "fracture_site_uncertain",
+                      "value": "hip or lower leg bone",
+                      "words": "either his hip or the lower leg bone"
+                    },
+                    {
+                      "key": "fracture_status",
+                      "value": "closed",
+                      "words": "it looks like a closed fracture"
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accident fracture",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "person_benefits",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4",
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10",
+                  "e11",
+                  "e12",
+                  "e13",
+                  "e14"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "either his hip or the lower leg bone",
+                  "purpose": "claim",
+                  "fact_keys": [
+                    "fracture_site_uncertain",
+                    "fracture_status",
+                    "how_it_happened"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "assumption_words": "either his hip or the lower leg bone"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"needs_facts\"}",
+                "evidenceIds": [
+                  "e13"
+                ]
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "fact",
+                  "preface": "I’m sorry Daniel has been hurt.",
+                  "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+                  "statements": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "requirement_id": "q1_1"
+                },
+                "name": "ask_user",
+                "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "how_it_happened",
+                      "value": "fell at home",
+                      "words": "hurt himself in a fall at home last night"
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "fact",
+                  "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+                  "statements": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "requirement_id": "q1_1"
+                },
+                "name": "ask_user",
+                "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+            "evidenceChosen": [
+              "e13",
+              "e2"
+            ]
+          },
+          {
+            "gate": [],
+            "turn": 2,
+            "calls": [
+              {
+                "ok": true,
+                "input": 8153,
+                "output": 202,
+                "attempt": 1,
+                "costUsd": 0.0009163000000000001,
+                "latencyMs": 2814
+              },
+              {
+                "ok": true,
+                "input": 9274,
+                "output": 43,
+                "attempt": 1,
+                "costUsd": 0.00022647,
+                "latencyMs": 1725
+              },
+              {
+                "ok": true,
+                "input": 9382,
+                "output": 142,
+                "attempt": 1,
+                "costUsd": 0.00018588,
+                "latencyMs": 2235
+              },
+              {
+                "ok": true,
+                "input": 9703,
+                "output": 81,
+                "attempt": 1,
+                "costUsd": 0.00017775999999999998,
+                "latencyMs": 1967
+              },
+              {
+                "ok": true,
+                "input": 10044,
+                "output": 191,
+                "attempt": 1,
+                "costUsd": 0.00023797,
+                "latencyMs": 2606
+              },
+              {
+                "ok": true,
+                "input": 10429,
+                "output": 263,
+                "attempt": 1,
+                "costUsd": 0.00028178,
+                "latencyMs": 3333
+              }
+            ],
+            "limit": null,
+            "steps": 6,
+            "usage": {
+              "input": 56985,
+              "output": 922
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "timings": {
+              "toolMs": {
+                "resolve_person": {
+                  "n": 1,
+                  "ms": 1
+                },
+                "evaluate_benefit": {
+                  "n": 2,
+                  "ms": 13
+                }
+              },
+              "modelMs": 14680,
+              "otherMs": 48,
+              "resolve": {
+                "n": 1,
+                "ms": 12
+              }
+            },
+            "composed": [
+              "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+              "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount."
+            ],
+            "latencyMs": 14742,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "fracture_site_detail",
+                      "value": "tibia (lower leg)",
+                      "words": "it is definitely the lower leg, the tibia"
+                    },
+                    {
+                      "key": "fracture_confirmed",
+                      "value": "yes",
+                      "words": "it is definitely the lower leg, the tibia"
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "the tibia (lower leg)",
+                  "purpose": "claim",
+                  "fact_keys": [
+                    "fracture_site_detail",
+                    "fracture_status",
+                    "how_it_happened"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "assumption_words": "it is definitely the lower leg, the tibia"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"case_conflict\"}",
+                "evidenceIds": [
+                  "e13"
+                ]
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "fact",
+                  "question": "Has a registered medical practitioner confirmed the tibia fracture by X-ray?",
+                  "requirement_id": "q2_1"
+                },
+                "name": "ask_user",
+                "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+                "evidenceIds": []
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "fact",
+                  "fact_key": "how_it_happened",
+                  "question": "How did Daniel's fall happen?",
+                  "statements": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v3"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "because_evidence_ids": [
+                    "e2",
+                    "e3",
+                    "e5"
+                  ]
+                },
+                "name": "ask_user",
+                "error": "how_it_happened is already recorded (fell at home, \"hurt himself in a fall at home last night\"); do not ask again",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "case": "tibia (lower leg)",
+                  "purpose": "claim",
+                  "fact_keys": [
+                    "fracture_site_detail",
+                    "fracture_status",
+                    "how_it_happened"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "assumption_words": "it is definitely the lower leg, the tibia"
+                },
+                "name": "evaluate_benefit",
+                "summary": "{\"status\":\"case_conflict\"}",
+                "evidenceIds": [
+                  "e13"
+                ]
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "fact",
+                  "question": "Which listed case best describes Daniel's tibia fracture: Hip, or Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)?",
+                  "statements": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v3"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "requirement_id": "q2_2"
+                },
+                "name": "ask_user",
+                "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "kind": "benefit_terms",
+                      "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                      "benefit": "Simple Fracture or Other Fracture due to Accident",
+                      "value_ids": [
+                        "v3"
+                      ],
+                      "benefit_id": "bd46d4e45bd",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    },
+                    {
+                      "kind": "uncertainty",
+                      "text": "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount.",
+                      "subject_id": "7c000000-0000-4000-8000-000000000001",
+                      "evidence_ids": [
+                        "e13"
+                      ]
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Update: it is definitely the lower leg, the tibia.",
+            "evidenceChosen": [
+              "e13",
+              "e2"
+            ]
+          }
+        ],
+        "values": {
+          "v1": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 50000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Term Life",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 358,
+                        "text": "S****411A",
+                        "start": 349,
+                        "header": ""
+                      },
+                      {
+                        "end": 379,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 359,
+                        "header": ""
+                      },
+                      {
+                        "end": 389,
+                        "text": "S$500,000",
+                        "start": 380,
+                        "header": ""
+                      },
+                      {
+                        "end": 395,
+                        "text": "As of",
+                        "start": 390,
+                        "header": ""
+                      },
+                      {
+                        "end": 406,
+                        "text": "01/04/2024",
+                        "start": 396,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 406,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 349,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 50000000,
+              "notes": [],
+              "value": 500000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Term Life",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 358,
+                        "text": "S****411A",
+                        "start": 349,
+                        "header": ""
+                      },
+                      {
+                        "end": 379,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 359,
+                        "header": ""
+                      },
+                      {
+                        "end": 389,
+                        "text": "S$500,000",
+                        "start": 380,
+                        "header": ""
+                      },
+                      {
+                        "end": 395,
+                        "text": "As of",
+                        "start": 390,
+                        "header": ""
+                      },
+                      {
+                        "end": 406,
+                        "text": "01/04/2024",
+                        "start": 396,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 406,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                  "start": 349,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "rowLabel": "Group Term Life",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Term Life”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP TERM LIFE(POLICY NO.GTL-8001)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 358,
+                          "text": "S****411A",
+                          "start": 349,
+                          "header": ""
+                        },
+                        {
+                          "end": 379,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 359,
+                          "header": ""
+                        },
+                        {
+                          "end": 389,
+                          "text": "S$500,000",
+                          "start": 380,
+                          "header": ""
+                        },
+                        {
+                          "end": 395,
+                          "text": "As of",
+                          "start": 390,
+                          "header": ""
+                        },
+                        {
+                          "end": 406,
+                          "text": "01/04/2024",
+                          "start": 396,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 389,
+                      "text": "S$500,000",
+                      "start": 380
+                    },
+                    "layout": "person_row",
+                    "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 379,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 359,
+                      "memberId": "7c000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 406,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+                    "start": 349,
+                    "onPage": 1
+                  },
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "v2": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP PERSONAL ACCIDENT(POLICY NO. GPA-8002)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 517,
+                          "text": "S****411A",
+                          "start": 508,
+                          "header": ""
+                        },
+                        {
+                          "end": 538,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 518,
+                          "header": ""
+                        },
+                        {
+                          "end": 548,
+                          "text": "S$600,000",
+                          "start": 539,
+                          "header": ""
+                        },
+                        {
+                          "end": 554,
+                          "text": "As of",
+                          "start": 549,
+                          "header": ""
+                        },
+                        {
+                          "end": 565,
+                          "text": "01/04/2024",
+                          "start": 555,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 548,
+                      "text": "S$600,000",
+                      "start": 539
+                    },
+                    "layout": "person_row",
+                    "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 538,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 518,
+                      "memberId": "7c000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 565,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "v3": {
+            "operand": {
+              "ppm": null,
+              "kind": "table_value",
+              "cents": 60000000,
+              "count": null,
+              "period": null,
+              "benefit": "Group Personal Accident",
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "valueKind": "money"
+            },
+            "selected": {
+              "ppm": null,
+              "unit": null,
+              "cents": 60000000,
+              "notes": [],
+              "value": 600000,
+              "period": null,
+              "status": "ok",
+              "benefit": "Group Personal Accident",
+              "version": null,
+              "currency": "SGD",
+              "evidence": {
+                "page": {
+                  "end": 1,
+                  "start": 1
+                },
+                "table": {
+                  "row": {
+                    "cells": [
+                      {
+                        "end": 517,
+                        "text": "S****411A",
+                        "start": 508,
+                        "header": ""
+                      },
+                      {
+                        "end": 538,
+                        "text": "Lee Wei Ming, Daniel",
+                        "start": 518,
+                        "header": ""
+                      },
+                      {
+                        "end": 548,
+                        "text": "S$600,000",
+                        "start": 539,
+                        "header": ""
+                      },
+                      {
+                        "end": 554,
+                        "text": "As of",
+                        "start": 549,
+                        "header": ""
+                      },
+                      {
+                        "end": 565,
+                        "text": "01/04/2024",
+                        "start": 555,
+                        "header": ""
+                      }
+                    ]
+                  },
+                  "asOf": "2024-04-01",
+                  "cell": {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539
+                  },
+                  "layout": "person_row",
+                  "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                  "rowLabel": "S****411A",
+                  "appliesTo": {
+                    "kind": "everyone",
+                    "value": "everyone"
+                  },
+                  "rowPerson": {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "memberId": "7c000000-0000-4000-8000-000000000001"
+                  },
+                  "columnLeaf": "",
+                  "columnHeader": ""
+                },
+                "passage": {
+                  "end": 565,
+                  "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                  "start": 508,
+                  "onPage": 1
+                },
+                "policyId": "7c000000-0000-4000-8000-000000000101",
+                "subjectId": "7c000000-0000-4000-8000-000000000001",
+                "documentHash": "sha256:al-cert"
+              },
+              "rowLabel": "Group Personal Accident",
+              "valueKind": "money",
+              "conditions": [
+                "under “Group Personal Accident”",
+                "printed as of 2024-04-01: the document's amount on that date, not confirmation of cover on a later date"
+              ],
+              "columnBasis": {
+                "basis": "document",
+                "detail": "the document prints Daniel Lee Wei Ming's own row (“Lee Wei Ming, Daniel”) under “GROUP PERSONAL ACCIDENT(POLICY NO. GPA-8002)”",
+                "evidence": {
+                  "page": {
+                    "end": 1,
+                    "start": 1
+                  },
+                  "table": {
+                    "row": {
+                      "cells": [
+                        {
+                          "end": 517,
+                          "text": "S****411A",
+                          "start": 508,
+                          "header": ""
+                        },
+                        {
+                          "end": 538,
+                          "text": "Lee Wei Ming, Daniel",
+                          "start": 518,
+                          "header": ""
+                        },
+                        {
+                          "end": 548,
+                          "text": "S$600,000",
+                          "start": 539,
+                          "header": ""
+                        },
+                        {
+                          "end": 554,
+                          "text": "As of",
+                          "start": 549,
+                          "header": ""
+                        },
+                        {
+                          "end": 565,
+                          "text": "01/04/2024",
+                          "start": 555,
+                          "header": ""
+                        }
+                      ]
+                    },
+                    "asOf": "2024-04-01",
+                    "cell": {
+                      "end": 548,
+                      "text": "S$600,000",
+                      "start": 539
+                    },
+                    "layout": "person_row",
+                    "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+                    "rowLabel": "S****411A",
+                    "appliesTo": {
+                      "kind": "everyone",
+                      "value": "everyone"
+                    },
+                    "rowPerson": {
+                      "end": 538,
+                      "text": "Lee Wei Ming, Daniel",
+                      "start": 518,
+                      "memberId": "7c000000-0000-4000-8000-000000000001"
+                    },
+                    "columnLeaf": "",
+                    "columnHeader": ""
+                  },
+                  "passage": {
+                    "end": 565,
+                    "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+                    "start": 508,
+                    "onPage": 1
+                  },
+                  "policyId": "7c000000-0000-4000-8000-000000000101",
+                  "subjectId": "7c000000-0000-4000-8000-000000000001",
+                  "documentHash": "sha256:al-cert"
+                }
+              },
+              "columnHeader": ""
+            },
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          }
+        },
+        "history": [
+          {
+            "user": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+            "assistant": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to."
+          },
+          {
+            "user": "Update: it is definitely the lower leg, the tibia.",
+            "assistant": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount."
+          }
+        ],
+        "pending": null,
+        "docNames": {
+          "7c000000-0000-4000-8000-000000000101": "Scheme X Group Insurance - Certificate",
+          "7c000000-0000-4000-8000-000000000102": "Group Insurance Product Summary",
+          "7c000000-0000-4000-8000-000000000103": "Group Personal Accident Benefit Summary",
+          "7c000000-0000-4000-8000-000000000104": "Group Insurance Benefits Booklet"
+        },
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 358,
+                    "text": "S****411A",
+                    "start": 349,
+                    "header": ""
+                  },
+                  {
+                    "end": 379,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 359,
+                    "header": ""
+                  },
+                  {
+                    "end": 389,
+                    "text": "S$500,000",
+                    "start": 380,
+                    "header": ""
+                  },
+                  {
+                    "end": 395,
+                    "text": "As of",
+                    "start": 390,
+                    "header": ""
+                  },
+                  {
+                    "end": 406,
+                    "text": "01/04/2024",
+                    "start": 396,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 389,
+                "text": "S$500,000",
+                "start": 380
+              },
+              "layout": "person_row",
+              "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Term Life",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 379,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 359,
+                "memberId": "7c000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 406,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 349,
+              "onPage": 1
+            },
+            "support": {
+              "end": 406,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+              "start": 349,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "person_benefits",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "row": {
+                "cells": [
+                  {
+                    "end": 517,
+                    "text": "S****411A",
+                    "start": 508,
+                    "header": ""
+                  },
+                  {
+                    "end": 538,
+                    "text": "Lee Wei Ming, Daniel",
+                    "start": 518,
+                    "header": ""
+                  },
+                  {
+                    "end": 548,
+                    "text": "S$600,000",
+                    "start": 539,
+                    "header": ""
+                  },
+                  {
+                    "end": 554,
+                    "text": "As of",
+                    "start": 549,
+                    "header": ""
+                  },
+                  {
+                    "end": 565,
+                    "text": "01/04/2024",
+                    "start": 555,
+                    "header": ""
+                  }
+                ]
+              },
+              "asOf": "2024-04-01",
+              "cell": {
+                "end": 548,
+                "text": "S$600,000",
+                "start": 539
+              },
+              "layout": "person_row",
+              "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+              "rowLabel": "Group Personal Accident",
+              "appliesTo": null,
+              "rowPerson": {
+                "end": 538,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 518,
+                "memberId": "7c000000-0000-4000-8000-000000000001"
+              },
+              "columnLeaf": "",
+              "columnHeader": ""
+            },
+            "context": null,
+            "passage": {
+              "end": 565,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "start": 508,
+              "onPage": 1
+            },
+            "support": {
+              "end": 565,
+              "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "start": 508,
+              "onPage": 1
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "passage": {
+              "end": 929,
+              "text": "•\tMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*",
+              "start": 853,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 1422,
+                "role": "footnote",
+                "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary",
+                "start": 1347,
+                "onPage": 13
+              }
+            ],
+            "passage": {
+              "end": 987,
+              "text": "•\tHome Rehabilitation Renovation Expenses*\tUp to S$10,000",
+              "start": 930,
+              "onPage": 13
+            },
+            "support": {
+              "end": 987,
+              "text": "•\tHome Rehabilitation Renovation Expenses*\tUp to S$10,000",
+              "start": 930,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 1422,
+                "role": "footnote",
+                "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary",
+                "start": 1347,
+                "onPage": 13
+              }
+            ],
+            "passage": {
+              "end": 1037,
+              "text": "•\tAccidental Hospital Recuperation Benefit*\tS$250",
+              "start": 988,
+              "onPage": 13
+            },
+            "support": {
+              "end": 1037,
+              "text": "•\tAccidental Hospital Recuperation Benefit*\tS$250",
+              "start": 988,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-product-summary"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 408,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 370,
+              "onPage": 8
+            },
+            "support": {
+              "end": 408,
+              "text": "Neck, Skull or Spine (Full Break)\t100%",
+              "start": 370,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 416,
+              "text": "Hip\t75%",
+              "start": 409,
+              "onPage": 8
+            },
+            "support": {
+              "end": 416,
+              "text": "Hip\t75%",
+              "start": 409,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 469,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+              "start": 417,
+              "onPage": 8
+            },
+            "support": {
+              "end": 469,
+              "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+              "start": 417,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 532,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 470,
+              "onPage": 8
+            },
+            "support": {
+              "end": 532,
+              "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+              "start": 470,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 579,
+              "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+              "start": 533,
+              "onPage": 8
+            },
+            "support": {
+              "end": 579,
+              "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+              "start": 533,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "passage": {
+              "end": 1743,
+              "text": "G. Ambulance Cost\nIf an Insured Person sustains bodily injury as a result of an Accident, which necessitates the use of an ambulance, we will reimburse the actual\nground ambulance costs on a per event per Insured Person basis, incurred by the Insured Person up to maximum of $500 for transportation\n(including the medical supplies used) to the Hospital.\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+              "start": 1307,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "person_benefits",
+            "page": {
+              "end": 9,
+              "start": 9
+            },
+            "table": null,
+            "passage": {
+              "end": 327,
+              "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the funeral expenses incurred, up to $2,000,\non receipt of proof of death and the relevant documents in our prescribed form.\nThis Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+              "start": 0,
+              "onPage": 9
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000104",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-booklet"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "person_benefits",
+            "page": {
+              "end": 8,
+              "start": 8
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 849,
+                "role": "table_header",
+                "text": "(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and",
+                "start": 702,
+                "onPage": 8
+              }
+            ],
+            "passage": {
+              "end": 930,
+              "text": "(% of Sum Insured)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\nArm, Elbow, Wrist or Ribs (Other Fracture)\t20%\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nF.\tDisappearance\nIf an Insured Person:\n(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+              "start": 351,
+              "onPage": 8
+            },
+            "support": {
+              "end": 930,
+              "text": "(ii)\this body is not found within l year from the date of his disappearance; and",
+              "start": 850,
+              "onPage": 8
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "subjectId": null,
+            "documentHash": "sha256:al-pa-summary"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "person_benefits",
+            "page": {
+              "end": 13,
+              "start": 13
+            },
+            "table": null,
+            "passage": {
+              "end": 687,
+              "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\n#\nArm , Elbow, Wrist or Ribs\t25%\n^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+              "start": 395,
+              "onPage": 13
+            },
+            "policyId": "7c000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:al-product-summary"
+          }
+        },
+        "evaluated": [
+          {
+            "id": "bd46d4e45bd",
+            "benefit": "Simple Fracture or Other Fracture due to Accident",
+            "product": "Group Personal Accident Benefit Summary",
+            "subjectId": "7c000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "speakerId": "7c000000-0000-4000-8000-000000000001",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "established": [
+          {
+            "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+            "turn": 2,
+            "benefit": "Simple Fracture or Other Fracture due to Accident",
+            "valueIds": [
+              "v3"
+            ],
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "evidenceIds": [
+              "e13",
+              "e2"
+            ]
+          }
+        ],
+        "recentSubjectIds": [
+          "7c000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to."
+          ],
+          "summary": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+          "citations": [
+            {
+              "chunkId": "rag2:e13",
+              "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "pageStart": 8,
+              "policyName": "Group Personal Accident Benefit Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7c000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Scheme X Group Insurance - Certificate",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "f94b868b-925f-4d9e-aa37-1d42beff6658",
+          "figureBindings": [
+            {
+              "asOf": "2024-04-01",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "currency": "SGD",
+              "policyId": "7c000000-0000-4000-8000-000000000101",
+              "sentence": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+              "pageStart": 1,
+              "rowPerson": "Lee Wei Ming, Daniel",
+              "subjectId": "7c000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:al-cert"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
+        },
+        "content": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+        "visible": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.\nThe scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.",
+        "questions": [],
+        "userAt": "2026-10-17T15:47:17.194Z",
+        "assistantAt": "2026-10-17T15:47:17.194Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7497,
+              "output": 208,
+              "attempt": 1,
+              "costUsd": 0.00019499,
+              "latencyMs": 3037
+            },
+            {
+              "ok": true,
+              "input": 11833,
+              "output": 84,
+              "attempt": 1,
+              "costUsd": 0.0005619100000000001,
+              "latencyMs": 1751
+            },
+            {
+              "ok": true,
+              "input": 12250,
+              "output": 160,
+              "attempt": 1,
+              "costUsd": 0.00025137,
+              "latencyMs": 2827
+            },
+            {
+              "ok": true,
+              "input": 12581,
+              "output": 66,
+              "attempt": 1,
+              "costUsd": 0.00019993999999999999,
+              "latencyMs": 2174
+            },
+            {
+              "ok": true,
+              "input": 12941,
+              "output": 190,
+              "attempt": 1,
+              "costUsd": 0.00026815,
+              "latencyMs": 3021
+            },
+            {
+              "ok": true,
+              "input": 13260,
+              "output": 272,
+              "attempt": 1,
+              "costUsd": 0.00030865,
+              "latencyMs": 4075
+            }
+          ],
+          "limit": null,
+          "steps": 6,
+          "usage": {
+            "input": 70362,
+            "output": 980
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "timings": {
+            "toolMs": {
+              "resolve_person": {
+                "n": 1,
+                "ms": 2
+              },
+              "person_benefits": {
+                "n": 1,
+                "ms": 31
+              },
+              "evaluate_benefit": {
+                "n": 1,
+                "ms": 1
+              }
+            },
+            "modelMs": 16885,
+            "otherMs": 34,
+            "resolve": {
+              "n": 1,
+              "ms": 10
+            }
+          },
+          "composed": [
+            "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+            "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to."
+          ],
+          "latencyMs": 16953,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Daniel"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "how_it_happened",
+                    "value": "fell at home",
+                    "words": "hurt himself in a fall at home last night"
+                  },
+                  {
+                    "key": "injury",
+                    "value": "possible fracture",
+                    "words": "The hospital thinks he broke either his hip or the lower leg bone"
+                  },
+                  {
+                    "key": "fracture_site_uncertain",
+                    "value": "hip or lower leg bone",
+                    "words": "either his hip or the lower leg bone"
+                  },
+                  {
+                    "key": "fracture_status",
+                    "value": "closed",
+                    "words": "it looks like a closed fracture"
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "topic": "accident fracture",
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "person_benefits",
+              "summary": "{}",
+              "evidenceIds": [
+                "e1",
+                "e2",
+                "e3",
+                "e4",
+                "e5",
+                "e6",
+                "e7",
+                "e8",
+                "e9",
+                "e10",
+                "e11",
+                "e12",
+                "e13",
+                "e14"
+              ]
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "either his hip or the lower leg bone",
+                "purpose": "claim",
+                "fact_keys": [
+                  "fracture_site_uncertain",
+                  "fracture_status",
+                  "how_it_happened"
+                ],
+                "benefit_id": "bd46d4e45bd",
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "assumption_words": "either his hip or the lower leg bone"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"needs_facts\"}",
+              "evidenceIds": [
+                "e13"
+              ]
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "fact",
+                "preface": "I’m sorry Daniel has been hurt.",
+                "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+                "statements": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "requirement_id": "q1_1"
+              },
+              "name": "ask_user",
+              "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "how_it_happened",
+                    "value": "fell at home",
+                    "words": "hurt himself in a fall at home last night"
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "fact",
+                "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+                "statements": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "requirement_id": "q1_1"
+              },
+              "name": "ask_user",
+              "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v2"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?",
+          "evidenceChosen": [
+            "e13",
+            "e2"
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "user": "Update: it is definitely the lower leg, the tibia.",
+        "answer": {
+          "mode": "answer",
+          "details": [
+            "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount."
+          ],
+          "summary": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+          "citations": [
+            {
+              "chunkId": "rag2:e13",
+              "excerpt": "(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 8,
+              "policyId": "7c000000-0000-4000-8000-000000000103",
+              "pageStart": 8,
+              "policyName": "Group Personal Accident Benefit Summary",
+              "documentRole": "benefit_summary"
+            },
+            {
+              "chunkId": "rag2:e2",
+              "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "insurer": "Aldermoor Life Ltd",
+              "pageEnd": 1,
+              "policyId": "7c000000-0000-4000-8000-000000000101",
+              "pageStart": 1,
+              "policyName": "Scheme X Group Insurance - Certificate",
+              "documentRole": "schedule"
+            }
+          ],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "computations": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "f94b868b-925f-4d9e-aa37-1d42beff6658",
+          "figureBindings": [
+            {
+              "asOf": "2024-04-01",
+              "value": 600000,
+              "column": null,
+              "layout": "person_row",
+              "benefit": "Group Personal Accident",
+              "pageEnd": 1,
+              "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+              "currency": "SGD",
+              "policyId": "7c000000-0000-4000-8000-000000000101",
+              "sentence": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+              "pageStart": 1,
+              "rowPerson": "Lee Wei Ming, Daniel",
+              "subjectId": "7c000000-0000-4000-8000-000000000001",
+              "documentHash": "sha256:al-cert"
+            }
+          ],
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 2,
+          "potentialPayoutTotals": [],
+          "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
+        },
+        "content": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+        "visible": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.\nThe scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount.",
+        "questions": [],
+        "userAt": "2026-10-17T15:47:32.378Z",
+        "assistantAt": "2026-10-17T15:47:32.378Z",
+        "trace": {
+          "gate": [],
+          "turn": 2,
+          "calls": [
+            {
+              "ok": true,
+              "input": 8153,
+              "output": 202,
+              "attempt": 1,
+              "costUsd": 0.0009163000000000001,
+              "latencyMs": 2814
+            },
+            {
+              "ok": true,
+              "input": 9274,
+              "output": 43,
+              "attempt": 1,
+              "costUsd": 0.00022647,
+              "latencyMs": 1725
+            },
+            {
+              "ok": true,
+              "input": 9382,
+              "output": 142,
+              "attempt": 1,
+              "costUsd": 0.00018588,
+              "latencyMs": 2235
+            },
+            {
+              "ok": true,
+              "input": 9703,
+              "output": 81,
+              "attempt": 1,
+              "costUsd": 0.00017775999999999998,
+              "latencyMs": 1967
+            },
+            {
+              "ok": true,
+              "input": 10044,
+              "output": 191,
+              "attempt": 1,
+              "costUsd": 0.00023797,
+              "latencyMs": 2606
+            },
+            {
+              "ok": true,
+              "input": 10429,
+              "output": 263,
+              "attempt": 1,
+              "costUsd": 0.00028178,
+              "latencyMs": 3333
+            }
+          ],
+          "limit": null,
+          "steps": 6,
+          "usage": {
+            "input": 56985,
+            "output": 922
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "final_answer",
+          "timings": {
+            "toolMs": {
+              "resolve_person": {
+                "n": 1,
+                "ms": 1
+              },
+              "evaluate_benefit": {
+                "n": 2,
+                "ms": 13
+              }
+            },
+            "modelMs": 14680,
+            "otherMs": 48,
+            "resolve": {
+              "n": 1,
+              "ms": 12
+            }
+          },
+          "composed": [
+            "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+            "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount."
+          ],
+          "latencyMs": 14742,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "Daniel"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ok\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "facts": [
+                  {
+                    "key": "fracture_site_detail",
+                    "value": "tibia (lower leg)",
+                    "words": "it is definitely the lower leg, the tibia"
+                  },
+                  {
+                    "key": "fracture_confirmed",
+                    "value": "yes",
+                    "words": "it is definitely the lower leg, the tibia"
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "the tibia (lower leg)",
+                "purpose": "claim",
+                "fact_keys": [
+                  "fracture_site_detail",
+                  "fracture_status",
+                  "how_it_happened"
+                ],
+                "benefit_id": "bd46d4e45bd",
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "assumption_words": "it is definitely the lower leg, the tibia"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"case_conflict\"}",
+              "evidenceIds": [
+                "e13"
+              ]
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "fact",
+                "question": "Has a registered medical practitioner confirmed the tibia fracture by X-ray?",
+                "requirement_id": "q2_1"
+              },
+              "name": "ask_user",
+              "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+              "evidenceIds": []
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "fact",
+                "fact_key": "how_it_happened",
+                "question": "How did Daniel's fall happen?",
+                "statements": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v3"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "because_evidence_ids": [
+                  "e2",
+                  "e3",
+                  "e5"
+                ]
+              },
+              "name": "ask_user",
+              "error": "how_it_happened is already recorded (fell at home, \"hurt himself in a fall at home last night\"); do not ask again",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "case": "tibia (lower leg)",
+                "purpose": "claim",
+                "fact_keys": [
+                  "fracture_site_detail",
+                  "fracture_status",
+                  "how_it_happened"
+                ],
+                "benefit_id": "bd46d4e45bd",
+                "subject_id": "7c000000-0000-4000-8000-000000000001",
+                "assumption_words": "it is definitely the lower leg, the tibia"
+              },
+              "name": "evaluate_benefit",
+              "summary": "{\"status\":\"case_conflict\"}",
+              "evidenceIds": [
+                "e13"
+              ]
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "fact",
+                "question": "Which listed case best describes Daniel's tibia fracture: Hip, or Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)?",
+                "statements": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v3"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "requirement_id": "q2_2"
+              },
+              "name": "ask_user",
+              "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "sentences": [
+                  {
+                    "kind": "benefit_terms",
+                    "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                    "benefit": "Simple Fracture or Other Fracture due to Accident",
+                    "value_ids": [
+                      "v3"
+                    ],
+                    "benefit_id": "bd46d4e45bd",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  },
+                  {
+                    "kind": "uncertainty",
+                    "text": "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount.",
+                    "subject_id": "7c000000-0000-4000-8000-000000000001",
+                    "evidence_ids": [
+                      "e13"
+                    ]
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "final_answer",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Update: it is definitely the lower leg, the tibia.",
+          "evidenceChosen": [
+            "e13",
+            "e2"
+          ]
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "SBp",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": "7c000000-0000-4000-8000-000000000001",
+    "speakerId": "7c000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "paraphrased",
+          "value": "possible fracture",
+          "words": "The hospital thinks he broke either his hip or the lower leg bone",
+          "source": "user_reported"
+        },
+        "fracture_status": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "closed",
+          "words": "it looks like a closed fracture",
+          "source": "user_reported"
+        },
+        "how_it_happened": {
+          "turn": 1,
+          "basis": "paraphrased",
+          "value": "fell at home",
+          "words": "hurt himself in a fall at home last night",
+          "source": "user_reported"
+        },
+        "fracture_confirmed": {
+          "turn": 2,
+          "basis": "paraphrased",
+          "value": "yes",
+          "words": "it is definitely the lower leg, the tibia",
+          "source": "user_reported"
+        },
+        "fracture_site_detail": {
+          "turn": 2,
+          "basis": "stated",
+          "value": "tibia (lower leg)",
+          "words": "it is definitely the lower leg, the tibia",
+          "source": "user_reported"
+        },
+        "fracture_site_uncertain": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "hip or lower leg bone",
+          "words": "either his hip or the lower leg bone",
+          "source": "user_reported"
+        }
+      },
+      "derived": [],
+      "subjectId": "7c000000-0000-4000-8000-000000000001"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 6,
+        "usage": {
+          "input": 70362,
+          "output": 980
+        },
+        "latencyMs": 16953,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Daniel"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "how_it_happened",
+                  "value": "fell at home",
+                  "words": "hurt himself in a fall at home last night"
+                },
+                {
+                  "key": "injury",
+                  "value": "possible fracture",
+                  "words": "The hospital thinks he broke either his hip or the lower leg bone"
+                },
+                {
+                  "key": "fracture_site_uncertain",
+                  "value": "hip or lower leg bone",
+                  "words": "either his hip or the lower leg bone"
+                },
+                {
+                  "key": "fracture_status",
+                  "value": "closed",
+                  "words": "it looks like a closed fracture"
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "accident fracture",
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "person_benefits",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12",
+              "e13",
+              "e14"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "either his hip or the lower leg bone",
+              "purpose": "claim",
+              "fact_keys": [
+                "fracture_site_uncertain",
+                "fracture_status",
+                "how_it_happened"
+              ],
+              "benefit_id": "bd46d4e45bd",
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "assumption_words": "either his hip or the lower leg bone"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"needs_facts\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "preface": "I’m sorry Daniel has been hurt.",
+              "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+              "statements": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "requirement_id": "q1_1"
+            },
+            "name": "ask_user",
+            "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "how_it_happened",
+                  "value": "fell at home",
+                  "words": "hurt himself in a fall at home last night"
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "question": "Once the scans confirm it, is Daniel’s fracture in the hip, or in the leg (lower-leg/shin bone)?",
+              "statements": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "requirement_id": "q1_1"
+            },
+            "name": "ask_user",
+            "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The scans have not yet established which listed fracture case applies, so the documents do not yet establish which percentage applies or what the benefit would work out to.",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e13",
+          "e2"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 6,
+        "usage": {
+          "input": 56985,
+          "output": 922
+        },
+        "latencyMs": 14742,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Daniel"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "fracture_site_detail",
+                  "value": "tibia (lower leg)",
+                  "words": "it is definitely the lower leg, the tibia"
+                },
+                {
+                  "key": "fracture_confirmed",
+                  "value": "yes",
+                  "words": "it is definitely the lower leg, the tibia"
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "the tibia (lower leg)",
+              "purpose": "claim",
+              "fact_keys": [
+                "fracture_site_detail",
+                "fracture_status",
+                "how_it_happened"
+              ],
+              "benefit_id": "bd46d4e45bd",
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "assumption_words": "it is definitely the lower leg, the tibia"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"case_conflict\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "question": "Has a registered medical practitioner confirmed the tibia fracture by X-ray?",
+              "requirement_id": "q2_1"
+            },
+            "name": "ask_user",
+            "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+            "evidenceIds": []
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "fact_key": "how_it_happened",
+              "question": "How did Daniel's fall happen?",
+              "statements": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v3"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "because_evidence_ids": [
+                "e2",
+                "e3",
+                "e5"
+              ]
+            },
+            "name": "ask_user",
+            "error": "how_it_happened is already recorded (fell at home, \"hurt himself in a fall at home last night\"); do not ask again",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "case": "tibia (lower leg)",
+              "purpose": "claim",
+              "fact_keys": [
+                "fracture_site_detail",
+                "fracture_status",
+                "how_it_happened"
+              ],
+              "benefit_id": "bd46d4e45bd",
+              "subject_id": "7c000000-0000-4000-8000-000000000001",
+              "assumption_words": "it is definitely the lower leg, the tibia"
+            },
+            "name": "evaluate_benefit",
+            "summary": "{\"status\":\"case_conflict\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "question": "Which listed case best describes Daniel's tibia fracture: Hip, or Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)?",
+              "statements": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v3"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "requirement_id": "q2_2"
+            },
+            "name": "ask_user",
+            "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e2, e3, e5)",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "kind": "benefit_terms",
+                  "text": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+                  "benefit": "Simple Fracture or Other Fracture due to Accident",
+                  "value_ids": [
+                    "v3"
+                  ],
+                  "benefit_id": "bd46d4e45bd",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                },
+                {
+                  "kind": "uncertainty",
+                  "text": "The scans and medical confirmation are still needed to establish the fracture and its classification; the listed percentage is not a confirmed claim amount.",
+                  "subject_id": "7c000000-0000-4000-8000-000000000001",
+                  "evidence_ids": [
+                    "e13"
+                  ]
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e13",
+          "e2"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 358,
+                "text": "S****411A",
+                "start": 349,
+                "header": ""
+              },
+              {
+                "end": 379,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 359,
+                "header": ""
+              },
+              {
+                "end": 389,
+                "text": "S$500,000",
+                "start": 380,
+                "header": ""
+              },
+              {
+                "end": 395,
+                "text": "As of",
+                "start": 390,
+                "header": ""
+              },
+              {
+                "end": 406,
+                "text": "01/04/2024",
+                "start": 396,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 389,
+            "text": "S$500,000",
+            "start": 380
+          },
+          "layout": "person_row",
+          "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Term Life",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 379,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 359,
+            "memberId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 406,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 349,
+          "onPage": 1
+        },
+        "support": {
+          "end": 406,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$500,000\tAs of\t01/04/2024",
+          "start": 349,
+          "onPage": 1
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000101",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-cert"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "person_benefits",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "row": {
+            "cells": [
+              {
+                "end": 517,
+                "text": "S****411A",
+                "start": 508,
+                "header": ""
+              },
+              {
+                "end": 538,
+                "text": "Lee Wei Ming, Daniel",
+                "start": 518,
+                "header": ""
+              },
+              {
+                "end": 548,
+                "text": "S$600,000",
+                "start": 539,
+                "header": ""
+              },
+              {
+                "end": 554,
+                "text": "As of",
+                "start": 549,
+                "header": ""
+              },
+              {
+                "end": 565,
+                "text": "01/04/2024",
+                "start": 555,
+                "header": ""
+              }
+            ]
+          },
+          "asOf": "2024-04-01",
+          "cell": {
+            "end": 548,
+            "text": "S$600,000",
+            "start": 539
+          },
+          "layout": "person_row",
+          "tableId": "7c000000-0000-4000-8000-000000000101:p1:t1",
+          "rowLabel": "Group Personal Accident",
+          "appliesTo": null,
+          "rowPerson": {
+            "end": 538,
+            "text": "Lee Wei Ming, Daniel",
+            "start": 518,
+            "memberId": "7c000000-0000-4000-8000-000000000001"
+          },
+          "columnLeaf": "",
+          "columnHeader": ""
+        },
+        "context": null,
+        "passage": {
+          "end": 565,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+          "start": 508,
+          "onPage": 1
+        },
+        "support": {
+          "end": 565,
+          "text": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+          "start": 508,
+          "onPage": 1
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000101",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-cert"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "passage": {
+          "end": 929,
+          "text": "•\tMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*",
+          "start": 853,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 1422,
+            "role": "footnote",
+            "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary",
+            "start": 1347,
+            "onPage": 13
+          }
+        ],
+        "passage": {
+          "end": 987,
+          "text": "•\tHome Rehabilitation Renovation Expenses*\tUp to S$10,000",
+          "start": 930,
+          "onPage": 13
+        },
+        "support": {
+          "end": 987,
+          "text": "•\tHome Rehabilitation Renovation Expenses*\tUp to S$10,000",
+          "start": 930,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 1422,
+            "role": "footnote",
+            "text": "*This Benefit can only be claimed either under the Core Scheme or Voluntary",
+            "start": 1347,
+            "onPage": 13
+          }
+        ],
+        "passage": {
+          "end": 1037,
+          "text": "•\tAccidental Hospital Recuperation Benefit*\tS$250",
+          "start": 988,
+          "onPage": 13
+        },
+        "support": {
+          "end": 1037,
+          "text": "•\tAccidental Hospital Recuperation Benefit*\tS$250",
+          "start": 988,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-product-summary"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 408,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 370,
+          "onPage": 8
+        },
+        "support": {
+          "end": 408,
+          "text": "Neck, Skull or Spine (Full Break)\t100%",
+          "start": 370,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 416,
+          "text": "Hip\t75%",
+          "start": 409,
+          "onPage": 8
+        },
+        "support": {
+          "end": 416,
+          "text": "Hip\t75%",
+          "start": 409,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 469,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+          "start": 417,
+          "onPage": 8
+        },
+        "support": {
+          "end": 469,
+          "text": "Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%",
+          "start": 417,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 532,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 470,
+          "onPage": 8
+        },
+        "support": {
+          "end": 532,
+          "text": "Cheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%",
+          "start": 470,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 579,
+          "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+          "start": 533,
+          "onPage": 8
+        },
+        "support": {
+          "end": 579,
+          "text": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+          "start": 533,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "passage": {
+          "end": 1743,
+          "text": "G. Ambulance Cost\nIf an Insured Person sustains bodily injury as a result of an Accident, which necessitates the use of an ambulance, we will reimburse the actual\nground ambulance costs on a per event per Insured Person basis, incurred by the Insured Person up to maximum of $500 for transportation\n(including the medical supplies used) to the Hospital.\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+          "start": 1307,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "person_benefits",
+        "page": {
+          "end": 9,
+          "start": 9
+        },
+        "table": null,
+        "passage": {
+          "end": 327,
+          "text": "Section 5 - Compassionate Death Allowance Benefit\nIf an Insured Person dies as a result of an Accident, we will pay the funeral expenses incurred, up to $2,000,\non receipt of proof of death and the relevant documents in our prescribed form.\nThis Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.",
+          "start": 0,
+          "onPage": 9
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000104",
+        "subjectId": "7c000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:al-booklet"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "person_benefits",
+        "page": {
+          "end": 8,
+          "start": 8
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 849,
+            "role": "table_header",
+            "text": "(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and",
+            "start": 702,
+            "onPage": 8
+          }
+        ],
+        "passage": {
+          "end": 930,
+          "text": "(% of Sum Insured)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\nArm, Elbow, Wrist or Ribs (Other Fracture)\t20%\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nF.\tDisappearance\nIf an Insured Person:\n(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+          "start": 351,
+          "onPage": 8
+        },
+        "support": {
+          "end": 930,
+          "text": "(ii)\this body is not found within l year from the date of his disappearance; and",
+          "start": 850,
+          "onPage": 8
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:al-pa-summary"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "person_benefits",
+        "page": {
+          "end": 13,
+          "start": 13
+        },
+        "table": null,
+        "passage": {
+          "end": 687,
+          "text": "Schedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\n#\nArm , Elbow, Wrist or Ribs\t25%\n^\tFor the avoidance of doubt, any fractures of toe and foot are not covered",
+          "start": 395,
+          "onPage": 13
+        },
+        "policyId": "7c000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:al-product-summary"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e13",
+            "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "pageStart": 8,
+            "policyName": "Group Personal Accident Benefit Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Scheme X Group Insurance - Certificate",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2024-04-01",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+            "currency": "SGD",
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "sentence": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+            "pageStart": 1,
+            "rowPerson": "Lee Wei Ming, Daniel",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001",
+        "citations": [
+          {
+            "chunkId": "rag2:e13",
+            "excerpt": "(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 8,
+            "policyId": "7c000000-0000-4000-8000-000000000103",
+            "pageStart": 8,
+            "policyName": "Group Personal Accident Benefit Summary",
+            "documentRole": "benefit_summary"
+          },
+          {
+            "chunkId": "rag2:e2",
+            "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+            "insurer": "Aldermoor Life Ltd",
+            "pageEnd": 1,
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "Scheme X Group Insurance - Certificate",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "asOf": "2024-04-01",
+            "value": 600000,
+            "column": null,
+            "layout": "person_row",
+            "benefit": "Group Personal Accident",
+            "pageEnd": 1,
+            "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of\t01/04/2024",
+            "currency": "SGD",
+            "policyId": "7c000000-0000-4000-8000-000000000101",
+            "sentence": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%.",
+            "pageStart": 1,
+            "rowPerson": "Lee Wei Ming, Daniel",
+            "subjectId": "7c000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:al-cert"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

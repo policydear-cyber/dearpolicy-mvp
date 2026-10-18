@@ -20,6 +20,7 @@ import * as TAN from "../fixtures/reliable-chat/tan";
 import * as PR50 from "../fixtures/rag2-pr50/household";
 import * as BOOKLET from "../fixtures/reliable-chat/booklet";
 import { gradeP50A } from "./pr50a-check";
+import { STRUCTURED_GRADERS } from "./structured-check";
 
 type Check = { id: string; dim: "C" | "K" | "S" | "U"; name: string; ok: boolean; detail?: string };
 type Verdict = "PASS" | "FAIL" | "BLOCKED" | "INCOMPLETE";
@@ -358,7 +359,7 @@ export function gradeFL5(id: string, conv: any): Graded {
 
 export const GRADERS: Record<string, (id: string, conv: any) => Graded> = { FL1a: gradeFL1, FL1b: gradeFL1, FL2: gradeFL2, FL3: gradeFL3, FL4: gradeFL4, FL4b: gradeFL4b, FL5a: gradeFL5, FL5b: gradeFL5, BKL1a: gradeBKL1, BKL1b: gradeBKL1, BKL2: gradeBKL2, BKL3: gradeBKL3, RCT1a: gradeRCT1, RCT1b: gradeRCT1, RCW1a: gradeRCW1, RCW1b: gradeRCW1, RCW2: gradeRCW2, RCW3: gradeRCW3,
   // rc-live-2 (pre-registered in EXPECTED-rc-live-2.md)
-  RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX };
+  RCT2a: gradeRCT1, RCT2b: gradeRCT1, RCW4a: gradeRCW1, RCW4b: gradeRCW1, RCX: gradeRCX, ...STRUCTURED_GRADERS };
 
 /** v2 controls on the ACTUAL rc-live-1 transcripts (committed): answers the v1 grader passed that were not useful now
  * fail on the intended check. The v1 grades themselves are kept as they were (live/rc-live-1-grade.md). */

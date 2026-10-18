@@ -1,0 +1,184 @@
+[
+  {
+    "scenario": "SBc",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no refusal / “couldn't confirm” text where an answer was possible, and no model error",
+        "ok": true,
+        "detail": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel'"
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "K",
+        "name": "no other household's / superseded version's / other document's figure",
+        "ok": true,
+        "detail": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel'"
+      },
+      {
+        "id": "G4",
+        "dim": "K",
+        "name": "no “Schedule” / bullet identity and no imported definition of Simple / Other Fracture",
+        "ok": true,
+        "detail": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel'"
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spin"
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved: every saved calculation's sentence is shown whole",
+        "ok": true,
+        "detail": "[[],[\"If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\",\"If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\"]]"
+      },
+      {
+        "id": "Q1",
+        "dim": "U",
+        "name": "turn 1: exactly one question, about the hip or the lower-leg case, never whether the insurer accepts or approves",
+        "ok": true,
+        "detail": "[{\"id\":\"rag_fact_listed_case_bd46d4e45bd\",\"why\":\"This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%” (page 8)\",\"text\":\"Once the scan confirms the fracture, is it in Daniel’s hip or his lower leg (shin/tibia)?\",\"type\":\"choice\",\"options\":[\"Hip\",\"Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\"]}]"
+      },
+      {
+        "id": "Q2",
+        "dim": "K",
+        "name": "turn 1: the supported Simple Fracture terms come first (the S$5,000 limit and its hip and leg rows) and no amount is asserted before the case is known",
+        "ok": true,
+        "detail": "The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident Benefit Summary (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Daniel'"
+      },
+      {
+        "id": "Q3",
+        "dim": "K",
+        "name": "turn 1: no unrelated row is cited as the reason for the question (Cheekbone / Shoulder / Arm)",
+        "ok": true,
+        "detail": "[{\"id\":\"rag_fact_listed_case_bd46d4e45bd\",\"why\":\"This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%” (page 8)\",\"text\":\"Once the scan confirms the fracture, is it in Daniel’s hip or his lower leg (shin/tibia)?\",\"type\":\"choice\",\"options\":[\"Hip\",\"Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\"]}]"
+      },
+      {
+        "id": "Q4",
+        "dim": "K",
+        "name": "turn 2: the illustration is for the clarified case (leg row, S$2,500), conditional and saved",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nYou told me the scan is back: it is the tibia.\nThe uploaded documents do not establish whether t"
+      },
+      {
+        "id": "Q5",
+        "dim": "K",
+        "name": "turn 2: the earlier uncertain report is not the assumption (no “possibly”, “not sure”, “hip, or”)",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Pr"
+      },
+      {
+        "id": "Q6",
+        "dim": "U",
+        "name": "turn 2: the question is not asked again; a contact step is shown",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Pr"
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "SBd",
+    "verdict": "PASS",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no refusal / “couldn't confirm” text where an answer was possible, and no model error",
+        "ok": true,
+        "detail": "The imaging result is still pending, so the documents do not yet establish which listed fracture case applies. The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident"
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "K",
+        "name": "no other household's / superseded version's / other document's figure",
+        "ok": true,
+        "detail": "The imaging result is still pending, so the documents do not yet establish which listed fracture case applies. The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident"
+      },
+      {
+        "id": "G4",
+        "dim": "K",
+        "name": "no “Schedule” / bullet identity and no imported definition of Simple / Other Fracture",
+        "ok": true,
+        "detail": "The imaging result is still pending, so the documents do not yet establish which listed fracture case applies. The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident"
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "The imaging result is still pending, so the documents do not yet establish which listed fracture case applies. The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fra"
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved: every saved calculation's sentence is shown whole",
+        "ok": true,
+        "detail": "[[],[\"If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\",\"If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\"]]"
+      },
+      {
+        "id": "Q1",
+        "dim": "U",
+        "name": "turn 1: exactly one question, about the hip or the lower-leg case, never whether the insurer accepts or approves",
+        "ok": true,
+        "detail": "[{\"id\":\"rag_fact_listed_case_bd46d4e45bd\",\"why\":\"This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%” (page 8)\",\"text\":\"Once imaging confirms a fracture, is it the hip or the lower leg (shin/tibia)?\",\"type\":\"choice\",\"options\":[\"Hip\",\"Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\"]}]"
+      },
+      {
+        "id": "Q2",
+        "dim": "K",
+        "name": "turn 1: the supported Simple Fracture terms come first (the S$5,000 limit and its hip and leg rows) and no amount is asserted before the case is known",
+        "ok": true,
+        "detail": "The imaging result is still pending, so the documents do not yet establish which listed fracture case applies. The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The Group Personal Accident"
+      },
+      {
+        "id": "Q3",
+        "dim": "K",
+        "name": "turn 1: no unrelated row is cited as the reason for the question (Cheekbone / Shoulder / Arm)",
+        "ok": true,
+        "detail": "[{\"id\":\"rag_fact_listed_case_bd46d4e45bd\",\"why\":\"This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%” (page 8)\",\"text\":\"Once imaging confirms a fracture, is it the hip or the lower leg (shin/tibia)?\",\"type\":\"choice\",\"options\":[\"Hip\",\"Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\"]}]"
+      },
+      {
+        "id": "Q4",
+        "dim": "K",
+        "name": "turn 2: the illustration is for the clarified case (leg row, S$2,500), conditional and saved",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nYou told me: “Imaging confirms the tibia, not the hip”.\nThe Group Personal Accident Benefit Summ"
+      },
+      {
+        "id": "Q5",
+        "dim": "K",
+        "name": "turn 2: the earlier uncertain report is not the assumption (no “possibly”, “not sure”, “hip, or”)",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Pr"
+      },
+      {
+        "id": "Q6",
+        "dim": "U",
+        "name": "turn 2: the question is not asked again; a contact step is shown",
+        "ok": true,
+        "detail": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident), under the Group Personal Accident Benefit Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nIf the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Pr"
+      }
+    ],
+    "note": null
+  }
+]

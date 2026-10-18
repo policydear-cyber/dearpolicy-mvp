@@ -37,6 +37,7 @@ async function main() {
   if (preflight) process.env.RAG2_LIVE_PREFLIGHT = "1"; else delete process.env.RAG2_LIVE_PREFLIGHT;
   const runId = arg("run-id", preflight ? "preflight" : undefined);
   if (!runId || !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
+  process.env.RAG2_LIVE_RUN_ID = runId; // the guard admits the run against the cumulative ledger (and the server it starts inherits this)
   const safety = liveSafetyChecks(process.env);
   // --live: CI direct mode, or the loopback relay in the workbench kernel (scripts/rag2-live/relay.py), which forwards
   // through the Composio "openai" connection holding the dedicated, spend-limited test key server-side (the key never

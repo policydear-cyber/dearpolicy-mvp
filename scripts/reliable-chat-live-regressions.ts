@@ -113,7 +113,7 @@ async function main() {
       (v: ScriptView) => [call("final_answer", { subject_id: A, sentences: [{ kind: "calculation", result_id: evalOf(v).result_id, text: "-" }] })],
     ] }]);
     const x = out[0];
-    check("RCW1b recorded calls: the assumption is the household's recorded words (\"Adrian broke his leg\"), not the paraphrase; the gate accepts the S$2,500", /S\$2,500/.test(x.v) && !(x.trace.gate ?? []).length && !/closed fracture of his leg/.test(x.v) && /Adrian broke his leg/.test(x.v), x.v + "\n" + JSON.stringify(x.trace.gate));
+    check("RCW1b recorded calls: the saved record's assumption is the household's recorded words (\"Adrian broke his leg\"), not the paraphrase, and the statement says the resolved case (structured-answers release: household words are provenance, never quoted); the gate accepts the S$2,500", /S\$2,500/.test(x.v) && !(x.trace.gate ?? []).length && !/closed fracture of his leg/.test(x.v) && (x.answer.calculations ?? []).some((k: any) => /Adrian broke his leg/.test(k.assumption ?? "") && !/closed fracture of his leg/.test(k.assumption ?? "")), x.v + "\n" + JSON.stringify(x.trace.gate));
     let note3 = "";
     const w3 = await run([{ user: "Which of my uploaded policies should I claim under for Adrian's broken wrist from a cycling accident?", steps: [
       () => [call("resolve_person", { mention: "Adrian" })],

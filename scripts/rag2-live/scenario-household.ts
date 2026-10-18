@@ -20,6 +20,7 @@ import * as LIVELIB from "../fixtures/rag2-livelib/household";
 import * as PR50 from "../fixtures/rag2-pr50/household";
 import * as TAN from "../fixtures/reliable-chat/tan";
 import * as BOOKLET from "../fixtures/reliable-chat/booklet";
+import * as ACTUAL from "../fixtures/reliable-chat/actual-lib";
 import type { Scenario } from "./scenarios";
 
 export const SCENARIO_ACCOUNT = SCENARIO.ACCOUNT;
@@ -29,6 +30,7 @@ export const LIVELIB_ACCOUNT = LIVELIB.ACCOUNT;
 export const PR50_ACCOUNT = PR50.ACCOUNT;
 export const TAN_ACCOUNT = TAN.ACCOUNT;
 export const BOOKLET_ACCOUNT = BOOKLET.ACCOUNT;
+export const ACTUAL_ACCOUNT = ACTUAL.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
   "Desmond broke his leg.",
   "He fell down the stairs.",
@@ -169,8 +171,58 @@ export const FL5b: Scenario = { id: "FL5b", title: "rc-live-9: a fresh paraphras
   { user: "Say Daniel passed away after an accident. Would the booklet cover any of the funeral costs, and how much? What proof would the insurer ask us for?", expect: {} }] };
 export const RC_BOOKLET = process.env.BOOKLET_CDA === "recorded" ? [FL4, FL4b, FL5a, FL5b] : [BKL1a, BKL1b, BKL2, BKL3, FL1a, FL1b, FL2, FL3];
 
-export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" = "scenario"): Promise<void> {
-  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : SCENARIO) as unknown as typeof SCENARIO;
+/** Structured-answers release (EXPECTED-structured-answers.md, grader v8 in structured-check.ts, written before any run):
+ * the faithful actual-library household (RAG2_LIVE_HOUSEHOLD=actuallib). Fresh wording; SAa/SAb are two independent
+ * attempts of the correction journey, SBa/SBb of the ambiguity journey; SAp/SBp are fresh paraphrases of each. */
+const SA_TURNS = [
+  "Daniel fell off a ladder at home and fractured his tibia. It's a closed fracture. What would his accident cover pay?",
+  "Correction: it was his hip, not his tibia. Keep this as a hypothetical closed fracture.",
+];
+export const SAa: Scenario = { id: "SAa", title: "structured: closed tibia -> corrected to hip (attempt 1)", why: "release journey 1 and 2", turns: SA_TURNS.map((user) => ({ user, expect: {} })) };
+export const SAb: Scenario = { ...SAa, id: "SAb", title: "structured: closed tibia -> corrected to hip (attempt 2)" };
+export const SAp: Scenario = { id: "SAp", title: "structured: closed tibia -> corrected to hip (fresh paraphrase)", why: "release journey 1 and 2 (paraphrase)", turns: [
+  { user: "My husband Daniel slipped on wet stairs at home and the doctor says he has a closed break of the shin bone. What could his personal accident cover pay out for that?", expect: {} },
+  { user: "Sorry, I had that wrong - the break is in his hip, not his shin. Same closed fracture, still just asking what it could be worth.", expect: {} }] };
+const SB_TURNS = [
+  "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?",
+  "The scan shows it is the tibia.",
+];
+export const SBa: Scenario = { id: "SBa", title: "structured: uncertain hip / tibia -> one question -> tibia (attempt 1)", why: "release journey 3", turns: SB_TURNS.map((user) => ({ user, expect: {} })) };
+export const SBb: Scenario = { ...SBa, id: "SBb", title: "structured: uncertain hip / tibia -> one question -> tibia (attempt 2)" };
+export const SBp: Scenario = { id: "SBp", title: "structured: uncertain hip / tibia (fresh paraphrase)", why: "release journey 3 (paraphrase)", turns: [
+  { user: "Daniel hurt himself in a fall at home last night. The hospital thinks he broke either his hip or the lower leg bone, they are still waiting on scans, and it looks like a closed fracture. What would his accident insurance give him?", expect: {} },
+  { user: "Update: it is definitely the lower leg, the tibia.", expect: {} }] };
+export const SC: Scenario = { id: "SC", title: "structured: Simple versus Other Fracture comparison", why: "release journey 4", turns: [{ user: "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?", expect: {} }] };
+export const SD: Scenario = { id: "SD", title: "structured: the death allowance", why: "release journey 5", turns: [{ user: "If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?", expect: {} }] };
+export const SE: Scenario = { id: "SE", title: "structured: person switch to Grace", why: "release journey 6", turns: [
+  { user: "Daniel fractured his tibia in an accident, a closed fracture. What would his accident cover pay?", expect: {} },
+  { user: "And if Grace fractured her hip, what would the Simple Fracture benefit pay for her?", expect: {} }] };
+/** SAq (after sa-live-2): SAp's wording said "My husband Daniel" while the fixture lists Daniel as the account holder ("self"), so the
+ * app rightly asked who was meant and the paraphrase never tested the correction. SAq is the same paraphrase without that contradiction;
+ * SAp stays in the record as run. */
+export const SAq: Scenario = { id: "SAq", title: "structured: closed tibia -> corrected to hip (fresh paraphrase, consistent with the fixture)", why: "release journey 1 and 2 (paraphrase)", turns: [
+  { user: "Daniel slipped on wet stairs at home and the doctor says he has a closed break of the shin bone. What could his personal accident cover pay out for that?", expect: {} },
+  { user: "Sorry, I had that wrong - the break is in his hip, not his shin. Same closed fracture, still just asking what it could be worth.", expect: {} }] };
+/** SAr (round 3, written before its first run): a held-back correction paraphrase -- different cause, bone and wording from SAa/SAb/SAq. */
+export const SAr: Scenario = { id: "SAr", title: "structured: closed lower-leg break -> corrected to hip (held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase)", turns: [
+  { user: "Daniel came off his bicycle this morning and the doctor says he has a closed break in his lower leg, the tibia. If we claimed on his accident cover, what could that be worth?", expect: {} },
+  { user: "The doctor has corrected it: the break is actually at the hip, not the lower leg. Same closed fracture. What does that change?", expect: {} }] };
+/** SAs (round 3, written before sa-live-5): a second held-back correction paraphrase -- different cause, wording and trigger; same bones, so the original grader applies. */
+export const SAs: Scenario = { id: "SAs", title: "structured: broken shin bone -> corrected to hip (second held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase 2)", turns: [
+  { user: "Daniel slipped on a wet floor in the kitchen and the hospital says his shin bone, the tibia, is broken cleanly - a closed fracture. If we made a claim under his accident insurance, roughly what would it be worth?", expect: {} },
+  { user: "Sorry, the hospital rang back: it is the hip that is broken, not the shin bone. Still a closed fracture. What would it be worth now?", expect: {} }] };
+/** SBc / SBd (round 4, written before sa-live-6): two held-back ambiguity paraphrases -- different cause, wording and trigger; the same bones as SBa/SBb
+ * (hip or tibia unknown, then the tibia confirmed), so the original ambiguity grader applies and the round-4 completeness assessment (v9.1 K1-K3) is added. */
+export const SBc: Scenario = { id: "SBc", title: "structured: hip or shin unknown -> one question -> tibia (held-back paraphrase 1)", why: "release journey 3 (round-4 paraphrase 1)", turns: [
+  { user: "Daniel tripped on the kerb outside the house and the hospital thinks it is either his hip or his tibia that has cracked - they will know more after the scan. It looks like a closed fracture from an accident. What could his accident cover give him?", expect: {} },
+  { user: "The scan is back: it is the tibia.", expect: {} }] };
+export const SBd: Scenario = { id: "SBd", title: "structured: hip or lower leg unknown -> one question -> tibia (held-back paraphrase 2)", why: "release journey 3 (round-4 paraphrase 2)", turns: [
+  { user: "Daniel slipped in the bathroom at home. The doctor suspects a fracture of the hip or possibly the tibia but is waiting for imaging. No open wound, so a closed fracture. What would his accident insurance pay for that?", expect: {} },
+  { user: "Imaging confirms the tibia, not the hip.", expect: {} }] };
+export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SAs, SBp, SBc, SBd, SC, SD, SE];
+
+export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" = "scenario"): Promise<void> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : SCENARIO) as unknown as typeof SCENARIO;
   assertLocalDatabase();
   for (const acct of [ACCOUNT, OTHER_ACCOUNT]) {
     await pool.query("DELETE FROM model_executions WHERE household_ref = $1", [pseudonymizeId(acct)]).catch(() => undefined);
@@ -179,7 +231,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : which === "booklet" ? "SYNTHETIC-DPTEST-booklet Household Lee (Daniel)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : which === "booklet" ? "SYNTHETIC-DPTEST-booklet Household Lee (Daniel)" : which === "actuallib" ? "SYNTHETIC-DPTEST-actuallib Household Lee (Daniel)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

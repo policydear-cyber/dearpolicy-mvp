@@ -54,6 +54,8 @@ export type ToolContext = {
   /** PR #54 follow-up: the household's reports per person (recorded facts, and their own messages), oldest first, with
    * whether each corrected an earlier one -- what a benefit's definition is checked against (lib/rag2/applicability.ts). */
   reportedFacts?: Map<string, import("./applicability").Reported[]>;
+  /** Latency evidence for the turn: the time the benefit records took to resolve, and how many times. */
+  timing?: { resolveMs: number; resolveCount: number };
   /** Reliable chat: per `${memberId}|${benefitId}`, the reported parts an evaluation found none of the listed cases covers. */
   unlisted?: Map<string, string[]>;
 };
@@ -64,7 +66,13 @@ export type ToolDef = { name: string; description: string; parameters: JsonSchem
 export function recordsFor(ctx: ToolContext, subjectId: string): Promise<BenefitRecord[]> {
   const c = (ctx.recordCache ??= new Map());
   let p = c.get(subjectId);
-  if (!p) { p = resolveBenefitRecords(ctx.accountId, subjectId); c.set(subjectId, p); p.catch(() => c.delete(subjectId)); }
+  if (!p) {
+    const t0 = Date.now();
+    p = resolveBenefitRecords(ctx.accountId, subjectId); c.set(subjectId, p); p.catch(() => c.delete(subjectId));
+    // (latency evidence: how often and how long the records of a turn are resolved -- once per person per turn)
+    const t = (ctx.timing ??= { resolveMs: 0, resolveCount: 0 }); t.resolveCount++;
+    void p.then(() => { t.resolveMs += Date.now() - t0; }, () => undefined);
+  }
   return p;
 }
 export function createToolContext(args: { accountId: string; speakerId?: string | null; lastSubjectId?: string | null; asOf?: string | null }): ToolContext {

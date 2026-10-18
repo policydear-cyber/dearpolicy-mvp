@@ -1,0 +1,20 @@
+{
+  "version": "v9.1",
+  "source": "/home/user/wt/docs/rag-migration/live/RUN-sa-live-5-2026-10-17T17-25-01",
+  "scenarios": {
+    "SAr": {
+      "v8_2": "FAIL",
+      "v9": "PASS",
+      "failed_v8_2": [
+        "U1"
+      ],
+      "failed_v9": []
+    },
+    "SAs": {
+      "v8_2": "PASS",
+      "v9": "PASS",
+      "failed_v8_2": [],
+      "failed_v9": []
+    }
+  }
+}

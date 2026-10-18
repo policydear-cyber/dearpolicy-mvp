@@ -1,0 +1,20 @@
+{
+  "scenario": "SC",
+  "title": "structured: Simple versus Other Fracture comparison",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Can you compare what the Simple Fracture benefit and the Other Fracture benefit would pay if Daniel broke his leg?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 11,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

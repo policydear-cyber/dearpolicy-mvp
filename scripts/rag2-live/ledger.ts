@@ -6,7 +6,12 @@
  * appends its own entry, committed together with its results (.github/workflows/rag2-live-smoke.yml).
  *   node --import tsx scripts/rag2-live/ledger.ts plan   --ledger <LEDGER.json> --request <run-request.json>
  *   node --import tsx scripts/rag2-live/ledger.ts append --ledger <LEDGER.json> --run-id <id> --tested-sha <sha>
- *        --request-sha <sha> --cap <usd> --preflight <true|false> [--run-dir <RUN folder>]
+ *        --request-sha <sha> --cap <usd> --preflight <true|false> [--run-dir <RUN folder>] [--at <iso>] [--note <text>]
+ *   node --import tsx scripts/rag2-live/ledger.ts reconcile --ledger <LEDGER.json> --dir <docs/rag-migration/live> [--dir <more>]
+ * Admission is enforced at EVERY entry point, not only by `plan`: e2e/support/rag2-live-guard.ts liveSafetyChecks (called by
+ * scripts/rag2-live/run.ts, scripts/ingest-live/run.ts and both live test servers) reads this ledger (RAG2_LIVE_LEDGER,
+ * default docs/rag-migration/live/LEDGER.json) for RAG2_LIVE_RUN_ID and caps the run at what planRun allows. A run_id
+ * already in the ledger is refused; `append` and validateLedger refuse a duplicate run_id, so one run is charged once.
  * `plan` writes run_id, scenarios, cap, remaining and preflight to $GITHUB_OUTPUT when it is set.
  */
 import fs from "node:fs";
@@ -48,6 +53,11 @@ export function validateRequest(r: any, kind: "rag2" | "ingest" = "rag2"): RunRe
 export function validateLedger(l: any): Ledger {
   if (!l || typeof l !== "object" || !Array.isArray(l.runs)) throw new Error("LEDGER.json: { exercise_cap_usd, runs: [] } expected");
   if (Number(l.exercise_cap_usd) !== EXERCISE_CAP_USD) throw new Error("LEDGER.json: exercise_cap_usd must be 1.00");
+  const seen = new Set<string>();
+  for (const r of l.runs as LedgerRun[]) {
+    if (seen.has(r.run_id)) throw new Error(`LEDGER.json: run_id "${r.run_id}" appears twice (a run is charged once)`);
+    seen.add(r.run_id);
+  }
   for (const r of l.runs as LedgerRun[]) {
     if (r.kind === undefined) continue;
     if (r.kind !== "trial_allocation") throw new Error(`LEDGER.json: unknown entry kind "${r.kind}" (${r.run_id})`);
@@ -75,6 +85,42 @@ export function entryFor(run: any | null, m: { runId: string; testedSha: string;
   return { ...base, spent_usd: round6(Number(b.spentUsd) || 0), reserved_unsettled_usd: round6(Number(b.reservedUsd) || 0), calls: Number(b.calls) || 0, refused: Number(b.refusals) || 0, failed: Number(b.failed) || 0 };
 }
 
+export type FoundRun = { run_id: string; dir: string; spent_usd: number; reserved_usd: number; calls: number; preflight: boolean; plumbing: boolean };
+/** Every RUN-* folder under the given roots with its recorded run.json spend (a folder without run.json is reported with spent null). */
+export function foundRuns(dirs: string[]): (FoundRun | { run_id: string; dir: string; unreadable: true })[] {
+  const out: (FoundRun | { run_id: string; dir: string; unreadable: true })[] = [];
+  for (const root of dirs) {
+    if (!fs.existsSync(root)) continue;
+    for (const name of fs.readdirSync(root).filter((n) => n.startsWith("RUN-")).sort()) {
+      const dir = path.join(root, name);
+      const m = /^RUN-(.*?)-?\d{4}-\d\d-\d\dT[\d-]+(-PLUMBING|-PREFLIGHT)?$/.exec(name);
+      const f = path.join(dir, "run.json");
+      let j: any = null;
+      try { j = JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* unreadable */ }
+      const run_id = String(j?.runId ?? m?.[1] ?? name);
+      if (!j) { out.push({ run_id, dir, unreadable: true }); continue; }
+      const b = j.budgetUsed ?? {};
+      out.push({ run_id, dir, spent_usd: Number(b.spentUsd) || 0, reserved_usd: Number(b.reservedUsd) || 0, calls: Number(b.calls) || 0, preflight: j.preflight === true, plumbing: /-PLUMBING$/.test(name) });
+    }
+  }
+  return out;
+}
+/** Which recorded runs have no ledger entry, or an entry that disagrees with the run's own record. Plumbing runs (a local
+ * fake endpoint, no model call) are not charged. A preflight run with no ledger entry is only tolerated (listed as
+ * unchargedPreflight) when its own record shows US$0, no reservation and no call; anything else without an entry is missing. */
+export function reconcileRuns(l: Ledger, found: ReturnType<typeof foundRuns>): { missing: string[]; mismatched: string[]; unreadable: string[]; plumbing: string[]; unchargedPreflight: string[] } {
+  const byId = new Map(l.runs.map((r) => [r.run_id, r]));
+  const res = { missing: [] as string[], mismatched: [] as string[], unreadable: [] as string[], plumbing: [] as string[], unchargedPreflight: [] as string[] };
+  for (const f of found) {
+    if ("unreadable" in f) { res.unreadable.push(f.run_id); continue; }
+    if (f.plumbing) { res.plumbing.push(f.run_id); continue; }
+    const e = byId.get(f.run_id);
+    if (!e) { (f.preflight && f.spent_usd === 0 && f.reserved_usd === 0 && f.calls === 0 ? res.unchargedPreflight : res.missing).push(f.run_id); continue; }
+    if (round6(f.spent_usd) !== round6(Number(e.spent_usd)) || f.calls !== Number(e.calls)) res.mismatched.push(f.run_id);
+  }
+  return res;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const arg = (n: string) => { const i = process.argv.indexOf("--" + n); return i > 0 ? process.argv[i + 1] : undefined; };
   const need = (n: string) => arg(n) ?? (() => { throw new Error(`--${n} is required`); })();
@@ -93,9 +139,18 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       const dir = arg("run-dir");
       const runJson = dir && fs.existsSync(path.join(dir, "run.json")) ? JSON.parse(fs.readFileSync(path.join(dir, "run.json"), "utf8")) : null;
       const e = entryFor(runJson, { runId: need("run-id"), testedSha: need("tested-sha"), requestSha: need("request-sha"), capUsd: Number(need("cap")), preflight: need("preflight") === "true" });
+      if (ledger.runs.some((r) => r.run_id === e.run_id)) throw new Error(`run_id "${e.run_id}" is already in the ledger: a run is charged once`);
+      if (arg("at")) e.at = arg("at")!;
+      if (arg("note")) e.note = arg("note")!;
       ledger.runs.push(e);
       fs.writeFileSync(ledgerPath, JSON.stringify(ledger, null, 2) + "\n");
       console.log(`ledger: ${e.run_id} spent US$${e.spent_usd} (+${e.reserved_unsettled_usd} unsettled), ${e.calls} calls, ${e.refused} refused, ${e.failed} failed; exercise remaining US$${remainingUsd(ledger)}`);
-    } else throw new Error("usage: ledger.ts plan|append ...");
+    } else if (cmd === "reconcile") {
+      const dirs = process.argv.flatMap((a, i, all) => (a === "--dir" && all[i + 1] ? [all[i + 1]] : []));
+      if (!dirs.length) throw new Error("--dir <folder holding RUN-*> is required");
+      const r = reconcileRuns(ledger, foundRuns(dirs));
+      console.log(JSON.stringify(r, null, 2));
+      if (r.missing.length || r.mismatched.length || r.unreadable.length) process.exit(1);
+    } else throw new Error("usage: ledger.ts plan|append|reconcile ...");
   } catch (e) { console.error(e instanceof Error ? e.message : e); process.exit(1); }
 }

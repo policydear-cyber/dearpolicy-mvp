@@ -1,0 +1,20 @@
+{
+  "scenario": "SBa",
+  "title": "structured: uncertain hip / tibia -> one question -> tibia (attempt 1)",
+  "conversationId": null,
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?",
+      "error": "POST /api/chat 404: No household"
+    }
+  ],
+  "totalMs": 15,
+  "firstUsefulResponseMs": null,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0
+}

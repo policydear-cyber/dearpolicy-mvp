@@ -71,7 +71,7 @@ export function caseFor(rows: CaseRow[], words: string): CaseChoice {
   // ("not the thigh, the shin" -> shin); infer no diagnosis from negative facts alone.
   const negated = new Set(PARTS.filter((p) => {
     const matches = [...words.matchAll(new RegExp(p.words.source, "gi"))];
-    return matches.some((m) => /\b(?:not|no|neither|without)(?:\s+(?:the|a|an|his|her|my|their|left|right|broken|fractured|injured)){0,3}\s*$/i.test(words.slice(Math.max(0, m.index! - 60), m.index)));
+    return matches.some((m) => /\b(?:not|no|neither|without)(?:\s+(?:the|a|an|his|her|my|their|left|right|lower|upper|broken|fractured|injured)){0,3}\s*$/i.test(words.slice(Math.max(0, m.index! - 60), m.index)));
   }).map((p) => p.id));
   const want = named.filter((p) => !negated.has(p));
   if (!want.length) return { kind: "ambiguous", rows: [...rows], parts: named, conflicting: true };

@@ -18,6 +18,8 @@ import { loadDocs, loadLinks, type DocRow, type LinkRow } from "../store";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
+/** The relationship note between two documents' tables (written once per answer). */
+const RELATION = new WeakSet<object>();
 /** Contact steps the server wrote for a document linked to the answer's person (checked here, not re-judged by text). */
 export const RENDERED_STEPS = new Set<string>();
 export const STATEMENT_KINDS = ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status"] as const;
@@ -118,11 +120,14 @@ export function renderCalculation(resultId: string, d: Deps): string | null {
     const ops = (c.record?.operands ?? []).filter((o) => o.source === "document");
     const pct = ops.find((o) => o.unit === "percent"), base = ops.find((o) => o.unit === "money");
     const baseText = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)} (${pretty(base.label, [...(d.ctx.benefitRecords?.values() ?? [])].map((r) => r.policy.product))})` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
-    const assumption = c.record?.assumption?.trim() ?? "";
-    // the household's own words are said back only when they are a description, not merely the case they picked
-    const said = assumption && assumption.split(/\s+/).length >= 4 && !/^(?:the listed case|if)\b/i.test(assumption) ? ` (as you described: “${assumption.replace(/[“”"]/g, "")}”)` : "";
+    // (the household's own words stay in the record as provenance; the statement says the resolved case, never a quotation)
+    const said = "";
     const named = /\b(?:benefit|allowance|cover|compensation)\b/i.test(c.benefit) ? c.benefit : `${c.benefit} benefit`;
-    return `If the ${named} applies${pct ? ` to ${who}'s case “${pct.label}”` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}, under the ${product}; it is an illustration from the document's terms, not a payment or an insurer's decision.`;
+    // (a row the document itself labels with a case name in brackets -- "(Other Fracture)" -- says so: its applicability to
+    // the reported event is the document's to define, and these documents print no definition of it)
+    const label = pct ? pct.label.replace(/\s*\(([^)]*\bFracture)\)\s*$/i, "") : "";
+    const tagged = pct ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
+    return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${tagged ? ` (the row the document labels “${tagged}”; these documents print no definition of which fractures that is)` : ""}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}, under the ${product}; it is an illustration from the document's terms, not a payment or an insurer's decision.`;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {
     const rate = c.printed.find((x) => x.unit === "money");
@@ -150,6 +155,24 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const w = await renderTerms(r, d);
       s.text = w.text; s.evidence_ids = [...new Set([...((s.evidence_ids as string[]) ?? []), ...w.evidence_ids])]; s.value_ids = [...new Set([...((s.value_ids as string[]) ?? []), ...w.value_ids])];
       s.subject_id ??= r.memberId; s.benefit ??= r.benefit; RENDERED.add(s);
+    }
+  }
+  // Two documents of one scheme printing a percentage table for the same kind of event, each with its own base: said once,
+  // from the records (their documents, pages and bases), that the documents give no relationship between them.
+  if (list) {
+    const rendered = list.filter((s) => s && typeof s === "object" && s.kind === "calculation" && RENDERED.has(s));
+    const outs = rendered.map((s) => calcOutcomes(d.ctx).get(String(s.result_id))).filter((c): c is NonNullable<typeof c> => !!c && c.calculator === "lump_sum");
+    const recs = outs.map((c) => [...(d.ctx.benefitRecords?.values() ?? [])].find((r) => r.kind === "percentage_schedule" && r.policy.id === c.policyId && r.benefit === c.benefit && r.memberId === c.subjectId)).filter((r): r is BenefitRecord => !!r);
+    // (a benefit_terms statement that presents a schedule counts like a calculation on it: the relationship is as unestablished before any amount)
+    const shown = list.filter((s) => s && typeof s === "object" && s.kind === "benefit_terms" && RENDERED.has(s)).map((s) => d.ctx.benefitRecords?.get(String(s.benefit_id))).filter((r): r is BenefitRecord => !!r && r.kind === "percentage_schedule");
+    for (const r of shown) if (!recs.some((x) => x.id === r.id)) recs.push(r);
+    const [a, b] = [recs[0], recs.find((r) => r.policy.id !== recs[0]?.policy.id)];
+    const already = list.some((s) => !!s && typeof s === "object" && RELATION.has(s));
+    if (a && b && !already && a.schedule && b.schedule && a.memberId === b.memberId && a.policy.documentRole !== "amendment" && b.policy.documentRole !== "amendment" && !a.policy.personalProof && !b.policy.personalProof) {
+      const baseOf = (r: BenefitRecord) => { const x = r.schedule!.base; return x.kind === "fixed_limit" ? `a fixed ${x.label}` : x.kind === "sum_insured" ? `${r.memberName}'s own sum insured` : "an amount the document does not establish"; };
+      const text = `The ${a.policy.product ?? "document"} (page ${a.schedule.page}) prints “${pretty(a.benefit)}” as a percentage of ${baseOf(a)}; the ${b.policy.product ?? "document"} (page ${b.schedule.page}) prints “${pretty(b.benefit)}” as a percentage of ${baseOf(b)}. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.`;
+      const note = { kind: "uncertainty", text, evidence_ids: [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)], subject_id: a.memberId } as Record<string, unknown>;
+      RENDERED.add(note); RELATION.add(note); list.push(note);
     }
   }
   // next steps: "contact:<policy_id>" is written as that document's own insurer, never a model-named one

@@ -61,7 +61,9 @@ export function percentTables(page: string): PctTable[] {
         if (!cellLike && !pctOnly) break; // a sentence that mentions a percentage ends the table
         if (pctOnly && !frag.length) break;
         const first = frag[0] ?? l;
-        const label = [...frag.map((f) => f.text.trim()), t.replace(/^[•▪●◦*\-–]\s*/, "").replace(/(\d+(?:\.\d+)?)\s*%/g, " ").trim()].filter(Boolean).join(" ").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim();
+        const label = [...frag.map((f) => f.text.trim()), t.replace(/^[•▪●◦*\-–]\s*/, "").replace(/(\d+(?:\.\d+)?)\s*%/g, " ").trim()].filter(Boolean).join(" ").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim()
+          // a footnote marker is not part of the case's name ("Leg^, Ankle", "# Arm , Elbow")
+          .replace(/(?<=[A-Za-z])[\^*†‡]+(?=[\s,]|$)/g, "").replace(/^[#^*†‡]\s*/, "").replace(/\s+,/g, ",").replace(/\s{2,}/g, " ").trim();
         rows.push({ label, percents: p, start: first.start, end: l.end, text: page.slice(first.start, l.end), lines: frag.length + 1 });
         frag = [];
         continue;
