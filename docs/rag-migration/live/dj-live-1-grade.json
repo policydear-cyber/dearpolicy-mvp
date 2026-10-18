@@ -1,0 +1,506 @@
+[
+  {
+    "scenario": "D1",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no budget-only dead end, refusal or “couldn't confirm” text, and no model error",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death occurs while covered under the Scheme, but the uploaded documents do not establish that this amount remains current today.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days; the documents do not establish that this amount is current or that the accident conditions would be met in any particular case.\nThe uploaded documents do not establish who would receive the life benefit, the claim process or required claim documents, or whether Daniel’s cover is in force at a future date.\nThe Group Insurance Benefits Book"
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death occurs while covered under the Scheme, but the uploaded documents do not establish that this amount remains current today.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days; the documents do not establish that this"
+      },
+      {
+        "id": "G4",
+        "dim": "S",
+        "name": "no raw internal identifier",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no invented paperwork, deadline or party",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved = displayed: the answer the browser was given equals the saved answer, whole",
+        "ok": true,
+        "detail": "[{\"saved\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death \",\"returned\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death \"}]"
+      },
+      {
+        "id": "G7",
+        "dim": "U",
+        "name": "every saved next step is visible (none saved but not shown)",
+        "ok": true,
+        "detail": "[[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]]"
+      },
+      {
+        "id": "A1",
+        "dim": "K",
+        "name": "Daniel's Group Term Life S$1,000,000 is stated, on a line naming Term Life and Daniel (never Personal Accident)",
+        "ok": true,
+        "detail": "[\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022\"]"
+      },
+      {
+        "id": "A2",
+        "dim": "K",
+        "name": "Daniel's Group Personal Accident S$600,000 is stated, on a line naming Personal Accident (never as Term Life)",
+        "ok": true,
+        "detail": "[\"Daniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days\"]"
+      },
+      {
+        "id": "A3",
+        "dim": "K",
+        "name": "the certificate date is stated for the amounts (6 October 2022 / 06/10/2022) and the amounts are not presented as current cover",
+        "ok": false,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death occurs while covered under the Scheme, but the uploaded documents do not establish that this amount remains current today.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days; the documents do not establish that this amount is current or that the accident conditions would be met in any particular case.\nThe uploaded"
+      },
+      {
+        "id": "A4",
+        "dim": "K",
+        "name": "the two amounts are separate (not added, not 'S$1,600,000', not 'in total/combined')",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death occurs while covered under the Scheme, but the uploaded documents do not establish that this amount remains current today.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days; the documents do not establish that this amount is current or that the accident conditions would be met in any particular case.\nThe uploaded"
+      },
+      {
+        "id": "A5",
+        "dim": "K",
+        "name": "Grace's figures (S$200,000 / S$100,000) are not attached to Daniel",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A6",
+        "dim": "K",
+        "name": "the accident-dependent benefits say they depend on an Accident (a conditional 'if / only if ... Accident' wording; the Compassionate Death Allowance paragraph names the Accident)",
+        "ok": true,
+        "detail": "[\"Daniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insured if an accident injury results in death within 365 days\"]"
+      },
+      {
+        "id": "A7",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named with its printed conditions (accident, proof of death / prescribed form, Core or Voluntary Scheme)",
+        "ok": false,
+        "detail": "[\"the document does not say which currency) for funeral expenses if an insured person dies as a result of an accident, on proof of death and prescribed documents, and says it can be claimed under either the Core Scheme or Voluntary Scheme\"]"
+      },
+      {
+        "id": "A8",
+        "dim": "K",
+        "name": "the booklet's bare $2,000 keeps its currency unstated (never S$2,000 for the booklet); the summary's S$2,000 may be said with the summary",
+        "ok": true,
+        "detail": "[\"The Group Insurance Benefits Booklet describes a compassionate death allowance of up to 2,000 (printed with a “$” sign\"]"
+      },
+      {
+        "id": "A9",
+        "dim": "K",
+        "name": "no dismemberment / fracture benefit, row, figure or window is evaluated or borrowed for a death question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "A10",
+        "dim": "U",
+        "name": "a useful next step is visible: contact the person's own insurer (Aldermoor Life Ltd) about a claim, without an amount",
+        "ok": true,
+        "detail": "[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]"
+      },
+      {
+        "id": "A11",
+        "dim": "U",
+        "name": "no unnecessary question: the person (Daniel) and the event are known, so none is asked",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A12",
+        "dim": "C",
+        "name": "complete, not a one-product answer: Term Life, Personal Accident and the Compassionate Death Allowance all appear",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; the wording says the death benefit is 100% of the Sum Assured shown on the insured person’s certificate, provided death occurs while covered under the Scheme, but the uploaded documents do not establish that this amount remains current today.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022, and the accident wording describes an accidental-death benefit of 100% of the Sum Insu"
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "D2",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no budget-only dead end, refusal or “couldn't confirm” text, and no model error",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and defines that sum as the amount on his certificate.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\nThe uploaded documents do not establish whether the accidental-death benefit is payable alongside Group Term Life or identify its claim recipient or claim procedure.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and defines that sum as the amount on his certificate.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\nThe uploaded documents do not establish whether the accidental-death benefit is payable alongside Group Term "
+      },
+      {
+        "id": "G4",
+        "dim": "S",
+        "name": "no raw internal identifier",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no invented paperwork, deadline or party",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved = displayed: the answer the browser was given equals the saved answer, whole",
+        "ok": true,
+        "detail": "[{\"saved\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and define\",\"returned\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and define\"}]"
+      },
+      {
+        "id": "G7",
+        "dim": "U",
+        "name": "every saved next step is visible (none saved but not shown)",
+        "ok": true,
+        "detail": "[[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]]"
+      },
+      {
+        "id": "A1",
+        "dim": "K",
+        "name": "Daniel's Group Term Life S$1,000,000 is stated, on a line naming Term Life and Daniel (never Personal Accident)",
+        "ok": true,
+        "detail": "[\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\"]"
+      },
+      {
+        "id": "A2",
+        "dim": "K",
+        "name": "Daniel's Group Personal Accident S$600,000 is stated, on a line naming Personal Accident (never as Term Life)",
+        "ok": true,
+        "detail": "[\"Daniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\"]"
+      },
+      {
+        "id": "A3",
+        "dim": "K",
+        "name": "the certificate date is stated for the amounts (6 October 2022 / 06/10/2022) and the amounts are not presented as current cover",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and defines that sum as the amount on his certificate.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\nThe uploaded documents do not establish whether the accidental-death benefit is payable alongside Group Term Life or identify its claim recipient or claim procedure.\nContact Aldermoor Life Ltd (through the emp"
+      },
+      {
+        "id": "A4",
+        "dim": "K",
+        "name": "the two amounts are separate (not added, not 'S$1,600,000', not 'in total/combined')",
+        "ok": true,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and defines that sum as the amount on his certificate.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\nThe uploaded documents do not establish whether the accidental-death benefit is payable alongside Group Term Life or identify its claim recipient or claim procedure.\nContact Aldermoor Life Ltd (through the emp"
+      },
+      {
+        "id": "A5",
+        "dim": "K",
+        "name": "Grace's figures (S$200,000 / S$100,000) are not attached to Daniel",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A6",
+        "dim": "K",
+        "name": "the accident-dependent benefits say they depend on an Accident (a conditional 'if / only if ... Accident' wording; the Compassionate Death Allowance paragraph names the Accident)",
+        "ok": false,
+        "detail": "[\"Daniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\",\"The product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\"]"
+      },
+      {
+        "id": "A7",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named with its printed conditions (accident, proof of death / prescribed form, Core or Voluntary Scheme)",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A8",
+        "dim": "K",
+        "name": "the booklet's bare $2,000 keeps its currency unstated (never S$2,000 for the booklet); the summary's S$2,000 may be said with the summary",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A9",
+        "dim": "K",
+        "name": "no dismemberment / fracture benefit, row, figure or window is evaluated or borrowed for a death question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "A10",
+        "dim": "U",
+        "name": "a useful next step is visible: contact the person's own insurer (Aldermoor Life Ltd) about a claim, without an amount",
+        "ok": true,
+        "detail": "[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]"
+      },
+      {
+        "id": "A11",
+        "dim": "U",
+        "name": "no unnecessary question: the person (Daniel) and the event are known, so none is asked",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A12",
+        "dim": "C",
+        "name": "complete, not a one-product answer: Term Life, Personal Accident and the Compassionate Death Allowance all appear",
+        "ok": false,
+        "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\nThe wording says the benefit is 100% of the Sum Assured if death occurs while he is covered under the Scheme, and defines that sum as the amount on his certificate.\nDaniel’s certificate also lists Group Personal Accident of S$600,000 as of 6 October 2022.\nThe product summary describes Accidental Death as 100% of Sum Insured following bodily injury caused by an Accident that results in death within 365 days.\nThe uploa"
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "D3",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no budget-only dead end, refusal or “couldn't confirm” text, and no model error",
+        "ok": true,
+        "detail": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+      },
+      {
+        "id": "G4",
+        "dim": "S",
+        "name": "no raw internal identifier",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no invented paperwork, deadline or party",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved = displayed: the answer the browser was given equals the saved answer, whole",
+        "ok": true,
+        "detail": "[{\"saved\":\"I need to know who this is about first.\\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?\",\"returned\":\"I need to know who this is about first.\\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?\"}]"
+      },
+      {
+        "id": "G7",
+        "dim": "U",
+        "name": "every saved next step is visible (none saved but not shown)",
+        "ok": true,
+        "detail": "[[]]"
+      },
+      {
+        "id": "A1",
+        "dim": "K",
+        "name": "Daniel's Group Term Life S$1,000,000 is stated, on a line naming Term Life and Daniel (never Personal Accident)",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A2",
+        "dim": "K",
+        "name": "Daniel's Group Personal Accident S$600,000 is stated, on a line naming Personal Accident (never as Term Life)",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A3",
+        "dim": "K",
+        "name": "the certificate date is stated for the amounts (6 October 2022 / 06/10/2022) and the amounts are not presented as current cover",
+        "ok": false,
+        "detail": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+      },
+      {
+        "id": "A4",
+        "dim": "K",
+        "name": "the two amounts are separate (not added, not 'S$1,600,000', not 'in total/combined')",
+        "ok": true,
+        "detail": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+      },
+      {
+        "id": "A5",
+        "dim": "K",
+        "name": "Grace's figures (S$200,000 / S$100,000) are not attached to Daniel",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A6",
+        "dim": "K",
+        "name": "the accident-dependent benefits say they depend on an Accident (a conditional 'if / only if ... Accident' wording; the Compassionate Death Allowance paragraph names the Accident)",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A7",
+        "dim": "K",
+        "name": "the Compassionate Death Allowance Benefit is named with its printed conditions (accident, proof of death / prescribed form, Core or Voluntary Scheme)",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A8",
+        "dim": "K",
+        "name": "the booklet's bare $2,000 keeps its currency unstated (never S$2,000 for the booklet); the summary's S$2,000 may be said with the summary",
+        "ok": true,
+        "detail": "[]"
+      },
+      {
+        "id": "A9",
+        "dim": "K",
+        "name": "no dismemberment / fracture benefit, row, figure or window is evaluated or borrowed for a death question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "A10",
+        "dim": "U",
+        "name": "a useful next step is visible: contact the person's own insurer (Aldermoor Life Ltd) about a claim, without an amount",
+        "ok": false,
+        "detail": "[]"
+      },
+      {
+        "id": "A11",
+        "dim": "U",
+        "name": "no unnecessary question: the person (Daniel) and the event are known, so none is asked",
+        "ok": false,
+        "detail": "[{\"id\":\"rag_person\",\"why\":\"The answer depends on who this is about.\",\"text\":\"Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?\",\"type\":\"choice\",\"options\":[\"Daniel Lee Wei Ming (Daniel) (your you)\",\"Grace Tan Hui Min (Grace)\"]}]"
+      },
+      {
+        "id": "A12",
+        "dim": "C",
+        "name": "complete, not a one-product answer: Term Life, Personal Accident and the Compassionate Death Allowance all appear",
+        "ok": false,
+        "detail": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+      }
+    ],
+    "note": null
+  },
+  {
+    "scenario": "F1",
+    "verdict": "FAIL",
+    "checks": [
+      {
+        "id": "G1",
+        "dim": "C",
+        "name": "no budget-only dead end, refusal or “couldn't confirm” text, and no model error",
+        "ok": true,
+        "detail": "If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe wording says the benefit applies when bodily injury results from an accident and causes a listed Simple Fracture; the hip row is 75% of the limit.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+      },
+      {
+        "id": "G2",
+        "dim": "C",
+        "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G3",
+        "dim": "S",
+        "name": "no payment promise",
+        "ok": true,
+        "detail": "If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe wording says the benefit applies when bodily injury results from an accident and causes a listed Simple Fracture; the hip row is 75% of the limit.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it"
+      },
+      {
+        "id": "G4",
+        "dim": "S",
+        "name": "no raw internal identifier",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G5",
+        "dim": "S",
+        "name": "no invented paperwork, deadline or party",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "G6",
+        "dim": "U",
+        "name": "returned = saved = displayed: the answer the browser was given equals the saved answer, whole",
+        "ok": true,
+        "detail": "[{\"saved\":\"If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; \",\"returned\":\"If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; \"}]"
+      },
+      {
+        "id": "G7",
+        "dim": "U",
+        "name": "every saved next step is visible (none saved but not shown)",
+        "ok": true,
+        "detail": "[[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]]"
+      },
+      {
+        "id": "F1",
+        "dim": "K",
+        "name": "the Simple Fracture hip illustration S$3,750 (75% of the S$5,000 limit) is stated as conditional, on a line naming Hip",
+        "ok": true,
+        "detail": "[\"If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary\"]"
+      },
+      {
+        "id": "F2",
+        "dim": "K",
+        "name": "the fracture's own condition is given (an Accident causing a Simple Fracture of the nature in the table) with no borrowed window or death/dismemberment text",
+        "ok": false,
+        "detail": "[\"If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\",\"The wording says the benefit applies when bodily injury results from an accident and causes a listed Simple Fracture; the hip row is 75% of the limit.\"]"
+      },
+      {
+        "id": "F3",
+        "dim": "K",
+        "name": "the fracture benefit is stated as separate from the death benefits (not added to or taken from them)",
+        "ok": false,
+        "detail": "If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.\nThe wording says the benefit applies when bodily injury results from an accident and causes a listed Simple Fracture; the hip row is 75% of the limit.\nContact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim."
+      },
+      {
+        "id": "F4",
+        "dim": "U",
+        "name": "no unnecessary question about a hip fracture (hip is stated) and a visible contact step",
+        "ok": true,
+        "detail": "[]"
+      }
+    ],
+    "note": null
+  }
+]

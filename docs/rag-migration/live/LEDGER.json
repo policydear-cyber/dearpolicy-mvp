@@ -703,6 +703,20 @@
       "refused": 0,
       "failed": 0,
       "note": "ESTIMATED cost (app-estimated, no provider billing verification). Eight production-UI test turns in five conversations on the signed-in household's library, run against the merged PR #55 deployment (e3109bb) through the app's existing credentials; no credential was extracted. Back-filled on 2026-10-18 from DearPolicy-live-verification-PR55-2026-10-18.md; the run did not pass through ledger plan/append, and its time of day is not recorded (at is the date only). The one per-turn token-admission refusal in the death turn prevented a call; it was not a provider refusal or a charge. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged."
+    },
+    {
+      "run_id": "dj-live-1",
+      "tested_code_sha": "e7c6c6546ff0843324675c8a226ade955d24c929",
+      "request_sha": "e7c6c6546ff0843324675c8a226ade955d24c929",
+      "at": "2026-10-18T15:14:48.004Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.00545,
+      "reserved_unsettled_usd": 0,
+      "calls": 14,
+      "refused": 0,
+      "failed": 0,
+      "note": "Four live attempts (D1, D2 repeated broad death question; D3 husband-passed-away paraphrase; F1 fracture control) on the synthetic death-journey household (DJR), not the actual library, through the existing dedicated connection and relay. Actual spend from the run's own budgetUsed. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
     }
   ]
 }

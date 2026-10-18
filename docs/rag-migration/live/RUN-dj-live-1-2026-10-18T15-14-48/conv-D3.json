@@ -1,0 +1,870 @@
+{
+  "scenario": "D3",
+  "title": "death journey: fresh paraphrase",
+  "conversationId": "b68ea1fb-e4b0-47da-b6af-3219210e53dd",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?",
+      "nextSteps": [],
+      "timings": {
+        "acceptedMs": 17,
+        "firstAssistantPersistedMs": 8154,
+        "answerSeenMs": 8339,
+        "modelMs": 7300,
+        "upstreamMs": 7200,
+        "relayMs": 7202
+      },
+      "calls": [
+        {
+          "seq": 8,
+          "at": "2026-10-18T15:15:23.422Z",
+          "estInputTokens": 15367,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025367,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7480,
+            "output": 123,
+            "cached": 7319
+          },
+          "latencyMs": 2581,
+          "upstreamMs": 2581,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-18T15:15:26.015Z",
+          "estInputTokens": 15899,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025899,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 5,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7797,
+            "output": 71,
+            "cached": 7354
+          },
+          "latencyMs": 2461,
+          "upstreamMs": 2461,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-18T15:15:28.483Z",
+          "estInputTokens": 16118,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026118,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 7,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7903,
+            "output": 84,
+            "cached": 7671
+          },
+          "latencyMs": 2258,
+          "upstreamMs": 2258,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 8,
+          "at": "2026-10-18T15:15:23.423Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15594,
+          "reservedUsd": 0.0025594000000000003,
+          "chargedUsd": 0.00015078999999999998,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2579,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EaMtY94T4Ljpc9I8sNrZ00LUa5lmr",
+          "usage": {
+            "input": 7480,
+            "output": 123,
+            "cached": 7319,
+            "reasoning": 0
+          },
+          "scenario": "D3",
+          "turn": 1
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-18T15:15:26.016Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16156,
+          "reservedUsd": 0.0026156000000000005,
+          "chargedUsd": 0.00015334,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2418,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EaMtbjMovDXAODKm1kR9ucaX15pw9",
+          "usage": {
+            "input": 7797,
+            "output": 71,
+            "cached": 7354,
+            "reasoning": 0
+          },
+          "scenario": "D3",
+          "turn": 1
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-18T15:15:28.483Z",
+          "host": "127.0.0.1",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16388,
+          "reservedUsd": 0.0026388,
+          "chargedUsd": 0.00014191000000000003,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "systemSha": "452ec099be7b1b48",
+          "kind": "loop",
+          "upstreamMs": 2213,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "providerRequestId": "chatcmpl-EaMtdwsvSPawOet3joszglWi9DwAn",
+          "usage": {
+            "input": 7903,
+            "output": 84,
+            "cached": 7671,
+            "reasoning": 0
+          },
+          "scenario": "D3",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [],
+      "relay": [
+        {
+          "at": "2026-10-18T15:15:23Z",
+          "t": 1792336523.425,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 2,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2576,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EaMtY94T4Ljpc9I8sNrZ00LUa5lmr",
+          "usage": {
+            "prompt_tokens": 7480,
+            "completion_tokens": 123,
+            "total_tokens": 7603,
+            "cached_tokens": 7319,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "resolve_person",
+            "note_facts"
+          ],
+          "status": 200,
+          "relay_ms": 2577
+        },
+        {
+          "at": "2026-10-18T15:15:26Z",
+          "t": 1792336526.02,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 5,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2413,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EaMtbjMovDXAODKm1kR9ucaX15pw9",
+          "usage": {
+            "prompt_tokens": 7797,
+            "completion_tokens": 71,
+            "total_tokens": 7868,
+            "cached_tokens": 7354,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2414
+        },
+        {
+          "at": "2026-10-18T15:15:28Z",
+          "t": 1792336528.486,
+          "mode": "live",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "messages": 7,
+          "tools": 13,
+          "tools_sha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "system_prompt_sha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "upstream_ms": 2211,
+          "provider_model": "gpt-6-luna",
+          "provider_request_id": "chatcmpl-EaMtdwsvSPawOet3joszglWi9DwAn",
+          "usage": {
+            "prompt_tokens": 7903,
+            "completion_tokens": 84,
+            "total_tokens": 7987,
+            "cached_tokens": 7671,
+            "reasoning_tokens": 0
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "ask_user"
+          ],
+          "status": 200,
+          "relay_ms": 2211
+        }
+      ],
+      "tokens": {
+        "input": 23180,
+        "output": 278
+      },
+      "costUsd": {
+        "charged": 0.00044604000000000003,
+        "reserved": 0.007813800000000001,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [
+          8,
+          9,
+          10
+        ],
+        "guardUsd": 0.00044604000000000003,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 8345,
+  "firstUsefulResponseMs": 8154,
+  "tokens": {
+    "input": 23180,
+    "output": 278
+  },
+  "costUsd": 0.00044604000000000003,
+  "calls": 3,
+  "loaded": {
+    "conversationId": "b68ea1fb-e4b0-47da-b6af-3219210e53dd",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 0,
+        "turn": 1,
+        "claim": null,
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": true,
+                "input": 7480,
+                "output": 123,
+                "attempt": 1,
+                "costUsd": 0.00015078999999999998,
+                "latencyMs": 2581
+              },
+              {
+                "ok": true,
+                "input": 7797,
+                "output": 71,
+                "attempt": 1,
+                "costUsd": 0.00015334,
+                "latencyMs": 2462
+              },
+              {
+                "ok": true,
+                "input": 7903,
+                "output": 84,
+                "attempt": 1,
+                "costUsd": 0.00014191000000000003,
+                "latencyMs": 2259
+              }
+            ],
+            "limit": null,
+            "steps": 3,
+            "usage": {
+              "input": 23180,
+              "output": 278
+            },
+            "phases": {
+              "gateMs": 0,
+              "loopMs": 7341,
+              "checkMs": 2,
+              "rescueMs": 0,
+              "storeSql": 5,
+              "composeMs": 0,
+              "gateReportMs": 1
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "ask_user",
+            "timings": {
+              "store": {
+                "rounds": 4,
+                "docsSql": 1,
+                "linksSql": 1,
+                "memoHits": 4,
+                "pagesSql": 1,
+                "pageChars": 6068,
+                "docsServed": 11,
+                "membersSql": 2,
+                "memoMisses": 6,
+                "pagesServed": 25
+              },
+              "toolMs": {
+                "resolve_person": {
+                  "n": 1,
+                  "ms": 6
+                }
+              },
+              "modelMs": 7302,
+              "otherMs": 20,
+              "resolve": {
+                "n": 0,
+                "ms": 0
+              }
+            },
+            "latencyMs": 7328,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "my husband Daniel"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ambiguous\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": false,
+                "args": {
+                  "facts": [
+                    {
+                      "key": "death",
+                      "value": "passed away",
+                      "words": "Daniel passed away"
+                    },
+                    {
+                      "key": "how_it_happened",
+                      "value": "in an accident",
+                      "words": "in an accident"
+                    },
+                    {
+                      "key": "event_time",
+                      "value": "last week",
+                      "words": "last week"
+                    }
+                  ],
+                  "subject_id": "7c000000-0000-4000-8000-000000000001"
+                },
+                "name": "note_facts",
+                "error": "who is meant is not settled yet: ask which person the household means before recording facts about one of them",
+                "evidenceIds": []
+              },
+              {
+                "ok": false,
+                "args": {
+                  "kind": "person",
+                  "mention": "my husband Daniel",
+                  "options": [
+                    "7c000000-0000-4000-8000-000000000001"
+                  ],
+                  "question": "Daniel Lee Wei Ming (Daniel) is not recorded as your husband. Do you mean Daniel, or someone else?"
+                },
+                "name": "ask_user",
+                "error": "a person question offers two or more household members (the candidates resolve_person returned)",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "kind": "person",
+                  "mention": "my husband Daniel",
+                  "options": [
+                    "7c000000-0000-4000-8000-000000000001",
+                    "7c000000-0000-4000-8000-000000000002"
+                  ],
+                  "question": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+                },
+                "name": "ask_user",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?",
+            "evidenceChosen": []
+          }
+        ],
+        "history": [
+          {
+            "user": "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?",
+            "assistant": "I need to know who this is about first. Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+          }
+        ],
+        "pending": {
+          "kind": "person",
+          "turn": 1,
+          "mention": "my husband Daniel",
+          "options": [
+            {
+              "id": "7c000000-0000-4000-8000-000000000001",
+              "label": "Daniel Lee Wei Ming (Daniel) (your you)"
+            },
+            {
+              "id": "7c000000-0000-4000-8000-000000000002",
+              "label": "Grace Tan Hui Min (Grace)"
+            }
+          ],
+          "purpose": "subject",
+          "question": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+        },
+        "evidence": {},
+        "speakerId": "7c000000-0000-4000-8000-000000000001",
+        "subjectId": null,
+        "recentSubjectIds": []
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?",
+        "answer": {
+          "mode": "answer",
+          "details": [],
+          "summary": "I need to know who this is about first.",
+          "citations": [],
+          "nextSteps": [],
+          "questions": [
+            {
+              "id": "rag_person",
+              "why": "The answer depends on who this is about.",
+              "text": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?",
+              "type": "choice",
+              "options": [
+                "Daniel Lee Wei Ming (Daniel) (your you)",
+                "Grace Tan Hui Min (Grace)"
+              ]
+            }
+          ],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "b68ea1fb-e4b0-47da-b6af-3219210e53dd",
+          "payoutQualifiers": [],
+          "personCandidates": [
+            {
+              "id": "7c000000-0000-4000-8000-000000000001",
+              "label": "Daniel Lee Wei Ming (Daniel) (your you)"
+            },
+            {
+              "id": "7c000000-0000-4000-8000-000000000002",
+              "label": "Grace Tan Hui Min (Grace)"
+            }
+          ],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": []
+        },
+        "content": "I need to know who this is about first.",
+        "visible": "I need to know who this is about first.\nDo you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?\nThe answer depends on who this is about.",
+        "questions": [
+          "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+        ],
+        "userAt": "2026-10-18T15:15:30.748Z",
+        "assistantAt": "2026-10-18T15:15:30.748Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": true,
+              "input": 7480,
+              "output": 123,
+              "attempt": 1,
+              "costUsd": 0.00015078999999999998,
+              "latencyMs": 2581
+            },
+            {
+              "ok": true,
+              "input": 7797,
+              "output": 71,
+              "attempt": 1,
+              "costUsd": 0.00015334,
+              "latencyMs": 2462
+            },
+            {
+              "ok": true,
+              "input": 7903,
+              "output": 84,
+              "attempt": 1,
+              "costUsd": 0.00014191000000000003,
+              "latencyMs": 2259
+            }
+          ],
+          "limit": null,
+          "steps": 3,
+          "usage": {
+            "input": 23180,
+            "output": 278
+          },
+          "phases": {
+            "gateMs": 0,
+            "loopMs": 7341,
+            "checkMs": 2,
+            "rescueMs": 0,
+            "storeSql": 5,
+            "composeMs": 0,
+            "gateReportMs": 1
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "ask_user",
+          "timings": {
+            "store": {
+              "rounds": 4,
+              "docsSql": 1,
+              "linksSql": 1,
+              "memoHits": 4,
+              "pagesSql": 1,
+              "pageChars": 6068,
+              "docsServed": 11,
+              "membersSql": 2,
+              "memoMisses": 6,
+              "pagesServed": 25
+            },
+            "toolMs": {
+              "resolve_person": {
+                "n": 1,
+                "ms": 6
+              }
+            },
+            "modelMs": 7302,
+            "otherMs": 20,
+            "resolve": {
+              "n": 0,
+              "ms": 0
+            }
+          },
+          "latencyMs": 7328,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": true,
+              "args": {
+                "mention": "my husband Daniel"
+              },
+              "name": "resolve_person",
+              "summary": "{\"status\":\"ambiguous\"}",
+              "evidenceIds": []
+            },
+            {
+              "ok": false,
+              "args": {
+                "facts": [
+                  {
+                    "key": "death",
+                    "value": "passed away",
+                    "words": "Daniel passed away"
+                  },
+                  {
+                    "key": "how_it_happened",
+                    "value": "in an accident",
+                    "words": "in an accident"
+                  },
+                  {
+                    "key": "event_time",
+                    "value": "last week",
+                    "words": "last week"
+                  }
+                ],
+                "subject_id": "7c000000-0000-4000-8000-000000000001"
+              },
+              "name": "note_facts",
+              "error": "who is meant is not settled yet: ask which person the household means before recording facts about one of them",
+              "evidenceIds": []
+            },
+            {
+              "ok": false,
+              "args": {
+                "kind": "person",
+                "mention": "my husband Daniel",
+                "options": [
+                  "7c000000-0000-4000-8000-000000000001"
+                ],
+                "question": "Daniel Lee Wei Ming (Daniel) is not recorded as your husband. Do you mean Daniel, or someone else?"
+              },
+              "name": "ask_user",
+              "error": "a person question offers two or more household members (the candidates resolve_person returned)",
+              "evidenceIds": []
+            },
+            {
+              "ok": true,
+              "args": {
+                "kind": "person",
+                "mention": "my husband Daniel",
+                "options": [
+                  "7c000000-0000-4000-8000-000000000001",
+                  "7c000000-0000-4000-8000-000000000002"
+                ],
+                "question": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+              },
+              "name": "ask_user",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?",
+          "evidenceChosen": []
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "D3",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "7c000000-0000-4000-8000-000000000001",
+    "pending": {
+      "kind": "person",
+      "turn": 1,
+      "mention": "my husband Daniel",
+      "options": [
+        {
+          "id": "7c000000-0000-4000-8000-000000000001",
+          "label": "Daniel Lee Wei Ming (Daniel) (your you)"
+        },
+        {
+          "id": "7c000000-0000-4000-8000-000000000002",
+          "label": "Grace Tan Hui Min (Grace)"
+        }
+      ],
+      "purpose": "subject",
+      "question": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+    },
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "ask_user",
+        "steps": 3,
+        "usage": {
+          "input": 23180,
+          "output": 278
+        },
+        "latencyMs": 7328,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "my husband Daniel"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ambiguous\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": false,
+            "args": {
+              "facts": [
+                {
+                  "key": "death",
+                  "value": "passed away",
+                  "words": "Daniel passed away"
+                },
+                {
+                  "key": "how_it_happened",
+                  "value": "in an accident",
+                  "words": "in an accident"
+                },
+                {
+                  "key": "event_time",
+                  "value": "last week",
+                  "words": "last week"
+                }
+              ],
+              "subject_id": "7c000000-0000-4000-8000-000000000001"
+            },
+            "name": "note_facts",
+            "error": "who is meant is not settled yet: ask which person the household means before recording facts about one of them",
+            "evidenceIds": []
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "person",
+              "mention": "my husband Daniel",
+              "options": [
+                "7c000000-0000-4000-8000-000000000001"
+              ],
+              "question": "Daniel Lee Wei Ming (Daniel) is not recorded as your husband. Do you mean Daniel, or someone else?"
+            },
+            "name": "ask_user",
+            "error": "a person question offers two or more household members (the candidates resolve_person returned)",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "kind": "person",
+              "mention": "my husband Daniel",
+              "options": [
+                "7c000000-0000-4000-8000-000000000001",
+                "7c000000-0000-4000-8000-000000000002"
+              ],
+              "question": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?"
+            },
+            "name": "ask_user",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {},
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": [
+          {
+            "id": "rag_person",
+            "why": "The answer depends on who this is about.",
+            "text": "Do you mean Daniel Lee Wei Ming (Daniel), or someone else in the household?",
+            "type": "choice",
+            "options": [
+              "Daniel Lee Wei Ming (Daniel) (your you)",
+              "Grace Tan Hui Min (Grace)"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
