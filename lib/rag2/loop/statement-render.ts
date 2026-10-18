@@ -153,7 +153,9 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const r = bid ? d.ctx.benefitRecords?.get(bid) : undefined;
       if (!r) { problems.push(`statement ${i + 1}: kind benefit_terms needs a benefit_id that person_benefits returned this turn`); continue; }
       const w = await renderTerms(r, d);
-      s.text = w.text; s.evidence_ids = [...new Set([...((s.evidence_ids as string[]) ?? []), ...w.evidence_ids])]; s.value_ids = [...new Set([...((s.value_ids as string[]) ?? []), ...w.value_ids])];
+      s.text = w.text; // Agent R (dj-live-2): a server-written statement is bound ONLY by the bindings its record gives. A model-supplied value
+  // id (a stray "v1" of another table) merged into it made verification reject a sound statement and lose its amount.
+      s.evidence_ids = [...new Set(w.evidence_ids)]; s.value_ids = [...new Set(w.value_ids)];
       s.subject_id ??= r.memberId; s.benefit ??= r.benefit; RENDERED.add(s);
     }
   }

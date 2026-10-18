@@ -289,7 +289,7 @@ const ENROL_NEG = [
  * statement about whether a documented benefit applies to the person, which runs together three different things: the
  * benefit the wording documents, the person's DATED certificate listing, and eligibility for the event now. */
 const APPLIES_NEG = /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|prove|verify)\w*\s+(?:that\s+|whether\s+)?(?:this|the|that|his|her|their|any)\s+(?:[\w’'-]+\s+){0,4}?(?:benefit|allowance|cover|coverage)\s+(?:\w+\s+){0,2}?(?:applies|apply|would apply|is payable|covers)\s+(?:to|for)\b/i;
-export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages"> & { docFacts?: Map<string, string> }, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
+export function enrolmentAbsenceClaim(text: string, subjectId: string | null, cited: EvidenceRef[], ctx: Pick<Ctx, "benefits" | "people" | "libraryPages" | "withheldRows"> & { docFacts?: Map<string, string> }, benefitName: string | null = null): { text: string; evidence: EvidenceRef; reason: string; benefit?: string | null } | null {
   // (a statement that also says the person's enrolment or listing is unconfirmed is answered by the dated listing, as
   // before; an applicability statement alone keeps its own question beside the listing)
   const enrol = ENROL_NEG.map((re) => re.exec(text)).find(Boolean);
@@ -297,7 +297,8 @@ export function enrolmentAbsenceClaim(text: string, subjectId: string | null, ci
   const m = enrol ?? (applies ? APPLIES_NEG.exec(text) : null);
   if (!m || !subjectId || !ctx.benefits) return null;
   if (DATED_LIMITATION.test(text)) return null;
-  const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.policy.personalProof && b.memberId === subjectId);
+  const held = ctx.withheldRows?.(subjectId) ?? new Set<string>();
+  const rows = (ctx.benefits.byMember.get(subjectId)?.benefits ?? []).filter((b) => b.applicability === "person_row" && b.policy.personalProof && b.memberId === subjectId && !held.has(`${b.policy.id}|${b.benefit.label.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim()}`));
   if (!rows.length) return null;
   // What the enrolment is said to be IN: a certificate's listing shows the scheme and the products it lists. Enrolment
   // for something else -- a particular benefit, the applicable / Core / Voluntary part of a scheme -- is not what the
@@ -856,6 +857,8 @@ type Ctx = {
   /** Agent F (D7): household members (id + the names a sentence may use) and readable documents (id -> product). */
   people?: { id: string; names: string[] }[];
   policyNames?: Map<string, string>;
+  /** Applicability (benefit-applicability.ts): the certificate rows (policy id | normalised benefit label) a person's reported facts withhold -- a certificate summary never lists a person under them. */
+  withheldRows?: (subjectId: string) => Set<string>;
   /** V1.1: what each readable document states on its face (product, insurer, numbers, amendment role). */
   docFacts?: Map<string, string>;
   /** V1.1: every readable document's full stored text (all pages), loaded when the answer states an absence. */
@@ -1050,7 +1053,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (!ctx.state.speakerConfirmed) text = withoutUnconfirmedAddress(text, ctx.people ?? []);
     if (!text) continue;
     let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
-    const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
+    const allValIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
+    // Agent R (dj-live-2): a citation of a value no tool issued supports nothing, so it cannot validate anything -- when the
+    // statement also cites values that WERE issued, the unissued id is a presentation fault and is set aside (every figure
+    // is still checked against the issued values it cites). A statement citing ONLY unissued ids is still left out.
+    const issuedVals = allValIds.filter((id) => ctx.tools.values.has(id));
+    const valIds = issuedVals.length ? issuedVals : allValIds;
     const inlineResult = inline.ids.find((id) => /^r\d/.test(id) && (ctx.tools.results.has(id) || calcOutcomes(ctx.tools).has(id))) ?? null;
     const oneOf = Array.isArray(s.result_ids) && (s.result_ids as unknown[]).length === 1 && typeof (s.result_ids as unknown[])[0] === "string" ? (s.result_ids as string[])[0] : null;
     const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : oneOf ?? inlineResult;
