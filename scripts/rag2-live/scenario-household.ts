@@ -211,7 +211,15 @@ export const SAr: Scenario = { id: "SAr", title: "structured: closed lower-leg b
 export const SAs: Scenario = { id: "SAs", title: "structured: broken shin bone -> corrected to hip (second held-back paraphrase)", why: "release journey 1 and 2 (round-3 paraphrase 2)", turns: [
   { user: "Daniel slipped on a wet floor in the kitchen and the hospital says his shin bone, the tibia, is broken cleanly - a closed fracture. If we made a claim under his accident insurance, roughly what would it be worth?", expect: {} },
   { user: "Sorry, the hospital rang back: it is the hip that is broken, not the shin bone. Still a closed fracture. What would it be worth now?", expect: {} }] };
-export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SAs, SBp, SC, SD, SE];
+/** SBc / SBd (round 4, written before sa-live-6): two held-back ambiguity paraphrases -- different cause, wording and trigger; the same bones as SBa/SBb
+ * (hip or tibia unknown, then the tibia confirmed), so the original ambiguity grader applies and the round-4 completeness assessment (v9.1 K1-K3) is added. */
+export const SBc: Scenario = { id: "SBc", title: "structured: hip or shin unknown -> one question -> tibia (held-back paraphrase 1)", why: "release journey 3 (round-4 paraphrase 1)", turns: [
+  { user: "Daniel tripped on the kerb outside the house and the hospital thinks it is either his hip or his tibia that has cracked - they will know more after the scan. It looks like a closed fracture from an accident. What could his accident cover give him?", expect: {} },
+  { user: "The scan is back: it is the tibia.", expect: {} }] };
+export const SBd: Scenario = { id: "SBd", title: "structured: hip or lower leg unknown -> one question -> tibia (held-back paraphrase 2)", why: "release journey 3 (round-4 paraphrase 2)", turns: [
+  { user: "Daniel slipped in the bathroom at home. The doctor suspects a fracture of the hip or possibly the tibia but is waiting for imaging. No open wound, so a closed fracture. What would his accident insurance pay for that?", expect: {} },
+  { user: "Imaging confirms the tibia, not the hip.", expect: {} }] };
+export const RC_ACTUAL = [SAa, SAb, SBa, SBb, SAp, SAq, SAr, SAs, SBp, SBc, SBd, SC, SD, SE];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : SCENARIO) as unknown as typeof SCENARIO;

@@ -18,7 +18,8 @@ import { sentencesOf } from "@/lib/chat/answer-verification";
 import { gradeV9, nextStepRequired, claimsATotal } from "./rag2-live/structured-regrade";
 import { caseFor } from "@/lib/rag2/calc/case-terms";
 import { requirementToAsk, type OpenRequirement } from "@/lib/rag2/loop/requirement-question";
-import { D, G, CERT, SBA_U1, SBA_U2, sbaTurns, SAR_U1, SAR_U2, sarTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
+import { planSchedules, namedSchedules } from "@/lib/rag2/loop/schedule-disposition";
+import { D, G, CERT, N_U1, narrowTurn, SBB_U1, SBB_U2, sbbTurns, SBA_U1, SBA_U2, sbaTurns, SAR_U1, SAR_U2, sarTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 setEnv(A as any);
 let failed = 0, passed = 0;
@@ -117,6 +118,33 @@ async function main() {
       check("negation control: an affirmed “lower leg” still names the leg row, and “hip or lower leg” stays ambiguous", kind("a closed break in his lower leg") === "r3" && kind("his hip or the lower leg") === "ambiguous");
     }
     check("SAr replay turn 2: the tibia amounts are withdrawn, not current", !lines(sr2.v).some((l) => /conditional illustration is S\$(?:2,500|300,000)/.test(l)) && agrees(sr2), sr2.v);
+  }
+
+  // ===== SBb replay (round 4, sa-live-4): the model evaluated only the Group Personal Accident table; the lookup had also returned Simple Fracture
+  {
+    const [b1, b2] = await converse("SBb", [SBB_U1, SBB_U2], sbbTurns());
+    const bq = (b1.answer.questions ?? []) as any[];
+    const sched = (t: Turn) => (t.trace?.schedules ?? []) as any[];
+    check("SBb replay turn 1: both schedules' supported terms (the S$5,000 limit and Daniel's S$600,000 sum insured) although the model evaluated one", /S\$5,000/.test(b1.v) && /S\$600,000/.test(b1.v) && !/conditional illustration is S\$/.test(b1.v), b1.v);
+    check("SBb replay turn 1: the unresolved relationship is stated, no definition invented, exactly one question", /Neither document says whether one amends, replaces or adds to the other/.test(b1.v) && bq.length === 1, b1.v + JSON.stringify(bq));
+    check("SBb replay turn 1: both schedules carry a recorded disposition", sched(b1).length >= 2 && sched(b1).every((x) => ["explained", "evaluated", "excluded", "unresolved"].includes(x.disposition) && x.reason), JSON.stringify(sched(b1)));
+    check("SBb replay turn 1: returned = saved = reopened; complete", agrees(b1) && complete(b1.v), b1.v);
+    check("SBb replay turn 2: both conditional alternatives (S$2,500 and S$300,000) as separate statements, never a total, no repeated question, nothing pending", /S\$2,500/.test(b2.v) && /S\$300,000/.test(b2.v) && !claimsATotal(b2.v) && !(b2.answer.questions ?? []).length && !b2.state?.ragLoop?.pending && complete(b2.v) && agrees(b2), b2.v);
+    check("SBb replay turn 2: neither alternative is added to the other (no S$302,500)", !/302,500/.test(b2.v), b2.v);
+    // controls: nothing extra is added
+    const [n1] = await converse("SBb-narrow", [N_U1], [narrowTurn()]);
+    check("SBb control: an explicitly narrow single-benefit question (“the Simple Fracture benefit”) gets only that benefit -- no Group Personal Accident material added", /S\$2,500/.test(n1.v) && !/S\$300,000|S\$600,000|Personal Accident/.test(n1.v) && agrees(n1), n1.v);
+    const sch = (id: string, benefit = "Simple Fracture", subjectId = D) => ({ id, benefit, subjectId });
+    const base = { subjectId: D, eventText: "closed tibia fracture accident", userTexts: [] as string[], message: "What would his accident cover pay?", notApplicable: new Map<string, string>() };
+    const two = [sch("s1"), sch("s2", "Simple Fracture or Other Fracture due to Accident")];
+    check("schedule plan: two relevant schedules, the reply covers one -> the other is completed", planSchedules({ ...base, discovered: two, covered: new Map([["s2", "evaluated" as const]]) }).complete.map((x) => x.id).join() === "s1");
+    check("schedule plan: both already covered -> nothing to complete, both rows recorded", (() => { const p = planSchedules({ ...base, discovered: two, covered: new Map([["s1", "explained" as const], ["s2", "evaluated" as const]]) }); return !p.complete.length && p.rows.length === 2; })());
+    check("schedule plan: an unrelated benefit (no shared event topic) is excluded, never completed", (() => { const p = planSchedules({ ...base, discovered: [sch("s1"), sch("s3", "Compassionate Death Allowance")], covered: new Map([["s1", "evaluated" as const]]) }); return !p.complete.length; })());
+    check("schedule plan: another person's schedules are not this person's (no completion)", !planSchedules({ ...base, discovered: [sch("s1"), sch("s2", "Simple Fracture or Other Fracture due to Accident", G)], covered: new Map([["s1", "evaluated" as const]]) }).complete.length);
+    check("schedule plan: a reply covering no discovered schedule is not padded", !planSchedules({ ...base, discovered: two, covered: new Map() }).complete.length);
+    check("schedule plan: a benefit the household named is the only one wanted (the other is excluded with their own words)", (() => { const p = planSchedules({ ...base, message: "What would the Simple Fracture benefit give?", userTexts: ["What would the Simple Fracture benefit give?"], discovered: two, covered: new Map([["s1", "evaluated" as const]]) }); return !p.complete.length && p.rows.some((r) => r.disposition === "excluded" && /own words/.test(r.reason)); })());
+    check("schedule plan: a source-backed not-applicable reason excludes it", (() => { const p = planSchedules({ ...base, discovered: two, covered: new Map([["s1", "evaluated" as const]]), notApplicable: new Map([["s2", "the certificate excludes it"]]) }); return !p.complete.length && p.rows.some((r) => r.benefitId === "s2" && r.disposition === "excluded"); })());
+    check("schedule plan: naming helper -- no named benefit means no restriction", namedSchedules([], "What would his accident cover pay?", two) === null);
   }
 
   // ===== Round 3: when the server owes the household a question (negative controls of the finalisation rule)

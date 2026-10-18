@@ -142,3 +142,23 @@ test("SA8: the first report sat under two keys; the correction still settles the
   await page.reload();
   await expect(page.locator(".message.assistant").last()).toContainText("conditional illustration is S$3,750", { timeout: 60_000 });
 });
+
+test("SA9: the model evaluated only one fracture table; the application still gives both schedules, then both conditional alternatives (never a total), reload-safe", async ({ page, request }) => {
+  const [u1, u2] = await scenario(request, "SA9");
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "New chat" }).click();
+  const a1 = await send(page, u1);
+  const s1 = await sameAsSaved(request, a1.shown, "SA9 first", a1.visibleMs);
+  expect(a1.shown).toMatch(/S\$5,000/);
+  expect(a1.shown).toMatch(/S\$600,000/);
+  expect(a1.shown).toMatch(/Neither document says whether one amends, replaces or adds to the other/);
+  expect(s1.questions ?? []).toHaveLength(1);
+  const a2 = await send(page, u2);
+  const s2 = await sameAsSaved(request, a2.shown, "SA9 clarified", a2.visibleMs);
+  expect(a2.shown).toMatch(/S\$2,500/);
+  expect(a2.shown).toMatch(/S\$300,000/);
+  expect(a2.shown).not.toMatch(/302,500/);
+  expect(s2.questions ?? []).toHaveLength(0);
+  await page.reload();
+  await expect(page.locator(".message.assistant").last()).toContainText("S$300,000", { timeout: 60_000 });
+});

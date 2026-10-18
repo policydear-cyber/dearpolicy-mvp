@@ -58,6 +58,17 @@ export function gradeV9(scenario: string, conv: any): Graded {
   if (g.checks.some((c) => c.id === "C3")) {
     g = swap(g, "C3", !claimsATotal(lastText) && /(?:neither document says|do not establish|does not say|unclear|not established)/i.test(lastText), "the two figures are alternatives from separate documents, never added, combined or said payable together without evidence", lastText.slice(0, 900));
   }
+  // v9.1 round 4: completeness of the ambiguity journeys (K1-K3), added beside the v8.2/v9 checks and changing none of them
+  if (g.checks.some((c) => c.id === "Q6")) {
+    const t1 = visibleOf(turns[0]?.answer), t2 = visibleOf(turns.at(-1)?.answer);
+    const k = [
+      { id: "K1", dim: "C" as const, ok: /S\$5,000/.test(t1) && /S\$600,000/.test(t1), name: "turn 1 gives BOTH fracture schedules' supported terms (the S$5,000 limit and the person's own S$600,000 sum insured)", detail: t1.slice(0, 400) },
+      { id: "K2", dim: "C" as const, ok: /S\$2,500/.test(t2) && /S\$300,000/.test(t2), name: "turn 2 presents BOTH supported conditional alternatives (S$2,500 and S$300,000) separately", detail: t2.slice(0, 400) },
+      { id: "K3", dim: "C" as const, ok: !claimsATotal(t2) && !/302,500/.test(t2) && /(?:neither document says|do not establish|does not say|unclear|not established)/i.test(t2), name: "turn 2 never adds them and states the relationship as unresolved", detail: t2.slice(0, 400) },
+    ];
+    const checks = [...g.checks, ...k];
+    g = { ...g, checks, verdict: g.verdict === "PASS" || g.verdict === "FAIL" ? (checks.every((c) => c.ok) ? "PASS" : "FAIL") : g.verdict };
+  }
   void lines;
   return g;
 }

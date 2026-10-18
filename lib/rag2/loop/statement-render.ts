@@ -163,6 +163,9 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
     const rendered = list.filter((s) => s && typeof s === "object" && s.kind === "calculation" && RENDERED.has(s));
     const outs = rendered.map((s) => calcOutcomes(d.ctx).get(String(s.result_id))).filter((c): c is NonNullable<typeof c> => !!c && c.calculator === "lump_sum");
     const recs = outs.map((c) => [...(d.ctx.benefitRecords?.values() ?? [])].find((r) => r.kind === "percentage_schedule" && r.policy.id === c.policyId && r.benefit === c.benefit && r.memberId === c.subjectId)).filter((r): r is BenefitRecord => !!r);
+    // (a benefit_terms statement that presents a schedule counts like a calculation on it: the relationship is as unestablished before any amount)
+    const shown = list.filter((s) => s && typeof s === "object" && s.kind === "benefit_terms" && RENDERED.has(s)).map((s) => d.ctx.benefitRecords?.get(String(s.benefit_id))).filter((r): r is BenefitRecord => !!r && r.kind === "percentage_schedule");
+    for (const r of shown) if (!recs.some((x) => x.id === r.id)) recs.push(r);
     const [a, b] = [recs[0], recs.find((r) => r.policy.id !== recs[0]?.policy.id)];
     const already = list.some((s) => !!s && typeof s === "object" && RELATION.has(s));
     if (a && b && !already && a.schedule && b.schedule && a.memberId === b.memberId && a.policy.documentRole !== "amendment" && b.policy.documentRole !== "amendment" && !a.policy.personalProof && !b.policy.personalProof) {

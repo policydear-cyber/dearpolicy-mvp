@@ -11,6 +11,7 @@
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
 import { requirementToAsk } from "./requirement-question";
+import { planSchedules } from "./schedule-disposition";
 import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
@@ -487,6 +488,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let budgetWarned = false;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
+  /** PR #55 (SBb): every evaluate_benefit run this turn (the model's and the server's): which benefit, for whom, with what, and what came of it. */
+  const evalRuns: { subject: string; benefitId: string; args: Record<string, unknown>; status: string; resultId: string | null; need: string | null; why: string | null }[] = [];
+  let serverSeq = 0;
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
   const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, libraryPages, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** PR #54 follow-up: what the household reported about one person, oldest first -- the facts recorded for them (with
@@ -1278,6 +1282,121 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return null;
   };
 
+  /** What follows an evaluate_benefit result, whoever called it (the model, or the server completing a schedule the reply left out). */
+  const afterEvaluate = (call: ToolCall, res: { ok: boolean; data?: unknown; error?: string }, shown: unknown, ids: string[]) => {
+    // Reliable chat: what an evaluation's case rests on -- the facts the model names (fact_keys), else the facts the
+    // household gave for this person this turn -- so a correction withdraws exactly the results built on it.
+    if (res.ok && call.name === "evaluate_benefit" && (res.data as { status?: string }).status === "unlisted_case") {
+      const d = res.data as { listed_cases?: string; benefit?: string };
+      unlistedNow.set(String(call.arguments.subject_id ?? ""), { benefit: d.benefit ?? "", labels: String(d.listed_cases ?? "").split("; ").map((x) => x.replace(/\s+\d+(?:\.\d+)?%$/, "").trim()).filter(Boolean) });
+    }
+    if (res.ok && call.name === "evaluate_benefit") {
+      const rid = (res.data as { result_id?: string }).result_id; const k = rid ? calcOutcomes(ctx).get(rid) : undefined;
+      const subj = String(call.arguments.subject_id ?? "");
+      const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
+      const named = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String).filter((x) => facts[x]) : [];
+      if (k) k.dependsOn = named.length ? named : [...new Set(recordedNow.filter((r) => r.subject === subj && facts[r.key]).map((r) => r.key))];
+      // PR #54 follow-up: the facts the benefit's definition was checked against are what the result rests on too
+      const appKeys = (((res.data as { applicability?: { fact_keys?: string[] } }).applicability?.fact_keys) ?? []).filter((x) => facts[x]);
+      if (k && appKeys.length) k.dependsOn = [...new Set([...(k.dependsOn ?? []), ...appKeys])];
+      // rc-live-3 RCT2a: the open "which case?" question is answered once the server has settled the case from the
+      // household's words (a result for one listed case, or the case is not listed) -- whatever key the model noted
+      // the answer under ("fracture_bone_detail" for a question asked as "fracture_bone"). It is never put back.
+      const status = (res.data as { status?: string }).status;
+      const bid = String(call.arguments.benefit_id ?? "");
+      const reason = (res.data as { reason?: string }).reason;
+    evalRuns.push({ subject: subj, benefitId: bid, args: { ...call.arguments }, status: status ?? "", resultId: rid ?? null, need: (res.data as { need?: string }).need ?? null, why: (res.data as { why?: string }).why ?? null });
+      if (bid && ((status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) || status === "case_conflict")) caseOpenNow.set(subj, bid);
+      const settles = !!bid && (!!rid || status === "unlisted_case" || status === "not_applicable");
+      if (bid && subj && status === "not_applicable") { notApplicable.set(`${subj}|${bid}`, (res.data as { why?: string }).why ?? ""); withdrawInapplicable(subj, bid, String((res.data as { why?: string }).why ?? "")); }
+      if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
+      if (settles) for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
+      // (latency: the benefit stays addressable by its id in later turns -- re-resolved and re-checked on every call)
+      { const rec = ctx.benefitRecords?.get(bid); if (rec && subj) state.evaluated = [...(state.evaluated ?? []).filter((e) => !(e.id === bid && e.subjectId === subj)), { id: bid, benefit: rec.benefit, product: rec.policy.product, subjectId: subj }].slice(-6); }
+      if (bid && subj && (status === "needs_facts" || status === "case_conflict")) {
+        const dd = res.data as { benefit?: string; ask?: string; need?: string; options?: { option_id: string; case: string }[]; matching_cases?: string[] };
+        const isCase = reason === "missing" || reason === "ambiguous" || status === "case_conflict";
+        const isApp = reason === "applicability";
+        const optionList = isCase || isApp ? (dd.options ?? []) : [];
+        const factKey = isApp ? normalizeKey(String((res.data as { fact_key?: string }).fact_key ?? "")) || `detail_${bid}` : isCase ? `listed_case_${bid}` : /admission/i.test(dd.need ?? "") ? "admission_datetime" : /discharge/i.test(dd.need ?? "") ? "discharge_datetime" : normalizeKey(dd.need ?? "") || `detail_${bid}`;
+        const question = dd.ask ?? (status === "case_conflict" && dd.matching_cases?.length ? `Which of these is it: ${dd.matching_cases.join(" or ")}?` : `What does ${dd.benefit ?? "this benefit"} still need: ${dd.need ?? "the missing detail"}?`);
+        const reqIdNew = `q${state.turn}_${++reqSeq}`;
+        // (every requirement the server creates here asks for something the household reports or can observe -- which
+        // listed case, the detail a definition turns on, a stay's dates -- never an insurer's assessment)
+        const reqNew: Requirement = { id: reqIdNew, subjectId: subj, benefitId: bid, benefit: dd.benefit ?? bid, factKey, question, options: optionList.map((o) => o.option_id), evidenceIds: [...ids], isCase, optionLabels: new Map(optionList.map((o) => [o.option_id, o.case])), resolvedBy: "household" };
+        for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
+        requirements.set(reqIdNew, reqNew);
+        const sd = (shown as { data?: Record<string, unknown> }).data;
+        if (sd && typeof sd === "object") { sd.requirement_id = reqIdNew; sd.resolved_by = reqNew.resolvedBy; sd.requirement_note = "To ask the household for this, call ask_user with requirement_id and your question (the server supplies the person, the fact and the evidence). Give the benefit's printed terms first (benefit_terms)."; }
+      }
+      const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || p.benefitId === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
+      if (settles && asksCase(state.pending)) { state.pending = null; (trace.adjusted ??= []).push(`the open case question was answered (${bid})`); }
+      if (settles && asksCase(state.parkedPending)) state.parkedPending = null;
+    }
+  };
+
+  /** The schedules a lookup already returned for this person that the reply leaves out: every one ends the turn explained,
+   * evaluated, excluded (with the reason) or unresolved (with the uncertainty) -- see schedule-disposition.ts. Only schedules
+   * the lookup returned, for the person the reply is about, and only when the reply already addresses that family. */
+  const serverEvaluate = async (args: Record<string, unknown>): Promise<{ status: string; resultId: string | null; need: string | null; why: string | null } | null> => {
+    const call: ToolCall = { id: `server-${++serverSeq}`, name: "evaluate_benefit", arguments: { ...args } };
+    const by = "server (a relevant schedule the reply left out)";
+    const refusal = preflight(call);
+    if (refusal) { record(call.name, { ...call.arguments, by }, false, [], refusal); return null; }
+    const t1 = Date.now();
+    const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
+    { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - t1; }
+    await refine(res.evidence, null);
+    const ids: string[] = [];
+    const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
+    if (!res.ok) { record(call.name, { ...call.arguments, by }, false, ids, res.error); return null; }
+    afterEvaluate(call, res, shown, ids);
+    const d = res.data as { status?: string; amount?: unknown };
+    record(call.name, { ...call.arguments, by }, true, ids, undefined, JSON.stringify({ status: d.status, ...(d.amount ? { amount: d.amount } : {}) }));
+    const last = evalRuns[evalRuns.length - 1];
+    return { status: last.status, resultId: last.resultId, need: last.need, why: last.why };
+  };
+  const completeSchedules = async (call: ToolCall, field: "sentences" | "statements"): Promise<void> => {
+    if (chatContract(env) !== "benefits") return;
+    const subject = String(call.arguments.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? "");
+    const discovered = (state.discovered ?? []).filter((d) => d.subjectId === subject);
+    if (!subject || discovered.length < 2) return;
+    const list = [...(((call.arguments[field] as Record<string, unknown>[] | undefined)) ?? [])];
+    const covered = new Map<string, "explained" | "evaluated">();
+    for (const x of list) {
+      if (!x || typeof x !== "object") continue;
+      if (x.kind === "benefit_terms" && typeof x.benefit_id === "string" && covered.get(x.benefit_id) !== "evaluated") covered.set(x.benefit_id, "explained");
+      if (x.kind === "calculation") for (const id of [x.result_id, ...(Array.isArray(x.result_ids) ? x.result_ids : [])]) { const b = typeof id === "string" ? evalRuns.find((e) => e.resultId === id)?.benefitId : undefined; if (b) covered.set(b, "evaluated"); }
+    }
+    const na = new Map<string, string>();
+    for (const [k, why] of notApplicable) { const [sj, bid] = k.split("|"); if (sj === subject) na.set(bid, why); }
+    const claimWords = Object.values((state.claim?.subjectId === subject ? state.claim.facts : state.otherClaims?.[subject]?.facts) ?? {}).map((f) => `${(f as { words?: string }).words ?? ""} ${(f as { value?: unknown }).value ?? ""}`).join(" ");
+    const plan = planSchedules({ discovered, subjectId: subject, eventText: `${input.message} ${claimWords}`, userTexts, message: input.message, covered, notApplicable: na });
+    const rows = [...plan.rows];
+    const extra: Record<string, unknown>[] = [];
+    const terms = (id: string) => ({ kind: "benefit_terms", benefit_id: id, subject_id: subject, text: "-" });
+    for (const m of plan.complete) {
+      const prior = evalRuns.find((e) => e.subject === subject && e.benefitId === m.id && e.resultId);
+      if (prior?.resultId) { extra.push({ kind: "calculation", result_id: prior.resultId, text: "-" }); rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "evaluated", reason: "evaluated this turn; the reply had left the illustration out" }); continue; }
+      const sibling = [...evalRuns].reverse().find((e) => e.subject === subject && e.status === "conditional_illustration" && e.benefitId !== m.id && discovered.some((d) => d.id === e.benefitId));
+      if (!sibling) {
+        const open = [...requirements.values()].find((r) => r.subjectId === subject && r.resolvedBy === "household");
+        extra.push(terms(m.id));
+        rows.push({ benefitId: m.id, benefit: m.benefit, disposition: open ? "unresolved" : "explained", reason: open ? `its printed terms are stated; which listed case applies is still open (${open.question})` : "its printed terms are stated; no amount was asked for" });
+        continue;
+      }
+      const r = await serverEvaluate({ ...sibling.args, benefit_id: m.id });
+      if (r?.status === "conditional_illustration" && r.resultId) { extra.push({ kind: "calculation", result_id: r.resultId, text: "-" }); rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "evaluated", reason: "worked out on the server for the same reported case as the benefit the model evaluated" }); continue; }
+      extra.push(terms(m.id));
+      if (r?.status === "not_applicable" || r?.status === "unlisted_case") rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "excluded", reason: r.status === "unlisted_case" ? "the reported case is not one of its listed cases" : r.why || "its own definition does not fit what the household reported" });
+      else rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "unresolved", reason: r ? `${r.status}${r.need ? `: ${r.need}` : ""}` : "it could not be re-read" });
+    }
+    if (extra.length) {
+      call.arguments = { ...call.arguments, [field]: [...list, ...extra] };
+      (trace.adjusted ??= []).push(`${call.name}: added ${extra.length} statement(s) for relevant schedule(s) the lookup returned and the reply left out (${plan.complete.map((c) => c.benefit).join("; ")})`);
+    }
+    if (rows.length) trace.schedules = rows;
+  };
   /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
   const partialAnswer = (): Composed | null => {
     // V1.5 (live verification, 14 Oct): only figures RELEVANT to what the household asked -- their label, product and
@@ -1521,6 +1640,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
             const keep = given.filter((x) => !(x?.kind === "benefit_terms" && [...notApplicable.keys()].some((k) => k.endsWith(`|${String(x.benefit_id ?? "")}`))));
             if (keep.length !== given.length) { (trace.adjusted ??= []).push(`${call.name}: left out the terms of ${given.length - keep.length} benefit(s) whose definition does not fit what the household reported`); call.arguments = { ...call.arguments, [field]: keep }; }
           }
+          await completeSchedules(call, field);
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
           const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
@@ -1562,6 +1682,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const ids: string[] = [];
       const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
       if (!res.ok) noteFailure(call.name);
+      if (res.ok && call.name === "person_benefits") {
+        const who = String(call.arguments.subject_id ?? "");
+        const found = (((res.data as { schedules?: { benefit_id?: string; benefit?: string }[] }).schedules) ?? []).filter((x) => x.benefit_id && x.benefit).map((x) => ({ id: String(x.benefit_id), benefit: String(x.benefit), subjectId: who }));
+        if (who && found.length) state.discovered = [...(state.discovered ?? []).filter((d) => !found.some((f) => f.id === d.id && f.subjectId === d.subjectId)), ...found].slice(-8);
+      }
       if (res.ok && call.name === "calculate" && typeof call.arguments.subject_id === "string") {
         const miss = ((shown as { data?: { missing?: { key: string; ask: string; why: string; evidence?: { evidence_id?: string }[] }[] } }).data?.missing ?? []).filter((m) => m.ask === "household");
         const byBenefit = calcMissingBy.get(call.arguments.subject_id) ?? new Map(); calcMissingBy.set(call.arguments.subject_id, byBenefit);
@@ -1574,54 +1699,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (kind === "unresolved" && miss.length) (state.openCalcs ??= {})[openKey] = { args: call.arguments, missing: miss.map((m) => normalizeKey(m.key)), turn: state.turn };
         else if (kind === "indicative_estimate" || kind === "conditional_illustration") { if (state.openCalcs) delete state.openCalcs[openKey]; }
       }
-      // Reliable chat: what an evaluation's case rests on -- the facts the model names (fact_keys), else the facts the
-      // household gave for this person this turn -- so a correction withdraws exactly the results built on it.
-      if (res.ok && call.name === "evaluate_benefit" && (res.data as { status?: string }).status === "unlisted_case") {
-        const d = res.data as { listed_cases?: string; benefit?: string };
-        unlistedNow.set(String(call.arguments.subject_id ?? ""), { benefit: d.benefit ?? "", labels: String(d.listed_cases ?? "").split("; ").map((x) => x.replace(/\s+\d+(?:\.\d+)?%$/, "").trim()).filter(Boolean) });
-      }
-      if (res.ok && call.name === "evaluate_benefit") {
-        const rid = (res.data as { result_id?: string }).result_id; const k = rid ? calcOutcomes(ctx).get(rid) : undefined;
-        const subj = String(call.arguments.subject_id ?? "");
-        const facts = (state.claim?.subjectId === subj ? state.claim.facts : state.otherClaims?.[subj]?.facts) ?? {};
-        const named = Array.isArray(call.arguments.fact_keys) ? (call.arguments.fact_keys as unknown[]).map(String).filter((x) => facts[x]) : [];
-        if (k) k.dependsOn = named.length ? named : [...new Set(recordedNow.filter((r) => r.subject === subj && facts[r.key]).map((r) => r.key))];
-        // PR #54 follow-up: the facts the benefit's definition was checked against are what the result rests on too
-        const appKeys = (((res.data as { applicability?: { fact_keys?: string[] } }).applicability?.fact_keys) ?? []).filter((x) => facts[x]);
-        if (k && appKeys.length) k.dependsOn = [...new Set([...(k.dependsOn ?? []), ...appKeys])];
-        // rc-live-3 RCT2a: the open "which case?" question is answered once the server has settled the case from the
-        // household's words (a result for one listed case, or the case is not listed) -- whatever key the model noted
-        // the answer under ("fracture_bone_detail" for a question asked as "fracture_bone"). It is never put back.
-        const status = (res.data as { status?: string }).status;
-        const bid = String(call.arguments.benefit_id ?? "");
-        const reason = (res.data as { reason?: string }).reason;
-        if (bid && ((status === "needs_facts" && (reason === "missing" || reason === "ambiguous")) || status === "case_conflict")) caseOpenNow.set(subj, bid);
-        const settles = !!bid && (!!rid || status === "unlisted_case" || status === "not_applicable");
-        if (bid && subj && status === "not_applicable") { notApplicable.set(`${subj}|${bid}`, (res.data as { why?: string }).why ?? ""); withdrawInapplicable(subj, bid, String((res.data as { why?: string }).why ?? "")); }
-        if (settles && caseOpenNow.get(subj) === bid) caseOpenNow.delete(subj);
-        if (settles) for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
-        // (latency: the benefit stays addressable by its id in later turns -- re-resolved and re-checked on every call)
-        { const rec = ctx.benefitRecords?.get(bid); if (rec && subj) state.evaluated = [...(state.evaluated ?? []).filter((e) => !(e.id === bid && e.subjectId === subj)), { id: bid, benefit: rec.benefit, product: rec.policy.product, subjectId: subj }].slice(-6); }
-        if (bid && subj && (status === "needs_facts" || status === "case_conflict")) {
-          const dd = res.data as { benefit?: string; ask?: string; need?: string; options?: { option_id: string; case: string }[]; matching_cases?: string[] };
-          const isCase = reason === "missing" || reason === "ambiguous" || status === "case_conflict";
-          const isApp = reason === "applicability";
-          const optionList = isCase || isApp ? (dd.options ?? []) : [];
-          const factKey = isApp ? normalizeKey(String((res.data as { fact_key?: string }).fact_key ?? "")) || `detail_${bid}` : isCase ? `listed_case_${bid}` : /admission/i.test(dd.need ?? "") ? "admission_datetime" : /discharge/i.test(dd.need ?? "") ? "discharge_datetime" : normalizeKey(dd.need ?? "") || `detail_${bid}`;
-          const question = dd.ask ?? (status === "case_conflict" && dd.matching_cases?.length ? `Which of these is it: ${dd.matching_cases.join(" or ")}?` : `What does ${dd.benefit ?? "this benefit"} still need: ${dd.need ?? "the missing detail"}?`);
-          const reqIdNew = `q${state.turn}_${++reqSeq}`;
-          // (every requirement the server creates here asks for something the household reports or can observe -- which
-          // listed case, the detail a definition turns on, a stay's dates -- never an insurer's assessment)
-          const reqNew: Requirement = { id: reqIdNew, subjectId: subj, benefitId: bid, benefit: dd.benefit ?? bid, factKey, question, options: optionList.map((o) => o.option_id), evidenceIds: [...ids], isCase, optionLabels: new Map(optionList.map((o) => [o.option_id, o.case])), resolvedBy: "household" };
-          for (const [k2, r2] of requirements) if (r2.subjectId === subj && r2.benefitId === bid) requirements.delete(k2);
-          requirements.set(reqIdNew, reqNew);
-          const sd = (shown as { data?: Record<string, unknown> }).data;
-          if (sd && typeof sd === "object") { sd.requirement_id = reqIdNew; sd.resolved_by = reqNew.resolvedBy; sd.requirement_note = "To ask the household for this, call ask_user with requirement_id and your question (the server supplies the person, the fact and the evidence). Give the benefit's printed terms first (benefit_terms)."; }
-        }
-        const asksCase = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subj) === subj && (p.caseOf === bid || p.benefitId === bid || (!!p.options?.length && p.options.every((o) => String(o).startsWith(bid))));
-        if (settles && asksCase(state.pending)) { state.pending = null; (trace.adjusted ??= []).push(`the open case question was answered (${bid})`); }
-        if (settles && asksCase(state.parkedPending)) state.parkedPending = null;
-      }
+      afterEvaluate(call, res, shown, ids);
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "household_documents") inventoryNow = res.data as Inventory;
       if (call.name === "resolve_person") lastMention = String(call.arguments.mention ?? "");

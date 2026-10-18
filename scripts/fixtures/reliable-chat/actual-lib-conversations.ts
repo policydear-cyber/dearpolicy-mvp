@@ -103,6 +103,7 @@ export const ACTUAL_SCENARIOS = (): ActualScenario[] => [
   { id: "SA5", title: "death allowance", messages: [J5_U], turns: [j5Turn()] },
   { id: "SA6", title: "person switch to Grace", messages: [J1_U, J6_U], turns: [j1Turn(), j6Turn()] },
   { id: "SA7", title: "SBa replay: the model never asked the question", messages: [SBA_U1, SBA_U2], turns: sbaTurns() },
+  { id: "SA9", title: "SBb replay: the model evaluated one fracture table only", messages: [SBB_U1, SBB_U2], turns: sbbTurns() },
   { id: "SA8", title: "SAr replay: the first report was recorded under two keys, the correction replaced one", messages: [SAR_U1, SAR_U2], turns: sarTurns() },
 ];
 
@@ -146,6 +147,38 @@ export const sarTurns = (): ScriptTurn[] => [
     (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: [] })],
   ] },
 ];
+
+/** Round 4 (sa-live-4 SBb, the real model): the model evaluated ONLY the Group Personal Accident table -- turn 1 asked with that
+ * table's terms alone, turn 2 gave only its S$300,000 -- though the lookup had returned the Simple Fracture schedule too. Replayed from
+ * the recorded arguments in order (evidence ids are the fixture's own; the recorded statement ids are dropped). The model still omits
+ * the second evaluation: the application must produce the complete answer anyway. */
+export const SBB_U1 = "Daniel fell and the doctor says he fractured his hip, or possibly his tibia - they are not sure yet. It is a closed fracture from an accident at home. What would his accident cover pay?";
+export const SBB_U2 = "The scan shows it is the tibia.";
+const bodilyInjuryHit = (v: ScriptView) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const hit = ((o.result?.data?.hits ?? []) as any[]).find((x) => /bodily injury/i.test(JSON.stringify(x))); if (hit) return hit.evidence.evidence_id as string; } return null; };
+export const sbbTurns = (): ScriptTurn[] => [
+  { user: SBB_U1, steps: [
+    () => [call("resolve_person", { mention: "Daniel" }), call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "accident at home", words: "an accident at home" }, { key: "fracture_type", value: "closed fracture", words: "It is a closed fracture" }, { key: "possible_fracture_site", value: "hip or possibly his tibia; they are not sure yet", words: "fractured his hip, or possibly his tibia - they are not sure yet" }, { key: "cause_reported", value: "accident", words: "from an accident at home" }] }), call("person_benefits", { subject_id: D, topic: "accident cover fracture hip tibia closed fracture" })],
+    () => [call("search_passages", { subject_id: D, k: 10, query: "Simple Fracture benefit conditions closed fracture accident X-ray registered medical practitioner claim either Core Scheme or Voluntary Scheme" }), call("read_page", { policy_id: A.doc("PA_SUMMARY").id, page: 8 })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "hip or possibly tibia; they are not sure yet", assumption_words: "fractured his hip, or possibly his tibia - they are not sure yet", fact_keys: ["possible_fracture_site", "fracture_type", "cause_reported"] })],
+    (v: ScriptView) => [call("ask_user", { kind: "fact", subject_id: D, requirement_id: evals(v)[0]?.requirement_id, question: "Which fracture site has the doctor confirmed: Daniel’s hip, or his leg (tibia/lower leg)?", statements: [{ kind: "benefit_terms", benefit_id: paOf(v)?.benefit_id, benefit: "Simple Fracture or Other Fracture due to Accident", subject_id: D, text: "-" }] })],
+  ] },
+  { user: SBB_U2, steps: [
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "fracture_site_detail", value: "tibia", words: "The scan shows it is the tibia." }] })],
+    () => [call("person_benefits", { subject_id: D, topic: "closed tibia fracture" })],
+    (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: paOf(v)?.benefit_id, purpose: "claim", case: "tibia", assumption_words: "The scan shows it is the tibia.", fact_keys: ["fracture_site_detail", "fracture_type", "cause_reported"] })],
+    () => [call("search_passages", { subject_id: D, k: 5, query: "Simple Fracture or Other Fracture due to Accident definition medical confirmation conditions" })],
+    (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [...calcs(v), ...(bodilyInjuryHit(v) ? [{ kind: "fact", text: "The Group Personal Accident Benefit Summary says the benefit applies to bodily injury resulting from an accident and a fracture of a nature listed in its schedule.", evidence_ids: [bodilyInjuryHit(v)] }] : [])], next_steps: ["contact:" + CERT] })],
+  ] },
+];
+
+/** Round 4 controls: material that must NOT be added. */
+// (a) an explicitly narrow single-benefit question: only the Simple Fracture benefit was asked about and evaluated
+export const N_U1 = "Daniel fractured his tibia in an accident. It's a closed fracture. What would the Simple Fracture benefit give?";
+export const narrowTurn = (): ScriptTurn => ({ user: N_U1, steps: [
+  () => [call("resolve_person", { mention: "Daniel" }), call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "closed tibia fracture", words: "fractured his tibia in an accident. It's a closed fracture" }] }), call("person_benefits", { subject_id: D, topic: "closed tibia fracture accident" })],
+  (v: ScriptView) => [call("evaluate_benefit", { subject_id: D, benefit_id: sfOf(v)?.benefit_id, purpose: "claim", case: "tibia", fact_keys: ["injury"] })],
+  (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: calcs(v), next_steps: [] })],
+] });
 
 /** Round 3: clarification-provenance controls. Each keeps a relationship scoped to person, event and benefit. */
 // (a) a SECOND injury reported after a first one: it is reported under its own key, evaluated for its own case
