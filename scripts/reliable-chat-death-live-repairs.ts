@@ -226,9 +226,9 @@ async function restore2() {
   ] };
   await withModel(turn3, Q, (v) => {
     check("R7 Term Life is stated for a death by illness", /Group Term Life/.test(v) && /1,000,000/.test(v), v);
-    // (Known gap, stated in the handoff: accident-only death benefits are still LISTED for a reported death by illness -- there is no server
-    // applicability rule for them -- but each carries its printed accident condition and nothing says it is payable.)
-    check("R7 the accident-only death benefits listed for a death by illness carry their printed accident condition and no payment promise", /dies as a result of an Accident/.test(v) && !/\b(?:will|would|shall) be paid\b|you will receive|is payable to you/i.test(v), v);
+    // (the cause / applicability rule: each accident-only death benefit is left out for a reported illness and named with its printed condition;
+    // the full cases are in scripts/reliable-chat-death-cause.ts)
+    check("R7 accident-only death benefits are NOT presented as potentially payable for a death by illness: named with their printed accident condition, no amount, no promise", /printed as accident-only/.test(v) && /dies as a result of an Accident/.test(v) && !/600,000/.test(v) && !/\b(?:will|would|shall) be paid\b|you will receive|is payable to you/i.test(v), v);
   });
 }
 

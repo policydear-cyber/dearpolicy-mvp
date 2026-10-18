@@ -122,3 +122,17 @@ dated 1 April 2024), kept as a **deliberately different control** and never desc
   price, `openai:gpt-6-luna` US$0.10 / US$0.50 per million) and refuses a call that would exceed the US$0.05 run cap or the ledger's
   unreserved allowance. The batch is one run id (`dj-live-1`), cap US$0.05, one ledger entry appended once from the actual result. The
   US$0.15 reservation is never counted as available.
+
+## Live batch 2 addendum (dj-live-2; written and frozen BEFORE any paid call)
+Plan: five cases, each run ONCE, cap US$0.05 (within the US$1 cumulative allowance; the open US$0.15 reservation is not available), the existing dedicated
+connection and ledger guard, household DJR. No repeat-until-green, no post-result change of an expectation, grader or scenario wording.
+* D1, D2 (same broad death question, two independent attempts), D3 (fresh "my husband Daniel passed away in an accident" paraphrase), F1 (fracture
+  condition + "is it separate from the death benefits?"): wording and graders exactly as in dj-live-1 (death-v1, unchanged; its known literal false
+  positives D1 A3/A7, D2 A6, F1 F2 are listed in `dj-live-1-regrade.md` and are NOT edited -- a regrade, if any, is published separately).
+* DI (new, illness-applicability control): "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his
+  insurance, and what should we do?" Expected: Group Term Life S$1,000,000 (Daniel's certificate, 6 October 2022, not current cover) stated; NO accident-only
+  benefit (Group Personal Accident S$600,000, Accidental Death 100%, the Compassionate Death Allowance's 2,000) presented as potentially payable -- one that is
+  named says it is accident-only / does not fit; a visible contact step for Aldermoor Life Ltd; no question; no fracture/dismemberment text; Grace's figures not
+  attached to Daniel. Checks I1-I7 + common G1-G7 (`gradeIllness`, controls in `deathControls`).
+* Admission is checked by `ledger.ts plan` before any call (worst case for five cases); if the plan did not fit, it would be reduced transparently before calls.
+* Distinction kept in the report: actual-model results (this batch) vs scripted-model replays (`reliable-chat:death-cause-test`, `death-live-repairs-test`).

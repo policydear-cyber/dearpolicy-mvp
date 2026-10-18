@@ -96,7 +96,30 @@ export function gradeFracture(id: string, conv: any): Graded {
   ];
   return finish(id, checks, b);
 }
-export const DEATH_GRADERS: Record<string, (id: string, conv: any) => Graded> = { D1: gradeDeath, D2: gradeDeath, D3: gradeDeath, F1: gradeFracture };
+/** DI (live batch 2, written and frozen before any paid call; death-v1 addendum): a death reported as an illness. Term Life is the person's own and is
+ * stated with its date; no accident-only benefit (Group Personal Accident S$600,000, Accidental Death 100%, the Compassionate Death Allowance's
+ * S$2,000 / $2,000) is presented as potentially payable -- a line that carries one of those figures passes only if the same line says the benefit
+ * is accident-only / does not fit / applies only to an accident. */
+const ACC_FIGURE = /600,000|Accidental Death[^\n]{0,40}100%|\b2,000\b/;
+const ACC_QUALIFIED = /accident-only|only (?:if|for|where|when)[^.]{0,40}\bAccident|not fit|does not (?:apply|fit)|do not (?:apply|fit)|dies as a result of an Accident|requires? an Accident|applies only/i;
+export function gradeIllness(id: string, conv: any): Graded {
+  const b = base(conv); if (b.blocked || !b.turns.length) return finish(id, [], b);
+  const v = b.turns.at(-1)!.v;
+  const tl = lineWith(v, /1,000,000/);
+  const accLines = lineWith(v, ACC_FIGURE);
+  const q = (b.turns.at(-1)!.answer?.questions ?? []) as any[];
+  const checks: Check[] = [...common(b),
+    { id: "I1", dim: "K", name: "Daniel's Group Term Life S$1,000,000 is stated on a line naming Term Life and Daniel, with the certificate date, not presented as current cover", ok: tl.some((l) => /Term Life/i.test(l) && /Daniel/.test(l)) && /6 October 2022|06\/10\/2022|2022-10-06/.test(tl.join("\n")) && !CURRENT_COVER.test(v), detail: J(tl) },
+    { id: "I2", dim: "K", name: "no accident-only benefit's figure (S$600,000, Accidental Death 100%, the allowance's 2,000) is presented as potentially payable: any line with one says it is accident-only / does not fit", ok: accLines.every((l) => ACC_QUALIFIED.test(l)), detail: J(accLines.filter((l) => !ACC_QUALIFIED.test(l))) },
+    { id: "I3", dim: "K", name: "Personal Accident / Accidental Death / the allowance, if named, are said to depend on an Accident (the death was reported as an illness)", ok: !/Personal Accident|Accidental Death|Compassionate Death Allowance/i.test(v) || /accident/i.test(lineWith(v, /Personal Accident|Accidental Death|Compassionate Death Allowance/i).join(" ")), detail: J(lineWith(v, /Personal Accident|Accidental Death|Compassionate Death Allowance/i)) },
+    { id: "I4", dim: "K", name: "no dismemberment / fracture benefit, row, figure or window for a death question", ok: !FRACTURE_OR_DISMEMBERMENT.test(v), detail: (v.match(FRACTURE_OR_DISMEMBERMENT) ?? [""])[0] },
+    { id: "I5", dim: "U", name: "a visible next step: contact the person's own insurer (Aldermoor Life Ltd) about a claim", ok: contact(v) && uniqueSteps(b.turns.at(-1)!.answer?.nextSteps).length >= 1, detail: J(uniqueSteps(b.turns.at(-1)!.answer?.nextSteps)) },
+    { id: "I6", dim: "U", name: "no unnecessary question: the person and the cause (illness) are known", ok: q.length === 0, detail: J(q) },
+    { id: "I7", dim: "K", name: "Grace's figures (S$200,000 / S$100,000) are not attached to Daniel", ok: lineWith(v, /200,000|S\$100,000\b/).every((l) => /Grace/.test(l)), detail: J(lineWith(v, /200,000|S\$100,000\b/)) },
+  ];
+  return finish(id, checks, b);
+}
+export const DEATH_GRADERS: Record<string, (id: string, conv: any) => Graded> = { D1: gradeDeath, D2: gradeDeath, D3: gradeDeath, F1: gradeFracture, DI: gradeIllness };
 
 /** the grader's own controls: a synthetic good answer passes; each known-bad variant fails on the intended check */
 export function deathControls(): [string, Graded, Graded["verdict"], string | null][] {
@@ -137,6 +160,9 @@ export function deathControls(): [string, Graded, Graded["verdict"], string | nu
     ["D returned differs from saved", gradeDeath("D1", { ...mk(GOOD), turns: [{ visible: "S$600,000" }] }), "FAIL", "G6"],
     ["D saved next step not displayed", gradeDeath("D1", (() => { const c: any = mk(GOOD); c.turns[0].visible = c.turns[0].visible; c.loaded.turns[0].answer = { ...GOOD, nextSteps: [STEP, "Keep a copy of the certificate."] }; c.turns[0].visible = visibleOf(GOOD); return c; })()), "FAIL", "G6"],
     ["D cut quotation", gradeDeath("D1", mut((a) => { a.details.push("The booklet says “if an Insured Person dies as a result of an”."); return a; })), "FAIL", "G2"],
+    ["DI good (illness: Term Life stated, accident-only benefits named as not fitting)", gradeIllness("DI", mk({ summary: "Daniel's certificate prints Group Term Life of S$1,000,000, as of 6 October 2022. It is an amount dated 6 October 2022, not proof of current cover.", details: ["For a death reported as an illness, Group Personal Accident is printed as accident-only, so it does not fit that report and no amount is given for it."], nextSteps: [STEP], questions: [] })), "PASS", null],
+    ["DI Personal Accident S$600,000 presented as potentially payable", gradeIllness("DI", mk({ summary: "Daniel's certificate prints Group Term Life of S$1,000,000, as of 6 October 2022.", details: ["Daniel's certificate also prints Group Personal Accident of S$600,000, as of 6 October 2022."], nextSteps: [STEP], questions: [] })), "FAIL", "I2"],
+    ["DI Term Life dropped", gradeIllness("DI", mk({ summary: "Group Personal Accident is printed as accident-only, so it does not fit that report.", details: [], nextSteps: [STEP], questions: [] })), "FAIL", "I1"],
     ["F good", gradeFracture("F1", mkF(F_GOOD)), "PASS", null],
     ["F borrowed 365-day window under the fracture", gradeFracture("F1", mkF({ ...F_GOOD, details: ["The Simple Fracture benefit applies if an Accident results in a Simple Fracture within 365 days of the Accident. It is a separate benefit from the death benefits."] })), "FAIL", "F2"],
     ["F added to the death benefit", gradeFracture("F1", mkF({ ...F_GOOD, details: [...F_GOOD.details, "Together with S$1,000,000 Term Life that is S$1,003,750 in total."] })), "FAIL", "F3"],

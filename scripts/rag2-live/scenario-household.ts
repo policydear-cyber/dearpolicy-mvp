@@ -231,7 +231,11 @@ export const DJ1: Scenario = { id: "D1", title: "death journey: broad death ques
 export const DJ2: Scenario = { ...DJ1, id: "D2", title: "death journey: broad death question (attempt 2)" };
 export const DJ3: Scenario = { id: "D3", title: "death journey: fresh paraphrase", why: "death-journey live batch (paraphrase)", turns: [{ user: "My husband Daniel passed away in an accident last week. Which of our insurance covers pay anything, how much, and what do I need to do first?", expect: {} }] };
 export const DJF1: Scenario = { id: "F1", title: "death journey: fracture condition and comparison control", why: "death-journey live batch (fracture control)", turns: [{ user: "If Daniel breaks his hip in an accident, what does the Simple Fracture benefit pay, what condition applies to it, and is it separate from the death benefits?", expect: {} }] };
-export const RC_DEATH = [DJ1, DJ2, DJ3, DJF1];
+/** Live batch 2 (dj-live-2, pre-registered in EXPECTED-death-journey.md, "Live batch 2 addendum"): the illness-applicability control. The household reports
+ * a death by illness (and says it was not an accident); the accident-only benefits (Group Personal Accident, Accidental Death, the booklet's
+ * Compassionate Death Allowance) must not be presented as potentially payable, and Term Life must be. Wording fixed before any paid call. */
+export const DJI: Scenario = { id: "DI", title: "death journey: death by illness (applicability control)", why: "death-journey live batch 2 (cause / applicability)", turns: [{ user: "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?", expect: {} }] };
+export const RC_DEATH = [DJ1, DJ2, DJ3, DJF1, DJI];
 
 export async function seedScenario(which: "scenario" | "stress" | "binding" | "binding-cells" | "livelib" | "pr50" | "tan" | "booklet" | "actuallib" | "deathjourney" = "scenario"): Promise<void> {
   const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = (which === "stress" ? STRESS : which === "binding" ? BINDING : which === "binding-cells" ? BINDING_CELLS : which === "livelib" ? LIVELIB : which === "pr50" ? PR50 : which === "tan" ? TAN : which === "booklet" ? BOOKLET : which === "actuallib" ? ACTUAL : which === "deathjourney" ? DJR : SCENARIO) as unknown as typeof SCENARIO;

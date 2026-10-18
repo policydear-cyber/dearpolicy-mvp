@@ -34,6 +34,18 @@ export const ATTRIBUTES: Attribute[] = [
   },
 ];
 
+/** Cause-of-death attribute (not one of the definition-driven ATTRIBUTES): how a reported death happened. Used only to read the
+ * household's own words (latest correction wins) against a benefit's printed accident condition. */
+export const CAUSE_ATTRIBUTE: Attribute = {
+  id: "cause_of_death", factKey: "how_it_happened", label: "whether the death was caused by an accident or by an illness", context: /./,
+  values: [
+    { id: "accident", label: "An accident", re: /\baccident\w*|\bcrash(?:ed)?\b|\bcollision\b|\brun over\b|\bdrown\w*|\bfell (?:off|from|down)\b/gi },
+    { id: "illness", label: "An illness", re: /\bill(?:ness)?\b|\bsick(?:ness)?\b|\bdisease\b|\bcancer\b|\bheart (?:attack|failure|disease)\b|\bstroke\b|\bnatural causes\b|\bpneumonia\b|\bdementia\b|\bcovid\b|\bdiabet\w*\b|\bterminal\b/gi },
+  ],
+  question: (who) => `Did ${who} die in an accident, or of an illness?`,
+  said: (v) => (v === "accident" ? "an accident" : "an illness"),
+};
+
 const NEG_BEFORE = /(?:\bnot|n['’]t|\bnever|\bno)\s+(?:an?\s+|the\s+)?(?:\w+\s+)?$/i;
 /** The attribute values a text states (a negated value counts as the other one; "open or closed" states both). */
 export function valuesIn(text: string, attr: Attribute): Set<string> {
