@@ -661,6 +661,48 @@
       "refused": 0,
       "failed": 0,
       "note": "Back-filled on 2026-10-18 from the run own run.json (budgetUsed): started from the workbench harness, it did not pass through ledger plan/append at the time."
+    },
+    {
+      "run_id": "prod-ui-pr52-verify-2026-10-16",
+      "tested_code_sha": "",
+      "request_sha": "",
+      "at": "2026-10-16T00:00:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.01566652,
+      "spent_usd": 0.01566652,
+      "reserved_unsettled_usd": 0,
+      "calls": 34,
+      "refused": 0,
+      "failed": 0,
+      "note": "ESTIMATED cost (application estimate, no provider billing verification). Production-UI verification test of PR #52 through the deployed app's existing credentials; no credential was extracted. Back-filled on 2026-10-18 from the owner's figures; the run did not pass through ledger plan/append and its time of day is not recorded (at is the date only). The tested commit SHA was not supplied, so none is recorded. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged."
+    },
+    {
+      "run_id": "prod-ui-pr54-verify-2026-10-17",
+      "tested_code_sha": "",
+      "request_sha": "",
+      "at": "2026-10-17T00:00:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.01497526,
+      "spent_usd": 0.01497526,
+      "reserved_unsettled_usd": 0,
+      "calls": 24,
+      "refused": 0,
+      "failed": 0,
+      "note": "ESTIMATED cost (application estimate, no provider billing verification). Production-UI verification test of PR #54 through the deployed app's existing credentials; no credential was extracted. Back-filled on 2026-10-18 from the owner's figures; the run did not pass through ledger plan/append and its time of day is not recorded (at is the date only). The tested commit SHA was not supplied, so none is recorded. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged."
+    },
+    {
+      "run_id": "prod-ui-pr55-verify-2026-10-18",
+      "tested_code_sha": "e3109bb523da30cbaf0cac5aa90c35b751db495b",
+      "request_sha": "e3109bb523da30cbaf0cac5aa90c35b751db495b",
+      "at": "2026-10-18T00:00:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.01544342,
+      "spent_usd": 0.01544342,
+      "reserved_unsettled_usd": 0,
+      "calls": 26,
+      "refused": 0,
+      "failed": 0,
+      "note": "ESTIMATED cost (app-estimated, no provider billing verification). Eight production-UI test turns in five conversations on the signed-in household's library, run against the merged PR #55 deployment (e3109bb) through the app's existing credentials; no credential was extracted. Back-filled on 2026-10-18 from DearPolicy-live-verification-PR55-2026-10-18.md; the run did not pass through ledger plan/append, and its time of day is not recorded (at is the date only). The one per-turn token-admission refusal in the death turn prevented a call; it was not a provider refusal or a charge. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged."
     }
   ]
 }

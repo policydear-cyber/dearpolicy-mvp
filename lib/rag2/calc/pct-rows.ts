@@ -11,8 +11,9 @@
  * Nothing here chooses between rows that a condition does not single out: a tie, a row printing no percentage or two,
  * or the same row printed twice with different percentages is returned as unresolved, never as the first or the larger.
  */
+import { isSectionHeading } from "../section-scope";
 export type PctRow = { label: string; percents: number[]; start: number; end: number; text: string; lines: number };
-export type PctTable = { name: string | null; heading: string; header: string; base: string; headerStart: number; start: number; end: number; rows: PctRow[] };
+export type PctTable = { name: string | null; /** the nearest section heading above the table (bullet / marker removed), however far above: the benefit the table belongs to */ section?: string | null; heading: string; header: string; base: string; headerStart: number; start: number; end: number; rows: PctRow[] };
 
 const PCT_HEADER = /(?:%|per ?cent(?:age)?)\s+of\s+([^\n]{2,80}?)\)?\s*$/i;
 const CELL_GAP = /\S(?:\t+| {3,})\S/;
@@ -81,7 +82,11 @@ export function percentTables(page: string): PctTable[] {
     }
     if (!rows.length) continue;
     const end = rows[rows.length - 1].end;
-    out.push({ name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: (wrapped ? prev.split(/\t+| {3,}/).map((c) => c.trim()).filter(Boolean).join(" ") + " " : "") + h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: wrapped ? lines[i - 1].start : h.start, start: wrapped ? lines[i - 1].start : h.start, end, rows });
+    // Death-journey release: the section the table is printed under, however many lines of that section's wording sit between its
+    // heading and the table (the heading is more than four lines above for a section that prints a sentence first).
+    let section: string | null = null;
+    for (let k = i - 1; k >= floor; k--) if (isSectionHeading(lines[k].text, lines[k + 1]?.text ?? null, lines[k - 1]?.text ?? null)) { section = lines[k].text.trim().replace(/^[•·▪●■\-]\s*/, "").replace(/^(?:\d{1,2}|[A-Za-z])[.)]\s+/, "").trim(); break; }
+    out.push({ section, name: sectionLine ? SECTION.exec(sectionLine.text)![1] : null, heading: above.map((l) => l.text.trim()).join("\n"), header: (wrapped ? prev.split(/\t+| {3,}/).map((c) => c.trim()).filter(Boolean).join(" ") + " " : "") + h.text.trim().replace(/\s{2,}/g, "  "), base: hm[1].trim(), headerStart: wrapped ? lines[i - 1].start : h.start, start: wrapped ? lines[i - 1].start : h.start, end, rows });
     floor = j;
     i = j - 1;
   }

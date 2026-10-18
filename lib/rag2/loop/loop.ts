@@ -18,13 +18,16 @@ import type { ChatAnswer } from "@/types";
 import { evidenceAt, refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import type { TableValueOperand } from "../compute";
 import type { SelectedValue } from "../tables";
-import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
+import { loadDocs, loadPages, newToolRound, pageMap, policyFamily, turnStoreStats, withTurnStore } from "../store";
 import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { choosePercentRow, percentTables } from "../calc/pct-rows";
 import { caseFor, partsIn } from "../calc/case-terms";
 import { paragraphs } from "../headings";
+import { familiesOf, productFamilies } from "../event-relations";
+import { compactSearch, retrievalRoom, RESULT_ALLOWANCE, type ShownSpans } from "./retrieval-budget";
+import { scopeToEvent } from "../section-scope";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, recordsFor, runTool, validateArgs, type ToolContext } from "../tools";
@@ -33,7 +36,7 @@ import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept,
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
-import { LoopUsageMeter, type MeterStop } from "./usage-meter";
+import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { RENDERED, renderStatements } from "./statement-render";
 import { applicabilityOf } from "../applicability";
@@ -201,18 +204,18 @@ export function optionRowsWhy(e: EvidenceRef, labels: string[]): string | null {
 
 /** The line of a cited passage that says why a question matters: a table row's label, else the passage line sharing
  * the most words with the question (quoted verbatim, whitespace collapsed). */
-function whyLine(e: EvidenceRef, about: string): string {
-  if (e.table?.rowLabel) return e.table.rowLabel;
+function whyLine(e: EvidenceRef, about: string, scoped?: { text: string; rowOk: boolean } | null): string {
+  if (e.table?.rowLabel && (!scoped || scoped.rowOk)) return e.table.rowLabel;
   const want = new Set((about.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.replace(/e?s$/, "")));
   // (Actual-library findings: "If an Insured Person sustains bodily injury as a result of an Accident, which" was quoted
   // -- the first line of a wrapped sentence. The passage is read as its sentences, wrapped lines joined.)
-  const all = paragraphs(e.passage.text).flatMap((p) => p.split(/(?<=[.;])\s+(?=[A-Z])/)).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const all = paragraphs(scoped ? scoped.text : e.passage.text).flatMap((p) => p.split(/(?<=[.;])\s+(?=[A-Z])/)).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
   // Round 6 (A3): a heading ("Section 2 - What is covered") never says why a fact matters: prefer wording lines.
   const wording = all.filter((l) => /[.;:]$/.test(l) || l.split(" ").length > 8);
   const lines = wording.length ? wording : all;
   const score = (l: string) => (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => want.has(w.replace(/e?s$/, ""))).length;
   const best = [...lines].sort((a, b) => score(b) - score(a))[0] ?? "";
-  return "“" + best + "”";
+  return "“" + best.replace(/^[•·▪●■]\s*/, "") + "”";
 }
 
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
@@ -265,7 +268,12 @@ export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|s
 const EVENT_WORDS = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim\w*)\b/i;
 export const CLAIM_SELECTION_QUESTION = /\b(?:which|what)\b[^?.!,;]*\b(?:polic(?:y|ies)|documents?|plans?|covers?|insurances?)\b[^?.!,;]*\b(?:claim\w*|apply|applies|cover|covers|pay|pays|payable|use)\b/i;
 
-export async function runLoop(input: LoopInput): Promise<LoopOutput> {
+/** One conversational turn. Death-journey release: the turn's household-scoped reads are kept for the turn (lib/rag2/store.ts
+ * turn store), re-validated at every tool call and model step. */
+export function runLoop(input: LoopInput): Promise<LoopOutput> {
+  return withTurnStore(input.accountId, () => runLoopTurn(input));
+}
+async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
   const state: RagLoopState = structuredClone(input.state);
@@ -454,12 +462,27 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return pageCache.get(policyId)!;
   };
   /** Sets an evidence entry's support to the sentence / row that supports `about` (keeps the old one when none fits). */
-  const narrow = async (id: string, about: string) => {
+  /** Death-journey release: the part of a cited passage that belongs to the benefit the words are about. A passage can span two
+   * benefits' sections (the tail of the Dismemberment table and the head of the Simple Fracture section); the event the words
+   * describe picks the section whose own heading names that benefit's family -- never an accident-related sentence of the
+   * neighbour. "none": the passage is printed wholly under another benefit; null: nothing to restrict. */
+  const scopeFor = async (id: string, eventWords: string): Promise<{ text: string; rowOk: boolean; ranges: { start: number; end: number }[] } | "none" | null> => {
+    const e = state.evidence[id];
+    if (!e) return null;
+    const pageText = (await pagesOf(e.policyId)).get(e.passage.onPage);
+    if (!pageText) return null;
+    const sc = scopeToEvent(pageText, e.passage.start, e.passage.end, familiesOf(eventWords));
+    if (!sc || sc === "none") return sc;
+    const ranges = sc.ranges.map((r) => ({ start: Math.max(r.start, e.passage.start), end: Math.min(r.end, e.passage.end) }));
+    const cell = e.table?.cell;
+    return { text: ranges.map((r) => pageText.slice(r.start, r.end)).join("\n"), rowOk: !cell || ranges.some((r) => cell.start >= r.start && cell.end <= r.end), ranges };
+  };
+  const narrow = async (id: string, about: string, within?: { start: number; end: number }[] | null) => {
     const e = state.evidence[id];
     if (!e) return;
     const pages = await pagesOf(e.policyId);
     const text = pages.get(e.passage.onPage);
-    const sp = text ? supportSpan(e, text, about) : null;
+    const sp = text ? supportSpan(e, text, about, within) : null;
     if (sp) { e.support = sp; const cx = contextFor(sp, pages); e.context = cx.length ? cx : null; }
   };
   const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
@@ -486,6 +509,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const notApplicable = new Map<string, string>();
   let reqSeq = 0;
   let budgetWarned = false;
+  /** Death-journey release: passage spans already returned this turn, searches in a row that added nothing, the largest search
+   * result measured (tokens), and why retrieval was closed (named in the answer as the remaining gap). */
+  const shownSpans: ShownSpans = new Map();
+  let idleSearches = 0, resultTokens = RESULT_ALLOWANCE, retrievalClosed: string | null = null, lastRetrieval: string | null = null, deathGap: string | null = null;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** PR #55 (SBb): every evaluate_benefit run this turn (the model's and the server's): which benefit, for whom, with what, and what came of it. */
@@ -512,6 +539,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
   let askBecause: string[] = [];
+  /** Death-journey release: per cited passage of the question being asked, the part that belongs to the benefit asked about. */
+  const askScopes = new Map<string, { text: string; rowOk: boolean; ranges: { start: number; end: number }[] }>();
+  const askScopesPre = new Map<string, { text: string; rowOk: boolean; ranges: { start: number; end: number }[] } | "none" | null>();
   /** The mention the latest resolve_person call of this turn was asked about. */
   let lastMention: string | null = null;
   /** Round 7: facts the household's message gave, recorded this turn (their words, who about). */
@@ -1028,8 +1058,25 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
+      // Death-journey release: the cited "why" is the sentence of the benefit's OWN section. A passage printed under another
+      // benefit's heading (Total and Permanent Dismemberment for a fracture question) is not cited for this benefit, and where
+      // a passage spans two sections only the section naming the event's benefit is read.
+      askScopes.clear();
+      {
+        const foreign: string[] = [];
+        for (const id of because) {
+          const sc = askScopesPre.get(id);
+          if (sc === "none") foreign.push(id); else if (sc) askScopes.set(id, sc);
+        }
+        if (foreign.length) {
+          const keep = because.filter((id) => !foreign.includes(id));
+          (trace.adjusted ??= []).push(`ask_user: the cited passage(s) ${foreign.join(", ")} are printed under another benefit's section and were not cited for this question`);
+          if (!keep.length) return { result: { ok: false, error: `the cited evidence (${foreign.join(", ")}) is printed under a different benefit's section, not the benefit this question is about: cite the passage printed under that benefit's own heading, or do not ask` } };
+          because = keep;
+        }
+      }
       const caseLabels = req?.isCase && req.options.length ? req.options.map((o) => req!.optionLabels?.get(o) ?? o) : null;
-      const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
+      const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""), askScopes.get(id) ?? null)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
       // V1.2: the household speaks about this person in the third person ("Desmond broke his leg"): the question names
@@ -1344,6 +1391,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const refusal = preflight(call);
     if (refusal) { record(call.name, { ...call.arguments, by }, false, [], refusal); return null; }
     const t1 = Date.now();
+    newToolRound();
     const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
     { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - t1; }
     await refine(res.evidence, null);
@@ -1385,7 +1433,18 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         rows.push({ benefitId: m.id, benefit: m.benefit, disposition: open ? "unresolved" : "explained", reason: open ? `its printed terms are stated; which listed case applies is still open (${open.question})` : "its printed terms are stated; no amount was asked for" });
         continue;
       }
-      const r = await serverEvaluate({ ...sibling.args, benefit_id: m.id });
+      // Death-journey release: the evaluation's option and facts are THIS benefit's. The sibling's option_id names a row of the
+      // sibling's own schedule; it is carried over only when it is also a row of this one's, else the household's case words
+      // (the sibling's row label) are what is asked of this benefit's own rows -- never another benefit's option id.
+      const recsNow = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+      const mineRec = recsNow.find((x) => x.id === m.id), sibRec = recsNow.find((x) => x.id === sibling.benefitId);
+      const { option_id: sibOption, ...sibRest } = sibling.args as Record<string, unknown>;
+      const bound: Record<string, unknown> = { ...sibRest, benefit_id: m.id };
+      if (typeof sibOption === "string" && sibOption) {
+        if (mineRec?.schedule?.rows.some((x) => x.id === sibOption)) bound.option_id = sibOption;
+        else if (!bound.case) { const lbl = sibRec?.schedule?.rows.find((x) => x.id === sibOption)?.label; if (lbl) bound.case = lbl; }
+      }
+      const r = await serverEvaluate(bound);
       if (r?.status === "conditional_illustration" && r.resultId) { extra.push({ kind: "calculation", result_id: r.resultId, text: "-" }); rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "evaluated", reason: "worked out on the server for the same reported case as the benefit the model evaluated" }); continue; }
       extra.push(terms(m.id));
       if (r?.status === "not_applicable" || r?.status === "unlisted_case") rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "excluded", reason: r.status === "unlisted_case" ? "the reported case is not one of its listed cases" : r.why || "its own definition does not fit what the household reported" });
@@ -1396,6 +1455,53 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       (trace.adjusted ??= []).push(`${call.name}: added ${extra.length} statement(s) for relevant schedule(s) the lookup returned and the reply left out (${plan.complete.map((c) => c.benefit).join("; ")})`);
     }
     if (rows.length) trace.schedules = rows;
+  };
+  /** Death-journey release: a question about a death is answered for EVERY documented benefit that pays on death for this person
+   * (the certificate's Term Life and Personal Accident rows, Accidental Death, Compassionate Death Allowance ...), each with a
+   * supported disposition: its printed terms, written by the server from its resolved record. What was not read is named: a
+   * claims procedure no retrieved passage prints is never invented. Event/product relationships come from event-relations.ts. */
+  const CLAIMS_PROCEDURE = /\b(?:claims? (?:procedure|process|forms?|documents?|requirements?)|how to (?:make (?:a )?)?claim|notice of claim|documents? (?:required|needed)|submit(?:ting)? (?:a )?claim)\b/i;
+  const deathCompletion = async (subject: string, given: Record<string, unknown>[]): Promise<{ extra: Record<string, unknown>[]; steps: string[]; gap: string | null; rows: string[] } | null> => {
+    if (chatContract(env) !== "benefits" || !subject || !familiesOf(input.message).has("death")) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const covered = new Set(given.filter((x) => x && x.kind === "benefit_terms").map((x) => String(x.benefit_id)));
+    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && (familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
+    const seen = new Set<string>();
+    const extra: Record<string, unknown>[] = [];
+    const rows: string[] = [];
+    for (const r of mine) {
+      const key = `${r.policy.id}|${r.benefit.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      extra.push({ kind: "benefit_terms", benefit_id: r.id, subject_id: subject, text: "-" });
+      rows.push(r.benefit);
+    }
+    const read = [...shownThisTurn].map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e).map((e) => evidenceTextOf(e));
+    const procedureRead = read.some((t) => CLAIMS_PROCEDURE.test(t));
+    const certificate = recs.find((r) => r.policy.personalProof && (productFamilies(r.benefit).has("death") || familiesOf(r.benefit).has("death")));
+    const steps = certificate ? [`contact:${certificate.policy.id}`] : [];
+    const gap = procedureRead && !retrievalClosed && !lastRetrieval ? null
+      : `I did not read a claims procedure for a death claim (how to notify the insurer, or which documents it asks for) in ${retrievalClosed || lastRetrieval ? "the part of the documents I could look at before this question's model-use limit" : "the documents I looked at"}, so none is listed beyond what each benefit above prints; the insurer can confirm what it needs.`;
+    // Nothing in this person's documents pays on death (as far as they were read): said as the specific uncertainty it is, so the
+    // reply is never empty and never invents a benefit, an amount or a requirement.
+    if (!extra.length && !given.length) {
+      const who = (input.people.find((p) => p.id === subject)?.name ?? "this person").split(" ")[0];
+      extra.push({ kind: "uncertainty", text: `The documents do not state what would be received on ${who}’s death.`, subject_id: subject });
+      rows.push("(no death benefit established)");
+    }
+    return extra.length || gap ? { extra, steps, gap, rows } : null;
+  };
+  const deathStopAnswer = async (): Promise<Composed | null> => {
+    const subject = String(state.subjectId ?? "");
+    const dc = await deathCompletion(subject, []);
+    if (!dc || !dc.extra.length) return null;
+    const args: Record<string, unknown> = { subject_id: subject, sentences: dc.extra, next_steps: dc.steps };
+    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    if (problems.length) return null;
+    const composed = composeFinal({ sentences: args.sentences as Record<string, unknown>[], nextSteps: args.next_steps, subjectId: subject }, composeCtx());
+    if (!composed.sentences.length) return null;
+    composed.notes = [...(composed.notes ?? []), ...(dc.gap ? [dc.gap] : []), "I stopped looking further so the answer could be written within this question's model-use limit."];
+    return composed;
   };
   /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
   const partialAnswer = (): Composed | null => {
@@ -1616,11 +1722,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
     const used = meter.usage.input + meter.usage.output;
-    if (!budgetWarned && step > 0 && (used > limits.maxTokensPerTurn * 0.5 || [...failures.values()].some((n) => n >= 2))) {
+    if (!budgetWarned && step > 0 && (used > limits.maxTokensPerTurn * 0.5 || lastRetrieval !== null || [...failures.values()].some((n) => n >= 2))) {
       const last = [...messages].reverse().find((x) => x.role === "tool") as { content: string } | undefined;
       if (last) { budgetWarned = true; try { last.content = JSON.stringify({ ...JSON.parse(last.content), notice: BUDGET_NOTICE }); } catch { last.content += "\n" + BUDGET_NOTICE; } }
     }
-    const m = await meter.next({ messages, tools, maxOutputTokens: limits.maxOutputTokens });
+    newToolRound();
+    // Once retrieval is closed the model is offered only what can still finish the turn (the answer, the question, the server-side
+    // evaluation): the lookups it was refused are not re-described to it on every call.
+    const m = await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
     trace.steps++; trace.modelId = out.modelId || trace.modelId;
@@ -1641,11 +1750,29 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
             if (keep.length !== given.length) { (trace.adjusted ??= []).push(`${call.name}: left out the terms of ${given.length - keep.length} benefit(s) whose definition does not fit what the household reported`); call.arguments = { ...call.arguments, [field]: keep }; }
           }
           await completeSchedules(call, field);
+          if (call.name === "final_answer") {
+            const subj = String(call.arguments.subject_id ?? state.subjectId ?? "");
+            // (Only when the reply has nothing to say about the person's benefits, or the turn's room ran short and retrieval was closed:
+            // a reply the model wrote with room to spare is its own selection and is not padded.)
+            const givenNow = (call.arguments.sentences as Record<string, unknown>[] | undefined) ?? [];
+            const dc = retrievalClosed || lastRetrieval || !givenNow.length ? await deathCompletion(subj, givenNow) : null;
+            if (dc) {
+              if (dc.extra.length) { call.arguments = { ...call.arguments, sentences: [...((call.arguments.sentences as unknown[] | undefined) ?? []), ...dc.extra] }; (trace.adjusted ??= []).push(`final_answer: added the printed terms of ${dc.rows.join("; ")} (benefits that pay on death for this person that the reply left out)`); }
+              if (!(Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length) && dc.steps.length) call.arguments = { ...call.arguments, next_steps: dc.steps };
+              if (dc.gap) deathGap = dc.gap;
+            }
+          }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
           const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
         }
         if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
+        if (call.name === "ask_user") {
+          // (the sections a cited passage spans are read here, before the synchronous check: see askScopes)
+          askScopesPre.clear();
+          const ids = new Set<string>([...(Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []), ...[...requirements.values()].flatMap((r) => r.evidenceIds)]);
+          for (const id of ids) { askScopesPre.set(id, await scopeFor(id, `${String(call.arguments.question ?? "")} ${input.message}`)); }
+        }
         let r = action(call);
         // PR #54 (rc-live-8): a model statement about a benefit the server offered this turn that fails its check is
         // omitted whole; the benefit's own validated terms are kept, written by the same renderer from its record
@@ -1667,6 +1794,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const repair = await gateRepair(r.terminal.composed);
           if (repair) { gateRepaired = true; beforeRepair = r.terminal; meter.grantRepairCall(); r = { result: { ok: false, error: repair } }; }
         } else if (r.terminal?.kind === "final" && gateRepaired) limitDateDrops(r.terminal.composed, call);
+        if (deathGap && call.name === "final_answer" && r.terminal?.kind === "final" && !r.terminal.composed.notes.includes(deathGap)) r.terminal.composed.notes = [...r.terminal.composed.notes, deathGap];
         record(call.name, call.arguments, r.result.ok !== false, [], r.result.ok === false ? String(r.result.error) : undefined);
         messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
         if (r.terminal && TERMINAL.has(call.name)) reply = r.terminal;
@@ -1675,9 +1803,29 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (call.name === "calculate") await readTableRest(call);
       const refusal = preflight(call);
       if (refusal) { record(call.name, call.arguments, false, [], refusal); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: refusal }) }); continue; }
+      if (call.name === "search_passages" || call.name === "read_page") {
+        const room = retrievalRoom({ used: meter.usage.input + meter.usage.output, callTokens: estimateTokens({ messages, tools }) + limits.maxOutputTokens, resultTokens, limit: limits.maxTokensPerTurn, idle: idleSearches });
+        const closed = room.closed;
+        if (room.last) lastRetrieval ??= room.last;
+        if (closed) {
+          retrievalClosed ??= closed;
+          const why = `retrieval is closed: ${closed}. Write the answer now from what you already hold (final_answer): every benefit person_benefits returned for this person, cited, and say what you could not look up.`;
+          record(call.name, call.arguments, false, [], why);
+          messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: why, notice: BUDGET_NOTICE }) });
+          continue;
+        }
+      }
       const toolT0 = Date.now();
+      newToolRound();
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
       { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - toolT0; }
+      if (call.name === "search_passages") {
+        // (every hit's evidence id is allocated in result order first, as before: ids recorded in earlier turns keep their meaning)
+        if (res.ok) for (const h of ((res.data as { hits?: { evidence?: unknown }[] })?.hits ?? [])) if (isRef(h?.evidence)) evidenceIdOf(state, h.evidence, call.name);
+        const pr = compactSearch(res as { ok: boolean; data?: unknown; evidence: unknown }, shownSpans, (ref) => evidenceIdOf(state, ref, call.name));
+        idleSearches = res.ok && pr.novel === 0 ? idleSearches + 1 : 0;
+        (trace.adjusted ??= []).push(`search_passages: ${pr.hits} hit(s), ${pr.novel} new, ${pr.repeated} already returned this turn${pr.dropped ? `, ${pr.dropped} more left out` : ""}`);
+      }
       await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
       const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
@@ -1726,12 +1874,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const d = res.ok ? (res.data as Record<string, unknown>) : null;
       record(call.name, call.arguments, res.ok, ids, res.ok ? undefined : res.error, d ? brief({ status: d.status, valueId: d.valueId, resultId: d.resultId, value: d.value, amount: d.amount, kind: d.kind, column: d.columnHeader, row: d.rowLabel, hits: Array.isArray(d.hits) ? d.hits.length : undefined }) : undefined);
       messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(shown) });
+      if (call.name === "search_passages" || call.name === "read_page") resultTokens = Math.max(RESULT_ALLOWANCE > resultTokens ? RESULT_ALLOWANCE : resultTokens, Math.ceil(JSON.stringify(shown).length / 3.5));
     }
   }
   trace.latencyMs = Date.now() - t0;
   trace.usage = { ...meter.usage };
   trace.calls = meter.calls;
-  { const modelMs = (meter.calls ?? []).reduce((a, c) => a + (c.latencyMs ?? 0), 0), tools = Object.values(toolMs).reduce((a, c) => a + c.ms, 0); trace.timings = { modelMs, toolMs, resolve: { n: ctx.timing?.resolveCount ?? 0, ms: ctx.timing?.resolveMs ?? 0 }, otherMs: Math.max(0, trace.latencyMs - modelMs - tools) }; }
+  { const modelMs = (meter.calls ?? []).reduce((a, c) => a + (c.latencyMs ?? 0), 0), tools = Object.values(toolMs).reduce((a, c) => a + c.ms, 0); trace.timings = { modelMs, toolMs, resolve: { n: ctx.timing?.resolveCount ?? 0, ms: ctx.timing?.resolveMs ?? 0 }, otherMs: Math.max(0, trace.latencyMs - modelMs - tools), ...(turnStoreStats() ? { store: { ...turnStoreStats()! } } : {}) }; }
   state.seq = ctx.seq;
 
   // V1.2: a calculation left unresolved only for household facts (kept per benefit, with its validated arguments) is
@@ -1906,7 +2055,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const kind = stop?.kind ?? "turn_calls";
     // Round 7 (A3): a turn stopped by its own budget answers with what it had already established -- the printed
     // figures it read (bound and gated like any answer) and what is still missing -- never only the limit text.
-    const partial = BUDGET_STOPS.has(kind) ? partialAnswer() : null;
+    // Death-journey release: a death question stopped by its budget is finished from the benefits already resolved for the person
+    // (each with its printed terms), the remaining gap named -- not a single figure and the limit text.
+    const deathStop = BUDGET_STOPS.has(kind) ? await deathStopAnswer() : null;
+    const partial = deathStop ?? (BUDGET_STOPS.has(kind) ? partialAnswer() : null);
     final = partial ? { kind: "final", composed: partial } : { kind: "fallback", text: LIMIT_TEXT[kind] };
     if (partial) { trace.dropped = partial.dropped; trace.evidenceChosen.push(...partial.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id))); }
     trace.limit = { kind, detail: stop?.detail ?? "the turn ended without an answer" };
@@ -1938,7 +2090,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Precision: each cited passage narrowed to the sentence / row the answer's sentence rests on (internal; the page
     // stays the household-facing link).
     // A span found at search time (for the query) is replaced by the one for the sentence actually said.
-    for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
+    for (const sent of c.sentences) for (const id of sent.evidenceIds) { const sc = await scopeFor(id, `${sent.benefit ?? ""} ${sent.text}`); await narrow(id, sent.text, sc && sc !== "none" ? sc.ranges : null); }
     if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
     if (state.claim) for (const s of c.sentences) if ((s.estimate || s.kind === "conditional_illustration") && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn, evidenceIds: s.evidenceIds });
@@ -1960,7 +2112,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // event happened, the sentence about accidents; otherwise the one closest to the question.
   if (final.kind === "ask" && final.pending.kind === "fact") {
     const p = final.pending;
-    for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
+    for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "), askScopes.get(id)?.ranges ?? null);
   }
   // PR #54 follow-up: every earlier illustration of this conversation is re-checked against its benefit's definition with
   // what the household has now reported (a correction may have changed it under any key): one that no longer fits is

@@ -164,8 +164,8 @@ async function main() {
   // Loop-level: a probe conversation selecting evidence by id for Desmond's calculation.
   const PA = HH.doc("PA_WORD").id;
   const call = (name: string, args: Record<string, unknown>): ScriptCall => ({ name, arguments: args });
-  const hitIn = (v: ScriptView, re: RegExp, who = D) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok && (o.args.subject_id ?? null) === who) { const x = (o.result.data.hits as any[]).find((y) => re.test(`${y.text ?? ""} ${y.evidence?.excerpt ?? ""}`)); if (x) return x.evidence.evidence_id as string; } return null; };
-  const anyHit = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const x = (o.result.data.hits as any[]).find((y) => re.test(`${y.text ?? ""} ${y.evidence?.excerpt ?? ""}`)); if (x) return x.evidence.evidence_id as string; } return null; };
+  const hitIn = (v: ScriptView, re: RegExp, who = D) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok && (o.args.subject_id ?? null) === who) { const hs = (o.result.data.hits as any[]).filter((y) => y.evidence); const x = hs.find((y) => re.test(y.evidence?.excerpt ?? "")) ?? hs.find((y) => re.test(`${y.text ?? ""} ${y.evidence?.excerpt ?? ""}`)); if (x) return x.evidence.evidence_id as string; } return null; };
+  const anyHit = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const hs = (o.result.data.hits as any[]).filter((y) => y.evidence); const x = hs.find((y) => re.test(y.evidence?.excerpt ?? "")) ?? hs.find((y) => re.test(`${y.text ?? ""} ${y.evidence?.excerpt ?? ""}`)); if (x) return x.evidence.evidence_id as string; } return null; };
   const hc = (extra: Record<string, unknown>) => call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: D, policy_id: PA, benefit: "Accident Hospital Income", admission: { at: "2026-10-03T21:00+08:00", words: "admitted at 9pm on 3 October 2026" }, discharge: { at: "2026-10-05T11:00+08:00", words: "discharged at 11am on 5 October 2026" }, ...extra });
   const lookups = () => [
     call("search_passages", { query: "Accident Hospital Income complete period of 24 hours confinement", subject_id: D }),
@@ -242,7 +242,7 @@ async function main() {
   } finally { await h.db.query("DELETE FROM policy_pages WHERE policy_id=$1 AND page_number=9", [PA]); }
 
   // New facts while another question is pending (each calculation completes when ITS facts arrive).
-  const boneAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "bone_fractured", question: "Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?", because_evidence_ids: [hitIn(v, /Fracture of thigh bone|% of Sum Insured|Schedule/), hitIn(v, /simple \(closed\)/)].filter(Boolean) });
+  const boneAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "bone_fractured", question: "Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?", because_evidence_ids: [hitIn(v, /Fracture of thigh bone|% of Sum Insured/), hitIn(v, /simple \(closed\)/)].filter(Boolean) });
   const timesAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "admission_datetime", question: "What were Desmond's admission and discharge dates and times?", because_evidence_ids: [hitIn(v, /Accident Hospital Income/)].filter(Boolean) });
   const t1Steps = (ask: (v: ScriptView) => ScriptCall) => [
     () => [call("resolve_person", { mention: "Desmond" })],

@@ -12,6 +12,7 @@
  */
 import { COMPARISON_REQUEST } from "./requirement-question";
 import { sharedTopic, topicStems } from "./topic";
+import { BODY_WORDS, familiesOf, familiesIntersect, familyName } from "../event-relations";
 
 export type DiscoveredSchedule = { id: string; benefit: string; subjectId: string };
 export type Disposition = { benefitId: string; benefit: string; disposition: "explained" | "evaluated" | "excluded" | "unresolved"; reason: string };
@@ -19,6 +20,23 @@ export type Disposition = { benefitId: string; benefit: string; disposition: "ex
 /** The topic words (other than the generic "accident") a schedule's own label shares with what the household described. */
 export const eventWordsShared = (eventText: string, s: DiscoveredSchedule): string[] =>
   sharedTopic(topicStems(eventText), topicStems(s.benefit)).filter((w) => w !== "accident");
+
+/**
+ * Death-journey release: is this schedule about the event the household described? By the ESTABLISHED relationship between
+ * the event and the benefit the schedule is NAMED for (a fracture event -> fracture schedules; a dismemberment event ->
+ * dismemberment schedules) -- never by a word the household's account happens to share with a schedule's rows or label
+ * ("leg", "permanent", "total"). Only a label naming no benefit family falls back to topic words, and body-part words
+ * never count there.
+ */
+export function scheduleRelation(eventText: string, s: DiscoveredSchedule): { relevant: boolean; reason: string } {
+  const ev = familiesOf(eventText), fam = familiesOf(s.benefit);
+  if (ev.size && fam.size) {
+    return familiesIntersect(ev, fam) ? { relevant: true, reason: "" }
+      : { relevant: false, reason: `it is a ${familyName(fam)} benefit, not the ${familyName(ev)} event the household described` };
+  }
+  const shared = eventWordsShared(eventText, s).filter((w) => !BODY_WORDS.has(w));
+  return shared.length ? { relevant: true, reason: "" } : { relevant: false, reason: "its label shares no topic with the event the household described" };
+}
 
 const norm = (t: string) => t.toLowerCase().replace(/\s+/g, " ");
 const names = (text: string, label: string) => new RegExp(`(?<![a-z])${norm(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`).test(norm(text));
@@ -54,8 +72,9 @@ export function planSchedules(a: {
   const rows: Disposition[] = [];
   const relevant: DiscoveredSchedule[] = [];
   for (const m of mine) {
-    if (eventWordsShared(a.eventText, m).length) relevant.push(m);
-    else rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "excluded", reason: "its label shares no topic with the event the household described" });
+    const rel = scheduleRelation(a.eventText, m);
+    if (rel.relevant) relevant.push(m);
+    else rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "excluded", reason: rel.reason });
   }
   if (relevant.length < 2) return { rows, complete: [] };
   const named = namedSchedules(a.userTexts, a.message, relevant);

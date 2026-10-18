@@ -18,6 +18,7 @@ import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, LATER_DATE_NOTE,
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
+import { turnStoreStats, withTurnStore } from "../store";
 import { emptyLoopState, type RagLoopState, type TraceTurn } from "./types";
 
 export type LoopConversationState = ConversationState & { ragLoop?: RagLoopState };
@@ -155,7 +156,11 @@ function blank(): ChatAnswer {
 }
 
 /** One chat turn through the loop, saved through the chat's own saveTurn (and so its output guard and figure gate). */
-export async function runLoopChat(context: ChatContext, opts: { save: Save; check?: () => Promise<void>; jobId?: string }): Promise<ChatResult> {
+export function runLoopChat(context: ChatContext, opts: { save: Save; check?: () => Promise<void>; jobId?: string }): Promise<ChatResult> {
+  // Death-journey release: one turn store for the whole turn -- the loop, the answer's citations, the figure gate and the save.
+  return withTurnStore(context.request.accountId, () => runLoopChatTurn(context, opts));
+}
+async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?: () => Promise<void>; jobId?: string }): Promise<ChatResult> {
   const { request, conversation } = context;
   const message = request.submittedQuestion ?? request.question;
   const prior = conversation.state as LoopConversationState;
@@ -165,8 +170,12 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   // ABOUT (the initial active subject), never who is typing.
   const selves = context.family.filter((p) => /^self$/i.test(p.relationship ?? ""));
   const speakerId = selves.length === 1 ? selves[0].id : null;
+  const tPhase0 = Date.now();
   const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel(), personChoiceId: request.personChoiceId ?? null });
   const { state, reply, trace } = out;
+  const phases: Record<string, number> = { loopMs: Date.now() - tPhase0 };
+  let tPhase = Date.now();
+  const lap = (name: string) => { const n = Date.now(); phases[name] = (phases[name] ?? 0) + (n - tPhase); tPhase = n; };
   // Integration (round 3): a correction or a deleted / superseded source updates this conversation's EXISTING claim
   // record (agent G); syncLoopClaimState only reads and updates claim_sessions rows -- it never creates a claim, so an
   // ordinary question is unaffected -- and runs only on a turn that changed something.
@@ -271,17 +280,24 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   const shownComposed = reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null;
   if (shownComposed) trace.composed = shownComposed.sentences.map((s) => s.text);
   const priorUserTexts = state.history.map((h) => h.user);
+  lap("composeMs");
   const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true, priorUserTexts });
+  lap("gateReportMs");
   trace.gate = problems.map((p) => ({ where: p.where, figure: p.figure, reason: p.reason }));
   const whoOf = (id: string | null | undefined) => { const p = context.family.find((f) => f.id === id); return p ? (p.preferred_name || p.display_name) : null; };
   if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null, whoOf);
+  lap("rescueMs");
   await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message, priorUserTexts });
+  lap("gateMs");
   const visible = [answer.summary, ...answer.details, ...answer.questions.map((q) => q.text)].join(" ");
   state.history = [...state.history, { user: message, assistant: visible }].slice(-8);
   state.turns = [...state.turns, trace].slice(-12) as TraceTurn[];
   const next: LoopConversationState = { ...prior, intent: "policy_question", ragLoop: state };
   delete next.pending;
   await opts.check?.();
+  lap("checkMs");
+  trace.phases = { ...phases, ...(turnStoreStats() ? { storeSql: turnStoreStats()!.docsSql + turnStoreStats()!.linksSql + turnStoreStats()!.pagesSql + turnStoreStats()!.membersSql } : {}) };
   await opts.save({ conversation, token: context.token, state: next, message, answer, jobId: opts.jobId });
+  lap("saveMs");
   return { answer, retrieved: [] };
 }

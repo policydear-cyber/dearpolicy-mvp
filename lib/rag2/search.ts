@@ -9,7 +9,7 @@
 import { query } from "@/lib/db/client";
 import { pineconeEnabled, searchPolicyPassages } from "@/lib/rag/pinecone";
 import { evidenceAt, refineEvidence, type EvidenceRef } from "./evidence";
-import { amendmentRemovals, loadDocs, loadLinks, loadPages, type DocRow } from "./store";
+import { amendmentRemovals, loadDocs, loadLinks, loadPages, turnMemo, type DocRow, type PageRow } from "./store";
 import type { AmendmentRemoval } from "@/lib/claims/person";
 
 export type PassageHit = {
@@ -46,19 +46,28 @@ export function passagesOf(pageText: string): { start: number; end: number }[] {
   return out.filter((p) => p.end > p.start);
 }
 
-/** BM25 (k1 1.2, b 0.75) of each unit for the query tokens. */
-function bm25(units: Unit[], q: string[]): number[] {
-  const N = units.length || 1, avg = units.reduce((s, u) => s + u.toks.length, 0) / N || 1;
+/** The passages of a set of pages with what BM25 needs of them that does not depend on the query (term counts per passage,
+ * document frequencies, average length): built once per turn for a set of documents (lib/rag2/store.ts turnMemo). */
+type Index = { units: Unit[]; tfs: Map<string, number>[]; df: Map<string, number>; avg: number; pageText: Map<string, string>; byPolicy: Map<string, Map<number, string>> };
+function buildIndex(pages: PageRow[]): Index {
+  const units: Unit[] = [];
+  for (const p of pages) for (const s of passagesOf(p.text)) { const text = p.text.slice(s.start, s.end); units.push({ policyId: p.policyId, page: p.page, start: s.start, end: s.end, text, toks: tokens(text) }); }
   const df = new Map<string, number>();
-  for (const u of units) for (const t of new Set(u.toks)) df.set(t, (df.get(t) ?? 0) + 1);
-  return units.map((u) => {
-    const tf = new Map<string, number>();
-    for (const t of u.toks) tf.set(t, (tf.get(t) ?? 0) + 1);
+  const tfs = units.map((u) => { const tf = new Map<string, number>(); for (const t of u.toks) tf.set(t, (tf.get(t) ?? 0) + 1); for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1); return tf; });
+  const byPolicy = new Map<string, Map<number, string>>();
+  for (const p of pages) { if (!byPolicy.has(p.policyId)) byPolicy.set(p.policyId, new Map()); byPolicy.get(p.policyId)!.set(p.page, p.text); }
+  return { units, tfs, df, avg: units.reduce((s, u) => s + u.toks.length, 0) / (units.length || 1) || 1, pageText: new Map(pages.map((p) => [p.policyId + "#" + p.page, p.text])), byPolicy };
+}
+/** BM25 (k1 1.2, b 0.75) of each unit for the query tokens. */
+function bm25(ix: Index, q: string[]): number[] {
+  const N = ix.units.length || 1;
+  return ix.units.map((u, i) => {
+    const tf = ix.tfs[i];
     let s = 0;
     for (const t of new Set(q)) {
       const f = tf.get(t) ?? 0; if (!f) continue;
-      const idf = Math.log(1 + (N - (df.get(t) ?? 0) + 0.5) / ((df.get(t) ?? 0) + 0.5));
-      s += idf * (f * 2.2) / (f + 1.2 * (1 - 0.75 + 0.75 * u.toks.length / avg));
+      const idf = Math.log(1 + (N - (ix.df.get(t) ?? 0) + 0.5) / ((ix.df.get(t) ?? 0) + 0.5));
+      s += idf * (f * 2.2) / (f + 1.2 * (1 - 0.75 + 0.75 * u.toks.length / ix.avg));
     }
     return s;
   });
@@ -101,21 +110,19 @@ export async function searchPassages(args: { accountId: string; query: string; s
   const docs = await searchableDocs(args.accountId, args.subjectId, args.policyIds);
   const q = tokens(args.query ?? "");
   if (!docs.length || !q.length) return { query: args.query, retrieval: "lexical", hits: [], searchedPolicyIds: docs.map((d) => d.id) };
-  const pages = await loadPages(args.accountId, docs.map((d) => d.id));
-  const units: Unit[] = [];
-  for (const p of pages) for (const s of passagesOf(p.text)) { const text = p.text.slice(s.start, s.end); units.push({ policyId: p.policyId, page: p.page, start: s.start, end: s.end, text, toks: tokens(text) }); }
-  const lexical = bm25(units, q);
+  const ix = await turnMemo(args.accountId, "search-index|" + docs.map((d) => d.id).sort().join(","), async () => buildIndex(await loadPages(args.accountId, docs.map((d) => d.id))));
+  const units = ix.units;
+  const lexical = bm25(ix, q);
   const semantic = await semanticPages(args.accountId, docs.map((d) => d.id), args.query);
   const max = Math.max(...lexical, 1e-9);
   const byId = new Map(docs.map((d) => [d.id, d]));
-  const pageText = new Map(pages.map((p) => [p.policyId + "#" + p.page, p.text]));
+  const pageText = ix.pageText;
   const qs = new Set(q);
   const ranked = units.map((u, i) => ({ u, lex: lexical[i], score: lexical[i] / max + (semantic?.get(u.policyId + "#" + u.page) ?? 0) * 0.5 }))
     .filter((x) => x.lex > 0)
     .sort((a, b) => b.score - a.score || a.u.policyId.localeCompare(b.u.policyId) || a.u.page - b.u.page || a.u.start - b.u.start)
     .slice(0, k);
-  const byPolicy = new Map<string, Map<number, string>>();
-  for (const p of pages) { if (!byPolicy.has(p.policyId)) byPolicy.set(p.policyId, new Map()); byPolicy.get(p.policyId)!.set(p.page, p.text); }
+  const byPolicy = ix.byPolicy;
   const hits: PassageHit[] = ranked.map(({ u, score }) => {
     const d = byId.get(u.policyId)!;
     // The passage is the retrieval unit; `support` pins the sentence / row in it that matches the query, with the

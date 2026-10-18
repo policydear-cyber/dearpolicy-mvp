@@ -21,7 +21,7 @@ import { isHeadingLine, paragraphs, sentenceEndLine } from "./headings";
 import { currencyDeclarationLine, documentCurrency } from "@/lib/chat/answer-verification";
 import { endorsementScope } from "./endorsement-scope";
 import { evidenceAt, type EvidenceRef } from "./evidence";
-import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow, type MemberRow } from "./store";
+import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, turnMemo, turnMemoByDoc, type DocRow, type MemberRow } from "./store";
 import { cellDate, headingLabel, memberNamedIn, parseCell, parseTables, rosterOf, type SelectedValue } from "./tables";
 import { reconstructCellRoster } from "@/lib/claims/roster-layout";
 
@@ -107,7 +107,15 @@ function labelLine(line: string, household: { id: string; names: string[] }[]): 
   return { label: m[1].trim(), value: m[2].trim() };
 }
 
+/** A person's documented benefits. Death-journey release: resolved ONCE per person per turn (the turn store keeps it under the
+ * fingerprint of the readable documents, links and members it was derived from; a changed set resolves again) -- the tool
+ * and the benefit records both asked for it, and each resolution parses every page of the person's documents. The caller gets
+ * its own copy of the lists (the tool ranks and filters them). */
 export async function personBenefits(accountId: string, memberId: string, preloaded?: { docs?: DocRow[]; members?: MemberRow[] }): Promise<PersonBenefitView> {
+  const v = await turnMemo(accountId, `person-benefits|${memberId}`, () => personBenefitsUncached(accountId, memberId, preloaded));
+  return { ...v, benefits: [...v.benefits], unresolved: [...v.unresolved] };
+}
+async function personBenefitsUncached(accountId: string, memberId: string, preloaded?: { docs?: DocRow[]; members?: MemberRow[] }): Promise<PersonBenefitView> {
   const members = preloaded?.members ?? await loadMembers(accountId);
   const member = members.find((m) => m.id === memberId);
   if (!member) return { householdId: accountId, member: { id: memberId, name: "" }, benefits: [], unresolved: ["not an active member of this household"] };
@@ -124,7 +132,7 @@ export async function personBenefits(accountId: string, memberId: string, preloa
     const seen = new Set<string>();
     const push = (b: Omit<PersonBenefit, "householdId" | "memberId" | "policy">) => { if (seen.has(b.key)) return; seen.add(b.key); out.push({ householdId: accountId, memberId, policy, ...b }); };
     // 1. The person's own rows: a roster table (one insured person per row under product headings).
-    const tables = parseTables(d.id, dp.map((p) => ({ page: p.page, text: p.text })));
+    const tables = turnMemoByDoc(accountId, d, "tables", () => parseTables(d.id, dp.map((p) => ({ page: p.page, text: p.text }))));
     const rosterRows = new Set<unknown>();
     for (const t of tables) {
       const ro = rosterOf(t, memberId, household);

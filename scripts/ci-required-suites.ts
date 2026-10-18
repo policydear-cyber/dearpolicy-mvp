@@ -108,6 +108,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "reliable-chat:slice-test",
   "reliable-chat:stage3-test",
   "reliable-chat:live-regressions-test",
+  "reliable-chat:death-journey-test",
   "reliable-chat:cases-test",
   "rag2:loop-test",
   "rag2:conv-test",

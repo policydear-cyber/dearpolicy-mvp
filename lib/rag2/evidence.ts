@@ -186,9 +186,36 @@ function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
 
 /** The sentence / row of `ref`'s passage that best supports `about` (a query or the sentence being said), or -- for a
  * table value -- the row holding the value cell. Null when nothing in the passage shares a word with `about`. */
-export function supportSpan(ref: EvidenceRef, pageText: string, about?: string | null): EvidenceSpan | null {
+/** Death-journey release: the candidate units inside the given page ranges only (the sections of the benefit the support is
+ * for). Prose lines wrapped over several lines are joined into ONE unit per sentence, so a clause is never cut at a line
+ * break ("... as a result of an Accident, which" / "results in a Simple Fracture ..."). Table lines stay whole. */
+function unitsWithin(ref: EvidenceRef, pageText: string, ranges: { start: number; end: number }[]): EvidenceSpan[] {
+  const out: EvidenceSpan[] = [];
+  const inRange = (l: Line) => ranges.some((r) => l.start >= r.start && l.end <= r.end) && l.end > ref.passage.start && l.start < ref.passage.end;
+  let run: Line[] = [];
+  const flush = () => {
+    if (!run.length) return;
+    const a = run[0].start + (run[0].text.length - run[0].text.trimStart().length), b = run[run.length - 1].start + run[run.length - 1].text.trimEnd().length;
+    const body = pageText.slice(a, b);
+    let from = 0;
+    const cuts = [...body.matchAll(/(?<=[.!?][*†‡§¶¹²³⁴⁵⁶⁷⁸⁹]*)\s+(?=[A-Z(*†‡"“'‘])/g)].map((m) => [m.index!, m.index! + m[0].length]);
+    for (const [cs, ce] of [...cuts, [body.length, body.length]]) { if (cs > from) out.push({ text: pageText.slice(a + from, a + cs), start: a + from, end: a + cs, onPage: ref.passage.onPage }); from = ce; }
+    run = [];
+  };
+  for (const l of linesOf(pageText)) {
+    if (!inRange(l) || !l.text.trim()) { flush(); continue; }
+    if (isTableLine(l.text)) { flush(); const lead = l.text.length - l.text.trimStart().length; out.push({ text: pageText.slice(l.start + lead, l.start + l.text.trimEnd().length), start: l.start + lead, end: l.start + l.text.trimEnd().length, onPage: ref.passage.onPage }); continue; }
+    run.push(l);
+    if (/[.!?:;][*†‡§¶¹²³⁴⁵⁶⁷⁸⁹)"”’]*\s*$/.test(l.text)) flush();
+  }
+  flush();
+  return out;
+}
+
+export function supportSpan(ref: EvidenceRef, pageText: string, about?: string | null, within?: { start: number; end: number }[] | null): EvidenceSpan | null {
   if (!pageText) return null;
-  const units = unitsOf(ref, pageText);
+  const units = within?.length ? unitsWithin(ref, pageText, within) : unitsOf(ref, pageText);
+  if (within?.length && !units.length) return null;
   if (ref.table?.cell) {
     const c = ref.table.cell;
     const row = units.find((u) => u.start <= c.start && u.end >= c.end);
@@ -202,7 +229,10 @@ export function supportSpan(ref: EvidenceRef, pageText: string, about?: string |
     const have = words(u.text);
     let s = 0;
     for (const w of want) if (have.has(w)) s += /^\d/.test(w) ? 3 : 1;
-    if (s > score) { score = s; best = u; }
+    // (equal scores: a wording sentence beats a heading line, and the earlier of equals only when both are alike -- an earlier
+    // heading of ANOTHER section naming the same word never wins over the sentence)
+    const wording = /[.;:]\s*$/.test(u.text.trim()) || u.text.trim().split(/\s+/).length > 8;
+    if (s > score || (s === score && s > 0 && best && wording && !(/[.;:]\s*$/.test(best.text.trim()) || best.text.trim().split(/\s+/).length > 8))) { score = s; best = u; }
   }
   return best;
 }

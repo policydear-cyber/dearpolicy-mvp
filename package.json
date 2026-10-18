@@ -142,6 +142,7 @@
     "verify:gate-test": "node --import tsx scripts/verify-gate-regressions.ts",
     "reliable-chat:slice-test": "node --import tsx scripts/reliable-chat-slice.ts && HH=wong node --import tsx scripts/reliable-chat-slice.ts",
     "reliable-chat:live-regressions-test": "node --import tsx scripts/reliable-chat-live-regressions.ts && HH=wong node --import tsx scripts/reliable-chat-live-regressions.ts",
+    "reliable-chat:death-journey-test": "node --import tsx scripts/reliable-chat-death-journey.ts",
     "reliable-chat:cases-test": "node --import tsx scripts/reliable-chat-cases.ts && HH=wong node --import tsx scripts/reliable-chat-cases.ts",
     "reliable-chat:conflicts-test": "node --import tsx scripts/reliable-chat-case-selection-regressions.ts && node --import tsx scripts/reliable-chat-conflicts.ts",
     "reliable-chat:booklet-test": "node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_CURRENCY=related node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_CURRENCY=unrelated node --import tsx scripts/reliable-chat-booklet.ts && BOOKLET_SECTIONS=none node --import tsx scripts/reliable-chat-booklet.ts && node --import tsx scripts/reliable-chat-batched-steps.ts && npm run -s reliable-chat:applicability-test && npm run -s reliable-chat:cda-recorded-test",
@@ -178,7 +179,6 @@
     "rag2:live": "node --import tsx scripts/rag2-live/run.ts",
     "rag2:live-check": "node --import tsx scripts/rag2-live/check.ts",
     "rag2:live-budget-test": "node --import tsx scripts/rag2-live/budget-regressions.ts",
-    "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts",
     "rag2:live-checker-test": "node --import tsx scripts/rag2-live/check-regressions.ts",
     "rag2:live-seed": "node --import tsx e2e/support/seed-rag2-live.ts",
     "rag2:live-attribution-test": "node --import tsx scripts/rag2-live/attribution-regressions.ts",
@@ -212,7 +212,8 @@
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
-    "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts"
+    "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts",
+    "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

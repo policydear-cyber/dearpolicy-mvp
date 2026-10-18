@@ -57,6 +57,10 @@ function tableBenefit(t: PctTable): string | null {
   if (t.name) return t.name.trim();
   const lines = t.heading.split("\n").map((l) => l.trim()).filter(Boolean).reverse();
   for (const l of lines) { const m = /^(.+?)\s+(?:benefit\s+)?(?:sub-?)?limit\b/i.exec(l); if (m && !/\d/.test(m[1])) return m[1].replace(/\s+benefit$/i, "").trim(); }
+  // Death-journey release: the section heading the table is printed under (however far above it), before any nearer line: the
+  // line nearest a table can be the wrapped start of that section's own sentence ("If an Insured Person sustains bodily
+  // injury as a result of an Accident, which"), which names no benefit.
+  if (t.section) return t.section;
   // (structured-answers release: a table's own column-header words -- "Schedule", "Compensation", "Benefit" -- name
   // nothing; the benefit is the section title the table is printed under, as the document words it, with its section
   // letter / number dropped: "E. Simple Fracture or Other Fracture due to Accident")
