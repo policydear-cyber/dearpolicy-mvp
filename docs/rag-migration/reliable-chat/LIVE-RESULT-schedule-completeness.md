@@ -2,7 +2,7 @@
 
 Tested code SHA: `bbe9aa5393e237154a729bdedb66a5a55b1b08d3` (clean tree, build `8IjSCdVxhKWmyqXcQMWuD`). Model `openai:gpt-6-luna`, relay mode, actual-library household. Batch cap US$0.03; spent US$0.006232 over 10 calls, 0 refusals, 0 failed, 0 open reservations. Preflight (no model calls) cost US$0. Cumulative spend about US$0.4385 of US$1.00; the US$0.15 trial-codespace reservation is untouched.
 
-Grades: v8.2 and v9.1 (including completeness checks K1-K3) PASS for SBc and SBd. One attempt each; nothing repeated. The run's own generic verdict label ("INCOMPLETE") is the harness status and is graded separately by `sa-live-6-2026-10-18T09-21-21-grade.md`.
+Grades: v8.2 and v9.1 (including completeness checks K1-K3) PASS for SBc and SBd. One attempt each; nothing repeated. The run record's verdict label "INCOMPLETE" is a fixed placeholder ("graded by scenario-check.ts") that `run.ts` writes for every scenario household before grading; all turns were saved and answered and all 10 provider calls succeeded. See `docs/rag-migration/live/LEDGER-RECONCILIATION-2026-10-18.md` for the exact meaning, and for the ledger entries added for every `sa-live` run.
 
 Limitation of this live evidence: in both journeys the model itself called `evaluate_benefit` for both schedules, so the server completion (`completeSchedules`) did not have to fire. That path is proven by the offline SBb replay (model omits the second evaluation; fails without the repair, passes with it).
 

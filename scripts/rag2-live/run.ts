@@ -74,6 +74,7 @@ async function main() {
   else delete process.env.RAG2_LIVE_PREFLIGHT;
   const runId = arg("run-id");
   if (runId != null && !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
+  if (runId) process.env.RAG2_LIVE_RUN_ID = runId; // the guard admits the run against the cumulative ledger (and the servers it starts inherit this)
   const safety = liveSafetyChecks(process.env);
   // V1.4: the SHA a run records must be the checked-out code (s50-live-1 recorded a stale one). Refuse before any call.
   {

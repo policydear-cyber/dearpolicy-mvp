@@ -178,6 +178,7 @@
     "rag2:live": "node --import tsx scripts/rag2-live/run.ts",
     "rag2:live-check": "node --import tsx scripts/rag2-live/check.ts",
     "rag2:live-budget-test": "node --import tsx scripts/rag2-live/budget-regressions.ts",
+    "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts",
     "rag2:live-checker-test": "node --import tsx scripts/rag2-live/check-regressions.ts",
     "rag2:live-seed": "node --import tsx e2e/support/seed-rag2-live.ts",
     "rag2:live-attribution-test": "node --import tsx scripts/rag2-live/attribution-regressions.ts",

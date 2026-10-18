@@ -19,8 +19,17 @@
  *    latency (measured around the provider request), the request settings and the prompt / tool-schema sha256.
  * RAG2_LIVE_PREFLIGHT=1: the guard refuses the FIRST model call ("preflight: no model call made") without reserving
  * or sending anything, so a run exercises build, seed, server and the /api/chat path at US$0.
+ *
+ * Cumulative admission (every entry point calls liveSafetyChecks, so none can start without it): the run's cap is
+ * min(RAG2_LIVE_RUN_CAP_USD, meter cap, what is left of the US$1.00 exercise in the LEDGER -- every earlier run's spend and
+ * unsettled reservations, including the open trial-codespace allowance). RAG2_LIVE_RUN_ID names the run; the ledger
+ * (RAG2_LIVE_LEDGER, default docs/rag-migration/live/LEDGER.json) must be readable and valid, the run_id must be unused,
+ * and nothing may be left to refuse. A preflight run spends US$0, so it is refused only for an unreadable ledger or a used
+ * run_id. There is no bypass: a cost written only in a results document does not count.
  */
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import { planRun, validateLedger } from "../../scripts/rag2-live/ledger";
 import { modelFor, priceFor, costUsd, type ModelChoice, type Price } from "@/lib/ai/providers";
 import { loopRequestSettings } from "@/lib/rag2/loop/hosted-model";
 import { maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
@@ -32,6 +41,7 @@ export const PREFLIGHT_REFUSAL = "preflight: no model call made";
 /** The placeholder the CI workflow passes when the repository secret is absent (preflight only; never a key). */
 export const NO_KEY_PLACEHOLDER = "preflight-no-key-set";
 export type LiveMode = "relay" | "direct";
+export const DEFAULT_LEDGER_PATH = "docs/rag-migration/live/LEDGER.json";
 export type GuardCall = {
   seq: number; at: string; estInputTokens: number; maxOutputTokens: number; reservedUsd: number; chargedUsd: number | null;
   ok: boolean; refused?: string; error?: string; usage?: { input: number; output: number }; latencyMs?: number;
@@ -49,7 +59,7 @@ function canon(v: unknown): string {
 }
 
 /** Every precondition of a live run; throws with the first one that fails. Never prints a secret. */
-export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice: ModelChoice; price: Price; capUsd: number; mode: LiveMode; preflight: boolean } {
+export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice: ModelChoice; price: Price; capUsd: number; mode: LiveMode; preflight: boolean; runId: string; remainingUsd: number } {
   const fail = (m: string) => { throw new Error("live run refused: " + m); };
   const rawMode = env.RAG2_LIVE_MODE ?? "";
   if (rawMode !== "" && rawMode !== "relay" && rawMode !== "direct") fail(`RAG2_LIVE_MODE must be "relay" (default) or "direct"`);
@@ -90,7 +100,18 @@ export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice
   }
   const price = priceFor(choice);
   if (!price) fail(`no price on file for ${choice.provider}:${choice.model} in lib/ai/providers.ts: refusing to run (fail closed)`);
-  return { choice, price: price!, capUsd: Math.min(cap, meterCap), mode, preflight };
+  // Cumulative admission against the authoritative ledger.
+  const runId = env.RAG2_LIVE_RUN_ID ?? "";
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(runId)) fail("RAG2_LIVE_RUN_ID (1-40 of A-Z a-z 0-9 . _ -) is required: the run must be admitted against the cumulative ledger");
+  const ledgerPath = env.RAG2_LIVE_LEDGER || DEFAULT_LEDGER_PATH;
+  let ledger;
+  try { ledger = validateLedger(JSON.parse(fs.readFileSync(ledgerPath, "utf8"))); } catch (e) { return fail(`the cumulative ledger ${ledgerPath} is missing or invalid (${e instanceof Error ? e.message : e}): refusing to start`); }
+  const wanted = Math.min(cap, meterCap);
+  const plan = planRun(ledger, { run_id: runId, scenarios: [], run_cap_usd: wanted, preflight });
+  let admitted = wanted;
+  if (plan.ok) admitted = plan.capUsd;
+  else if (!preflight || ledger.runs.some((r) => r.run_id === runId)) fail(plan.reason);
+  return { choice, price: price!, capUsd: admitted, mode, preflight, runId, remainingUsd: plan.ok ? plan.remainingUsd : 0 };
 }
 
 export class RunCapGuardModel implements LoopModel {
