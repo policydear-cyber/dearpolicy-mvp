@@ -317,6 +317,9 @@ export type CalculationRecord = {
   /** conditional_illustration: the what-if, in the household's words. indicative_estimate (integration r6): the stated
    * assumption that earlier use of a capped allowance leaves what this stay needs available -- the sentence must say it. */
   assumption?:string|null;
+  /** lump_sum over a percentage-table row: the footnotes THE PAGE PRINTS FOR THAT ROW (the row prints the marker and the page
+   * defines it under the table; calc/pct-rows.ts rowNotes), each with its source span. Absent when the row has none. */
+  rowNotes?:{ marker:string; text:string; passage:{ policyId:string; pageStart:number; pageEnd:number; text:string } }[];
   /** Shown instead of the sentence if the record fails verification: the specific unresolved requirement (no figures). */
   unresolvedText:string;
   /** A1 (r6): the rate's unit terms (unit, duration rule, caps with reset periods and how earlier use is settled), each
@@ -383,6 +386,14 @@ export type ChatAnswer = {
    * names, not figures: "Claim S$5,000 receipt.pdf could not be read" states no amount, so the figure gate does not
    * read money inside them (lib/chat/answer-verification.ts). Set only by the server from the library lookup. */
   libraryNames?:string[];
+  /** fx-live-1: for each "not found in these documents" statement the server wrote, what it checked -- the claim, the topic and
+   * search terms, and the documents read (id, name, file hash, version): saved with the answer, so a reopened answer is withdrawn
+   * when a document it was checked against is deleted or replaced (lib/chat/stale-answers.ts). Set only by the server. */
+  absenceChecks?:{ claim:"benefit_not_found"|"document_silent"; topic:string; terms:string[]; subjectId:string|null; scope:"named"|"subject"|"library"; documents:{ policyId:string; name:string; fileHash:string|null; rev:string|null; pages:number }[] }[];
+  /** fx-live-1 review: the monetary-boundary context this answer was written under, recorded by the conversational loop when it saves
+   * (its statements passed the save-time figure gate). A reopened answer is read under it only if it still validates
+   * (lib/chat/monetary-boundary.ts storedRenderContext); never taken from a calculation count alone. */
+  renderContext?:{ origin:"rag_loop"; claimContext:false };
   /** Gate R17: explicit records of every computed figure the answer's text states. */
   computations?:ComputationRecord[];
   /** Agent K: verified benefit calculations (illustrations / indicative estimates), one per stated result. */

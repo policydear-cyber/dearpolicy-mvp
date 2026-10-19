@@ -174,10 +174,21 @@ export function dateTimeStated(v: DT, words: string): boolean {
  * `grain` is what a question under the key needs: "time" (a clock time), "date", or null (any value).
  */
 export type FactConcept = { concept: string; grain: "time" | "date" | null };
+/** fx-live-1 (K2): a key the model invented for the SAME fact ("accident_cause", "was_it_accident", "due_to_accident_or_illness") is the
+ * cause of the event -- how it happened -- when it names a cause (or an accident) and nothing else: no date, place, hospital or amount. */
+const CAUSE_TOKEN = /^(?:cause|caused|causes|mechanism|circumstances?)$/;
+const CAUSE_ONLY = new Set(["was", "is", "it", "an", "a", "the", "due", "to", "or", "of", "by", "from", "because", "illness", "sickness", "sick", "injury", "injured", "accident", "accidental", "related", "caused", "event", "hospitalisation", "hospitalization", "stay", "confinement", "not"]);
+export function isCauseKey(k: string): boolean {
+  const t = k.split("_").filter(Boolean);
+  if (!t.length) return false;
+  if (t.some((x) => /^(?:date|time|datetime|day|hour|place|location|hospital|name|amount|cost|bill|number|count|duration|nights?)$/.test(x))) return false;
+  if (t.some((x) => CAUSE_TOKEN.test(x))) return true;
+  return t.some((x) => /^accident(?:al)?$/.test(x)) && t.every((x) => CAUSE_ONLY.has(x));
+}
 export function factConcept(key: string): FactConcept {
   const k = normalizeKey(key);
   const grain = /(?:^|_)(?:time|datetime|at|hour|clock)(?:_|$)/.test(k) ? "time" as const : /(?:^|_)(?:date|on|day)(?:_|$)/.test(k) ? "date" as const : null;
-  if (CAUSE_KEYS.has(k) || /^(?:how_|cause|mechanism|circumstance)/.test(k)) return { concept: "cause", grain: null };
+  if (CAUSE_KEYS.has(k) || /^(?:how_|cause|mechanism|circumstance)/.test(k) || isCauseKey(k)) return { concept: "cause", grain: null };
   if (/(?:^|_)(?:admi\w*|admitted)(?:_|$)/.test(k) && !/discharg/.test(k)) return { concept: "admission", grain };
   if (/(?:^|_)discharg\w*(?:_|$)/.test(k)) return { concept: "discharge", grain };
   if (/(?:^|_)(?:nights?|stay|length_of_stay|los|days_in_hospital|hospital_days|days_warded|warded_days|duration)(?:_|$)/.test(k)) return { concept: "stay_length", grain: null };

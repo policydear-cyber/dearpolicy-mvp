@@ -235,6 +235,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
       if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
       // dj-live-3: the supported practical steps are part of the reply a clarifying question rides on (the page shows them ahead of the question).
       answer.nextSteps = c.nextSteps;
+      if (c.absenceChecks?.length) { answer.absenceChecks = c.absenceChecks; answer.libraryNames = [...new Set([...(answer.libraryNames ?? []), ...c.absenceChecks.flatMap((x) => x.documents.map((d) => d.name))])]; }
     }
     answer.citations = await citationsFor(request.accountId, state, [...new Set([...(c?.evidenceIds ?? []), ...trace.evidenceChosen])]);
   } else if (unknownPeople.length && !resolvedSomeone) {
@@ -270,6 +271,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;
     if (c.libraryNames?.length) answer.libraryNames = c.libraryNames;
+    if (c.absenceChecks?.length) { answer.absenceChecks = c.absenceChecks; answer.libraryNames = [...new Set([...(answer.libraryNames ?? []), ...c.absenceChecks.flatMap((x) => x.documents.map((d) => d.name))])]; }
     // Agent K: verified benefit calculations, and the claim record only when the household is pursuing a claim.
     if (c.calculations.length) answer.calculations = c.calculations;
     if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }
@@ -285,6 +287,8 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
+  // (the context this answer is written under: a reopened answer is read under it again when it still validates)
+  answer.renderContext = { origin: "rag_loop", claimContext: false };
   // The save-time gate, applied here first (in report mode) so the turn's record shows its outcome; its rejections
   // are authoritative. Round 7 (A3): a rejected figure sentence is replaced by its figure-free part (when that part
   // still says something its evidence supports) or left out -- and a reply left with nothing says specifically what

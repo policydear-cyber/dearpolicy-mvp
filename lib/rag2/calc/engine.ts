@@ -525,6 +525,8 @@ export function benefitEvent(benefit: string, condition: string): "death" | "ill
 }
 
 export function lumpSum(a: { subjectId: string; who: string; benefit: string; terms: BenefitTerms; sumInsured: DocValue; percent?: DocValue | null; cap?: DocValue | null; condition: string; whatIf: boolean; assumptionWords?: string | null; proportion?: DocValue | null; proportionWhen?: string | null;
+  /** the footnotes the page prints for the percentage's own row (see CalculationRecord.rowNotes) */
+  notes?: { marker: string; text: string; evidence: EvidenceRef }[];
   /** V1.3: what the printed percentage is OF, as its own wording states it: the general sum insured (default) or a
    * fixed benefit limit / sub-limit printed in the wording. The base operand is recorded under that identity. */
   base?: { kind: "sum_insured" | "benefit_limit" | "sublimit" | "referenced_amount"; label: string } | null }): CalcOutcome | Refusal {
@@ -551,7 +553,7 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   // General suggestions (not requirements printed in the policy): none for a death -- the documents a death claim needs
   // are what the person's own documents state, or what the insurer asks for.
   const evidenceRequirements = event === "death" ? [] : ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
-  const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: printed.map((p) => p.evidence), evidenceRequirements, who: a.who, product };
+  const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: [...printed.map((p) => p.evidence), ...(a.notes ?? []).map((n) => n.evidence)], evidenceRequirements, who: a.who, product };
   // V1.1: a lump sum is only ever a conditional illustration (the definition is the insurer's to confirm) -- for a
   // what-if, or for an event the household reported, with their own words as the stated assumption.
   if (!a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
@@ -570,7 +572,8 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
     steps.push({ id: "s_share", op: "percent_of", inputs: ["s_part", "share"], out });
   }
   if (a.cap) { const c = docOperand("cap", "cap", a.cap, a.subjectId); if (typeof c === "string") return { refused: c }; ops.push(c); out = Math.min(out, a.cap.operand.cents!); steps.push({ id: "s_cap", op: "min", inputs: [last, "cap"], out }); }
-  const record: Omit<CalculationRecord, "sentence"> = { id: "", calculator: "lump_sum", kind: "conditional_illustration", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: out / 100, currency: s.currency }, currency: s.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption: a.assumptionWords.trim(), unresolvedText: "" };
+  const record: Omit<CalculationRecord, "sentence"> = { id: "", calculator: "lump_sum", kind: "conditional_illustration", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: out / 100, currency: s.currency }, currency: s.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption: a.assumptionWords.trim(), unresolvedText: "",
+    ...(a.notes?.length ? { rowNotes: a.notes.map((n) => ({ marker: n.marker, text: n.text, passage: { policyId: n.evidence.policyId, pageStart: n.evidence.page.start, pageEnd: n.evidence.page.end, text: n.evidence.passage.text } })) } : {}) };
   return finish({ ...base, kind: "conditional_illustration", conditions: conds, requirements: [conds[0].needs!], amount: out / 100, currency: s.currency, record, steps: [`${a.percent.operand.ppm! / 10_000}% of ${money(s.cents, s.currency)} = ${money(part, s.currency)}`, ...(a.proportion ? [`${a.proportionWhen?.trim() || "in the case the wording names"}: ${a.proportion.operand.ppm! / 10_000}% of ${money(part, s.currency)} = ${money(Number(divHalfUp(BigInt(part) * BigInt(a.proportion.operand.ppm!), 1_000_000n)), s.currency)}`] : []), ...(a.cap ? [`capped at ${money(a.cap.operand.cents!, s.currency)}: ${money(out, s.currency)}`] : [])] });
 }
 

@@ -89,12 +89,30 @@ export function unprintedAsk(question: string, factKey: string, evidenceTexts: s
   // ("Which bone ...?") is answered by the printed list.
   if (/^\s*(?:which|what|when|where|who|whom|whose|how|why|on\s+what|in\s+which)\b/i.test(question)) return null;
   const nameWords = new Set(names.flatMap((n) => contentWords(n)));
-  const asked = [...new Set(contentWords(question).filter((w) => !GENERIC.has(w) && !nameWords.has(w)))];
-  if (asked.length < 4) return null;
+  const useful = (ws: string[]) => [...new Set(ws.filter((w) => !GENERIC.has(w) && !nameWords.has(w)))];
   const have = new Set(contentWords(evidenceTexts.join("\n")));
+  // (1) A question that asserts a PROCEDURE or proof ("confirmed by X-ray", "certified by a registered medical practitioner") is a
+  // requirement the wording either prints or does not, however short the question is: it is supported when the cited wording prints
+  // anything of that procedure (what is done, or by whom), and not asked when it prints none of it.
+  const proc = PROCEDURE.exec(question);
+  if (proc) {
+    const terms = useful(contentWords(question.slice(proc.index)));
+    return terms.length && !terms.some((w) => have.has(w)) ? terms : null;
+  }
+  // (2) Otherwise word overlap is only a heuristic. A question phrased differently from the print ("Did the stay run through a whole
+  // day?") is still about the printed requirement when the fact the model keyed it under is named in the cited wording
+  // (continuous_confinement: "confined ... continuous period"): that question is asked. Only a long question that shares under a
+  // third of its words with the wording, under a key the wording does not print either, is not asked.
+  const keyWords = useful(contentWords(factKey.replace(/_/g, " ")));
+  const printed = (w: string) => have.has(w) || (w.length >= 5 && [...have].some((h) => h.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+  if (keyWords.length && keyWords.every(printed)) return null;
+  const asked = useful(contentWords(question));
+  if (asked.length < 4) return null;
   const missing = asked.filter((w) => !have.has(w));
   return (asked.length - missing.length) / asked.length < 1 / 3 ? missing : null;
 }
+/** A question asserting that something was done or proved by someone or something. */
+const PROCEDURE = /\b(?:confirm\w*|certif\w*|verif\w*|prov(?:ed|en)|diagnos\w*|document\w*|attest\w*|witness\w*|sign(?:ed)?|approv\w*|author[ie]s?d|endors\w*|referr?ed|prescrib\w*)\b[^?]{0,60}\b(?:by|with|from|through)\b/i;
 
 /**
  * Agent P (task 5): the words of the household's message that already give the fact a question would ask for (null

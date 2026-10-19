@@ -14,7 +14,7 @@ import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, waitingNotReached, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
 import { isCalendarDate } from "@/lib/claims/day-count";
 import { amendmentDayEdges, applyAmendmentDayEdges, readBenefitTerms } from "./terms";
-import { benefitRowProblem, ownTables, percentTables, rowAt } from "./pct-rows";
+import { benefitRowProblem, ownTables, percentTables, rowAt, rowNotes } from "./pct-rows";
 
 const outcomes = new WeakMap<ToolContext, Map<string, CalcOutcome>>();
 /** The calculations made in this tool context (calc id -> outcome). */
@@ -180,10 +180,13 @@ export async function runCalculate(ctx: ToolContext, args: Record<string, unknow
     if (!pct && typeof a.condition === "string" && a.condition.trim()) pct = await printedPercent(ctx, policyId, subjectId, a.condition);
     // V1.5: a percentage row printed in ANOTHER benefit's table on the same page (the Other Fracture table below the
     // Simple Fracture table) is never used for this benefit, whichever way it was selected.
+    let rowNotesOf: { marker: string; text: string; evidence: EvidenceRef }[] = [];
     if (pct) {
       const ev = pct.operand.evidence, page = (await pageMap(ctx.accountId, ev.policyId)).get(ev.passage.onPage) ?? "";
       const tables = percentTables(page), at = rowAt(tables, ev.passage.start);
       if (at && at.table.name && !ownTables(tables, benefit).includes(at.table) && ownTables(tables, benefit).length < tables.length) return fail(`lump_sum: the percentage “${at.row.label}” is printed in the ${at.table.name} table, not in the table for ${benefit}`);
+      // fx-live-1: the footnotes the page prints for THIS row (its marker is on the row; the page defines it under the table)
+      if (at) rowNotesOf = rowNotes(page, at.table, at.row).flatMap((n) => { const nev = evidenceFor({ policyId: ev.policyId, documentHash: doc.fileHash ?? null, page: ev.passage.onPage, pageText: page, passage: page.slice(n.start, n.end), near: n.start, subjectId: null }); return nev ? [{ marker: n.marker, text: n.text, evidence: nev }] : []; });
     }
     // V1.3: what the percentage is OF is read from its own wording (the table header / the sentence above it), never
     // assumed to be the certificate's general sum insured. A fixed benefit limit or sub-limit is read from the same
@@ -223,7 +226,7 @@ export async function runCalculate(ctx: ToolContext, args: Record<string, unknow
     }
     let share: DocValue | null = null;
     if (a.proportion && !shareIsPercent) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
-    out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
+    out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, notes: rowNotesOf, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null,
       base: pctBase && pctBase.kind !== "sum_insured" && (pctBase.kind !== "referenced_amount" || pctBase.printed) ? { kind: pctBase.kind === "referenced_amount" ? "benefit_limit" : pctBase.kind, label: sum.operand.benefit } : { kind: "sum_insured", label: sum.operand.benefit } });
     if (!("refused" in out) && (baseNote || recoveredNote)) (out as CalcOutcome & { notes?: string[] }).notes = [baseNote, recoveredNote].filter((x): x is string => !!x);
   } else return fail(`unknown calculator ${String(a.calculator)}`);

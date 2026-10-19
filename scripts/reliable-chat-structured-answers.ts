@@ -266,7 +266,7 @@ async function main() {
     const calcTurns: [string, Turn][] = [["J2", j2], ["J3 turn 2", j3b], ["J3b turn 2", j3cb], ["J4", j4], ["J6", j6], ["SBa replay turn 2", sba2]];
     for (const [label, t] of calcTurns) {
       const ks = (t.answer.calculations ?? []) as any[];
-      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
+      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision(?:; the page prints (?:a footnote|footnotes) for that row: “[^”]+” \(marked [^)]+\)(?: and “[^”]+” \(marked [^)]+\))*)?\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
       const shownWhole = ks.every((k) => lines(t.v).includes(k.sentence) && lines(t.shown).includes(k.sentence) && lines(t.reopened).includes(k.sentence));
       check(`complete conditions (${label}): every saved calculation is ONE complete conditional sentence (subject, case, percentage, base, document, not-a-payment) the splitter does not divide, and is displayed and reopened whole`, whole && shownWhole, JSON.stringify(ks.map((k) => k.sentence)));
     }

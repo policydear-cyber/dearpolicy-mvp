@@ -283,7 +283,7 @@ async function main() {
     assert.equal(u1.trace.outcome, "final_answer"); assert.equal(u1.answer.summary, "Happy to help with your household's documents.");
     assert.equal(u1.fk.count(), 2); assert.equal(u1.trace.calls.length, 2); assert.deepEqual(u1.trace.usage, { input: 2000, output: 100 });
     assert.equal(u1.newRows.length, 2);
-    for (const r of u1.newRows) { assert.deepEqual([r.status, r.operation, r.prompt_version, Number(r.input_tokens), Number(r.output_tokens)], ["succeeded", "rag_answer", "rag2-loop-v18-applicability", 1000, 50]); }
+    for (const r of u1.newRows) { assert.deepEqual([r.status, r.operation, r.prompt_version, Number(r.input_tokens), Number(r.output_tokens)], ["succeeded", "rag_answer", "rag2-loop-v19-scoped-absence", 1000, 50]); }
     assert.equal((await usageRows()).length, 2);
     assert.equal(U.loopRunUsage().calls, 2);
   });
@@ -299,7 +299,7 @@ async function main() {
     assert.equal(u3.fk.count(), 3); assert.equal(u3.trace.outcome, "budget_exhausted"); assert.equal(u3.trace.limit.kind, "turn_calls");
     assert.equal(u3.answer.summary, FALLBACK_TEXT); assert.equal(u3.newRows.length, 3);
   });
-  const u4 = await hostedTurn([() => reply([{ name: "resolve_person", args: { mention: "me" } }], { prompt_tokens: 11_000, completion_tokens: 50 })], { DEARPOLICY_RAG_LOOP_MAX_TOKENS: "14000" });
+  const u4 = await hostedTurn([() => reply([{ name: "resolve_person", args: { mention: "me" } }], { prompt_tokens: 11_000, completion_tokens: 50 })], { DEARPOLICY_RAG_LOOP_MAX_TOKENS: "15500" });
   await check("F4 INTEGRATION the per-turn token limit refuses the next call before it is made", () => {
     assert.equal(u4.fk.count(), 1); assert.equal(u4.trace.limit.kind, "turn_tokens"); assert.equal(u4.trace.outcome, "limit_reached");
     assert.equal(u4.answer.summary, LIMIT_TEXT.turn_tokens); assert.equal(u4.newRows.length, 1);

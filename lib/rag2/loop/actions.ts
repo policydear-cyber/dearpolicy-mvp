@@ -29,7 +29,7 @@ export const NOTE_FACTS: LoopToolSpec = {
 
 /** One sentence of the visible answer and what it rests on (final_answer, and ask_user's statements). */
 const SENTENCE: JsonSchema = { type: "object", properties: {
-  kind: { type: "string", enum: ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status"], description: "What this statement is. calculation: an evaluate_benefit result (give result_id; the server writes the figures, base and source). benefit_terms: a benefit's printed terms (give benefit_id; the server writes them). fact: something a cited passage states. uncertainty: what the documents do not establish (e.g. cover on a later date). suggestion: a general, labelled suggestion (no figures, no requirement the documents do not print). library_status: what documents the household has. One claim per statement: never join two benefits, two insurers or two conditions in one statement." },
+  kind: { type: "string", enum: ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status", "not_found"], description: "What this statement is. calculation: an evaluate_benefit result (give result_id; the server writes the figures, base and source). benefit_terms: a benefit's printed terms (give benefit_id; the server writes them). fact: something a cited passage states. uncertainty: what the documents do not establish (e.g. cover on a later date). suggestion: a general, labelled suggestion (no figures, no requirement the documents do not print). library_status: what documents the household has. not_found: the documents do NOT print something (give claim, topic, terms; optionally scope_policy_ids): the server reads the full text of the documents, refuses it when they do print it, and writes the sentence -- use it, never an uncertainty or a fact, to say a benefit is not described or a document does not state something. One claim per statement: never join two benefits, two insurers or two conditions in one statement." },
   benefit_id: str("kind benefit_terms: the benefit (b...) from person_benefits."),
   text: str("One sentence as the household will read it (no ids: cite with the fields below). For kind calculation / benefit_terms the server writes it; leave it short."),
   evidence_ids: ids("Evidence ids (e1, e2...) the sentence rests on."),
@@ -38,6 +38,10 @@ const SENTENCE: JsonSchema = { type: "object", properties: {
   result_ids: ids("Instead of result_id, for one sentence comparing alternatives: two or more calculate result ids of the same person whose amounts the sentence states (e.g. the open and closed illustrations of one row)."),
   benefit: str("The benefit / row the sentence's figure is printed for, as the document words it (when citing a passage rather than a table value)."),
   subject_id: str("Who this sentence is about, if not the answer's subject."),
+  claim: { type: "string", enum: ["benefit_not_found", "document_silent"], description: "kind not_found: benefit_not_found = the documents describe no benefit for the topic; document_silent = the named document(s) (scope_policy_ids) do not state the topic (a condition, a payment, what a benefit pays for)." },
+  topic: str("kind not_found: what was looked for, one short noun phrase with no verdict and no figure (\"dental treatment\", \"what Group Living Care pays for cancer\")."),
+  terms: ids("kind not_found: the specific words a document would print for the topic (e.g. [\"dental\", \"dentist\", \"tooth\"]); the server searches the documents' full text for each."),
+  scope_policy_ids: ids("kind not_found: the documents the claim is about (policy ids). Omit to check this person's documents."),
 }, required: ["text"], additionalProperties: false };
 
 export const ASK_USER: LoopToolSpec = {
