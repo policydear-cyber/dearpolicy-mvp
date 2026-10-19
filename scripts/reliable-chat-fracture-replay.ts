@@ -136,6 +136,26 @@ async function main() {
     try { const q = await turn("B7 term life", "what is grace's term life amount?"); check("B7 the certificate's Term Life amount keeps its printed date when the certificate prints it as one cell (\"As of 06/10/2022\")", /S\$1,000,000/.test(q.v) && /6 October 2022/.test(q.v), q.v); } finally { installLoopModel(null); }
   }
 
+  // B9: a GENUINE question (its requirement is printed) asked together with the established illustrations: what the household sees
+  // when the question is asked is what they see when the conversation is reopened (the illustrations are not withheld on reopening)
+  {
+    const TA: ScriptTurn = { user: /broke her arm/, steps: [
+      () => [call("resolve_person", { mention: "grace" })],
+      () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: "broke her arm", words: "broke her arm" }], subject_id: G }), call("person_benefits", { topic: "fracture after a fall", subject_id: G })],
+      (v) => {
+        const sb = benefitIdOf(v, /^Simple Fracture$/i), so = benefitIdOf(v, /Simple Fracture or Other Fracture/i);
+        const ev = (id: string) => call("evaluate_benefit", { case: "broke her arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: G, assumption_words: "broke her arm" });
+        return [ev(sb), ev(so), call("search_passages", { k: 6, query: "accidental hospital recuperation benefit hospital 24 hours", policy_ids: [BS] })];
+      },
+      (v) => { const r = resultIds(v); return [call("ask_user", { kind: "fact", fact_key: "continuous_confinement", subject_id: G, question: "Was Grace confined as a resident patient in a hospital for a continuous period of at least 24 hours?", statements: [{ kind: "calculation", text: "-", result_id: r[0], subject_id: G }, { kind: "calculation", text: "-", result_id: r[1], subject_id: G }], because_evidence_ids: idsAny(v, /continuous period of at least 24 hours/, "search_passages").slice(0, 1) })]; },
+    ] };
+    installLoopModel(new ScriptedLoopModel([TA]));
+    try {
+      const q = await turn("B9 genuine question with illustrations", MSG1);
+      check("B9 (control) a genuine question asked with the established illustrations: the question is asked, the illustrations are shown, and reopening shows exactly the same (no 'left out a sentence' notice)", q.trace.outcome === "ask_user" && /S\$1,250/.test(q.v) && /S\$120,000/.test(q.v) && !/left out a sentence|until claim evidence/i.test(q.reopened) && q.shown === q.saved && q.saved === q.reopened, `${q.trace.outcome}\n--saved:\n${q.saved}\n--reopened:\n${q.reopened}`);
+    } finally { installLoopModel(null); }
+  }
+
   // B8: ONE documented term alone (a library with the Product Summary only): the answer keeps its single-sentence headline and says no "alternatives"
   {
     const only = { ...FX, DOCS: FX.DOCS.filter((d) => d.key !== "BENEFIT_SUMMARY") } as any;

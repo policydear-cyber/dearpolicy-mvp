@@ -313,5 +313,11 @@ export function sanitizeStoredAnswer<T>(stored: T): T {
   copy.nextSteps = Array.isArray(copy.nextSteps) ? copy.nextSteps : [];
   copy.missingFacts = Array.isArray(copy.missingFacts) ? copy.missingFacts : [];
   copy.claimItems = copy.claimItems.map((item) => ({ ...item, conditions: Array.isArray(item.conditions) ? item.conditions : [], reason: typeof item.reason === "string" ? item.reason : "" }));
-  return enforceLiveChatMonetaryBoundary(copy) as unknown as T;
+  // Production fracture conversation (19 Oct 2026): an answer carrying verified calculations (the conversational loop's, saved
+  // with their re-verifiable records) was served with claimContext:false when it was written. A question turn has mode
+  // "fact_finding", which the default reads as a claim turn, so reopening the conversation left out the illustrations and
+  // added "I left out a sentence that stated an amount": what was shown was not what was saved. Reopening applies the same
+  // context the answer was written under.
+  const verified = (copy.calculations?.length ?? 0) > 0;
+  return enforceLiveChatMonetaryBoundary(copy, verified ? { claimContext: false } : {}) as unknown as T;
 }
