@@ -116,7 +116,12 @@ test("SA7: the model identified the ambiguity but never asked -- the server asks
   expect(s1.questions ?? []).toHaveLength(1);
   expect(a1.shown).toMatch(/Which of these cases is it: Hip or Jaw, Pelvis, Leg, Ankle or Knee(?: \(Other Fracture\))?\?/);
   expect(a1.shown).toContain("Hip 75%");
-  expect(a1.shown).not.toMatch(/Cheekbone[^\n]*#/);
+  // The report's finding was a "#" marker inside the Cheekbone row's own entry. A footnote is now said (PR #57) in a clause of its own that
+  // names the row it qualifies, so the check is bounded to the Cheekbone entry (up to its ";") and the attribution is asserted positively.
+  expect(a1.shown).not.toMatch(/Cheekbone[^;.\n]*[#^]/);
+  expect(a1.shown).toMatch(/for “Jaw, Pelvis, Leg, Ankle or Knee”: “[^”]*toe and foot[^”]*” \(marked \^\)/);
+  expect(a1.shown).toMatch(/for “Arm, Elbow, Wrist or Ribs”: “[^”]*thumb, finger and palm[^”]*” \(marked #\)/);
+  expect(a1.shown).not.toMatch(/for “(?:Hip|Neck, Skull or Spine \(Full Break\)|Cheekbone[^”]*)”: “/);
   expect(a1.shown).not.toMatch(/conditional illustration is S\$/);
   const a2 = await send(page, u2);
   const s2 = await sameAsSaved(request, a2.shown, "SA7 clarified", a2.visibleMs);
