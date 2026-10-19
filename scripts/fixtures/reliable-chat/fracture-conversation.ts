@@ -23,15 +23,9 @@ export const M = {
   other: { id: id(9), name: "Daniel Lee", pref: "Daniel", rel: "self", notes: null, dob: "1970-01-01", account: OTHER_ACCOUNT },
 } satisfies Record<string, FxMember>;
 
-const anon = (t: string) => t
-  .replace(/Singapore Life Ltd\. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife\.com/g, "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example")
-  .replace(/Company Reg\.No\. 196900499K GST Reg\.No\. MR-8500166-8/g, "Company Reg.No. 000000000X GST Reg.No. MR-0000000-0")
-  .replace(/singlife\.com\/MINDEFandMHA/g, "aldermoor.example/SCHEMEX")
-  .replace(/Singapore Life Ltd/g, "Aldermoor Life Ltd")
-  .replace(/MINDEF & MHA/g, "Scheme X")
-  .replace(/MINDEF\/SAF/g, "Authority-A")
-  .replace(/MINDEF or MHA/g, "Authority-A or Authority-B")
-  .replace(/Singlife/g, "Aldermoor");
+/** The committed text is already anonymised (insurer, address, registration, scheme web path, people, masks, policy numbers); this only refuses residue. */
+const RESIDUE = /singlife|shenton|singapore life|mindef|\bMHA\b|196900499|8500166|SGX Centre|068807/i;
+const anon = (t: string) => { if (RESIDUE.test(t)) throw new Error("fracture fixture: un-anonymised insurer/scheme text remains"); return t; };
 
 /** Certificate p1 -- the layout as stored: every row's date is ONE cell "As of dd/mm/yyyy". */
 export const CERT_P1 = anon([
@@ -41,8 +35,8 @@ export const CERT_P1 = anon([
   "SG 000000",
   "Private & Confidential",
   "CERTIFICATE OF GROUP INSURANCE",
-  "This is to certify that the person(s) named herein is/are insured with \"Singapore Life Ltd\" for cover(s) as indicated:",
-  "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)\tPage 1 of 1",
+  "This is to certify that the person(s) named herein is/are insured with \"Aldermoor Life Ltd\" for cover(s) as indicated:",
+  "Scheme X GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)\tPage 1 of 1",
   "Product, Policy Number, Particulars of Insured Person(s) and Sum Assured/Medical Plan\tEffective Date",
   "GROUP TERM LIFE(POLICY NO.3037850)",
   "S****411A\tLee Wei Ming, Daniel\tS$1,000,000\tAs of 06/10/2022",
@@ -59,19 +53,19 @@ export const CERT_P1 = anon([
   "This certificate is issued to the terms and conditions of the Group Policy. All endorsements, changes and amendments to the Group Policy shall be",
   "binding without prior notice to the certificate holder. This Certificate of Insurance contains information about your life insurance and",
   "supersedes any certificate(s) previously issued to your under this policy. Please read it carefully and keep it safe.",
-  "Singapore Life Ltd 4 Shenton Way #01-01 SGX Centre 2 Singapore 068807 www.singlife.com",
+  "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example",
 ].join("\n"));
 
 /** Product Summary p8 (printed "Page 7 of 36"): the key features of Group Personal Accident. */
 export const PS_P8 = anon([
   "Group Personal Accident",
-  "MINDEF & MHA GROUP INSURANCE VOLUNTARY SCHEME",
+  "Scheme X GROUP INSURANCE VOLUNTARY SCHEME",
   "(GROUP POLICY NO: G007500)",
   "The Group Personal Accident Insurance provides coverage in the event of an accident,",
   "and provides you and your family with greater assurance and peace of mind.",
   "The coverage we offer is up to age 70 next birthday (ANB) and continues even",
   "after you have:",
-  "•\tRetired or left the employment of MINDEF or MHA",
+  "•\tRetired or left the employment of Authority-A or Authority-B",
   "•\tBeen released from NS liability",
   "•\tCompleted Operationally Ready National Service (ORNS) training cycle",
   "or reached statutory age for completion of ORNS",
@@ -88,18 +82,18 @@ export const PS_P8 = anon([
   "•\t24/7 worldwide coverage",
   "•\tIn the event that the main Insured Person passes away, the spouse can",
   "continue to receive coverage",
-  "(For details on the plan benefits, please refer to singlife.com/MINDEFandMHA)",
+  "(For details on the plan benefits, please refer to aldermoor.example/SCHEMEX)",
   "Page 7 of 36",
 ].join("\n"));
 
 /** Product Summary p12 (printed "Page 11 of 36"): Injury due to Accident. */
 export const PS_P12 = anon([
   "Insurance Benefits (continued)",
-  "(For details on the plan benefits, please refer to singlife.com/MINDEFandMHA)",
+  "(For details on the plan benefits, please refer to aldermoor.example/SCHEMEX)",
   "•\tInjury due to Accident",
   "If while this policy is in force, an Insured Person sustains an Accidental bodily",
   "injury and suffers from any of the results described in the Schedule below,",
-  "Singlife upon receipt and approval of satisfactory proof, indemnify the Insured",
+  "Aldermoor upon receipt and approval of satisfactory proof, indemnify the Insured",
   "Person according to the Schedule below:",
   "Compensation",
   "Schedule\t(% of Sum",
@@ -117,7 +111,7 @@ export const PS_P12 = anon([
 /** Product Summary p13 (printed "Page 12 of 36"): Simple Fracture due to Accident, a fixed limit. */
 export const PS_P13 = anon([
   "Insurance Benefits (continued)",
-  "(For details on the plan benefits, please refer to singlife.com/MINDEFandMHA)",
+  "(For details on the plan benefits, please refer to aldermoor.example/SCHEMEX)",
   "•\tSimple Fracture due to Accident",
   "If an Insured Person sustains bodily injury as a result of an Accident, which",
   "results in a Simple Fracture of the nature mentioned in the table below, we",
@@ -171,8 +165,8 @@ export const BS_P7 = anon([
   "Head\t- Equals to or greater than 2% but less than 5%\t50%",
   "- Equals to or greater than 5% but less than 8%\t75%",
   "- Equals to or greater than 8%\t100%",
-  "Singapore Life Ltd. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife.com",
-  "Company Reg.No. 196900499K GST Reg.No. MR-8500166-8",
+  "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example",
+  "Company Reg.No. 000000000X GST Reg.No. MR-0000000-0",
 ].join("\n"));
 
 /** Benefit Summary p8: Simple Fracture or Other Fracture due to Accident, a percentage of the Sum Insured. */
@@ -212,8 +206,8 @@ export const BS_P8 = anon([
   "We will, upon receipt of relevant documents as required under clause 14 (including proof of need and total and permanent disability certified",
   "by a Registered Medical Practitioner), pay up to $10,000 of the costs of such equipment and the installation thereof, whichever is lesser.",
   "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
-  "Singapore Life Ltd. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife.com",
-  "Company Reg.No. 196900499K GST Reg.No. MR-8500166-8",
+  "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example",
+  "Company Reg.No. 000000000X GST Reg.No. MR-0000000-0",
 ].join("\n"));
 
 /** Benefit Summary p9: benefits with printed requirements (a positive control: a question about a requirement that IS printed). */
@@ -231,15 +225,95 @@ export const BS_P9 = anon([
   "children, provided the Dependant child is unmarried and a full-time student including in an institution of higher learning and is aged 25 and below",
   "and not enlisted into full-time National Service.",
   "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.",
-  "Singapore Life Ltd. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife.com",
-  "Company Reg.No. 196900499K GST Reg.No. MR-8500166-8",
+  "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example",
+  "Company Reg.No. 000000000X GST Reg.No. MR-0000000-0",
+].join("\n"));
+
+/** Product Summary p37 (printed "Page 36 of 36"): the claims and enquiries page -- it says the document is a summary and where the precise terms are,
+ * and dates its information. (Read-only copy of the actual page; the Authorities, hotline and e-mail addresses are anonymised.) */
+export const PS_P37 = anon([
+  "Claims and Enquiries",
+  "Claims",
+  "Authority-A and Authority-B are",
+  "contractually “The Policy Owner” for the Group Insurance Voluntary Scheme. The",
+  "Group Insurance Voluntary Scheme does not come under the framework of",
+  "nomination of beneficiaries under the Insurance Act (Cap. 142). All claims will be",
+  "paid directly to the Insured Person, proper claimant or legal representative, as",
+  "applicable.",
+  "For further enquiries or claims matters, please contact the Aldermoor Customer",
+  "Service Hotline at 6000 0000 (Mondays to Fridays excluding Public Holidays,",
+  "8:45am to 5:30pm). You may also email us at enquiries-a@aldermoor.example",
+  "or enquiries-b@aldermoor.example or visit aldermoor.example/SCHEMEX for more",
+  "information.",
+  "The above is a summary of the plan offered. The precise terms and conditions of the",
+  "plan are set out in the certificate of insurance. You may wish to seek advice from a",
+  "Financial Adviser Representative before making a commitment to purchase the plan.",
+  "In the event that you chose not to seek advice from a Financial Adviser Representative,",
+  "You should consider whether the plan in question is suitable for You.",
+  "As this product has no savings or investment feature, there is no cash value if",
+  "the policy ends or if the policy is terminated prematurely. The benefits of a",
+  "personal accident policy will only be payable upon an accident occurring. Before",
+  "replacing an existing personal accident policy with a new one, you should consider",
+  "whether the switch is detrimental as there may be potential disadvantages with",
+  "switching. A penalty may be imposed for early termination and the new policy",
+  "may cost more or have fewer benefits at the same costs. If you decide that the",
+  "policy is not suitable after purchasing the policy, you may terminate the policy",
+  "in accordance with the free-look provision, if any, and Aldermoor Life Ltd. may",
+  "recover from you any expense incurred by us in underwriting the policy. Buying",
+  "a health insurance policy that is not suitable for you may impact your ability to",
+  "finance your future healthcare needs. Information is accurate as at July 2021.",
+  "Page 36 of 36",
+].join("\n"));
+
+/** Benefit Summary p1 (the document's own title and its "Status of this Certificate of Insurance" note), read-only copy of the actual page. */
+export const BS_P1 = anon([
+  "POLICY OWNERS' PROTECTION SCHEME",
+  "These policies are protected under the Policy Owners' Protection Scheme, and are administered by the Singapore Deposit Insurance Corporation",
+  "(SDIC). Coverage for your policy is automatic and no further action is required. For more information on the types of benefits that are covered under",
+  "the scheme as well as the limits of coverage, where applicable, please contact us or visit the LIA and SDIC web-sites (www.lia.org.sg or",
+  "www.sdic.org.sg).",
+  "Scheme X GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)",
+  "CERTIFICATE OF INSURANCE PART 2: HIGHLIGHTS OF COVER",
+  "For the purpose of Part 2 of this Certificate of Insurance (\"Certificate\"), \"you\"/\"your\" means the Insured Person(s) and \"we\"/ \"us\"/ \"the Company\"",
+  "means Aldermoor Life Ltd.",
+  "IMPORTANT NOTES:",
+  "1) Owner of the Group Insurance Policies",
+  "THE GOVERNMENT, as represented by Authority-A or as represented by Authority-B (collectively the \"Authority\"), is contractually, \"The Policyholder\" of the",
+  "Scheme X Group Insurance Scheme (\"Group Scheme\"). This Group Scheme consists of the Core Scheme and the Voluntary Scheme, where the Core Scheme covers",
+  "Authority-A, Authority-B, Affiliate personnel and their Dependants. A Certificate has been or will be issued to an Insured Member/Insured Affiliate Member, who is or will",
+  "be covered under the Voluntary Scheme of any of the Group Policies listed in paragraph 2 Part 2 below. Insured Person(s) are not a party to",
+  "any of the Group Policies issued under the Group Scheme except for the limited right of enforcement given to Insured Member/Insured Affiliate",
+  "Member to claim benefits due under the Policy or right to seek arbitration, litigation or other dispute resolution in claim disputes, the Insured",
+  "Person shall not be entitled to claim any other rights under the Policy.",
+  "The Group Policies are reviewed periodically and may be subject to change as part of the Authority's aim to continuously review the benefits",
+  "for its members and its affiliates. As the Policyholder, the Authority reserve the right to negotiate any modification, amendment, suspension or",
+  "discontinuance of any or all of the provisions of the Group Policies with the Company at the Authority's absolute discretion.",
+  "If a Policy (as defined in paragraph 2 Part 2 below) is terminated between the Policyholder and the Company, your insurance cover under the",
+  "particular Policy will be terminated too.",
+  "2) Status of this Certificate of Insurance",
+  "This Certificate is not a contract of insurance. Its aim is to provide you with a confirmation of your/ your dependants' cover under the particular",
+  "Policy you have been insured under.",
+  "It is made up of two parts:",
+  "Part 1: Your/your dependants' particulars, the specific policy under which you/ your dependants are covered, the Sum Insured and the",
+  "effective date of your/your dependants' coverage",
+  "Part 2: Highlights of the insurance cover provided under the Group Term Life (\"GTL\") and Personal Accident Policy (\"GPA\"), Living Care Policy",
+  "(\"LC\"), Living Care Plus Policy (\"LCP\"), Disability Income Policy (\"DI\"), and Outpatient Medicare Policy (\"OPMC\") (collectively referred to",
+  "as \"Group Policies\"; individually referred to as \"Policy\" as the case may be).",
+  "Not all Group Policies or Benefits described in Part 2 of this Certificate will apply to you. A Benefit is only applicable to you if the Policy containing",
+  "the Benefit is specifically stated in Part 1 of this Certificate.",
+  "3) Duty of Insured Person",
+  "Your insurance cover specified in Part 1 of this Certificate will only be valid if you observe all the terms and conditions of the relevant Policy",
+  "and you are truthful in the provision of all statements and answers in the application form for insurance, in any health declaration or in respect",
+  "of any claim.",
+  "Aldermoor Life Ltd. 1 Example Road, #01-01 Singapore 000000 aldermoor.example",
+  "Company Reg.No. 000000000X GST Reg.No. MR-0000000-0",
 ].join("\n"));
 
 const both = [{ id: M.daniel.id }, { id: M.grace.id }];
 const scheme = { insurer: "Aldermoor Life Ltd", policyType: "Group insurance", groupPolicyNumber: "G007500" };
 export const DOCS: FxDoc[] = [
   { key: "CERT", id: id(101), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance Scheme", policyNumber: "3037850", role: "certificate", personal: true, hash: "sha256:fx-cert", effective: "2022-10-06", documentDate: null, filename: "Certificate of Insurance.pdf", pages: { 1: CERT_P1 } },
-  { key: "PRODUCT_SUMMARY", id: id(102), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "product_summary", personal: false, hash: "sha256:fx-product-summary", filename: "Product Summary.pdf", pages: { 8: PS_P8, 12: PS_P12, 13: PS_P13 } },
-  { key: "BENEFIT_SUMMARY", id: id(103), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "certificate", personal: false, hash: "sha256:fx-benefit-summary", filename: "Benefit Summary.pdf", pages: { 3: BS_P3, 5: BS_P5, 7: BS_P7, 8: BS_P8, 9: BS_P9 } },
+  { key: "PRODUCT_SUMMARY", id: id(102), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "product_summary", personal: false, hash: "sha256:fx-product-summary", filename: "Product Summary.pdf", pages: { 8: PS_P8, 12: PS_P12, 13: PS_P13, 37: PS_P37 } },
+  { key: "BENEFIT_SUMMARY", id: id(103), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "certificate", personal: false, hash: "sha256:fx-benefit-summary", filename: "Benefit Summary.pdf", pages: { 1: BS_P1, 3: BS_P3, 5: BS_P5, 7: BS_P7, 8: BS_P8, 9: BS_P9 } },
 ];
 export const doc = (key: string) => DOCS.find((d) => d.key === key)!;

@@ -16,6 +16,7 @@ import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
 import { loadDocs, loadLinks, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
+import { documentLabel, profileDocument, standingClause } from "./relation";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -38,7 +39,7 @@ const pretty = (label: string, known: (string | null | undefined)[] = []) => {
 };
 const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.test(r.policy.product ?? "") ? "certificate" : r.policy.product ?? "document");
 
-type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef) => string; nameOf: (id: string | null | undefined) => string | null };
+type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null };
 
 /** A benefit's printed terms, written from its record (with the evidence and value ids that bind each figure). */
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
@@ -111,7 +112,7 @@ export function paidTerms(paras: string[], cents: number, passage = ""): { cover
 }
 
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */
-export function renderCalculation(resultId: string, d: Deps): string | null {
+export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number }): string | null {
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c) return null;
   const who = d.nameOf(c.subjectId) ?? "this person";
@@ -132,7 +133,7 @@ export function renderCalculation(resultId: string, d: Deps): string | null {
     // the reported event is the document's to define, and these documents print no definition of it)
     const label = pct ? pct.label.replace(/\s*\(([^)]*\bFracture)\)\s*$/i, "") : "";
     const tagged = pct ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
-    return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${tagged ? ` (the row the document labels “${tagged}”; these documents print no definition of which fractures that is)` : ""}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}, under the ${product}; it is an illustration from the document's terms, not a payment or an insurer's decision.`;
+    return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${tagged ? ` (the row the document labels “${tagged}”; these documents print no definition of which fractures that is)` : ""}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision.`;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {
     const rate = c.printed.find((x) => x.unit === "money");
@@ -164,6 +165,7 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       s.subject_id ??= r.memberId; s.benefit ??= r.benefit; RENDERED.add(s);
     }
   }
+  let relationAsked = false;
   // Two documents of one scheme printing a percentage table for the same kind of event, each with its own base: said once,
   // from the records (their documents, pages and bases), that the documents give no relationship between them.
   if (list) {
@@ -175,11 +177,30 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
     for (const r of shown) if (!recs.some((x) => x.id === r.id)) recs.push(r);
     const [a, b] = [recs[0], recs.find((r) => r.policy.id !== recs[0]?.policy.id)];
     const already = list.some((s) => !!s && typeof s === "object" && RELATION.has(s));
+    if (already) relationAsked = true;
     if (a && b && !already && a.schedule && b.schedule && a.memberId === b.memberId && a.policy.documentRole !== "amendment" && b.policy.documentRole !== "amendment" && !a.policy.personalProof && !b.policy.personalProof) {
       const baseOf = (r: BenefitRecord) => { const x = r.schedule!.base; return x.kind === "fixed_limit" ? `a fixed ${x.label}` : x.kind === "sum_insured" ? `${r.memberName}'s own sum insured` : "an amount the document does not establish"; };
-      const text = `The ${a.policy.product ?? "document"} (page ${a.schedule.page}) prints “${pretty(a.benefit)}” as a percentage of ${baseOf(a)}; the ${b.policy.product ?? "document"} (page ${b.schedule.page}) prints “${pretty(b.benefit)}” as a percentage of ${baseOf(b)}. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.`;
-      const note = { kind: "uncertainty", text, evidence_ids: [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)], subject_id: a.memberId } as Record<string, unknown>;
-      RENDERED.add(note); RELATION.add(note); list.push(note);
+      // What separates the two documents: each one's own standing (a summary that sends the reader to the certificate for the precise terms,
+      // a certificate that says it is not the contract), read from its stored pages and cited -- never inferred (./relation.ts).
+      const [pa, pb] = await Promise.all([profileDocument(d.ctx.accountId, a.policy), profileDocument(d.ctx.accountId, b.policy)]);
+      let la = documentLabel(a.policy, pa), lb = documentLabel(b.policy, pb);
+      if (la === lb) { la = `${la} (page ${a.schedule.page})`; lb = `${lb} (page ${b.schedule.page})`; }
+      const frame = `${a.memberName}'s documents give two different answers for ${outs.length > 0 ? "this event" : "the same kind of event"}, and what they say does not settle which applies: these are alternatives from separate documents, never a total.`;
+      const standing = [standingClause(la, pa), standingClause(lb, pb)].filter((x): x is string => !!x);
+      const status = [`The ${la} (page ${a.schedule.page}) takes its percentage of ${baseOf(a)}; the ${lb} (page ${b.schedule.page}) takes its percentage of ${baseOf(b)}.`, ...standing, "Neither document says whether one amends, replaces or adds to the other, or which applies to this event."].join(" ");
+      const clauseEv = [...pa.clauses, ...pb.clauses].map((c) => d.evidenceId(c.evidence, "standing"));
+      const both = [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)];
+      const note1 = { kind: "uncertainty", text: frame, evidence_ids: both, subject_id: a.memberId } as Record<string, unknown>;
+      const note2 = { kind: "uncertainty", text: status, evidence_ids: [...new Set([...both, ...clauseEv])], subject_id: a.memberId } as Record<string, unknown>;
+      for (const n of [note1, note2]) { RENDERED.add(n); RELATION.add(n); list.push(n); }
+      // (the two illustrations name their document and page; each stays one complete sentence, with its own not-a-payment clause)
+      for (const sx of rendered) {
+        const out = calcOutcomes(d.ctx).get(String(sx.result_id));
+        const which = out?.policyId === a.policy.id ? { label: la, page: a.schedule.page } : out?.policyId === b.policy.id ? { label: lb, page: b.schedule.page } : null;
+        const t = which ? renderCalculation(String(sx.result_id), d, which) : null;
+        if (t) sx.text = t;
+      }
+      relationAsked = true;
     }
   }
   // next steps: "contact:<policy_id>" is written as that document's own insurer, never a model-named one
@@ -199,7 +220,7 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       if (insurersSaid.has(doc.insurer!.trim().toLowerCase())) return null;
       insurersSaid.add(doc.insurer!.trim().toLowerCase());
       const group = /\bgroup\b|\bscheme\b/i.test(`${doc.productName ?? ""} ${doc.policyType ?? ""}`);
-      const step = `Contact ${doc.insurer}${group ? " (through the employer or scheme administrator, for this group scheme)" : ""} about the ${doc.productName ?? "policy"} to ask what it needs for a claim.`;
+      const step = `Contact ${doc.insurer}${group ? " (through the employer or scheme administrator, for this group scheme)" : ""} about the ${doc.productName ?? "policy"} to ask ${relationAsked ? "which of the two schedules applies to this event, and " : ""}what it needs for a claim.`;
       RENDERED_STEPS.add(step);
       return step;
     }).filter((x) => x != null);

@@ -486,6 +486,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const narrow = async (id: string, about: string, within?: { start: number; end: number }[] | null) => {
     const e = state.evidence[id];
     if (!e) return;
+    // (a document's own standing sentence is cited whole, as the server wrote it -- never narrowed to one line of it)
+    if (e.via === "standing" && e.support) return;
     const pages = await pagesOf(e.policyId);
     const text = pages.get(e.passage.onPage);
     const sp = text ? supportSpan(e, text, about, within) : null;
@@ -1737,7 +1739,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (!dc || !dc.extra.length) return null;
     const cnStop = await causeNote(subject, dc.extra.map((x) => String(x.benefit ?? ""))).catch(() => null);
     const args: Record<string, unknown> = { subject_id: subject, sentences: [...dc.extra, ...(cnStop ?? [])], next_steps: dc.steps };
-    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
     if (problems.length) return null;
     const composed = composeFinal({ sentences: args.sentences as Record<string, unknown>[], nextSteps: args.next_steps, subjectId: subject }, composeCtx());
     if (!composed.sentences.length) return null;
@@ -2035,7 +2037,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             serverAskSteps = null;
             if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
-          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
           if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
@@ -2055,7 +2057,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const extra = retainedTerms(sentences, r.terminal.composed.dropped, String(call.arguments.subject_id ?? state.subjectId ?? ""));
           if (extra.length) {
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...extra] } };
-            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
             if (!p2.length) {
               await bindCitedFigures(again);
               const r2 = action(again);
@@ -2074,7 +2076,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (dc2?.extra.length && !dc2.rows.includes("(no death benefit established)")) {
             const nextSteps = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : dc2.steps;
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...dc2.extra], next_steps: nextSteps } };
-            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
             if (!p3.length) {
               await bindCitedFigures(again);
               const r3 = action(again);
@@ -2094,7 +2096,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const steps5 = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : ((await deathCompletion(subj3, sentences, [], true).catch(() => null))?.steps ?? []);
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences.filter((x) => !(x?.kind === "fact" && cn.some((n) => n.text === String(x.text ?? "")))), ...cn], next_steps: steps5 } };
-            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
             if (!p5.length) {
               await bindCitedFigures(again);
               const prevNotes = r.terminal.composed.notes ?? [];
@@ -2109,7 +2111,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (note) {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, note] } };
-            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
             if (!p4.length) {
               await bindCitedFigures(again);
               const r4 = action(again);
@@ -2356,7 +2358,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   if (!done && BUDGET_STOPS.has(stop?.kind ?? "turn_calls") && [...requirements.values()].some((x) => x.resolvedBy === "household")) {
     const r = [...requirements.values()].filter((x) => x.resolvedBy === "household").at(-1)!;
     const st: Record<string, unknown>[] = [{ kind: "benefit_terms", benefit_id: r.benefitId, subject_id: r.subjectId, text: "-" }];
-    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
     const composed = !problems.length ? composeFinal({ sentences: st, subjectId: r.subjectId }, composeCtx()) : null;
     const because = r.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
     if (because.length) {

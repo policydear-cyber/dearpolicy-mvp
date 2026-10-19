@@ -20,49 +20,12 @@ import * as FX from "./fixtures/reliable-chat/fracture-conversation";
 import { ScriptedLoopModel, type ScriptTurn, type ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
 import { cellDate } from "@/lib/rag2/tables";
+import { BS, CERT, G, MSG1, MSG2, PS, Q_XRAY, T1, T2, benefitIdOf, call, idsAny, resultIds } from "./fixtures/reliable-chat/fracture-script";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
-const call = (name: string, args: Record<string, unknown>) => ({ name, arguments: args });
 let failed = 0, passed = 0;
 const check = (name: string, ok: boolean, detail = "") => { if (ok) passed++; else failed++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${!ok && detail ? "\n     " + detail.split("\n").slice(0, 30).join("\n     ") : ""}`); };
 const visible = (a: any) => [a?.summary, ...(a?.details ?? []), ...(a?.questions ?? []).map((q: any) => q.text ?? ""), ...uniqueSteps(a?.nextSteps)].filter(Boolean).join("\n");
-/** Evidence ids, in any tool result of this turn, of an entry whose text matches. */
-const idsAny = (v: ScriptView, re: RegExp, tool?: string): string[] => {
-  const out: string[] = [];
-  const walk = (x: any) => { if (!x || typeof x !== "object") return; if (typeof x.evidence_id === "string" && Object.values(x).some((f) => typeof f === "string" && re.test(f))) out.push(x.evidence_id); for (const k of Object.keys(x)) walk(x[k]); };
-  for (const o of v.turn) if (!tool || o.name === tool) walk(o.result);
-  return [...new Set(out)];
-};
-const benefitIdOf = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "person_benefits") { for (const sc of o.result?.data?.schedules ?? []) if (re.test(sc.benefit) && sc.benefit_id) return sc.benefit_id as string; for (const d of o.result?.data?.documents ?? []) for (const b of d.benefits ?? []) if (re.test(b.benefit) && b.benefit_id) return b.benefit_id as string; } return ""; };
-const resultIds = (v: ScriptView) => [...v.turn].filter((o) => o.name === "evaluate_benefit" && o.ok && o.result?.data?.result_id).map((o) => o.result.data.result_id as string);
-
-const G = FX.M.grace.id;
-const CERT = FX.doc("CERT").id, PS = FX.doc("PRODUCT_SUMMARY").id, BS = FX.doc("BENEFIT_SUMMARY").id;
-const MSG1 = "grace fell down and broke her arm";
-const Q_XRAY = "Was Grace’s fracture confirmed by X-ray and certified by a registered medical practitioner?";
-const MSG2 = `${Q_XRAY.replace("?", "")}: yes`;
-const ALT_NOTE = "The Scheme X Group Insurance (page 13) prints “Simple Fracture” as a percentage of a fixed Simple Fracture Benefit Limit; the Scheme X Group Insurance (page 8) prints “Simple Fracture or Other Fracture due to Accident” as a percentage of Grace's own sum insured. Neither document says whether one amends, replaces or adds to the other, or which applies to this event, so these are alternatives from separate documents, never a total.";
-
-/** The recorded model calls (arguments as recorded; ids carried from this run's tool results, as a model would). */
-const known: { sb?: string; so?: string; frame?: string[] } = {};
-const alt = (v: ScriptView) => ({ kind: "uncertainty", text: ALT_NOTE, subject_id: G, evidence_ids: known.frame ?? [] });
-const T1: ScriptTurn = { user: /broke her arm/, steps: [
-  () => [call("resolve_person", { mention: "grace" })],
-  () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: "broke her arm", words: "broke her arm" }], subject_id: G }), call("person_benefits", { topic: "fracture after a fall", subject_id: G })],
-  (v) => {
-    known.sb = benefitIdOf(v, /^Simple Fracture$/i); known.so = benefitIdOf(v, /Simple Fracture or Other Fracture/i);
-    known.frame = [...idsAny(v, /any fractures of toe and foot are not covered/, "person_benefits").slice(0, 1), ...idsAny(v, /only be claimed either under the Core Scheme or Voluntary Scheme/, "person_benefits").slice(0, 1)];
-    const ev = (id: string) => call("evaluate_benefit", { case: "broke her arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: G, assumption_words: "broke her arm" });
-    return [ev(known.sb), ev(known.so), call("search_passages", { k: 10, query: "fracture benefit conditions confirmed by X-ray registered medical practitioner accident fracture", policy_ids: [PS, BS] })];
-  },
-  (v) => { const r = resultIds(v); return [call("ask_user", { kind: "fact", fact_key: "fracture_confirmation", question: Q_XRAY, statements: [{ kind: "calculation", text: "-", result_id: r[0], subject_id: G }, { kind: "calculation", text: "-", result_id: r[1], subject_id: G }, alt(v)], subject_id: G, because_evidence_ids: idsAny(v, /Fracture of the nature/, "search_passages").slice(0, 2) })]; },
-] };
-const T2: ScriptTurn = { user: /confirmed by X-ray/, steps: [
-  () => [call("note_facts", { facts: [{ key: "fracture_confirmation", value: "yes", words: "yes" }], subject_id: G })],
-  () => { const ev = (id: string) => call("evaluate_benefit", { case: "broke her arm", purpose: "claim", fact_keys: ["injury", "how_it_happened", "fracture_confirmation"], benefit_id: id, subject_id: G, assumption_words: "broke her arm" }); return [ev(known.sb!), ev(known.so!)]; },
-  (v) => { const r = resultIds(v); return [call("final_answer", { sentences: [{ kind: "calculation", text: "-", result_id: r[0] }, { kind: "calculation", text: "-", result_id: r[1] }, alt(v)], next_steps: ["contact:" + CERT], subject_id: G })]; },
-] };
-
 async function main() {
   setEnv(FX as any);
   const h = await startHarness(FX as any);
@@ -98,6 +61,10 @@ async function main() {
   check("A10 the supported next step (contact the insurer named on the certificate) is in the correction turn, returned = saved = reopened", /Aldermoor Life Ltd/.test(t2.v) && t2.shown === t2.saved && t2.saved === t2.reopened, `${t2.v}\n--reopened:\n${t2.reopened}`);
   check("A11 what the household said about the confirmation is recorded as their report (not as a policy term): the amounts do not change with it", /S\$1,250/.test(t2.v) && /S\$120,000/.test(t2.v) && sumOf(t2) !== "");
   check("A12 the figures' citations: page 13 (S$5,000 and 25%), page 8 (20%) and the certificate (S$600,000)", (() => { const c = JSON.stringify(t2.answer.citations ?? []); return /Simple Fracture Benefit Limit: S\$5,000/.test(c) && /Arm , Elbow, Wrist or Ribs\\t25%/.test(c) && /Other Fracture\)\\t20%/.test(c) && /S\$600,000/.test(c); })(), JSON.stringify(t2.answer.citations ?? []).slice(0, 900));
+
+  check("A13 the two documents are told apart by name: Product Summary (page 13) and Certificate of Insurance Part 2 (page 8), not two copies of one product name", /Product Summary \(page 13\)/.test(t1.v) && /Certificate of Insurance Part 2 \(page 8\)/.test(t1.v) && !/Scheme X Group Insurance \(page/.test(t1.v), t1.v);
+  check("A14 what separates them is the documents' own words, cited: the summary defers to the certificate for the precise terms (page 37, dated July 2021); the certificate says it is not a contract of insurance (page 1)", /describes itself as a summary and says the precise terms are set out in the certificate of insurance \(page 37; its information is dated July 2021\)/.test(t1.v) && /says it is not a contract of insurance \(page 1\)/.test(t1.v) && (() => { const c = JSON.stringify(t1.answer.citations ?? []); return /precise terms and conditions of the/.test(c) && /not a contract of insurance/.test(c); })(), t1.v + "\n" + (t1.answer.citations ?? []).map((c: any) => `p${c.pageStart} ${c.policyName}: ${c.excerpt}`).join("\n"));
+  check("A15 no document is said to govern: nothing says one prevails, overrides or replaces the other", !/prevail|overrid|supersed|takes precedence|replaces the (?:Product|Certificate)/i.test(t1.v) && /Neither document says whether one amends, replaces or adds to the other/.test(t1.v), t1.v);
 
   // ------------------------------------------------------------------------------------------------ B: controls
   const Q = await import("@/lib/rag2/loop/questions").catch(() => ({})) as { unprintedAsk?: (q: string, k: string, t: string[], n?: string[]) => string[] | null };
@@ -171,6 +138,70 @@ async function main() {
       const a = await h2.send(MSG1, {}); const s = await h2.savedAnswer(a.conversationId!);
       check("B8 (control) one documented term alone: the headline is that one sentence and there is no 'alternatives' framing", /S\$1,250/.test(String(s.answer.summary)) && !/S\$120,000/.test(visible(s.answer)) && !/alternatives/.test(visible(s.answer)), visible(s.answer));
     } finally { installLoopModel(null); }
+  }
+
+  // B10: the standing statements are said ONLY when the documents' own pages print them (a library without the summary's claims page and the certificate's status note)
+  {
+    const bare = { ...FX, DOCS: FX.DOCS.map((d) => d.key === "PRODUCT_SUMMARY" ? { ...d, pages: { 8: FX.PS_P8, 12: FX.PS_P12, 13: FX.PS_P13 } } : d.key === "BENEFIT_SUMMARY" ? { ...d, pages: { 3: FX.BS_P3, 5: FX.BS_P5, 7: FX.BS_P7, 8: FX.BS_P8, 9: FX.BS_P9 } } : d) } as any;
+    const h3 = await startHarness(bare);
+    const TB: ScriptTurn = { user: /broke her arm/, steps: [
+      () => [call("resolve_person", { mention: "grace" })],
+      () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: "broke her arm", words: "broke her arm" }], subject_id: G }), call("person_benefits", { topic: "fracture after a fall", subject_id: G })],
+      (v) => { const ev = (id: string) => call("evaluate_benefit", { case: "broke her arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: G, assumption_words: "broke her arm" }); return [ev(benefitIdOf(v, /^Simple Fracture$/i)), ev(benefitIdOf(v, /Simple Fracture or Other Fracture/i))]; },
+      (v) => [call("final_answer", { subject_id: G, sentences: [{ kind: "calculation", text: "-", result_id: resultIds(v)[0] }, { kind: "calculation", text: "-", result_id: resultIds(v)[1] }], next_steps: ["contact:" + CERT] })],
+    ] };
+    installLoopModel(new ScriptedLoopModel([TB]));
+    try {
+      const a = await h3.send(MSG1, {}); const s = await h3.savedAnswer(a.conversationId!); const v = visible(s.answer);
+      check("B10 (control) pages that print no standing statement: none is said, the two schedules are still given with their bases and the unresolved relationship", /S\$1,250/.test(v) && /S\$120,000/.test(v) && !/describes itself|not a contract|dated July/.test(v) && /Neither document says whether one amends, replaces or adds to the other/.test(v) && /takes its percentage of a fixed/.test(v), v);
+    } finally { installLoopModel(null); }
+  }
+
+  // ------------------------------------------------------------------------------------------------ B11-B13: wrong-person, wrong-version, wrong-base controls (numbers that differ, so a mix-up shows)
+  const withCert = (text: string) => ({ ...FX, DOCS: FX.DOCS.map((d) => d.key === "CERT" ? { ...d, pages: { 1: text } } : d) }) as any;
+  const fracScript = (who: { id: string; mention: string; msg: RegExp }, contact: string = CERT, both = true): ScriptTurn => ({ user: who.msg, steps: [
+    () => [call("resolve_person", { mention: who.mention })],
+    () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: "broke arm", words: "broke" }], subject_id: who.id }), call("person_benefits", { topic: "fracture after a fall", subject_id: who.id })],
+    (v) => { const ev = (id: string) => call("evaluate_benefit", { case: "broke arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: who.id, assumption_words: "broke" }); return [ev(benefitIdOf(v, /^Simple Fracture$/i)), ...(both ? [ev(benefitIdOf(v, /Simple Fracture or Other Fracture/i))] : [])]; },
+    (v) => [call("final_answer", { subject_id: who.id, sentences: resultIds(v).slice(0, both ? 2 : 1).map((r) => ({ kind: "calculation", text: "-", result_id: r })), next_steps: contact ? ["contact:" + contact] : [] })],
+  ] });
+  // B11: wrong person. Daniel's printed Personal Accident sum is S$800,000 and Grace's S$600,000: each person's conversation uses only that person's own sum.
+  {
+    const diff = FX.CERT_P1.replace("S****411A\tLee Wei Ming, Daniel\tS$600,000", "S****411A\tLee Wei Ming, Daniel\tS$800,000");
+    const h4 = await startHarness(withCert(diff));
+    const run = async (who: { id: string; mention: string; msg: RegExp }, text: string) => {
+      installLoopModel(new ScriptedLoopModel([fracScript(who)]));
+      try { const a = await h4.send(text, {}); const s = await h4.savedAnswer(a.conversationId!); return { v: visible(s.answer), shown: visible(a), saved: visible(s.answer), answer: s.answer, trace: s.state.ragLoop.turns.at(-1) }; } finally { installLoopModel(null); }
+    };
+    const d = await run({ id: FX.M.daniel.id, mention: "daniel", msg: /daniel/i }, "daniel fell down and broke his arm");
+    check("B11a (wrong-person control) Daniel's conversation uses Daniel's own sum insured: 20% x S$800,000 = S$160,000; Grace's S$120,000 and S$600,000 appear nowhere", /S\$160,000/.test(d.v) && /S\$800,000/.test(d.v) && !/S\$120,000|S\$600,000/.test(d.v) && d.shown === d.saved, d.v);
+    const g = await run({ id: G, mention: "grace", msg: /grace/i }, "grace fell down and broke her arm");
+    check("B11b (wrong-person control) Grace's conversation in the same library keeps her own S$600,000 -> S$120,000 and never Daniel's S$160,000 / S$800,000", /S\$120,000/.test(g.v) && /S\$600,000/.test(g.v) && !/S\$160,000|S\$800,000/.test(g.v) && g.shown === g.saved, g.v);
+    check("B11c (wrong-person control) the fixed-limit alternative (25% x S$5,000 = S$1,250) is the same for both people and is not scaled by either person's sum", /S\$1,250/.test(d.v) && /S\$1,250/.test(g.v) && !/S\$200,000|S\$150,000/.test(d.v + g.v), d.v + "\n" + g.v);
+  }
+  // B12: wrong version. A later certificate for the household (S$750,000 for Grace) and the earlier one superseded: only the current one is used; the superseded figure is not cited.
+  {
+    const oldCert = FX.CERT_P1;
+    const newCert = FX.CERT_P1.replace(/As of 06\/10\/2022/g, "As of 06/10/2024").replace("S****822B\tTan Hui Min Grace\tS$600,000", "S****822B\tTan Hui Min Grace\tS$750,000");
+    const base = FX.DOCS.find((d) => d.key === "CERT")!;
+    const docs = FX.DOCS.map((d) => d.key === "CERT" ? { ...d, pages: { 1: oldCert }, superseded: true } : d);
+    docs.push({ ...base, key: "CERT_NEW", id: "7d000000-0000-4000-8000-000000000104", hash: "sha256:fx-cert-new", effective: "2024-10-06", filename: "Certificate of Insurance (2024).pdf", pages: { 1: newCert }, superseded: false } as any);
+    const h5 = await startHarness({ ...FX, DOCS: docs } as any);
+    installLoopModel(new ScriptedLoopModel([fracScript({ id: G, mention: "grace", msg: /grace/i }, "7d000000-0000-4000-8000-000000000104")]));
+    try {
+      const a = await h5.send("grace fell down and broke her arm", {}); const s = await h5.savedAnswer(a.conversationId!); const v = visible(s.answer);
+      check("B12 (wrong-version control) with the earlier certificate superseded, the current one's S$750,000 is the base (20% = S$150,000, dated 2024) and the superseded S$600,000 / S$120,000 appear nowhere", /S\$150,000/.test(v) && /S\$750,000/.test(v) && !/S\$120,000|S\$600,000/.test(v) && /2024/.test(v), v);
+    } finally { installLoopModel(null); }
+  }
+  // B13: wrong base. A library with the Product Summary only has no sum insured to take 20% of: nothing is taken from the other document's base or from a sum no document prints.
+  {
+    const only = { ...FX, DOCS: FX.DOCS.filter((d) => d.key === "PRODUCT_SUMMARY") } as any;
+    const h6 = await startHarness(only);
+    installLoopModel(new ScriptedLoopModel([fracScript({ id: G, mention: "grace", msg: /grace/i }, "", false)]));
+    try {
+      const a = await h6.send("grace fell down and broke her arm", {}); const s = await h6.savedAnswer(a.conversationId!); const v = visible(s.answer);
+      check("B13 (wrong-base control) the Product Summary alone: 25% x the printed S$5,000 limit only (S$1,250); never 25% of a sum insured (S$150,000) nor the certificate's S$120,000", /S\$1,250/.test(v) && !/S\$150,000|S\$120,000|S\$600,000/.test(v), v);
+    } catch (e) { check("B13 (wrong-base control) runs", false, String(e)); } finally { installLoopModel(null); }
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
