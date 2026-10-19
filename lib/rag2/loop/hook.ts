@@ -171,7 +171,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
   const selves = context.family.filter((p) => /^self$/i.test(p.relationship ?? ""));
   const speakerId = selves.length === 1 ? selves[0].id : null;
   const tPhase0 = Date.now();
-  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel(), personChoiceId: request.personChoiceId ?? null });
+  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel(), now: new Date().toISOString(), personChoiceId: request.personChoiceId ?? null });
   const { state, reply, trace } = out;
   const phases: Record<string, number> = { loopMs: Date.now() - tPhase0 };
   let tPhase = Date.now();
@@ -233,6 +233,8 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
       answer.computations = c.computations;
       if (c.calculations.length) answer.calculations = c.calculations;
       if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
+      // dj-live-3: the supported practical steps are part of the reply a clarifying question rides on (the page shows them ahead of the question).
+      answer.nextSteps = c.nextSteps;
     }
     answer.citations = await citationsFor(request.accountId, state, [...new Set([...(c?.evidenceIds ?? []), ...trace.evidenceChosen])]);
   } else if (unknownPeople.length && !resolvedSomeone) {

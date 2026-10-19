@@ -43,6 +43,7 @@ import type { BenefitRecord } from "../benefit-records";
 import { ACCIDENT_COND, NATURAL_CAT, accidentCondition, causeApplicability, amountMayBePresented, type BenefitApplicability } from "../benefit-applicability";
 import { applicabilityOf, CAUSE_ATTRIBUTE, reportedValue, valuesIn } from "../applicability";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
+import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, isContactStep } from "./answer-completeness";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -55,6 +56,8 @@ export type LoopInput = { accountId: string; message: string; state: RagLoopStat
   /** Who the chat was opened about (a member-scoped chat): the initial active subject -- never the speaker. */
   initialSubjectId?: string | null;
   model: LoopModel; env?: NodeJS.ProcessEnv; asOf?: string | null;
+  /** The request's clock (ISO), for reading the household's relative dates ("last week") as the range they are. Defaults to now. */
+  now?: string | null;
   /** Cancels the turn: an in-flight model call is aborted and no further call is made. */
   signal?: AbortSignal | null;
   /** Agent F (D12): the member the household tapped in answer to the pending person question (chat page choice). */
@@ -805,6 +808,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     }
     return out;
   };
+  // dj-live-3: the supported next step a clarifying question carries (written by the server, so it is not a tool parameter)
+  let serverAskSteps: unknown[] | null = null;
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
     if (call.name === "final_answer" || call.name === "ask_user") for (const x of ((a.sentences ?? a.statements) as Record<string, unknown>[] | undefined) ?? []) {
@@ -922,14 +927,15 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       if (spoken.some((x) => /\?/.test(String(x?.text ?? "")))) return { result: { ok: false, error: "statements and the preface state; they never ask. Ask exactly one question, in question" } };
       if (spoken.length && a.kind === "person" && Array.isArray(a.statements) && a.statements.length) return { result: { ok: false, error: "a person question is asked on its own (no statements)" } };
       let composed: Composed | null = null;
-      if (spoken.length) {
-        composed = composeFinal({ sentences: spoken, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+      const askSteps = Array.isArray(a.next_steps) ? a.next_steps : serverAskSteps;
+      if (spoken.length || (Array.isArray(askSteps) && askSteps.length)) {
+        composed = composeFinal({ sentences: spoken, nextSteps: askSteps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
         noteDrops(spoken, composed);
         if (composed.dropped.length && !askRefused) {
           askRefused = true;
           return { result: { ok: false, error: "not shown before the question: " + composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" (${d.reason})`).join("; ") + ". State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out." } };
         }
-        if (!composed.sentences.length) composed = null;
+        if (!composed.sentences.length && !composed.nextSteps.length) composed = null;
       }
       if (a.kind === "person") {
         // Round 6c (A3): ask who only when the answer depends on the person. A mention that means anyone in the
@@ -1536,6 +1542,50 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     }
     return extra.length || gap ? { extra, steps, gap, rows } : null;
   };
+  /** dj-live-3: the supported practical step for a household that asks what to do -- contact the insurer of the document that
+   * is THIS person's own (the same renderer and link check as every contact step; never another person's insurer, never a
+   * reference document's). Null when nothing supports it, when the reply already carries a contact step, or when the
+   * conversation already gave this one. */
+  const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
+    if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
+    if (Array.isArray(given) && given.some(isContactStep)) return null;
+    const asked = familiesOf(input.message);
+    if (!asked.size) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
+    if (!cert) return null;
+    const earlier = state.turns.flatMap((t) => t.toolCalls.filter((c) => c.ok && (c.name === "final_answer" || c.name === "ask_user") && !c.args?.by).flatMap((c) => (Array.isArray(c.args?.next_steps) ? (c.args.next_steps as unknown[]) : [])));
+    const insurer = (cert.policy.insurer ?? "").toLowerCase();
+    if (state.turns.some((t) => (t.adjusted ?? []).some((x) => x.includes(`[contact:${cert.policy.id}]`)))) return null;
+    if (earlier.some((x) => typeof x === "string" && (x === `contact:${cert.policy.id}` || (insurer && x.toLowerCase().includes(insurer))))) return null;
+    return `contact:${cert.policy.id}`;
+  };
+  /** dj-live-3: a question for the DATE of a death whose answer cannot change what the uploaded wording says (see
+   * answer-completeness.ts): the household gave the date as a range ("last week"), every date the documents print lies before
+   * it, and no cited clause counts a period from the death. Null for every other question -- a clause with a period, a printed
+   * date the range could precede, or no date given keeps the question. */
+  const deathDateAskUnneeded = async (args: Record<string, unknown>): Promise<{ reason: string; words: string; hadPrinted: boolean } | null> => {
+    const key = normalizeKey(args.fact_key);
+    if (!(/death|died|passing|passed_away/.test(key) && /date|day|when/.test(key)) || args.kind === "person" || args.requirement_id) return null;
+    const subject = String(args.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? "");
+    if (!subject || !Array.isArray(args.statements) || !args.statements.length) return null;
+    const now = input.now ? new Date(input.now) : new Date();
+    const range = dateNearEvent(userTexts, /\b(?:died|dies|passed away|passed on|death|deceased|passing)\b/i, now);
+    if (!range || range.exact) return null;
+    const question = String(args.question ?? "");
+    const clauses: string[] = [];
+    for (const id of (Array.isArray(args.because_evidence_ids) ? args.because_evidence_ids : []).map(String)) {
+      if (!state.evidence[id]) continue;
+      const sc = await scopeFor(id, `${question} ${input.message}`);
+      if (sc === "none") continue;
+      clauses.push(whyLine(state.evidence[id], `${question} ${key}`, sc));
+    }
+    if (!clauses.length) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const printed = recs.flatMap((r) => [r.asOf, r.policy.version.effectiveDate, r.policy.version.documentDate]).filter((d): d is string => !!d).map((d) => d.slice(0, 10));
+    const v = dateQuestionVerdict({ range, clauses, printed });
+    return v.needed ? null : { reason: v.reason, words: range.words, hadPrinted: printed.length > 0 };
+  };
   /** dj-live-1 F1: "is it separate from the death benefits?" -- a question about how two benefits relate. What the documents establish
    * is stated from the resolved records (each benefit, its document and page); whether both can be paid for the same event is
    * said as open unless a passage read this turn prints a stacking rule. Nothing is added or totalled, and the death benefits
@@ -1917,6 +1967,19 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
         // Reliable chat (contract C): statements of kind calculation / benefit_terms and contact next steps are written
         // by the server from the saved calculation or the resolved record; an id this turn did not produce is sent back.
+        // dj-live-3: a question for a death date that no uploaded wording turns on is not asked; what the turn already established
+        // is the answer (it keeps the household's "last week" as the range it is, and says so).
+        if (call.name === "ask_user") {
+          const un = await deathDateAskUnneeded(call.arguments).catch(() => null);
+          if (un) {
+            const subjU = String(call.arguments.subject_id ?? state.subjectId ?? "");
+            const note = { kind: "uncertainty", subject_id: subjU, evidence_ids: (Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []).filter((id) => state.evidence[id]), text: `You told me the death was \u201c${un.words}\u201d; I have not turned that into an exact day. ${un.hadPrinted ? "Every date printed in these documents is earlier than that" : "These documents print no date to compare it with"}, and no cited clause counts a period from the death, so a more exact date would not change what this wording says.` };
+            (trace.adjusted ??= []).push(`ask_user (${normalizeKey(call.arguments.fact_key)}): not asked -- ${un.reason}; answered with its statements`);
+            call.name = "final_answer";
+            call.arguments = { sentences: [...(call.arguments.statements as unknown[]), note], subject_id: call.arguments.subject_id ?? subjU, ...(call.arguments.next_steps ? { next_steps: call.arguments.next_steps } : {}) };
+          }
+        }
+        let askStepTmp = false;
         if (call.name === "final_answer" || call.name === "ask_user") {
           // PR #54 follow-up: the terms of a benefit whose own definition the household's report contradicts are left out
           // (it does not apply to what they described); the rest of the answer is unchanged.
@@ -1951,9 +2014,15 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
               if (dc.gap) deathGap = dc.gap;
             }
           }
+          // dj-live-3: a household that asks what to do gets the supported step with the reply, whichever way the turn ends -- a
+          // clarifying question never suppresses it (it is shown ahead of the question).
+          { const sjS = String(call.arguments.subject_id ?? state.subjectId ?? ""); const stepS = await contactStepFor(sjS, call.arguments.next_steps).catch(() => null);
+            serverAskSteps = null;
+            if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
           const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
+          if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
         if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
         if (call.name === "ask_user") {

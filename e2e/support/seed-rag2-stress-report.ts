@@ -14,6 +14,7 @@ import * as TAN_HH from "../../scripts/fixtures/reliable-chat/tan";
 import * as BOOKLET_HH from "../../scripts/fixtures/reliable-chat/booklet";
 import * as ACTUAL_HH from "../../scripts/fixtures/reliable-chat/actual-lib";
 import * as DEATH_HH from "../../scripts/fixtures/reliable-chat/death-journey";
+import * as DEATHVALUES_HH from "../../scripts/fixtures/reliable-chat/death-journey-actual-values";
 
 // V1.4: `--household binding` seeds the binding household (scripts/fixtures/rag2-binding) instead.
 // `--household binding-cells` seeds it with the certificate one cell per line (the s50 live runs' layout).
@@ -24,7 +25,7 @@ const LIVELIB = process.argv.includes("livelib") ? { ...LIVELIB_HH, DOCS: LIVELI
 // `--household pr50` seeds the PR #50 live-failure household (file names from PR50_NAMES).
 // `--household tan` seeds the reliable-chat second household (scripts/fixtures/reliable-chat/tan.ts).
 // `--household booklet` seeds the actual-library repair household (scripts/fixtures/reliable-chat/booklet.ts).
-const HH = process.argv.includes("deathjourney") ? DEATH_HH : process.argv.includes("actuallib") ? ACTUAL_HH : process.argv.includes("tan") ? TAN_HH : process.argv.includes("booklet") ? BOOKLET_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+const HH = process.argv.includes("deathvalues") ? DEATHVALUES_HH : process.argv.includes("deathjourney") ? DEATH_HH : process.argv.includes("actuallib") ? ACTUAL_HH : process.argv.includes("tan") ? TAN_HH : process.argv.includes("booklet") ? BOOKLET_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];

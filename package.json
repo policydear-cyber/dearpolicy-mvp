@@ -145,6 +145,7 @@
     "reliable-chat:death-journey-test": "node --import tsx scripts/reliable-chat-death-journey.ts",
     "reliable-chat:cache-compaction-test": "node --import tsx scripts/reliable-chat-cache-compaction.ts",
     "reliable-chat:death-live-repairs-test": "node --import tsx scripts/reliable-chat-death-live-repairs.ts",
+    "reliable-chat:dj-live-3-replay-test": "node --import tsx scripts/reliable-chat-dj-live-3-replay.ts",
     "reliable-chat:death-cause-test": "node --import tsx scripts/reliable-chat-death-cause.ts",
     "reliable-chat:death-applicability-test": "node --import tsx scripts/reliable-chat-death-applicability.ts",
     "reliable-chat:cases-test": "node --import tsx scripts/reliable-chat-cases.ts && HH=wong node --import tsx scripts/reliable-chat-cases.ts",
