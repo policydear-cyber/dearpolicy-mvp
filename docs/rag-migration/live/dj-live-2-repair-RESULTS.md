@@ -26,7 +26,7 @@ Commits on top of `2ea7b34`: `c783e73` (product: the withheld accident-only bene
 * `rag2:s52-replay`: 11/12 on this candidate AND on the baseline tree under the same environment, with identical output. The single failing assertion (S52A#0 "added" 3 vs 2) is pre-existing, not introduced. Assertions unchanged.
 * Injection proofs (prohibited output injected at the last route boundary; end-to-end suite must fail on that property): 13/13 proved (J1-J13), none crashed or incomplete.
 * Mutation run (disposable copies, ~25 s each; M12 residue found and repaired in an earlier crashed in-place run): detected 13 (M4, M6, M8-M14 singly; M1+M4, M3+M4, M6+M15; all-at-once), survived 6 (M1, M2, M3, M5, M7, M15: layered defences, individually not proven; their safety properties are covered by J1-J13), crashed 0. The run started before the final one-line property move in loop.ts (semantically identical); no mutation was rerun.
-* Not rerun on `f2fe6a6`: `next build` and the Playwright journeys (last passed on the preceding frozen tree); run them before any merge.
+* `next build` of `f2fe6a6` (clean copy, Node 22.22.2): passes. Browser journeys on that build, production-mode server, scripted model, no source edits: reliable-chat (tan) 3 passed, deathjourney 3 passed, actuallib 8 passed, booklet 6 passed (3 skipped by design). A first actuallib run failed 8/8 only because my runner seeded the wrong household ("unknown scenario"); rerun with the correct household passed.
 
 ### Pre-registered DI expectations (published before any spend)
 1. dated Term Life S$1,000,000 remains, with its supported terms;
@@ -41,3 +41,9 @@ No path exists in this environment to execute the app, database and model route 
 
 ### Status
 A confirmed repair on the synthetic scenario cannot be claimed; the offline evidence is scripted-model only. Recommendation: HOLD (no merge, no deploy).
+
+### Live-attempt environment check (Mon 2026-10-19 PM) - still NOT RUN
+* Restorable and restored in the workbench (sudo, apt, npm, nodejs.org, GitHub reachable): Node 22.22.2, 3 GB swap, PostgreSQL 17.11 + pgvector, the 1,972 files of `f2fe6a6` (each verified against its git blob sha; 20 large docs run records skipped), `npm ci`, `next build` (exit 0), local synthetic database schema. `wt-H` itself was gone (sandbox recreated) and was rebuilt at the same path.
+* Dedicated test connection reachable: `GET /v1/models/gpt-6-luna` through `proxy_execute(..., "openai")` returned the model object (no cost).
+* Blocked operation: starting the loopback relay (`start_relay(proxy_execute)` from `scripts/rag2-live/relay.py`, a 127.0.0.1:8787 listener inside the workbench kernel that forwards to the connection) was denied by the session's permission check (reason given: "Expose Local Services"). Not a missing dependency, denied installation, lost compute or inaccessible connection. No model call, no spend, no ledger append, no workaround attempted.
+* One action that unblocks it: allow that single loopback-only relay listener (127.0.0.1) for the run, then the DI attempt (`RAG2_LIVE_HOUSEHOLD=deathjourney --scenarios DI`, run id `dj-live-3`, cap US$0.01, preflight first) can proceed unchanged.
