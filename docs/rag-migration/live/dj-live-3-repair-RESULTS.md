@@ -11,14 +11,18 @@ Records head 3bb34f6; product code under test in the live run: f2fe6a6.
 DI's message: "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his
 insurance, and what should we do?" (dated Mon 19 Oct 2026).
 
-* "last week" is kept as a range, not one day: 6-18 Oct 2026 (the previous calendar week or the past seven days, the union of both
-  readings). It is never turned into an exact day.
+* "last week" is kept as the household said it, with the message's date (Mon 19 Oct 2026, Singapore time). No exact day is
+  invented. For comparison with printed dates only, a window is derived by a documented convention: Asia/Singapore calendar
+  days (a default, not read from the request); "last week" = 13 days before through 1 day before the message's local date
+  (6-18 Oct 2026), the widest of the two readings (previous calendar week, past seven days). Boundaries are tested
+  (15:59/16:00 UTC, 00:30 Singapore, year and month ends).
 * The uploaded wording on the cited passages: Group Term Life pays 100% of the Sum Assured and "Death must occur while the
   Insured Person is covered under the Scheme". No cited clause counts a period from the death. Every date the documents print
-  (certificate 6 Oct 2022, product summary dates) lies years before the range.
-* So under this wording the exact day cannot change what the documents say: the cover on the date of death is not established
-  either way, whatever day of that week it was. The answer says so and keeps the uncertainty ("the documents do not establish
-  whether Daniel was covered on the date he died").
+  (certificate 6 Oct 2022, product summary dates) is earlier than the window. That does NOT show the exact date cannot matter.
+* Two questions are kept apart. (a) Would another date question help answer this request? Not now: nothing the documents print
+  is compared with the date, so the question is DEFERRED (low value for this request), not declared irrelevant, and the answer
+  says it has not asked. (b) Is cover on the date of death established? No. A certificate dated 6 Oct 2022 is evidence of its
+  dated value only; the answer states that cover on the date of death is not established and that stays unresolved.
 * A date question is NOT banned. It stays when (a) no date was given, (b) a cited clause counts a period from the event
   ("within 365 days of the Accident", "cover ends ..."), or (c) a printed date is not before the start of the range.
   Rule: `lib/rag2/loop/answer-completeness.ts` (`dateQuestionVerdict`).
@@ -81,3 +85,13 @@ covered by the saved/reopened comparison in the replay test, not by a browser ru
 
 One DI attempt (`dj-live-4`), same message, new product SHA, cap at most US$0.01, US$0 preflight first, loopback relay as before,
 graded against the unchanged six pre-registered expectations. Needs your approval.
+
+
+## 9. Correction at the next checkpoint (relative-date wording, open-question layout)
+
+* The earlier statement that the exact date "cannot change what the documents say" is withdrawn. The rule now defers a low-value
+  date question while giving the dated Term Life information and the contact step, and keeps cover on the date of death
+  explicitly unresolved (`deferredDateNote`, `dateQuestionVerdict`, `HOUSEHOLD_TZ`).
+* New browser control `DIQ` (spec `reliable-chat-dj-live-3.spec.ts`): a genuinely useful question (365 days from an accident)
+  is visible alongside the supported Aldermoor contact step, above it, outside any collapsed section, and equal to the saved and
+  reopened answer. The original dj-live-2 and dj-live-3 grades are unchanged.

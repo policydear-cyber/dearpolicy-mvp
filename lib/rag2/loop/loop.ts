@@ -43,7 +43,7 @@ import type { BenefitRecord } from "../benefit-records";
 import { ACCIDENT_COND, NATURAL_CAT, accidentCondition, causeApplicability, amountMayBePresented, type BenefitApplicability } from "../benefit-applicability";
 import { applicabilityOf, CAUSE_ATTRIBUTE, reportedValue, valuesIn } from "../applicability";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
-import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, isContactStep } from "./answer-completeness";
+import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, deferredDateNote, isContactStep } from "./answer-completeness";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -1564,7 +1564,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
    * answer-completeness.ts): the household gave the date as a range ("last week"), every date the documents print lies before
    * it, and no cited clause counts a period from the death. Null for every other question -- a clause with a period, a printed
    * date the range could precede, or no date given keeps the question. */
-  const deathDateAskUnneeded = async (args: Record<string, unknown>): Promise<{ reason: string; words: string; hadPrinted: boolean } | null> => {
+  const deathDateAskUnneeded = async (args: Record<string, unknown>): Promise<{ reason: string; words: string; hadPrinted: boolean; now: Date } | null> => {
     const key = normalizeKey(args.fact_key);
     if (!(/death|died|passing|passed_away/.test(key) && /date|day|when/.test(key)) || args.kind === "person" || args.requirement_id) return null;
     const subject = String(args.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? "");
@@ -1584,7 +1584,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
     const printed = recs.flatMap((r) => [r.asOf, r.policy.version.effectiveDate, r.policy.version.documentDate]).filter((d): d is string => !!d).map((d) => d.slice(0, 10));
     const v = dateQuestionVerdict({ range, clauses, printed });
-    return v.needed ? null : { reason: v.reason, words: range.words, hadPrinted: printed.length > 0 };
+    return v.needed ? null : { reason: v.reason, words: range.words, hadPrinted: printed.length > 0, now };
   };
   /** dj-live-1 F1: "is it separate from the death benefits?" -- a question about how two benefits relate. What the documents establish
    * is stated from the resolved records (each benefit, its document and page); whether both can be paid for the same event is
@@ -1973,8 +1973,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const un = await deathDateAskUnneeded(call.arguments).catch(() => null);
           if (un) {
             const subjU = String(call.arguments.subject_id ?? state.subjectId ?? "");
-            const note = { kind: "uncertainty", subject_id: subjU, evidence_ids: (Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []).filter((id) => state.evidence[id]), text: `You told me the death was \u201c${un.words}\u201d; I have not turned that into an exact day. ${un.hadPrinted ? "Every date printed in these documents is earlier than that" : "These documents print no date to compare it with"}, and no cited clause counts a period from the death, so a more exact date would not change what this wording says.` };
-            (trace.adjusted ??= []).push(`ask_user (${normalizeKey(call.arguments.fact_key)}): not asked -- ${un.reason}; answered with its statements`);
+            const note = { kind: "uncertainty", subject_id: subjU, evidence_ids: (Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []).filter((id) => state.evidence[id]), text: deferredDateNote(un.words, un.now) };
+            (trace.adjusted ??= []).push(`ask_user (${normalizeKey(call.arguments.fact_key)}): deferred -- ${un.reason}; answered with its statements`);
             call.name = "final_answer";
             call.arguments = { sentences: [...(call.arguments.statements as unknown[]), note], subject_id: call.arguments.subject_id ?? subjU, ...(call.arguments.next_steps ? { next_steps: call.arguments.next_steps } : {}) };
           }

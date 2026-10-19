@@ -22,7 +22,7 @@ import * as DJR from "./fixtures/reliable-chat/death-journey-actual-values";
 import { D, G } from "./fixtures/reliable-chat/death-journey-conversations";
 import { recordedTurns, replayScript, runDir } from "./fixtures/rag2-live-replay";
 import { ScriptedLoopModel, type ScriptTurn, type ScriptView } from "@/lib/rag2/loop/scripted-model";
-import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, eventDateRange, isContactStep } from "@/lib/rag2/loop/answer-completeness";
+import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, deferredDateNote, eventDateRange, HOUSEHOLD_TZ, isContactStep, localDay, messageDateText } from "@/lib/rag2/loop/answer-completeness";
 import { uniqueSteps } from "@/components/next-steps";
 import type { FxDoc } from "./fixtures/rag2/household";
 
@@ -46,7 +46,7 @@ const benefitIdOf = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn]
   check("C1 …not a date belonging to another event in the message", dateNearEvent(["He had surgery yesterday. Daniel passed away."], /\b(?:died|passed away|death)\b/i, now) === null);
   const wording = "Group Term Life: Death or Terminal Illness 100% of Sum Assured Death must occur while the Insured Person is covered under the Scheme.";
   const none = dateQuestionVerdict({ range: lw, clauses: [wording], printed: ["2022-10-06", "2024-04-01"] });
-  check("C2 (negative control) a range after EVERY printed date and a clause with no period: the exact day is not needed", !none.needed && /would not change what the wording says/.test(none.reason), JSON.stringify(none));
+  check("C2 (negative control) a window after EVERY printed date and a clause with no period: the date question is DEFERRED (not declared irrelevant; cover stays unestablished)", !none.needed && /^deferred: /.test(none.reason) && /cover on that date stays unestablished/.test(none.reason) && !/cannot matter|would not change/.test(none.reason), JSON.stringify(none));
   check("C2 …the same when the documents print no date at all", !dateQuestionVerdict({ range: lw, clauses: [wording], printed: [] }).needed);
   const early = dateQuestionVerdict({ range: lw, clauses: [wording], printed: ["2026-10-10"] });
   check("C2 (positive control) a printed date inside the range: the exact day is needed", early.needed && /not before the start/.test(early.reason), JSON.stringify(early));
@@ -55,6 +55,18 @@ const benefitIdOf = (v: ScriptView, re: RegExp) => { for (const o of [...v.turn]
   check("C2 (positive control) a clause limiting cover in time (\"cover ends ...\"): needed", dateQuestionVerdict({ range: lw, clauses: ["Cover ends on the last day of the month in which the Insured Person leaves the Scheme."], printed: [] }).needed);
   check("C2 (positive control) no date given at all: needed", dateQuestionVerdict({ range: null, clauses: [wording], printed: ["2022-10-06"] }).needed);
   check("C2 an exact date the household already gave is not asked for again", !dateQuestionVerdict({ range: eventDateRange("on 6 October 2026", now), clauses: [wording], printed: [] }).needed);
+  // Convention + timezone boundaries (Asia/Singapore calendar days, UTC+08:00): the message's LOCAL day, not the UTC date.
+  check("C3 the zone is the documented default", HOUSEHOLD_TZ === "Asia/Singapore");
+  const iso1 = (d: Date) => d.toISOString().slice(0, 10);
+  check("C3 15:59 UTC on 19 Oct is still 19 Oct in Singapore; 16:00 UTC is 20 Oct", iso1(localDay(new Date("2026-10-19T15:59:59Z"))) === "2026-10-19" && iso1(localDay(new Date("2026-10-19T16:00:00Z"))) === "2026-10-20");
+  check("C3 00:30 Singapore on 19 Oct (16:30 UTC on 18 Oct) reads as 19 Oct, so \"last week\" ends 18 Oct (a UTC reading would end 17 Oct)", (() => { const r = eventDateRange("last week", new Date("2026-10-18T16:30:00Z"))!; return r.from === "2026-10-06" && r.to === "2026-10-18"; })());
+  check("C3 23:59 Singapore on 19 Oct (15:59 UTC) and 00:00 Singapore on 20 Oct (16:00 UTC) shift the whole window by one day", (() => { const a = eventDateRange("last week", new Date("2026-10-19T15:59:00Z"))!; const b = eventDateRange("last week", new Date("2026-10-19T16:00:00Z"))!; return a.from === "2026-10-06" && a.to === "2026-10-18" && b.from === "2026-10-07" && b.to === "2026-10-19"; })());
+  check("C3 \"last week\" is exactly 13 days back through 1 day back (13 days wide, 7+7 overlap union), never a single day", (() => { const r = eventDateRange("last week", now)!; return (Date.parse(r.to) - Date.parse(r.from)) / 864e5 === 12; })());
+  check("C3 year and month boundaries: 2 Jan 2027 \"last week\" starts 20 Dec 2026; \"last month\" on 5 Mar 2027 is 1 Feb..4 Mar", eventDateRange("last week", new Date("2027-01-02T04:00:00Z"))!.from === "2026-12-20" && (() => { const m = eventDateRange("last month", new Date("2027-03-05T04:00:00Z"))!; return m.from === "2027-02-01" && m.to === "2027-03-04"; })());
+  check("C3 \"yesterday\" at 00:30 Singapore on 1 Jan is 31 Dec", eventDateRange("yesterday", new Date("2026-12-31T16:30:00Z"))!.from === "2026-12-31");
+  check("C3 the message date is said back in Singapore terms", messageDateText(new Date("2026-10-18T16:30:00Z")) === "19 October 2026");
+  const note = deferredDateNote("last week", new Date("2026-10-19T06:06:00Z"));
+  check("C4 the deferral note keeps the household's words and the message date, invents no day, defers rather than dismisses, and keeps cover open", /\u201clast week\u201d/.test(note) && /19 October 2026/.test(note) && /Singapore time/.test(note) && /not turned that into an exact day/.test(note) && /not asked for one now/.test(note) && /Cover on the date of death is still not established/.test(note) && !/cannot matter|no difference|earlier than/.test(note) && !/\b2026-\d\d-\d\d\b/.test(note), note);
   check("C3 what-to-do detection: asked / not asked", asksWhatToDo("What would the family receive from his insurance, and what should we do?") && asksWhatToDo("What do we do now?") && asksWhatToDo("What are the next steps?") && asksWhatToDo("How do we claim?") && !asksWhatToDo("What does Daniel's Term Life pay?") && !asksWhatToDo("Is the hospital cash benefit separate from the death benefit?"));
   check("C3 a contact step is recognised in both of its forms", isContactStep("contact:abc") && isContactStep("Contact Aldermoor Life Ltd about the policy.") && !isContactStep("Keep the death certificate."));
 }
@@ -101,9 +113,9 @@ async function main() {
   const qs = (r.answer.questions ?? []) as any[];
   check("A4 at most one question; any question carries its reason", qs.length <= 1 && qs.every((q) => typeof q.why === "string" && q.why.length > 10), JSON.stringify(qs));
   check("A4 no question asks for an exact date the wording does not turn on", !qs.some((q) => /exact date of death/i.test(q.text ?? "")) && /“last week”/.test(v) && /not turned that into an exact day/.test(v), v);
-  check("A4 the household's \"last week\" is kept as said, and the reason no exact day is asked for is given", /You told me the death was “last week”; I have not turned that into an exact day\. Every date printed in these documents is earlier than that, and no cited clause counts a period from the death, so a more exact date would not change what this wording says\./.test(v), v);
+  check("A4 the household's \"last week\" is kept as said with the message date; the question is deferred (not dismissed) and cover on the date of death stays unestablished", /You told me the death was \u201clast week\u201d \(your message is dated \d{1,2} \w+ 2026, Singapore time\); I have not turned that into an exact day\. I have not asked for one now: no clause I read counts a period from the death, so it would not change what I can tell you from these documents today\. Cover on the date of death is still not established\./.test(v) && !/earlier than that|cannot matter/.test(v), v);
   check("A5 returned = saved = reopened, next steps included", r.shown === r.v && r.v === r.reopened && r.v.length > 0 && /Contact Aldermoor Life Ltd/.test(r.reopened), `shown:\n${r.shown}\nsaved:\n${r.v}\nreopened:\n${r.reopened}`);
-  check("A5 the saved record says what was done (trace) and the turn ended with a final answer", r.trace.outcome === "final_answer" && (r.trace.adjusted ?? []).some((x: string) => /ask_user \(death_date\): not asked -- “last week”/.test(x)) && (r.trace.adjusted ?? []).some((x: string) => /added the supported next step/.test(x)), JSON.stringify([r.trace.outcome, r.trace.adjusted]));
+  check("A5 the saved record says what was done (trace) and the turn ended with a final answer", r.trace.outcome === "final_answer" && (r.trace.adjusted ?? []).some((x: string) => /ask_user \(death_date\): deferred -- deferred: “last week”/.test(x)) && (r.trace.adjusted ?? []).some((x: string) => /added the supported next step/.test(x)), JSON.stringify([r.trace.outcome, r.trace.adjusted]));
   check("A5 the original live record is untouched: its saved answer still ends in the question (the baseline this replay is compared with)", /What was Daniel’s exact date of death\?/.test(rec.visible) && rec.questions.length === 1, rec.visible);
   if (process.env.SHOW) console.log("--- ORIGINAL LIVE ANSWER\n" + rec.visible);
 
@@ -141,7 +153,7 @@ async function main() {
       },
     ] };
     const b = await run("B1b period clause", U, [t]);
-    check("B1b (positive control) the same \"last week\" does NOT remove a question whose cited clause counts a period (365 days): it is still asked, with its reason", b.trace.outcome === "ask_user" && ((b.answer.questions ?? []) as any[]).length === 1 && !(b.trace.adjusted ?? []).some((x: string) => /not asked --/.test(x)), JSON.stringify([b.trace.outcome, b.trace.adjusted, b.answer.questions]));
+    check("B1b (positive control) the same \"last week\" does NOT remove a question whose cited clause counts a period (365 days): it is still asked, with its reason", b.trace.outcome === "ask_user" && ((b.answer.questions ?? []) as any[]).length === 1 && !(b.trace.adjusted ?? []).some((x: string) => /deferred --/.test(x)), JSON.stringify([b.trace.outcome, b.trace.adjusted, b.answer.questions]));
   }
 
   // B2 a direct amount lookup needs no contact step.
