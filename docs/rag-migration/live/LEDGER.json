@@ -731,6 +731,20 @@
       "refused": 0,
       "failed": 0,
       "note": "Death-journey live batch 2: D1, D2, D3, F1, DI once each; exact tested SHA 605f677 (cause/applicability repair); original death-v1 grader unchanged"
+    },
+    {
+      "run_id": "dj-live-3",
+      "tested_code_sha": "f2fe6a630243bd19ac4ccaec95df965aa8504dc5",
+      "request_sha": "f2fe6a630243bd19ac4ccaec95df965aa8504dc5",
+      "at": "2026-10-19T06:10:42.454Z",
+      "preflight": false,
+      "run_cap_usd": 0.01,
+      "spent_usd": 0.002098,
+      "reserved_unsettled_usd": 0,
+      "calls": 3,
+      "refused": 0,
+      "failed": 0,
+      "note": "Single DI attempt (death by illness applicability control) on the synthetic death-journey household, product code f2fe6a6 (later commits change docs only); original death-v1 grader unchanged; through the existing dedicated connection and the loopback relay (stopped after the run). Actual spend from the run's own budgetUsed. The open US/home/user/append.sh.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
     }
   ]
 }

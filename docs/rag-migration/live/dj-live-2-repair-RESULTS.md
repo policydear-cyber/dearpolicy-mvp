@@ -15,7 +15,7 @@ Original dj-live-2 responses and grades are unchanged. This file records only th
 
 ## Remaining failures
 - `rag2:s52-replay` 11/12 (extra split sentence): verified PRE-EXISTING; see the confirmation section below.
-- Live confirmation of DI: see the confirmation section below (BLOCKED). Recommendation: HOLD.
+- Live confirmation of DI: executed as dj-live-3 (see the last section): FAIL on the unchanged death-v1 grader. Recommendation: HOLD.
 
 ## Confirmation checkpoint (Mon 2026-10-19) - tested SHA `f2fe6a630243bd19ac4ccaec95df965aa8504dc5`
 
@@ -47,3 +47,32 @@ A confirmed repair on the synthetic scenario cannot be claimed; the offline evid
 * Dedicated test connection reachable: `GET /v1/models/gpt-6-luna` through `proxy_execute(..., "openai")` returned the model object (no cost).
 * Blocked operation: starting the loopback relay (`start_relay(proxy_execute)` from `scripts/rag2-live/relay.py`, a 127.0.0.1:8787 listener inside the workbench kernel that forwards to the connection) was denied by the session's permission check (reason given: "Expose Local Services"). Not a missing dependency, denied installation, lost compute or inaccessible connection. No model call, no spend, no ledger append, no workaround attempted.
 * One action that unblocks it: allow that single loopback-only relay listener (127.0.0.1) for the run, then the DI attempt (`RAG2_LIVE_HOUSEHOLD=deathjourney --scenarios DI`, run id `dj-live-3`, cap US$0.01, preflight first) can proceed unchanged.
+
+### Single DI real-model attempt `dj-live-3` - EXECUTED (Mon 2026-10-19, supersedes the BLOCKED notes above)
+Authorised by the owner once (cap US$0.01). Workbench rebuilt (Node 22.22.2, Postgres 17 + pgvector, `f2fe6a6` verified file by file against a tree manifest, `npm ci`, `next build`, schema); US$0 preflight `dj-live-3-pre` first (stopped at the first model call: 0 calls, US$0, relay saw 0 requests); then one live run, loopback relay on 127.0.0.1:8787 only, stopped afterwards. Provenance check passed (recorded SHA = checked-out code, 955 checked files). Not rerun.
+
+* Tested code: `f2fe6a630243bd19ac4ccaec95df965aa8504dc5` (branch commits after it change docs only). Model gpt-6-luna (provider-reported), prompt `rag2-loop-v18-applicability`, settings temperature 0, max_completion_tokens 2000, tool_choice required.
+* Spend: US$0.002098 actual (3 calls; 34,945 in / 634 out tokens), within the US$0.01 cap; worst-case reservations US$0.0025-0.0037 per call all admitted. LEDGER.json appended once (`dj-live-3`); exercise spent US$0.503311 of US$1; the US$0.15 trial reservation is untouched.
+* Latency: 65.5 s send-to-seen (model 64.7 s; upstream calls 19.1 s, 3.6 s, 41.9 s). Misses the 20 s product target; upstream/relay time, not app time (accepted in 0.4 s).
+* Tool path: resolve_person, note_facts, person_benefits, policies_for, search_passages x2, then ask_user (3 model steps).
+
+**Complete visible answer (returned = saved):**
+> The Group Insurance Product Summary says the Group Term Life death benefit is 100% of the Sum Assured, and death must occur while the insured person is covered; it defines the Sum Assured as the amount on the person's certificate. Daniel's certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; that dated amount does not confirm cover on his date of death. The uploaded documents do not establish whether Daniel was covered on the date he died or what amount applied then.
+> What was Daniel's exact date of death?
+
+**Source bindings:** e18 = Group Insurance Product Summary page 12, "Group Term Life: Death or Terminal Illness 100% of Sum Assured; Death must occur while the Insured Person is covered under the Scheme"; e1 = Daniel's certificate page 1, Group Term Life S$1,000,000, dated 6 October 2022. Reported facts saved: death last week; not an accident (user-reported).
+
+**Grade against the six pre-registered expectations**
+1. Dated Term Life S$1,000,000 with supported terms: PASS (I1).
+2. No accident-only PA amount presented as applicable: PASS (I2-I4; no S$600,000, no accidental-death or allowance figure).
+3. No contradictory "no amount" statement: PASS, with a caveat: the answer says the dated amount does not confirm cover on the date of death and that the documents do not establish what amount applied then. That is consistent with a dated printed amount, not a contradiction.
+4. Correct person, product, version, currency, citations: PASS (I7 Grace's figures not attached; correct certificate date; S$).
+5. Returned, saved and displayed answers agree: PASS for returned = saved (G6, whole answer). No browser rendering of this live answer was made; the browser journeys use the scripted model.
+6. No generic refusal or unnecessary question: **FAIL** - I6 (it asks for the exact date of death although the person and cause are known) and I5 (no visible next step to contact the person's own insurer, Aldermoor Life Ltd; the "what should we do" half of the request is unanswered).
+
+Original death-v1 grader, unchanged, on the saved record: **FAIL** (12 of 14 checks pass; I5 and I6 fail). The harness's own `scenario-check.ts` reports INCOMPLETE (it has no DI checks). Files: `dj-live-3-grade.json`, `dj-live-3-grade.md`, `RUN-dj-live-3-2026-10-19T06-06-20/`, preflight `RUN-dj-live-3-pre-2026-10-19T06-03-54/`.
+
+**What this shows.** The repaired boundary works on this attempt: the Term Life figure is present with its terms and dated, and no accident-only benefit leaks (the two defects of dj-live-2). A new failure surfaces after it: the model's terminal ask_user (step 3) asked for the date of death and the question gate accepted it, so the turn ended on a question with no claim steps. This is one attempt on one synthetic scenario, not consistency evidence, and not actual-library verification. Reconciliation note: the app's per-call usage rows were empty for this run (guard total US$0.002098, rows US$0), so spend rests on the guard and relay records.
+
+### Status (updated)
+Offline evidence is scripted-model only; the single live attempt is a FAIL on the unchanged grader (I5, I6). Recommendation: HOLD (no merge, no deploy). Next decisive check: decide whether a date-of-death question is legitimate when a dated certificate exists and the user gave a relative date ("last week"); if not, repair the question gate / ask_user acceptance and add the contact-insurer next step, then a new authorised attempt.
