@@ -1659,7 +1659,10 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         : c.cause === "illness"
           ? `For a death reported as an illness, ${parts.join(" and ")}, so ${they} ${rows.length > 1 ? "do" : "does"} not fit that report and no amount is given for ${rows.length > 1 ? "them" : "it"}.`
           : `${parts.join(" and ")}; ${rows.length > 1 ? "these apply" : "this applies"} only to a death caused by an Accident, and an accident is not assumed here.`;
-      out.push({ kind: "fact", subject_id: subj, text, evidence_ids: [...new Set(rows.map((r) => evidenceIdOf(state, r.source.evidence, "statement")))] });
+      // (a withheld benefit whose amount is NOT displayed cites the wording that prints its condition, never the person's row that carries
+      // the excluded amount: the sources list must not show an amount the answer withholds)
+      const evFor = (r: (typeof rows)[number]) => { const via = r.printed?.kind === "money" && !withAmount ? (accidentCondition(r, recs)?.via as typeof r | undefined) : undefined; return evidenceIdOf(state, (via?.source ?? r.source).evidence, "statement"); };
+      out.push({ kind: "fact", subject_id: subj, text, evidence_ids: [...new Set(rows.map(evFor))] });
     }
     return out;
   };
@@ -1931,7 +1934,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
               const sj2 = String(call.arguments.subject_id ?? state.subjectId ?? "");
               const left = given.filter((x) => !keep.includes(x)).map((x) => String(ctx.benefitRecords?.get(String(x?.benefit_id ?? ""))?.benefit ?? x?.benefit ?? ""));
               const cn0 = call.name === "final_answer" ? await causeNote(sj2, left, keep.map((x) => String(x?.text ?? ""))).catch(() => null) : null;
-              if (cn0?.length) { keep.push(...cn0); causeNoted = true; (trace.adjusted ??= []).push("final_answer: stated how each accident-only death benefit's printed condition relates to the reported cause of death"); }
+              if (cn0?.length) { for (const n of cn0) { const i = keep.findIndex((x) => x?.kind === "fact" && String(x.text ?? "") === n.text); if (i >= 0) keep.splice(i, 1); } /* (a model copy of a server-written note is replaced by the note: its own citation may be the withheld amount row) */ keep.push(...cn0); causeNoted = true; (trace.adjusted ??= []).push("final_answer: stated how each accident-only death benefit's printed condition relates to the reported cause of death"); }
               call.arguments = { ...call.arguments, [field]: keep };
             }
           }
@@ -1995,14 +1998,18 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             }
           }
         }
-        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences) && !causeNoted) {
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences)) {
+          const again0 = causeNoted;
           causeNoted = true;
           const subj3 = String(call.arguments.subject_id ?? state.subjectId ?? "");
-          const cn = await causeNote(subj3, r.terminal.composed.sentences.map((x) => x.text));
+          let cn = await causeNote(subj3, r.terminal.composed.sentences.map((x) => x.text));
+          // (a later final answer of the same turn that repeats a note the server already wrote -- a model copy cites the evidence IT chose,
+          // possibly the withheld amount's row -- is bound to the note's own evidence again; a note the answer does not repeat is not re-added)
+          if (again0 && cn) cn = cn.filter((n) => r.terminal?.kind === "final" && r.terminal.composed.sentences.some((x) => x.text === n.text && x.evidenceIds.join() !== (n.evidence_ids as string[]).join()));
           if (cn?.length) {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const steps5 = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : ((await deathCompletion(subj3, sentences, [], true).catch(() => null))?.steps ?? []);
-            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...cn], next_steps: steps5 } };
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences.filter((x) => !(x?.kind === "fact" && cn.some((n) => n.text === String(x.text ?? "")))), ...cn], next_steps: steps5 } };
             const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
             if (!p5.length) {
               await bindCitedFigures(again);

@@ -43,7 +43,7 @@ type RecLike = { benefit: string; policy: { product: string | null }; conditions
 
 /** The printed accident condition of this benefit and where it comes from: its own conditions, its name ("Accidental
  * Death", "Personal Accident"), or the same benefit (same name) printed with the condition in another document. */
-export function accidentCondition(r: RecLike, all: (RecLike | { benefit: string; conditions: string[] })[] = []): { wording: string; kind: ApplicabilitySource["kind"] } | null {
+export function accidentCondition(r: RecLike, all: (RecLike | { benefit: string; conditions: string[] })[] = []): { wording: string; kind: ApplicabilitySource["kind"]; /** the record whose own wording prints the condition (when it is not this record) */ via?: RecLike } | null {
   const c = r.conditions.find((x) => ACCIDENT_COND.test(x));
   if (c) return { wording: c, kind: "own_conditions" };
   if (/\baccident/i.test(r.benefit) || /\baccident/i.test(r.policy.product ?? "")) {
@@ -54,13 +54,13 @@ export function accidentCondition(r: RecLike, all: (RecLike | { benefit: string;
     if (r.applicability !== "person_row") return { wording: `${r.benefit} is an accident benefit`, kind: "benefit_name" };
     const prod = coreLabel(r.benefit);
     const w = all.find((o) => o !== r && o.conditions.some((x) => ACCIDENT_COND.test(x)) && prod.length >= 8 && coreLabel((o as RecLike).policy?.product ?? "").includes(prod));
-    return w ? { wording: w.conditions.find((x) => ACCIDENT_COND.test(x))!, kind: "product_wording" } : { wording: `${r.benefit} is a product heading; its documents print no cause condition for this amount`, kind: "product_heading_only" };
+    return w ? { wording: w.conditions.find((x) => ACCIDENT_COND.test(x))!, kind: "product_wording", via: w as RecLike } : { wording: `${r.benefit} is a product heading; its documents print no cause condition for this amount`, kind: "product_heading_only" };
   }
   // (the same benefit printed with the condition in another document -- a person's amount row ("Group Term Life") and the wording
   // that defines it ("Group Term Life: Death or Terminal Illness") are the same benefit)
   const mine = coreLabel(r.benefit);
   const sib = all.find((o) => o !== r && o.conditions.some((x) => ACCIDENT_COND.test(x)) && (coreLabel(o.benefit) === mine || (r.applicability === "person_row" && mine.length >= 8 && (coreLabel(o.benefit) + " ").startsWith(mine + " "))));
-  return sib ? { wording: sib.conditions.find((x) => ACCIDENT_COND.test(x))!, kind: "same_benefit_in_scheme_document" } : null;
+  return sib ? { wording: sib.conditions.find((x) => ACCIDENT_COND.test(x))!, kind: "same_benefit_in_scheme_document", via: sib as RecLike } : null;
 }
 
 /**

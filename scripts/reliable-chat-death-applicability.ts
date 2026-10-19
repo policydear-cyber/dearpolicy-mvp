@@ -50,13 +50,14 @@ async function run(label: string, turns: ScriptTurn[], fn: (out: { v: string; tr
       try { const r2 = await h.savedAnswer(a.conversationId!); reopened = visible(r2.answer); } catch { /* same */ }
       check(`${label}: returned = saved = reopened/displayed (turn ${out.length + 1})`, shown === saved && saved === reopened && shown.length > 0, `${shown}\n---\n${saved}`);
       if (process.env.SHOW) console.log(`--- ${label} turn ${out.length + 1}\n${saved}\n  adjusted: ${JSON.stringify(tr.adjusted ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => d.reason + " :: " + String(d.sentence).slice(0, 80)))}`);
+      if (process.env.SHOW) console.log(`  citations: ${JSON.stringify((s.answer.citations ?? []).map((x: any) => [x.policyName, x.pageStart, x.pageEnd, String(x.excerpt ?? "").slice(0, 70)]))}\n  questions: ${JSON.stringify((s.answer.questions ?? []).map((q: any) => q.text))}\n  figureBindings: ${JSON.stringify((s.answer.figureBindings ?? []).map((b: any) => [String(b.sentence ?? "").slice(0, 60), b.figure ?? b.value ?? null]))}`);
       out.push({ v: saved, tr, raw: s.answer });
     }
     fn(out);
   } finally { installLoopModel(null); await h.db.close(); }
 }
 const CERT = DJR.doc("CERT").id;
-const NOT_PROMISED = (v: string) => !/\b(?:will|would|shall) be paid\b|you will receive|is payable to you|you can claim/i.test(v);
+const NOT_PROMISED = (v: string) => !/\b(?:will|would|shall)\s+(?:be\s+paid|pay)\b|you will receive|is payable|you can claim|\b(?:was|were) (?:fully )?covered\b|\b(?:Daniel|he) (?:is|was) (?:eligible|entitled)\b/i.test(v);
 /** "no amount is given for X" while that amount is shown elsewhere */
 const CONTRADICTS = (v: string) => /no amount is given/i.test(v) && /600,000/.test(v);
 
@@ -100,12 +101,19 @@ const diTurn: ScriptTurn = { user: DI, steps: [
 (async () => {
   await run("A1 dj-live-2 DI replay", [diTurn], ([o]) => {
     check("A1 Term Life S$1,000,000 (Daniel's certificate, dated 6 October 2022) is stated", /Group Term Life/.test(o.v) && /1,000,000/.test(o.v) && /6 October 2022|06\/10\/2022/.test(o.v), o.v);
-    check("A1 the dated Term Life amount is not presented as confirmed cover or a payment", !/will be paid|you will receive|is payable to you|confirmed (?:cover|eligib)/i.test(o.v) && /(?:not confirmation|do not establish|does not establish|not established)/i.test(o.v), o.v);
+    check("A1 the dated Term Life amount is not presented as confirmed cover or a payment", NOT_PROMISED(o.v) && !/confirmed (?:cover|eligib)/i.test(o.v) && /(?:not confirmation|do not establish|does not establish|not established)/i.test(o.v), o.v);
     check("A1 no accident-only amount: no S$600,000 and no certificate line for Personal Accident", !/600,000/.test(o.v) && !/lists Daniel's Group Personal Accident/i.test(o.v), o.v);
     check("A1 no 'schedule's percentages' line for a death question", !/schedule's percentages/i.test(o.v), o.v);
     check("A1 never 'no amount is given' while that amount is shown", !CONTRADICTS(o.v), o.v);
+    check("A1 never 'no amount is given' for Term Life, whose dated amount is shown", !/no amount is (?:given|printed|shown|stated) (?:for|under) (?:the )?(?:Group )?Term Life/i.test(o.v) && !/(?:Group )?Term Life[^.\n]{0,60}no amount is (?:given|printed|shown|stated)/i.test(o.v), o.v);
+    check("A1 the S$1,000,000 is bound to Term Life only (never to a Personal Accident benefit)", !/Personal Accident[^.\n]{0,80}1,000,000/i.test(o.v) && /Term Life[^.\n]{0,40}S\$1,000,000/.test(o.v), o.v);
     check("A1 the accident-only benefits are still named with their reason", /Personal Accident/.test(o.v) && /accident-only/i.test(o.v) && /not fit that report/.test(o.v), o.v);
     check("A1 a visible next step and nothing promised", /Contact Aldermoor Life Ltd/.test(o.v) && NOT_PROMISED(o.v), o.v);
+    // pre-registered DI expectations on the SOURCES list and the rest of what the browser shows
+    const cits = (o.raw.citations ?? []).map((x: any) => `${x.policyName} p${x.pageStart}: ${x.excerpt ?? ""}`);
+    check("A1 the sources show Daniel's dated Term Life row and the Term Life wording", cits.some((c: string) => /Certificate p1: .*1,000,000/.test(c)) && cits.some((c: string) => /Group Term Life/.test(c)), cits.join("\n"));
+    check("A1 no source shows the accident-only Personal Accident amount (the withheld S$600,000 row)", !cits.some((c: string) => /600,000/.test(c)), cits.join("\n"));
+    check("A1 no unnecessary question and no generic refusal; only Daniel, only S$", (o.raw.questions ?? []).length === 0 && !/I (?:can(?:no|')t|could not) (?:find|answer|help)|unable to (?:find|answer)/i.test(o.v) && !/Grace|US\$|\$\s?200,000/.test(o.v), o.v);
   });
 
   // ---- shared moves ----
