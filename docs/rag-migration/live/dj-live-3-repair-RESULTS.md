@@ -12,10 +12,13 @@ DI's message: "Daniel passed away last week after a long illness - it was not an
 insurance, and what should we do?" (dated Mon 19 Oct 2026).
 
 * "last week" is kept as the household said it, with the message's date (Mon 19 Oct 2026, Singapore time). No exact day is
-  invented. For comparison with printed dates only, a window is derived by a documented convention: Asia/Singapore calendar
-  days (a default, not read from the request); "last week" = 13 days before through 1 day before the message's local date
-  (6-18 Oct 2026), the widest of the two readings (previous calendar week, past seven days). Boundaries are tested
-  (15:59/16:00 UTC, 00:30 Singapore, year and month ends).
+  invented, and the original words are always shown back to the household.
+* The 6-18 Oct 2026 window is an **application-defined uncertainty envelope, not a standard calendar-week interpretation**.
+  Convention: Asia/Singapore calendar days (a default, not read from the request); "last week" = 13 days back through 1 day
+  back from the message's local date, deliberately wider than either usual reading (previous calendar week, past seven days)
+  so it can only err towards asking. It is used for one thing only: deciding whether a date the documents print is clearly
+  before it. It **never establishes eligibility, calculates a deadline, or confirms cover**, and it is never shown to the
+  household as a date. Boundaries are tested (15:59/16:00 UTC, 00:30 Singapore, year and month ends).
 * The uploaded wording on the cited passages: Group Term Life pays 100% of the Sum Assured and "Death must occur while the
   Insured Person is covered under the Scheme". No cited clause counts a period from the death. Every date the documents print
   (certificate 6 Oct 2022, product summary dates) is earlier than the window. That does NOT show the exact date cannot matter.
