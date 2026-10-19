@@ -15,6 +15,7 @@ import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
 import { loadDocs, loadLinks, type DocRow, type LinkRow } from "../store";
+import { cellDate } from "../tables";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -119,7 +120,11 @@ export function renderCalculation(resultId: string, d: Deps): string | null {
   if (c.kind === "conditional_illustration" && c.calculator === "lump_sum" && c.amount != null) {
     const ops = (c.record?.operands ?? []).filter((o) => o.source === "document");
     const pct = ops.find((o) => o.unit === "percent"), base = ops.find((o) => o.unit === "money");
-    const baseText = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)} (${pretty(base.label, [...(d.ctx.benefitRecords?.values() ?? [])].map((r) => r.policy.product))})` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
+    // A sum insured a certificate prints "As of 06/10/2022" is that date's amount: the date is said with it, read from the very
+    // passage that binds the amount (production fracture conversation, 19 Oct 2026: the S$600,000 base was shown undated).
+    const baseAsOf = base?.role === "sum_insured" ? cellDate(/\bas\s+(?:of|at)\s+(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})/i.exec(String((base as { binding?: { passage?: string } }).binding?.passage ?? ""))?.[1] ?? "") : null;
+    const baseDate = baseAsOf ? `, printed as of ${new Date(baseAsOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}, not confirmation of cover on a later date` : "";
+    const baseText = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)} (${pretty(base.label, [...(d.ctx.benefitRecords?.values() ?? [])].map((r) => r.policy.product))}${baseDate})` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
     // (the household's own words stay in the record as provenance; the statement says the resolved case, never a quotation)
     const said = "";
     const named = /\b(?:benefit|allowance|cover|compensation)\b/i.test(c.benefit) ? c.benefit : `${c.benefit} benefit`;

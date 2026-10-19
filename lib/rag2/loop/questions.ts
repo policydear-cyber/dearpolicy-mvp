@@ -75,6 +75,28 @@ export function relevantEvidence(question: string, factKey: string, evidenceText
 
 
 /**
+ * Production fracture conversation (19 Oct 2026): "Was Charmaine's fracture confirmed by X-ray and certified by a
+ * registered medical practitioner?" passed relevantEvidence because ONE word ("fracture") was shared with the cited
+ * clause, although neither cited page prints an X-ray or a practitioner's certificate for that benefit. A question that
+ * asks for a requirement is justified only by wording that prints it. Returns the asked words the cited wording does not
+ * contain when the question is mostly such words (a long question of which under a third is in the cited wording);
+ * null when the wording supports the question or the question is too short to judge (never refuses a short question).
+ */
+export function unprintedAsk(question: string, factKey: string, evidenceTexts: string[], names: string[] = []): string[] | null {
+  const c = factConcept(factKey);
+  if (VOCAB[c.concept]) return null; // admission / discharge / cause / bill / hospital facts have their own vocabulary check
+  // Only a question asserting a condition for a yes/no answer ("Was it confirmed by ...?"): one choosing among printed cases
+  // ("Which bone ...?") is answered by the printed list.
+  if (/^\s*(?:which|what|when|where|who|whom|whose|how|why|on\s+what|in\s+which)\b/i.test(question)) return null;
+  const nameWords = new Set(names.flatMap((n) => contentWords(n)));
+  const asked = [...new Set(contentWords(question).filter((w) => !GENERIC.has(w) && !nameWords.has(w)))];
+  if (asked.length < 4) return null;
+  const have = new Set(contentWords(evidenceTexts.join("\n")));
+  const missing = asked.filter((w) => !have.has(w));
+  return (asked.length - missing.length) / asked.length < 1 / 3 ? missing : null;
+}
+
+/**
  * Agent P (task 5): the words of the household's message that already give the fact a question would ask for (null
  * when the message does not give it). Admission / discharge: the keyword with a date or time in the same clause;
  * a bill: a money figure next to bill / invoice / cost wording; how it happened: an accident mechanism in their words.

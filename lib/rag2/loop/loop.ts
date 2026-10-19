@@ -34,7 +34,7 @@ import { createToolContext, RAG_TOOLS, recordsFor, runTool, validateArgs, type T
 import { loopLimits } from "@/lib/ai/usage";
 import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom, sameFactValue } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
-import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage } from "./questions";
+import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage, unprintedAsk } from "./questions";
 import { internalIdsIn } from "./statements";
 import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
@@ -1069,6 +1069,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
+      // Production fracture conversation (19 Oct 2026): a question asking for a REQUIREMENT ("confirmed by X-ray and certified by a
+      // registered medical practitioner") is justified only by cited wording that prints it. Sharing one word with the clause
+      // ("fracture") is not enough. When the answer already stands on its statements, the unsupported question is not asked:
+      // what the documents print is the answer (the household can still be asked something the wording turns on).
+      if (!calcItem && !req) {
+        const unprinted = unprintedAsk(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name));
+        if (unprinted) {
+          if (Array.isArray(a.statements) && (a.statements as unknown[]).length) {
+            const fin = action({ id: call.id, name: "final_answer", arguments: { sentences: a.statements, subject_id: a.subject_id ?? null, ...(Array.isArray(a.next_steps) ? { next_steps: a.next_steps } : serverAskSteps ? { next_steps: serverAskSteps } : {}) } });
+            if (fin.terminal) { (trace.adjusted ??= []).push(`ask_user (${key}): not asked -- the cited wording (${because.join(", ")}) does not print what it asks (${unprinted.join(", ")}); answered with its statements instead`); return fin; }
+          }
+          noteFailure("ask_user");
+          return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not print what this question asks (${unprinted.join(", ")}): state what the documents print as statements and end with final_answer; ask the household only for a detail the cited wording turns on` } };
+        }
+      }
       // Death-journey release: the cited "why" is the sentence of the benefit's OWN section. A passage printed under another
       // benefit's heading (Total and Permanent Dismemberment for a fracture question) is not cited for this benefit, and where
       // a passage spans two sections only the section naming the event's benefit is read.
