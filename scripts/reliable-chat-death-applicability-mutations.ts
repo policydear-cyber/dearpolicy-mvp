@@ -1,7 +1,9 @@
 /**
  * Mutation proof for scripts/reliable-chat-death-applicability.ts (dj-live-2 repair): each repair is disabled in turn by a one-line source
- * edit (applied to the working tree, then restored byte for byte), and the applicability suite must FAIL. A repair whose removal leaves the
- * suite green is not proved. The final row disables all of them at once (the pre-repair behaviour at the dj-live-2 boundary).
+ * edit applied to a DISPOSABLE COPY of the repository (never to the release tree), and the applicability suite must FAIL.
+ * Outcomes: DETECTED (suite failed with at least one FAIL check and ran to its completion line), SURVIVED (suite green: the repair is not
+ * proved by itself), CRASHED (edit text missing, spawn error, timeout, signal, or no completion line: never a pass).
+ * Layered defences may survive alone; their pairs and ALL are run too. The temporary copy is removed in a finally block and on exit/signals.
  *   node --import tsx scripts/reliable-chat-death-applicability-mutations.ts            (about 25 seconds per mutation)
  *   MUT=M3,M5 node --import tsx scripts/reliable-chat-death-applicability-mutations.ts     (one mutation)
  */
@@ -31,32 +33,76 @@ export const MUTATIONS: { id: string; repair: string; edits: Edit[] }[] = [
 const pair = (a: string, b: string) => ({ id: `${a}+${b}`, repair: `${a} and ${b} together (layered defences)`, edits: [...MUTATIONS.find((m) => m.id === a)!.edits, ...MUTATIONS.find((m) => m.id === b)!.edits] });
 MUTATIONS.push(pair("M1", "M4"), pair("M3", "M4"), pair("M6", "M15"));
 
+
+import { mkdtempSync, rmSync, cpSync, symlinkSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 const only = process.env.MUT;
-const run = () => spawnSync("node", ["--import", "tsx", "scripts/reliable-chat-death-applicability.ts"], { encoding: "utf8", env: { ...process.env, SHOW: "" }, maxBuffer: 64 * 1024 * 1024 });
-const failures = (out: string) => out.split("\n").filter((l) => l.startsWith("FAIL ")).map((l) => l.slice(5, 90));
-const apply = (edits: Edit[]) => {
-  const orig = new Map<string, string>();
-  for (const e of edits) {
-    const cur = orig.get(e.file) ?? readFileSync(e.file, "utf8");
-    if (!orig.has(e.file)) orig.set(e.file, cur);
-    const at = readFileSync(e.file, "utf8");
-    if (at.split(e.from).length !== 2) throw new Error(`mutation text must occur exactly once in ${e.file}: ${e.from.slice(0, 70)}`);
-    writeFileSync(e.file, at.replace(e.from, () => e.to));
-  }
-  return () => { for (const [f, t] of orig) writeFileSync(f, t); };
+const TIMEOUT_MS = Number(process.env.MUT_TIMEOUT_MS ?? 240000);
+const SRC = process.cwd();
+const tmpDirs = new Set<string>();
+const cleanup = () => { for (const d of tmpDirs) { try { rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } tmpDirs.delete(d); } };
+process.on("exit", cleanup);
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => { cleanup(); process.exit(130); });
+
+const copyRepo = () => {
+  const dir = mkdtempSync(join(tmpdir(), "mut-"));
+  tmpDirs.add(dir);
+  cpSync(SRC, dir, { recursive: true, filter: (f) => !/(^|\/)(node_modules|\.next|\.git|test-results|playwright-report)(\/|$)/.test(f.slice(SRC.length)) });
+  symlinkSync(join(SRC, "node_modules"), join(dir, "node_modules"));
+  return dir;
 };
-let bad = 0;
-const rows: string[] = [];
-const todo = [...MUTATIONS.filter((m) => !only || only.split(",").includes(m.id)), ...(only ? [] : [{ id: "ALL", repair: "all of the above at once", edits: MUTATIONS.flatMap((m) => m.edits) }])];
-for (const m of todo) {
-  const restore = apply(m.edits);
-  let out = "", code = 0;
-  try { const r = run(); out = r.stdout + r.stderr; code = r.status ?? 1; } finally { restore(); }
-  const f = failures(out);
-  const proved = code !== 0 && f.length > 0;
-  if (!proved) bad++;
-  rows.push(`${proved ? "PROVED " : "NOT PROVED"} ${m.id} (${m.repair}) -> ${f.length} failing check(s)${f.length ? ": " + f.slice(0, 4).join(" | ") : ""}`);
-  console.log(rows.at(-1));
-}
-console.log(bad ? `\n${bad} mutation(s) not proved` : "\nevery repair is proved: disabling it fails the suite");
-process.exitCode = bad ? 1 : 0;
+const applyIn = (dir: string, edits: Edit[]): string | null => {
+  for (const e of edits) {
+    const f = join(dir, e.file);
+    const at = readFileSync(f, "utf8");
+    if (at.split(e.from).length !== 2) return `mutation text must occur exactly once in ${e.file}: ${e.from.slice(0, 60)}`;
+    writeFileSync(f, at.replace(e.from, () => e.to));
+  }
+  return null;
+};
+type Result = { id: string; repair: string; outcome: "DETECTED" | "SURVIVED" | "CRASHED"; note: string };
+const runIn = (dir: string, edits: Edit[]): { outcome: Result["outcome"]; note: string } => {
+  const bad = applyIn(dir, edits);
+  if (bad) return { outcome: "CRASHED", note: bad };
+  const r = spawnSync("node", ["--import", "tsx", "scripts/reliable-chat-death-applicability.ts"], { cwd: dir, encoding: "utf8", env: { ...process.env, SHOW: "" }, maxBuffer: 64 * 1024 * 1024, timeout: TIMEOUT_MS, killSignal: "SIGKILL" });
+  const out = (r.stdout ?? "") + (r.stderr ?? "");
+  if (r.error) return { outcome: "CRASHED", note: `spawn error: ${r.error.message}` };
+  if (r.signal) return { outcome: "CRASHED", note: `killed by ${r.signal} (timeout ${TIMEOUT_MS}ms?)` };
+  const done = /^all passed$/m.test(out) || /^\d+ FAILED$/m.test(out);
+  if (!done) return { outcome: "CRASHED", note: `no completion line (exit ${r.status})` };
+  const fails = out.split("\n").filter((l) => l.startsWith("FAIL ")).map((l) => l.slice(5, 90));
+  if (r.status !== 0 && fails.length) return { outcome: "DETECTED", note: `${fails.length} failing check(s): ${fails.slice(0, 3).join(" | ")}` };
+  if (r.status === 0 && !fails.length) return { outcome: "SURVIVED", note: "suite stayed green" };
+  return { outcome: "CRASHED", note: `inconsistent result (exit ${r.status}, ${fails.length} FAIL lines)` };
+};
+
+const results: Result[] = [];
+const base = MUTATIONS.filter((m) => !m.id.includes("+"));
+const todo = [...MUTATIONS.filter((m) => !only || only.split(",").includes(m.id)), ...(only && !only.split(",").includes("ALL") ? [] : [{ id: "ALL", repair: "all of the above at once", edits: base.flatMap((m) => m.edits) }])];
+const treeDigest = () => spawnSync("sh", ["-c", "find lib scripts -type f | sort | xargs git hash-object 2>/dev/null | sha1sum"], { cwd: SRC, encoding: "utf8" }).stdout.trim();
+const before = treeDigest();
+try {
+  // control: the unmodified copy must pass to completion, otherwise nothing below means anything
+  const ctl = copyRepo();
+  try {
+    const r = spawnSync("node", ["--import", "tsx", "scripts/reliable-chat-death-applicability.ts"], { cwd: ctl, encoding: "utf8", env: { ...process.env, SHOW: "" }, maxBuffer: 64 * 1024 * 1024, timeout: TIMEOUT_MS, killSignal: "SIGKILL" });
+    if (r.status !== 0 || !/^all passed$/m.test(r.stdout ?? "")) { console.log("CONTROL FAILED: the unmodified copy does not pass; no mutation result is meaningful"); process.exitCode = 2; }
+    else console.log("CONTROL ok: the unmodified copy passes");
+  } finally { rmSync(ctl, { recursive: true, force: true }); tmpDirs.delete(ctl); }
+  if (!process.exitCode) for (const m of todo) {
+    const dir = copyRepo();
+    let res: { outcome: Result["outcome"]; note: string };
+    try { res = runIn(dir, m.edits); }
+    catch (e) { res = { outcome: "CRASHED", note: `runner error: ${(e as Error).message}` }; }
+    finally { rmSync(dir, { recursive: true, force: true }); tmpDirs.delete(dir); }
+    results.push({ id: m.id, repair: m.repair, ...res });
+    console.log(`${res.outcome.padEnd(8)} ${m.id} (${m.repair}) -> ${res.note}`);
+  }
+} finally { cleanup(); }
+const after = treeDigest();
+console.log(`\nrelease tree lib+scripts digest ${before === after ? "UNCHANGED" : "CHANGED (!)"}: ${before.slice(0, 12)} -> ${after.slice(0, 12)}`);
+const n = (o: string) => results.filter((r) => r.outcome === o).length;
+console.log(`detected ${n("DETECTED")}, survived ${n("SURVIVED")} (${results.filter((r) => r.outcome === "SURVIVED").map((r) => r.id).join(",") || "-"}), crashed ${n("CRASHED")} (${results.filter((r) => r.outcome === "CRASHED").map((r) => r.id).join(",") || "-"})`);
+if (before !== after || n("CRASHED") || process.exitCode === 2) process.exitCode = process.exitCode || 1;
