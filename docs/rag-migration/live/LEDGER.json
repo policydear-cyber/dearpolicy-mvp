@@ -745,6 +745,20 @@
       "refused": 0,
       "failed": 0,
       "note": "Single DI attempt (death by illness applicability control) on the synthetic death-journey household, product code f2fe6a6 (later commits change docs only); original death-v1 grader unchanged; through the existing dedicated connection and the loopback relay (stopped after the run). Actual spend from the run's own budgetUsed. The open US/home/user/append.sh.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
+    },
+    {
+      "run_id": "dj-live-4",
+      "tested_code_sha": "654121fbafe57df5211eb020c26e99115f3d1278",
+      "request_sha": "654121fbafe57df5211eb020c26e99115f3d1278",
+      "at": "2026-10-19T08:04:38.502Z",
+      "preflight": false,
+      "run_cap_usd": 0.01,
+      "spent_usd": 0.002148,
+      "reserved_unsettled_usd": 0,
+      "calls": 3,
+      "refused": 0,
+      "failed": 0,
+      "note": "Single DI confirmation (death by illness applicability control) on the synthetic death-journey household, product code 654121f; original dj-live-2 and dj-live-3 grades unchanged; existing dedicated connection and loopback relay (stopped after the run). US$0 preflight first (RUN-dj-live-4-pre). Actual spend from the run budgetUsed. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
     }
   ]
 }

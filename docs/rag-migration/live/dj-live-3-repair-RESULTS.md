@@ -95,3 +95,7 @@ graded against the unchanged six pre-registered expectations. Needs your approva
 * New browser control `DIQ` (spec `reliable-chat-dj-live-3.spec.ts`): a genuinely useful question (365 days from an accident)
   is visible alongside the supported Aldermoor contact step, above it, outside any collapsed section, and equal to the saved and
   reopened answer. The original dj-live-2 and dj-live-3 grades are unchanged.
+
+## 10. dj-live-4 (one authorised confirmation, 19 Oct 2026)
+
+Code 654121f, US$0 preflight then one live DI attempt: death-v1 PASS, 3 calls, US$0.0021476, 31.8 s, no question, dated Term Life, no PA amount, Aldermoor contact step. Full answer and bar in `dj-live-4-grade.md`; ledger appended once; relay stopped; no rerun, merge or deployment. The deferral note was not triggered live (the model did not ask); it remains offline-verified.
