@@ -1,0 +1,16 @@
+{
+  "runId": "fx-live-1",
+  "testedCodeSha": "e04cb61d6816c15e4ff7dce30027525bddcb2c00",
+  "model": "gpt-6-luna",
+  "preflight": false,
+  "budgetUsed": {
+    "spentUsd": 0.055757,
+    "reservedUsd": 0,
+    "calls": 55,
+    "refusals": 0,
+    "failed": 0
+  },
+  "estimatedCostUsd": 0.023623,
+  "upperBoundCostUsd": 0.055757,
+  "note": "Summary record. spentUsd is the upper bound without the cached-input discount (the figure booked in LEDGER.json); the estimate with the discount is estimatedCostUsd. Neither is provider-billed. The full record is README.md, report.md and responses.jsonl in this folder; requests.jsonl (2582120 bytes, sha256 058e1e7c62aa735b...) is not stored in Git."
+}
