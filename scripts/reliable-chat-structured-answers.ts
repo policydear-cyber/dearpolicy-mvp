@@ -233,7 +233,7 @@ async function main() {
     // another person: Grace's question never uses Daniel's rows (checked in J6); a neighbouring section: the PA
     // summary's Disappearance / Ambulance terms never enter a fracture answer
     check("N2 neighbouring section: no Disappearance / Ambulance / Mobility terms in a fracture answer", !/Disappearance|ambulance|Mobility/i.test(j1.v + j2.v + j4.v), j1.v);
-    check("N3 currency: the PA summary's bare $500 / $10,000 never appear as S$ in these answers", !/S\$500\b|S\$10,000/.test(j1.v + j4.v + j5.v), j5.v);
+    check("N3 currency: the PA summary's bare $500 / $10,000 never appear as S$ in these answers", !/S\$500(?![\d,])|S\$10,000/.test(j1.v + j4.v + j5.v), j5.v);
   }
 
   // ===== grader v8 controls: the scripted (correct) journeys pass; known-bad answers fail on the intended check

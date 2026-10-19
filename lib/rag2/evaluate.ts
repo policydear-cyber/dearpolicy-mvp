@@ -40,7 +40,7 @@ function percentOperand(row: ScheduleRow, subjectId: string): { operand: TableVa
 export async function personAmountValue(ctx: ToolContext, b: PersonBenefit, memberName: string, subjectId: string): Promise<string | null> {
   if (b.applicability !== "person_row" || b.printed.kind !== "money") return null;
   const key = `${b.policy.id}|${subjectId}|${b.benefit.label.toLowerCase()}`;
-  const known = ctx.personRows?.get(key); if (known) return known;
+  const known = ctx.personRows?.get(key); if (known && ctx.values.has(known)) return known;
   const r0 = await selectTableValue({ accountId: ctx.accountId, policyId: b.policy.id, benefit: b.benefit.label, subject: { memberId: subjectId }, want: "amount", asOf: ctx.asOf }).catch(() => null);
   const sel = r0?.status === "ok" && r0.valueKind === "money" && r0.cents === b.printed.cents && r0.currency === b.printed.currency ? r0 : selectedFromBenefit(b, memberName);
   if (!sel || sel.valueKind !== "money") return null;

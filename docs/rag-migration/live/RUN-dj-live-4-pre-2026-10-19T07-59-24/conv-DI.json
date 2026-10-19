@@ -1,0 +1,319 @@
+{
+  "scenario": "DI",
+  "title": "death journey: death by illness (applicability control)",
+  "conversationId": "2a6e0549-da13-4034-b7ca-a15428ef9b0c",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+      "nextSteps": [],
+      "timings": {
+        "acceptedMs": 436,
+        "firstAssistantPersistedMs": 628,
+        "answerSeenMs": 792,
+        "modelMs": 0,
+        "upstreamMs": 0,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 1,
+          "at": "2026-10-19T07:59:27.029Z",
+          "estInputTokens": 15370,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 13,
+          "messages": 2,
+          "systemPromptSha256": "10d8a4d144dafaa4d3b6309e916f80de997f90cb50e89c7d214b680ad7021674",
+          "toolsSha256": "98a759ed14a3c9594d1a7bd30efbbb1f49295d01dd5eb6d04587c4e07ffc71d6",
+          "chargedUsd": 0,
+          "ok": false,
+          "refused": "preflight: no model call made"
+        }
+      ],
+      "httpCalls": [],
+      "modelExecutions": [],
+      "relay": [],
+      "tokens": {
+        "input": 0,
+        "output": 0
+      },
+      "costUsd": {
+        "charged": 0,
+        "reserved": 0,
+        "ledger": 0
+      },
+      "reconciliation": {
+        "pairs": [],
+        "rowsWithoutCall": [],
+        "callsWithoutRow": [],
+        "guardUsd": 0,
+        "rowsUsd": 0
+      }
+    }
+  ],
+  "totalMs": 803,
+  "firstUsefulResponseMs": 628,
+  "tokens": {
+    "input": 0,
+    "output": 0
+  },
+  "costUsd": 0,
+  "calls": 0,
+  "loaded": {
+    "conversationId": "2a6e0549-da13-4034-b7ca-a15428ef9b0c",
+    "state": {
+      "intent": "policy_question",
+      "ragLoop": {
+        "v": 1,
+        "seq": 0,
+        "turn": 1,
+        "claim": null,
+        "turns": [
+          {
+            "gate": [],
+            "turn": 1,
+            "calls": [
+              {
+                "ok": false,
+                "error": "preflight: no model call made (no spend)",
+                "input": 0,
+                "output": 0,
+                "attempt": 1,
+                "costUsd": null,
+                "latencyMs": 2
+              }
+            ],
+            "limit": {
+              "kind": "model_error",
+              "detail": "preflight: no model call made (no spend)"
+            },
+            "steps": 0,
+            "usage": {
+              "input": 0,
+              "output": 0
+            },
+            "phases": {
+              "gateMs": 0,
+              "loopMs": 111,
+              "checkMs": 2,
+              "rescueMs": 0,
+              "storeSql": 4,
+              "composeMs": 1,
+              "gateReportMs": 5
+            },
+            "dropped": [],
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "error",
+            "timings": {
+              "store": {
+                "rounds": 1,
+                "docsSql": 1,
+                "linksSql": 1,
+                "memoHits": 4,
+                "pagesSql": 1,
+                "pageChars": 6068,
+                "docsServed": 11,
+                "membersSql": 1,
+                "memoMisses": 6,
+                "pagesServed": 25
+              },
+              "toolMs": {},
+              "modelMs": 2,
+              "otherMs": 19,
+              "resolve": {
+                "n": 0,
+                "ms": 0
+              }
+            },
+            "latencyMs": 21,
+            "modelKind": "hosted",
+            "toolCalls": [
+              {
+                "ok": false,
+                "args": {},
+                "name": "model",
+                "error": "preflight: no model call made (no spend)",
+                "evidenceIds": []
+              }
+            ],
+            "userMessage": "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?",
+            "evidenceChosen": []
+          }
+        ],
+        "history": [
+          {
+            "user": "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?",
+            "assistant": "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment."
+          }
+        ],
+        "pending": null,
+        "evidence": {},
+        "speakerId": "7c000000-0000-4000-8000-000000000001",
+        "subjectId": null,
+        "recentSubjectIds": []
+      },
+      "subjects": {}
+    },
+    "turns": [
+      {
+        "index": 0,
+        "user": "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?",
+        "answer": {
+          "mode": "answer",
+          "details": [],
+          "summary": "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+          "citations": [],
+          "nextSteps": [],
+          "questions": [],
+          "claimItems": [],
+          "confidence": null,
+          "disclaimer": "",
+          "knownFacts": [],
+          "missingFacts": [],
+          "claimSessionId": null,
+          "conversationId": "2a6e0549-da13-4034-b7ca-a15428ef9b0c",
+          "payoutQualifiers": [],
+          "policyStatedLimits": [],
+          "conversationRevision": 1,
+          "potentialPayoutTotals": []
+        },
+        "content": "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+        "visible": "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+        "questions": [],
+        "userAt": "2026-10-19T07:59:27.053Z",
+        "assistantAt": "2026-10-19T07:59:27.053Z",
+        "trace": {
+          "gate": [],
+          "turn": 1,
+          "calls": [
+            {
+              "ok": false,
+              "error": "preflight: no model call made (no spend)",
+              "input": 0,
+              "output": 0,
+              "attempt": 1,
+              "costUsd": null,
+              "latencyMs": 2
+            }
+          ],
+          "limit": {
+            "kind": "model_error",
+            "detail": "preflight: no model call made (no spend)"
+          },
+          "steps": 0,
+          "usage": {
+            "input": 0,
+            "output": 0
+          },
+          "phases": {
+            "gateMs": 0,
+            "loopMs": 111,
+            "checkMs": 2,
+            "rescueMs": 0,
+            "storeSql": 4,
+            "composeMs": 1,
+            "gateReportMs": 5
+          },
+          "dropped": [],
+          "modelId": "openai:gpt-6-luna",
+          "outcome": "error",
+          "timings": {
+            "store": {
+              "rounds": 1,
+              "docsSql": 1,
+              "linksSql": 1,
+              "memoHits": 4,
+              "pagesSql": 1,
+              "pageChars": 6068,
+              "docsServed": 11,
+              "membersSql": 1,
+              "memoMisses": 6,
+              "pagesServed": 25
+            },
+            "toolMs": {},
+            "modelMs": 2,
+            "otherMs": 19,
+            "resolve": {
+              "n": 0,
+              "ms": 0
+            }
+          },
+          "latencyMs": 21,
+          "modelKind": "hosted",
+          "toolCalls": [
+            {
+              "ok": false,
+              "args": {},
+              "name": "model",
+              "error": "preflight: no model call made (no spend)",
+              "evidenceIds": []
+            }
+          ],
+          "userMessage": "Daniel passed away last week after a long illness - it was not an accident. What would the family receive from his insurance, and what should we do?",
+          "evidenceChosen": []
+        }
+      }
+    ]
+  },
+  "verdict": {
+    "scenario": "DI",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "graded by scenario-check.ts",
+    "checks": []
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "7c000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "error",
+        "steps": 0,
+        "usage": {
+          "input": 0,
+          "output": 0
+        },
+        "latencyMs": 21,
+        "limit": {
+          "kind": "model_error",
+          "detail": "preflight: no model call made (no spend)"
+        },
+        "toolCalls": [
+          {
+            "ok": false,
+            "args": {},
+            "name": "model",
+            "error": "preflight: no model call made (no spend)",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {},
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

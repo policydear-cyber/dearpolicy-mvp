@@ -16,7 +16,7 @@ const NOT_CONFIRMED = /couldn['’]t (?:confirm|finish|work out)|could not confi
 const CUT_QUOTE = /[“"][^”"]*\b(?:which|and|or|of|the|to|that|if|an?|by|with|for)\s*[”"]/i;
 const ORPHAN = /^(?:[a-z]|(?:Says|Said|Requires|Requiring|Payable only|And|But|That|It says)\b)/m;
 const PROMISE = /\b(?:will (?:pay|receive|get)|you(?:'ll| will) be paid|is payable to you|guarantee[sd]?|entitled to)\b/i;
-const FOREIGN = /S\$\s?(?:7,000|4,000|900,000|3,500|10,000|500\b)|Singlife|MINDEF/;
+const FOREIGN = /S\$\s?(?:7,000|4,000|900,000|3,500|10,000|500(?![\d,]))|Singlife|MINDEF/;
 const DEFINITION = /Simple Fracture means|means a closed|not a Simple Fracture|skin is not broken/i;
 const SCHEDULE_ID = /“Schedule”|\bSchedule benefit\b|^•|\s•\s/m;
 /** (v8.1, after sa-live-2: a crash-safe stringify -- an answer with no `calculations` made the detail of K5 throw instead of FAIL; no expectation changed) */

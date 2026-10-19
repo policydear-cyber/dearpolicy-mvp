@@ -18,13 +18,16 @@ import type { ChatAnswer } from "@/types";
 import { evidenceAt, refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import type { TableValueOperand } from "../compute";
 import type { SelectedValue } from "../tables";
-import { loadDocs, loadPages, pageMap, policyFamily } from "../store";
+import { loadDocs, loadPages, newToolRound, pageMap, policyFamily, turnStoreStats, withTurnStore } from "../store";
 import { householdBenefits, selectedFromBenefit } from "../benefits";
 import type { PolicyCoverage } from "../policies";
 import { calcOutcomes, figureFromEvidence } from "../calc/tool";
 import { choosePercentRow, percentTables } from "../calc/pct-rows";
 import { caseFor, partsIn } from "../calc/case-terms";
 import { paragraphs } from "../headings";
+import { familiesOf, productFamilies } from "../event-relations";
+import { compactSearch, retrievalRoom, RESULT_ALLOWANCE, type ShownSpans } from "./retrieval-budget";
+import { scopeToEvent } from "../section-scope";
 import { inventorySentences, type Inventory, type InventoryDoc } from "../inventory";
 import type { CalcOutcome } from "../calc/engine";
 import { createToolContext, RAG_TOOLS, recordsFor, runTool, validateArgs, type ToolContext } from "../tools";
@@ -33,11 +36,14 @@ import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept,
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage } from "./questions";
 import { internalIdsIn } from "./statements";
-import { LoopUsageMeter, type MeterStop } from "./usage-meter";
+import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { RENDERED, renderStatements } from "./statement-render";
-import { applicabilityOf } from "../applicability";
+import type { BenefitRecord } from "../benefit-records";
+import { ACCIDENT_COND, NATURAL_CAT, accidentCondition, causeApplicability, amountMayBePresented, type BenefitApplicability } from "../benefit-applicability";
+import { applicabilityOf, CAUSE_ATTRIBUTE, reportedValue, valuesIn } from "../applicability";
 import { composeFinal, rosterHeading, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, evidenceTextOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
+import { asksWhatToDo, dateNearEvent, dateQuestionVerdict, deferredDateNote, isContactStep } from "./answer-completeness";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -50,6 +56,8 @@ export type LoopInput = { accountId: string; message: string; state: RagLoopStat
   /** Who the chat was opened about (a member-scoped chat): the initial active subject -- never the speaker. */
   initialSubjectId?: string | null;
   model: LoopModel; env?: NodeJS.ProcessEnv; asOf?: string | null;
+  /** The request's clock (ISO), for reading the household's relative dates ("last week") as the range they are. Defaults to now. */
+  now?: string | null;
   /** Cancels the turn: an in-flight model call is aborted and no further call is made. */
   signal?: AbortSignal | null;
   /** Agent F (D12): the member the household tapped in answer to the pending person question (chat page choice). */
@@ -201,18 +209,18 @@ export function optionRowsWhy(e: EvidenceRef, labels: string[]): string | null {
 
 /** The line of a cited passage that says why a question matters: a table row's label, else the passage line sharing
  * the most words with the question (quoted verbatim, whitespace collapsed). */
-function whyLine(e: EvidenceRef, about: string): string {
-  if (e.table?.rowLabel) return e.table.rowLabel;
+function whyLine(e: EvidenceRef, about: string, scoped?: { text: string; rowOk: boolean } | null): string {
+  if (e.table?.rowLabel && (!scoped || scoped.rowOk)) return e.table.rowLabel;
   const want = new Set((about.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.replace(/e?s$/, "")));
   // (Actual-library findings: "If an Insured Person sustains bodily injury as a result of an Accident, which" was quoted
   // -- the first line of a wrapped sentence. The passage is read as its sentences, wrapped lines joined.)
-  const all = paragraphs(e.passage.text).flatMap((p) => p.split(/(?<=[.;])\s+(?=[A-Z])/)).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const all = paragraphs(scoped ? scoped.text : e.passage.text).flatMap((p) => p.split(/(?<=[.;])\s+(?=[A-Z])/)).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
   // Round 6 (A3): a heading ("Section 2 - What is covered") never says why a fact matters: prefer wording lines.
   const wording = all.filter((l) => /[.;:]$/.test(l) || l.split(" ").length > 8);
   const lines = wording.length ? wording : all;
   const score = (l: string) => (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => want.has(w.replace(/e?s$/, ""))).length;
   const best = [...lines].sort((a, b) => score(b) - score(a))[0] ?? "";
-  return "“" + best + "”";
+  return "“" + best.replace(/^[•·▪●■]\s*/, "") + "”";
 }
 
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
@@ -265,7 +273,12 @@ export const INVENTORY_QUESTION = /^(?![^]*\b(?:need|needed|required|requires?|s
 const EVENT_WORDS = /\b(?:died|dies|death|passed away|accident\w*|injur\w*|hospital\w*|warded|admitted|fractur\w*|broke|broken|surgery|operation|diagnos\w*|illness|sick|cancer|claim\w*)\b/i;
 export const CLAIM_SELECTION_QUESTION = /\b(?:which|what)\b[^?.!,;]*\b(?:polic(?:y|ies)|documents?|plans?|covers?|insurances?)\b[^?.!,;]*\b(?:claim\w*|apply|applies|cover|covers|pay|pays|payable|use)\b/i;
 
-export async function runLoop(input: LoopInput): Promise<LoopOutput> {
+/** One conversational turn. Death-journey release: the turn's household-scoped reads are kept for the turn (lib/rag2/store.ts
+ * turn store), re-validated at every tool call and model step. */
+export function runLoop(input: LoopInput): Promise<LoopOutput> {
+  return withTurnStore(input.accountId, () => runLoopTurn(input));
+}
+async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
   const limits = loopLimits(env);
   const state: RagLoopState = structuredClone(input.state);
@@ -273,7 +286,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   state.speakerId = state.speakerId ?? input.speakerId ?? null;
   if (!state.subjectId && input.initialSubjectId) state.subjectId = input.initialSubjectId;
   const householdIds = new Set(input.people.map((p) => p.id));
-  const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
+  const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, speakerConfirmed: !!state.speakerConfirmed, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
   ctx.topicText = [...state.history.map((h) => h.user), input.message].join(" ");
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
@@ -333,7 +346,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // meant), before the model is called; the model is told who was chosen.
   if (pendingBefore?.kind === "person" && input.personChoiceId && pendingBefore.options.some((o) => o.id === input.personChoiceId)) {
     const id = input.personChoiceId;
-    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; }
+    if (pendingBefore.purpose === "speaker") { state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; ctx.conversation.speakerConfirmed = true; }
     else { state.subjectId = id; state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5); ctx.conversation.lastSubjectId = id; }
     unsettled = new Set();
     state.pending = null;
@@ -359,7 +372,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** PR #54 follow-up: an illustration worked out earlier for a benefit whose own definition the household's (corrected)
    * report now contradicts ("it was actually an open fracture" after a Simple Fracture illustration) is withdrawn --
    * on the claim and in what the model is shown -- and the answer says so once. */
-  const withdrawInapplicable = (subj: string, benefitId: string, why: string) => {
+  const withdrawInapplicable = (subj: string, benefitId: string, why: string, over?: { key: string; from: string; to: string }) => {
     const rec = ctx.benefitRecords?.get(benefitId);
     const claim = state.claim?.subjectId === subj ? state.claim : state.otherClaims?.[subj];
     if (!rec || !claim) return;
@@ -371,6 +384,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (sentences.length) scrubWithdrawn(sentences);
     const app = rec.definitions.length ? applicabilityOf(rec.benefit, rec.definitions, householdReports(subj, claim.facts)) : null;
     const prior = app && app.status !== "unconstrained" ? app.attribute.values.map((v) => v.id).find((v) => v !== app.reported.value) ?? null : null;
+    if (over) { if (!corrections.some((c) => c.key === over.key && c.to === over.to)) corrections.push({ key: over.key, from: over.from, to: over.to, withdrawn: sentences.length ? sentences : [rec.benefit] }); else corrections.find((c) => c.key === over.key && c.to === over.to)!.withdrawn.push(...(sentences.length ? sentences : [rec.benefit])); return; }
     const existing = corrections.find((c) => c.key !== "person" && c.withdrawn.length === 0 && app && app.status !== "unconstrained" && normalizeKey(c.key) === app.attribute.factKey);
     if (existing) existing.withdrawn.push(...(sentences.length ? sentences : [rec.benefit]));
     else if (!corrections.some((c) => c.key !== "person" && c.withdrawn.some((w) => w.includes(rec.benefit))))
@@ -454,12 +468,27 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return pageCache.get(policyId)!;
   };
   /** Sets an evidence entry's support to the sentence / row that supports `about` (keeps the old one when none fits). */
-  const narrow = async (id: string, about: string) => {
+  /** Death-journey release: the part of a cited passage that belongs to the benefit the words are about. A passage can span two
+   * benefits' sections (the tail of the Dismemberment table and the head of the Simple Fracture section); the event the words
+   * describe picks the section whose own heading names that benefit's family -- never an accident-related sentence of the
+   * neighbour. "none": the passage is printed wholly under another benefit; null: nothing to restrict. */
+  const scopeFor = async (id: string, eventWords: string): Promise<{ text: string; rowOk: boolean; ranges: { start: number; end: number }[] } | "none" | null> => {
+    const e = state.evidence[id];
+    if (!e) return null;
+    const pageText = (await pagesOf(e.policyId)).get(e.passage.onPage);
+    if (!pageText) return null;
+    const sc = scopeToEvent(pageText, e.passage.start, e.passage.end, familiesOf(eventWords));
+    if (!sc || sc === "none") return sc;
+    const ranges = sc.ranges.map((r) => ({ start: Math.max(r.start, e.passage.start), end: Math.min(r.end, e.passage.end) }));
+    const cell = e.table?.cell;
+    return { text: ranges.map((r) => pageText.slice(r.start, r.end)).join("\n"), rowOk: !cell || ranges.some((r) => cell.start >= r.start && cell.end <= r.end), ranges };
+  };
+  const narrow = async (id: string, about: string, within?: { start: number; end: number }[] | null) => {
     const e = state.evidence[id];
     if (!e) return;
     const pages = await pagesOf(e.policyId);
     const text = pages.get(e.passage.onPage);
-    const sp = text ? supportSpan(e, text, about) : null;
+    const sp = text ? supportSpan(e, text, about, within) : null;
     if (sp) { e.support = sp; const cx = contextFor(sp, pages); e.context = cx.length ? cx : null; }
   };
   const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
@@ -486,19 +515,23 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const notApplicable = new Map<string, string>();
   let reqSeq = 0;
   let budgetWarned = false;
+  /** Death-journey release: passage spans already returned this turn, searches in a row that added nothing, the largest search
+   * result measured (tokens), and why retrieval was closed (named in the answer as the remaining gap). */
+  const shownSpans: ShownSpans = new Map();
+  let idleSearches = 0, resultTokens = RESULT_ALLOWANCE, retrievalClosed: string | null = null, lastRetrieval: string | null = null, deathGap: string | null = null;
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** PR #55 (SBb): every evaluate_benefit run this turn (the model's and the server's): which benefit, for whom, with what, and what came of it. */
   const evalRuns: { subject: string; benefitId: string; args: Record<string, unknown>; status: string; resultId: string | null; need: string | null; why: string | null }[] = [];
   let serverSeq = 0;
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, libraryPages, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ withheldRows: (sj: string) => new Set(naRecordsFor(sj).filter((r) => !askedDirectly(r)).map((r) => `${r.policy.id}|${nmL(r.benefit)}`)), state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, libraryText, libraryPages, benefits: benefitView, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** PR #54 follow-up: what the household reported about one person, oldest first -- the facts recorded for them (with
    * their keys) and, for what no fact records, the sentences of their own messages that name no other member (a
    * question or a what-if is not a report). Each says whether its message corrected something. */
   const householdReports = (subj: string, facts: Record<string, import("./types").LoopFact>): import("../applicability").Reported[] => {
     const out: import("../applicability").Reported[] = Object.entries(facts).filter(([, f]) => f && (f.source ?? "user_reported") === "user_reported")
-      .map(([key, f]) => ({ key, words: `${f.words} ${typeof f.value === "string" ? f.value : ""}`.trim(), turn: f.turn, cue: !!f.cue }));
+      .map(([key, f]) => ({ key, words: `${f.words} ${typeof f.value === "string" && !f.words.toLowerCase().includes(f.value.toLowerCase()) ? f.value : ""}`.trim(), turn: f.turn, cue: !!f.cue }));
     const others = input.people.filter((p) => p.id !== subj).flatMap((p) => personNames(p.name)).filter((n) => !input.people.find((x) => x.id === subj && personNames(x.name).includes(n)));
     const named = (t: string) => others.some((n) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
     userTexts.forEach((m, i) => {
@@ -512,6 +545,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
   let askBecause: string[] = [];
+  /** Death-journey release: per cited passage of the question being asked, the part that belongs to the benefit asked about. */
+  const askScopes = new Map<string, { text: string; rowOk: boolean; ranges: { start: number; end: number }[] }>();
+  const askScopesPre = new Map<string, { text: string; rowOk: boolean; ranges: { start: number; end: number }[] } | "none" | null>();
   /** The mention the latest resolve_person call of this turn was asked about. */
   let lastMention: string | null = null;
   /** Round 7: facts the household's message gave, recorded this turn (their words, who about). */
@@ -688,6 +724,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let followUp = false;
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
+  let deathToppedUp = false, causeNoted = false;
+  let relationNoted = false;
   /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
    * leaves out what it rejects, as it would have without the repair. */
   let beforeRepair: LoopReply | null = null;
@@ -764,12 +802,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const mine = records.filter((r) => r.memberId === who && r.status !== "conflicting" && r.kind !== "percentage_schedule");
       let c = typeof s.benefit_id === "string" ? mine.filter((r) => r.id === s.benefit_id) : [];
       if (!c.length) c = mine.filter((r) => r.benefit.length >= 8 && (norm(s.benefit) === norm(r.benefit) || t.includes(norm(r.benefit))) && cited.has(r.policy.id));
-      if (c.length !== 1 || stated.has(c[0].id)) continue;
+      if (c.length !== 1 || stated.has(c[0].id) || (notApplicable.has(`${who}|${c[0].id}`) && !askedDirectly(c[0]))) continue;
       stated.add(c[0].id);
       out.push({ kind: "benefit_terms", benefit_id: c[0].id, subject_id: who, evidence_ids: [] });
     }
     return out;
   };
+  // dj-live-3: the supported next step a clarifying question carries (written by the server, so it is not a tool parameter)
+  let serverAskSteps: unknown[] | null = null;
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
     if (call.name === "final_answer" || call.name === "ask_user") for (const x of ((a.sentences ?? a.statements) as Record<string, unknown>[] | undefined) ?? []) {
@@ -887,14 +927,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (spoken.some((x) => /\?/.test(String(x?.text ?? "")))) return { result: { ok: false, error: "statements and the preface state; they never ask. Ask exactly one question, in question" } };
       if (spoken.length && a.kind === "person" && Array.isArray(a.statements) && a.statements.length) return { result: { ok: false, error: "a person question is asked on its own (no statements)" } };
       let composed: Composed | null = null;
-      if (spoken.length) {
-        composed = composeFinal({ sentences: spoken, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+      const askSteps = Array.isArray(a.next_steps) ? a.next_steps : serverAskSteps;
+      if (spoken.length || (Array.isArray(askSteps) && askSteps.length)) {
+        composed = composeFinal({ sentences: spoken, nextSteps: askSteps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
         noteDrops(spoken, composed);
         if (composed.dropped.length && !askRefused) {
           askRefused = true;
           return { result: { ok: false, error: "not shown before the question: " + composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" (${d.reason})`).join("; ") + ". State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out." } };
         }
-        if (!composed.sentences.length) composed = null;
+        if (!composed.sentences.length && !composed.nextSteps.length) composed = null;
       }
       if (a.kind === "person") {
         // Round 6c (A3): ask who only when the answer depends on the person. A mention that means anyone in the
@@ -1028,8 +1069,25 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
+      // Death-journey release: the cited "why" is the sentence of the benefit's OWN section. A passage printed under another
+      // benefit's heading (Total and Permanent Dismemberment for a fracture question) is not cited for this benefit, and where
+      // a passage spans two sections only the section naming the event's benefit is read.
+      askScopes.clear();
+      {
+        const foreign: string[] = [];
+        for (const id of because) {
+          const sc = askScopesPre.get(id);
+          if (sc === "none") foreign.push(id); else if (sc) askScopes.set(id, sc);
+        }
+        if (foreign.length) {
+          const keep = because.filter((id) => !foreign.includes(id));
+          (trace.adjusted ??= []).push(`ask_user: the cited passage(s) ${foreign.join(", ")} are printed under another benefit's section and were not cited for this question`);
+          if (!keep.length) return { result: { ok: false, error: `the cited evidence (${foreign.join(", ")}) is printed under a different benefit's section, not the benefit this question is about: cite the passage printed under that benefit's own heading, or do not ask` } };
+          because = keep;
+        }
+      }
       const caseLabels = req?.isCase && req.options.length ? req.options.map((o) => req!.optionLabels?.get(o) ?? o) : null;
-      const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
+      const why = because.map((id) => `${(caseLabels && optionRowsWhy(state.evidence[id], caseLabels)) || whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""), askScopes.get(id) ?? null)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
       // V1.2: the household speaks about this person in the third person ("Desmond broke his leg"): the question names
@@ -1207,11 +1265,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const args = { policy_id: e.policyId, benefit: heading.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim(), subject_id: who, want: "amount" };
           // The value is kept under the composer's own key (never the model-visible v1, v2 ... sequence, which is left
           // exactly as it was), so this lookup changes no id the model sees.
+          // (dj-live-2: an id still held -- a person row's cached value, a model-visible value -- is never reissued here; the
+          // lookup's temporary id must not overwrite and then delete a value another statement is bound to)
+          for (const k of [...ctx.values.keys(), ...(ctx.personRows?.values() ?? [])]) { const m = /^v(\d+)$/.exec(k); if (m) ctx.seq = Math.max(ctx.seq, Number(m[1])); }
           const seqBefore = ctx.seq;
+          const heldBefore = new Set(ctx.values.keys());
           const r = await runTool(ctx, "select_table_value", args, env2);
           let d = (r.ok ? r.data : null) as { status?: string; valueId?: string; valueKind?: string; value?: number; currency?: string } | null;
           let key: string | null = null;
-          if (d?.valueId && ctx.values.has(d.valueId)) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, ctx.values.get(d.valueId)!); ctx.values.delete(d.valueId); }
+          if (d?.valueId && ctx.values.has(d.valueId)) { key = `vb${state.turn}_${++bindSeq}`; ctx.values.set(key, ctx.values.get(d.valueId)!); if (!heldBefore.has(d.valueId)) ctx.values.delete(d.valueId); }
           else {
             // V1.4: a roster the table parser does not read (one cell per line) -- the view's reconstructed row itself.
             const sel = selectedFromBenefit(one, input.people.find((p) => p.id === who)?.name ?? "");
@@ -1344,6 +1406,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const refusal = preflight(call);
     if (refusal) { record(call.name, { ...call.arguments, by }, false, [], refusal); return null; }
     const t1 = Date.now();
+    newToolRound();
     const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
     { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - t1; }
     await refine(res.evidence, null);
@@ -1385,7 +1448,18 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         rows.push({ benefitId: m.id, benefit: m.benefit, disposition: open ? "unresolved" : "explained", reason: open ? `its printed terms are stated; which listed case applies is still open (${open.question})` : "its printed terms are stated; no amount was asked for" });
         continue;
       }
-      const r = await serverEvaluate({ ...sibling.args, benefit_id: m.id });
+      // Death-journey release: the evaluation's option and facts are THIS benefit's. The sibling's option_id names a row of the
+      // sibling's own schedule; it is carried over only when it is also a row of this one's, else the household's case words
+      // (the sibling's row label) are what is asked of this benefit's own rows -- never another benefit's option id.
+      const recsNow = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+      const mineRec = recsNow.find((x) => x.id === m.id), sibRec = recsNow.find((x) => x.id === sibling.benefitId);
+      const { option_id: sibOption, ...sibRest } = sibling.args as Record<string, unknown>;
+      const bound: Record<string, unknown> = { ...sibRest, benefit_id: m.id };
+      if (typeof sibOption === "string" && sibOption) {
+        if (mineRec?.schedule?.rows.some((x) => x.id === sibOption)) bound.option_id = sibOption;
+        else if (!bound.case) { const lbl = sibRec?.schedule?.rows.find((x) => x.id === sibOption)?.label; if (lbl) bound.case = lbl; }
+      }
+      const r = await serverEvaluate(bound);
       if (r?.status === "conditional_illustration" && r.resultId) { extra.push({ kind: "calculation", result_id: r.resultId, text: "-" }); rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "evaluated", reason: "worked out on the server for the same reported case as the benefit the model evaluated" }); continue; }
       extra.push(terms(m.id));
       if (r?.status === "not_applicable" || r?.status === "unlisted_case") rows.push({ benefitId: m.id, benefit: m.benefit, disposition: "excluded", reason: r.status === "unlisted_case" ? "the reported case is not one of its listed cases" : r.why || "its own definition does not fit what the household reported" });
@@ -1396,6 +1470,264 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       (trace.adjusted ??= []).push(`${call.name}: added ${extra.length} statement(s) for relevant schedule(s) the lookup returned and the reply left out (${plan.complete.map((c) => c.benefit).join("; ")})`);
     }
     if (rows.length) trace.schedules = rows;
+  };
+  /** Death-journey release: a question about a death is answered for EVERY documented benefit that pays on death for this person
+   * (the certificate's Term Life and Personal Accident rows, Accidental Death, Compassionate Death Allowance ...), each with a
+   * supported disposition: its printed terms, written by the server from its resolved record. What was not read is named: a
+   * claims procedure no retrieved passage prints is never invented. Event/product relationships come from event-relations.ts. */
+  const CLAIMS_PROCEDURE = /\b(?:claims? (?:procedure|process|forms?|documents?|requirements?)|how to (?:make (?:a )?)?claim|notice of claim|documents? (?:required|needed)|submit(?:ting)? (?:a )?claim)\b/i;
+  // `shown` = the text of the sentences that SURVIVED composing: a death benefit the reply names there is covered; one whose
+  // sentence was omitted whole by validation (or never written) is not, and its server-written terms are added.
+  const namedIn = (benefit: string, shown: string[]) => {
+    const norm = (t: string) => t.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+    const hay = " " + shown.map(norm).join(" | ") + " ";
+    const parts = [benefit, ...benefit.split(":")].map(norm).filter((p) => p.length >= 8);
+    return parts.some((p) => hay.includes(" " + p + " "));
+  };
+  // ---- Applicability governs every output path (benefit-applicability.ts): the records the household's report excludes ----
+  const nmL = (t: unknown) => String(t ?? "").toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  const naRecordsFor = (subj: string): BenefitRecord[] => [...notApplicable.keys()].filter((k) => k.startsWith(subj + "|")).map((k) => ctx.benefitRecords?.get(k.split("|")[1])).filter((r): r is BenefitRecord => !!r);
+  /** The household asked for this benefit's amount by name ("what is Daniel's Group Personal Accident amount?"). */
+  const askedDirectly = (r: { benefit: string }) => { const n = nmL(r.benefit); return n.length >= 8 && (" " + nmL(input.message) + " ").includes(" " + n + " ") && /\b(?:how much|amount|sum (?:insured|assured)|lists?|listed|certificate|worth|s\$|\$)\b/i.test(input.message); };
+  /** The excluded benefit a statement presents the AMOUNT of -- by a value it cites, or by naming it beside its printed figure --
+   * unless the household asked for that amount directly (then it may be shown, separated by causeNote). */
+  const inapplicableIn = (subj: string, x: { text?: unknown; value_ids?: unknown; valueIds?: unknown; benefit?: unknown }): BenefitRecord | null => {
+    const na = naRecordsFor(subj).filter((r) => !askedDirectly(r));
+    if (!na.length) return null;
+    const ids = [...((Array.isArray(x.value_ids) ? x.value_ids : Array.isArray(x.valueIds) ? x.valueIds : []) as unknown[])].map(String);
+    for (const id of ids) { const v = ctx.values.get(id); const hit = v && na.find((r) => r.policy.id === v.operand.evidence.policyId && nmL(r.benefit) === nmL(v.operand.benefit)); if (hit) return hit; }
+    const t = String(x.text ?? "");
+    for (const r of na) { const c = r.printed?.kind === "money" ? r.printed.cents : null; if (c != null && (" " + nmL(t) + " ").includes(" " + nmL(r.benefit) + " ") && moneyFiguresIn(t).some((f) => Math.round(f.value * 100) === c)) return r; }
+    return null;
+  };
+  const amountShownIn = (r: BenefitRecord, shown: string[]) => { const c = r.printed?.kind === "money" ? r.printed.cents : null; return c == null || shown.some((t) => moneyFiguresIn(t).some((f) => Math.round(f.value * 100) === c)); };
+  const deathCompletion = async (subject: string, given: Record<string, unknown>[], shown: string[] = [], broadOnly = false): Promise<{ extra: Record<string, unknown>[]; steps: string[]; gap: string | null; rows: string[] } | null> => {
+    // (only when the question is ABOUT a death: a comparison that mentions "the death benefits" beside a fracture, hospital stay or
+    // dismemberment is not turned into a broad death assessment)
+    const asked = familiesOf(input.message);
+    if (chatContract(env) !== "benefits" || !subject || !asked.has("death") || asked.size > 1) return null;
+    await causeGate(subject);
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    // (a question that NAMES one benefit or product -- "what does Daniel's Term Life pay?" -- is narrow: the other death benefits are
+    // not added to it; only a broad question about what happens on a death is answered for every documented death benefit)
+    if (broadOnly) {
+      const asks = " " + input.message.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+      const labelled = recs.some((r) => [r.benefit, ...r.benefit.split(":")].map((x) => x.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim()).some((x) => x.length >= 8 && asks.includes(" " + x + " ")));
+      if (labelled || /\b(?:term life|personal accident|accidental death|compassionate death|repatriation|funeral|burial|booklet|handbook|brochure|wording)\b/i.test(input.message)) return null;
+    }
+    const covered = new Set(given.filter((x) => x && x.kind === "benefit_terms").map((x) => String(x.benefit_id)));
+    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && !(namedIn(r.benefit, shown) && amountShownIn(r, shown)) &&(familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
+    const seen = new Set<string>();
+    const extra: Record<string, unknown>[] = [];
+    const rows: string[] = [];
+    for (const r of mine) {
+      const key = `${r.policy.id}|${r.benefit.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      extra.push({ kind: "benefit_terms", benefit_id: r.id, subject_id: subject, text: "-" });
+      rows.push(r.benefit);
+    }
+    const read = [...shownThisTurn].map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e).map((e) => evidenceTextOf(e));
+    const procedureRead = read.some((t) => CLAIMS_PROCEDURE.test(t));
+    const certificate = recs.find((r) => r.policy.personalProof && (productFamilies(r.benefit).has("death") || familiesOf(r.benefit).has("death")));
+    const steps = certificate ? [`contact:${certificate.policy.id}`] : [];
+    const gap = procedureRead && !retrievalClosed && !lastRetrieval ? null
+      : `I did not read a claims procedure for a death claim (how to notify the insurer, or which documents it asks for) in ${retrievalClosed || lastRetrieval ? "the part of the documents I could look at before this question's model-use limit" : "the documents I looked at"}, so none is listed beyond what each benefit above prints; the insurer can confirm what it needs.`;
+    // Nothing in this person's documents pays on death (as far as they were read): said as the specific uncertainty it is, so the
+    // reply is never empty and never invents a benefit, an amount or a requirement.
+    if (!extra.length && !given.length) {
+      const who = (input.people.find((p) => p.id === subject)?.name ?? "this person").split(" ")[0];
+      extra.push({ kind: "uncertainty", text: `The documents do not state what would be received on ${who}’s death.`, subject_id: subject });
+      rows.push("(no death benefit established)");
+    }
+    return extra.length || gap ? { extra, steps, gap, rows } : null;
+  };
+  /** dj-live-3: the supported practical step for a household that asks what to do -- contact the insurer of the document that
+   * is THIS person's own (the same renderer and link check as every contact step; never another person's insurer, never a
+   * reference document's). Null when nothing supports it, when the reply already carries a contact step, or when the
+   * conversation already gave this one. */
+  const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
+    if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
+    if (Array.isArray(given) && given.some(isContactStep)) return null;
+    const asked = familiesOf(input.message);
+    if (!asked.size) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
+    if (!cert) return null;
+    const earlier = state.turns.flatMap((t) => t.toolCalls.filter((c) => c.ok && (c.name === "final_answer" || c.name === "ask_user") && !c.args?.by).flatMap((c) => (Array.isArray(c.args?.next_steps) ? (c.args.next_steps as unknown[]) : [])));
+    const insurer = (cert.policy.insurer ?? "").toLowerCase();
+    if (state.turns.some((t) => (t.adjusted ?? []).some((x) => x.includes(`[contact:${cert.policy.id}]`)))) return null;
+    if (earlier.some((x) => typeof x === "string" && (x === `contact:${cert.policy.id}` || (insurer && x.toLowerCase().includes(insurer))))) return null;
+    return `contact:${cert.policy.id}`;
+  };
+  /** dj-live-3: a question for the DATE of a death whose answer cannot change what the uploaded wording says (see
+   * answer-completeness.ts): the household gave the date as a range ("last week"), every date the documents print lies before
+   * it, and no cited clause counts a period from the death. Null for every other question -- a clause with a period, a printed
+   * date the range could precede, or no date given keeps the question. */
+  const deathDateAskUnneeded = async (args: Record<string, unknown>): Promise<{ reason: string; words: string; hadPrinted: boolean; now: Date } | null> => {
+    const key = normalizeKey(args.fact_key);
+    if (!(/death|died|passing|passed_away/.test(key) && /date|day|when/.test(key)) || args.kind === "person" || args.requirement_id) return null;
+    const subject = String(args.subject_id ?? state.claim?.subjectId ?? state.subjectId ?? "");
+    if (!subject || !Array.isArray(args.statements) || !args.statements.length) return null;
+    const now = input.now ? new Date(input.now) : new Date();
+    const range = dateNearEvent(userTexts, /\b(?:died|dies|passed away|passed on|death|deceased|passing)\b/i, now);
+    if (!range || range.exact) return null;
+    const question = String(args.question ?? "");
+    const clauses: string[] = [];
+    for (const id of (Array.isArray(args.because_evidence_ids) ? args.because_evidence_ids : []).map(String)) {
+      if (!state.evidence[id]) continue;
+      const sc = await scopeFor(id, `${question} ${input.message}`);
+      if (sc === "none") continue;
+      clauses.push(whyLine(state.evidence[id], `${question} ${key}`, sc));
+    }
+    if (!clauses.length) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const printed = recs.flatMap((r) => [r.asOf, r.policy.version.effectiveDate, r.policy.version.documentDate]).filter((d): d is string => !!d).map((d) => d.slice(0, 10));
+    const v = dateQuestionVerdict({ range, clauses, printed });
+    return v.needed ? null : { reason: v.reason, words: range.words, hadPrinted: printed.length > 0, now };
+  };
+  /** dj-live-1 F1: "is it separate from the death benefits?" -- a question about how two benefits relate. What the documents establish
+   * is stated from the resolved records (each benefit, its document and page); whether both can be paid for the same event is
+   * said as open unless a passage read this turn prints a stacking rule. Nothing is added or totalled, and the death benefits
+   * are NAMED, not expanded (a comparison is not turned into a death assessment). */
+  const STACK_Q = /\b(?:separate(?:ly)?(?:\s+(?:from|to))?|in addition to|on top of|as well as|together with|combined with|alongside|in total|add(?:ed)? (?:up|together|to)|both|stack\w*|cumulative|as well)\b/i;
+  const STACK_WORDING = /\b(?:in addition to|additional to|on top of|cumulative|only one of|whichever is (?:higher|greater)|(?:not|never) (?:be )?(?:payable|paid) (?:together|in addition|concurrently|for the same)|aggregate|no more than one|separate(?:ly)? from)\b/i;
+  const relationNote = async (subject: string, composedText: string[]): Promise<Record<string, unknown> | null> => {
+    const asked = familiesOf(input.message);
+    if (chatContract(env) !== "benefits" || !subject || asked.size < 2 || !STACK_Q.test(input.message)) return null;
+    if (composedText.some((t) => /\b(?:same event|paid together|payable together|in addition|separate from)\b/i.test(t))) return null;
+    const read = [...shownThisTurn].map((id) => state.evidence[id]).filter((e): e is EvidenceEntry => !!e).map((e) => evidenceTextOf(e));
+    if (read.some((t) => STACK_WORDING.test(t))) return null;
+    const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    const core = (t: string) => t.replace(/\s*\(.*$/, "").replace(/\s+(?:benefit\s+)?limit\b.*$/i, "").replace(/\s+benefit$/i, "").trim();
+    const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const asks = " " + norm(input.message) + " ";
+    const usable = recs.filter((r) => r.status !== "unsupported" && r.status !== "conflicting" && !r.policy.personalProof);
+    // The benefit(s) the question NAMES (by label) are stated with their page; a family it only mentions in general ("the death
+    // benefits") is named by its benefits' labels, not expanded.
+    const named: typeof recs = [], general = new Map<string, string[]>();
+    for (const f of asked) {
+      const ofF = usable.filter((r) => familiesOf(r.benefit).has(f) && familiesOf(r.benefit).size === 1);
+      const hit = ofF.filter((r) => { const c = norm(core(r.benefit)); return c.length >= 8 && asks.includes(" " + c + " "); });
+      if (hit.length) { const seen = new Set<string>(); for (const r of hit) { const k = norm(core(r.benefit)); if (!seen.has(k)) { seen.add(k); named.push(r); } } }
+      else if (ofF.length) general.set(f, [...new Set(ofF.map((r) => core(r.benefit)).filter(Boolean))].slice(0, 4));
+    }
+    if (!named.length || !general.size) return null;
+    const join = (xs: string[]) => xs.length <= 2 ? xs.join(" and ") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
+    const what = named.map((r) => `${core(r.benefit)} (page ${r.source.page})`);
+    const products = [...new Set(named.map((r) => r.policy.product).filter(Boolean))];
+    const against = [...general.entries()].map(([f, labels]) => `the ${f} benefits (${join(labels)})`);
+    const ev = [...named.map((r) => r.source.evidence), ...usable.filter((r) => [...general.values()].some((ls) => ls.includes(core(r.benefit)))).map((r) => r.source.evidence)];
+    return { kind: "fact", subject_id: subject, text: `${products.length === 1 ? `The ${products[0]}` : "The documents"} lists ${join(what)} separately from ${join(against)}, each with its own printed terms; the passages I read do not say whether they can be paid for the same event, so that is not established and no total is given.`, evidence_ids: [...new Set(ev.map((e) => evidenceIdOf(state, e, "statement")))] };
+  };
+  /** Cause / applicability (after dj-live-1): each benefit's OWN printed condition decides whether the household's reported cause
+   * of death fits it. A benefit printed as accident-only is not offered for a death reported as an illness (its terms are left out,
+   * an illustration worked out for it earlier is withdrawn, and the reply says why); when the cause is not known its accident
+   * condition is stated and not assumed. Other benefits (a Term Life sum) are untouched. */
+  /** The printed accident condition of a benefit (benefit-applicability.ts decides where it comes from). */
+  const accidentCondOf = (r: { benefit: string; policy: { product: string | null }; conditions: string[] }, all: { benefit: string; conditions: string[] }[] = []): string | null => accidentCondition(r, all)?.wording ?? null;
+  const causeNow = (subj: string): { cause: "accident" | "illness" | "unknown"; words: string | null } => {
+    const claim = state.claim?.subjectId === subj ? state.claim : state.otherClaims?.[subj];
+    const r = reportedValue(CAUSE_ATTRIBUTE, householdReports(subj, claim?.facts ?? {}));
+    if (r.value === "accident" || r.value === "illness") return { cause: r.value, words: r.words };
+    // (no report, but the question itself names ONE cause as its scenario -- "if Daniel died in an accident, what would the booklet pay" -- that
+    // is the cause being asked about; two causes named, or none, is not known)
+    if (!r.conflict) { const asked = valuesIn(input.message, CAUSE_ATTRIBUTE); if (asked.size === 1) { const v = [...asked][0]; return { cause: v as "accident" | "illness", words: input.message.trim().slice(0, 120) }; } }
+    return { cause: "unknown", words: null };
+  };
+  /** Every decided applicability of this turn (benefit id -> result), for the trace and for every output path. */
+  const applicability = new Map<string, BenefitApplicability>();
+  const deathBenefit = (b: string) => familiesOf(b).has("death") || productFamilies(b).has("death");
+  const causeGate = async (subj: string) => {
+    if (!subj || chatContract(env) !== "benefits") return;
+    const c = causeNow(subj);
+    const recs = await recordsFor(ctx, subj).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
+    for (const r of recs) {
+      const a = causeApplicability(r, recs, { cause: c.cause, words: c.words, deathBenefit: deathBenefit(r.benefit) });
+      if (a.condition) applicability.set(`${subj}|${r.id}`, a);
+      if (!a.withhold) continue;
+      const key = `${subj}|${r.id}`;
+      if (notApplicable.has(key)) continue;
+      const why = a.reason;
+      notApplicable.set(key, why);
+      (ctx.benefitRecords ??= new Map()).set(r.id, r);
+      withdrawInapplicable(subj, r.id, why, { key: "how_it_happened", from: "an accident", to: "an illness" });
+    }
+  };
+  const causeNote = async (subj: string, shown: string[], draft: string[] = []): Promise<Record<string, unknown>[] | null> => {
+    const asked = familiesOf(input.message);
+    if (chatContract(env) !== "benefits" || !subj || !asked.has("death") || asked.size > 1) return null;
+    const c = causeNow(subj);
+    if (c.cause === "accident") return null;
+    const recs = (await recordsFor(ctx, subj).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>)).filter((r) => r.status !== "unsupported");
+    const norm = (t: string) => t.toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+    const asks = " " + norm(input.message) + " ";
+    const deathy = (r: { benefit: string }) => familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death");
+    const kindOf = (r: (typeof recs)[number]): "accident" | "natural" | "heading" | null => { const a = accidentCondition(r, recs); return a ? (a.kind === "product_heading_only" ? "heading" : "accident") : NATURAL_CAT.test(r.benefit) ? "natural" : null; };
+    const acc = recs.filter((r) => kindOf(r) && deathy(r));
+    if (!acc.length) return null;
+    const narrowNamed = recs.some((r) => { const n = norm(r.benefit); return n.length >= 8 && asks.includes(" " + n + " "); }) || /\b(?:term life|personal accident|accidental death|compassionate death|repatriation|funeral|burial|booklet|handbook|brochure|wording)\b/i.test(input.message);
+    const relevant = acc.filter((r) => namedIn(r.benefit, shown) || !narrowNamed || asks.includes(" " + norm(r.benefit) + " "));
+    // (records that carry the condition in their OWN wording come first, so the printed condition is quoted from the document that prints it)
+    const own = (r: (typeof recs)[number]) => r.conditions.some((x) => ACCIDENT_COND.test(x)) ? 0 : 1;
+    const seen = new Set<string>();
+    const uniq = [...relevant].sort((a, b) => own(a) - own(b)).filter((r) => { const k = norm(r.benefit.replace(/\s*\(.*$/, "")); if (seen.has(k)) return false; seen.add(k); return true; });
+    if (!uniq.length) return null;
+    const who = (input.people.find((p) => p.id === subj)?.name ?? "this person").split(" ")[0];
+    const join = (xs: string[]) => xs.length <= 2 ? xs.join(" and ") : xs.slice(0, -1).join(", ") + " and " + xs.at(-1);
+    const label = (r: { benefit: string }) => r.benefit.replace(/\s*\(.*$/, "").replace(/^[A-Z]\.\s+/, "");
+    // one statement per DOCUMENT, citing that document's own rows (a statement never names a benefit of one document while citing another)
+    const byDoc = new Map<string, typeof uniq>();
+    for (const r of uniq) byDoc.set(r.policy.id, [...(byDoc.get(r.policy.id) ?? []), r]);
+    const out: Record<string, unknown>[] = [];
+    // (what the answer displays: an excluded benefit whose amount IS displayed -- the household asked for that amount by name -- is
+    // separated from this event's benefits, and never said to have "no amount given")
+    const displayed = [...shown, ...draft];
+    const amountDisplayed = (r: BenefitRecord) => { const c = r.printed?.kind === "money" ? r.printed.cents : null; return c != null && displayed.some((t) => moneyFiguresIn(t).some((f) => Math.round(f.value * 100) === c)); };
+    for (const allRows of byDoc.values()) for (const withAmount of [false, true]) {
+      const rows = allRows.filter((r) => amountDisplayed(r as BenefitRecord) === withAmount);
+      if (!rows.length) continue;
+      const accRows = rows.filter((r) => kindOf(r) === "accident"), natRows = rows.filter((r) => kindOf(r) === "natural"), headRows = rows.filter((r) => kindOf(r) === "heading");
+      // (an amount printed under an accident PRODUCT heading, with no cause condition of its own: said as that, never as a printed condition)
+      if (headRows.length) {
+        const hs = headRows.length > 1;
+        const lead = c.cause === "unknown" ? "" : `For a death reported as ${c.cause === "illness" ? "an illness" : "an accident"}, `;
+        out.push({ kind: "fact", subject_id: subj, evidence_ids: [...new Set(headRows.map((r) => evidenceIdOf(state, r.source.evidence, "statement")))],
+          text: withAmount
+            ? `${lead}${join(headRows.map(label))} ${hs ? "are" : "is"} listed under an accident product heading and the documents read print no cause condition for ${hs ? "them" : "it"}; the amount shown for ${hs ? "them" : "it"} is only what the document printed as of its date, given because you asked, not an amount for this death.`
+            : `${lead}${join(headRows.map(label))} ${hs ? "are" : "is"} listed under an accident product heading and the documents read print no cause condition for ${hs ? "them" : "it"}, so ${hs ? "they are" : "it is"} not treated as applying to this death and no amount is given for ${hs ? "them" : "it"}.` });
+      }
+      if (!accRows.length && !natRows.length) continue;
+      const ownCond = accRows.flatMap((r) => r.conditions).find((x) => ACCIDENT_COND.test(x)) ?? null;
+      const printed = ownCond ? ` (printed condition: “${ownCond.replace(/[.;]+$/, "").replace(/,\s*we will pay.*$/i, "")}”)` : "";
+      const parts: string[] = [];
+      if (accRows.length) parts.push(`${join(accRows.map(label))} ${accRows.length > 1 ? "are" : "is"} printed as accident-only${printed}`);
+      if (natRows.length) parts.push(`${join(natRows.map(label))} ${natRows.length > 1 ? "are" : "is"} printed for a natural catastrophe`);
+      const they = rows.length > 1 ? "they" : "it";
+      const text = withAmount
+        ? `${parts.join(" and ")}${c.cause === "illness" ? `, so ${they} ${rows.length > 1 ? "do" : "does"} not apply to a death reported as an illness` : `; ${rows.length > 1 ? "these apply" : "this applies"} only to a death caused by an Accident, which has not been reported`}; the amount shown for ${rows.length > 1 ? "them" : "it"} is only what the document printed as of its date, given because you asked, not an amount for this death.`
+        : c.cause === "illness"
+          ? `For a death reported as an illness, ${parts.join(" and ")}, so ${they} ${rows.length > 1 ? "do" : "does"} not fit that report and no amount is given for ${rows.length > 1 ? "them" : "it"}.`
+          : `${parts.join(" and ")}; ${rows.length > 1 ? "these apply" : "this applies"} only to a death caused by an Accident, and an accident is not assumed here.`;
+      // (a withheld benefit whose amount is NOT displayed cites the wording that prints its condition, never the person's row that carries
+      // the excluded amount: the sources list must not show an amount the answer withholds)
+      const evFor = (r: (typeof rows)[number]) => { const via = r.printed?.kind === "money" && !withAmount ? (accidentCondition(r, recs)?.via as typeof r | undefined) : undefined; return evidenceIdOf(state, (via?.source ?? r.source).evidence, "statement"); };
+      out.push({ kind: "fact", subject_id: subj, text, evidence_ids: [...new Set(rows.map(evFor))] });
+    }
+    return out;
+  };
+  const deathStopAnswer = async (): Promise<Composed | null> => {
+    const subject = String(state.subjectId ?? "");
+    const dc = await deathCompletion(subject, []);
+    if (!dc || !dc.extra.length) return null;
+    const cnStop = await causeNote(subject, dc.extra.map((x) => String(x.benefit ?? ""))).catch(() => null);
+    const args: Record<string, unknown> = { subject_id: subject, sentences: [...dc.extra, ...(cnStop ?? [])], next_steps: dc.steps };
+    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    if (problems.length) return null;
+    const composed = composeFinal({ sentences: args.sentences as Record<string, unknown>[], nextSteps: args.next_steps, subjectId: subject }, composeCtx());
+    if (!composed.sentences.length) return null;
+    composed.notes = [...(composed.notes ?? []), ...(dc.gap ? [dc.gap] : []), "I stopped looking further so the answer could be written within this question's model-use limit."];
+    return composed;
   };
   /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
   const partialAnswer = (): Composed | null => {
@@ -1413,7 +1745,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       return sharedTopic(said, topicStems(parts.join(" "))).length;
     };
-    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)))
+    const read = [...ctx.values.entries()].filter(([id, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)) && !inapplicableIn(v.subjectId, { valueIds: [id] }))
       .map(([id, v], i) => ({ id, v, i, score: relevance(v.operand.evidence.policyId, v.operand.benefit, v.subjectId) }))
       .filter((x) => x.score > 0).sort((a, b) => a.score - b.score || a.i - b.i).map((x) => [x.id, x.v] as const);
     const seenRows = new Set<string>();
@@ -1431,7 +1763,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     // Nothing relevant read this turn: what the conversation already established about the question (stated, cited
     // and bound in an earlier turn), re-checked by the same composer and gate.
-    if (!sentences.length) for (const e of (state.established ?? []).filter((x) => !state.subjectId || x.subjectId === state.subjectId).slice(-3)) {
+    if (!sentences.length) for (const e of (state.established ?? []).filter((x) => (!state.subjectId || x.subjectId === state.subjectId) && !inapplicableIn(x.subjectId ?? state.subjectId ?? "", x)).slice(-3)) {
       if (sharedTopic(said, topicStems(`${e.text} ${e.benefit ?? ""}`)).length) sentences.push({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), ...(e.subjectId ? { subject_id: e.subjectId } : {}) });
     }
     if (!sentences.length) return null;
@@ -1551,13 +1883,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // one statement per figure, never a figure the reply already states.
     const wantSum = missing.some((m) => /sum insured/i.test(m)), wantStay = missing.some((m) => /hospital/i.test(m));
     const figs = new Set(moneyFiguresIn(texts.join(" ")).map((f) => Math.round(f.value * 100)));
-    const est = onlyCalcs ? [] : (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text))
+    const est = onlyCalcs ? [] : (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every(live) && e.valueIds.every((id) => ctx.values.has(id)) && !texts.includes(e.text) && !inapplicableIn(e.subjectId ?? subject, e))
       .filter((e) => bare || unsettled || (wantSum && /sum (?:insured|assured)/i.test(e.text)) || (wantStay && /hospital|confine/i.test(e.text)))
       .filter((e) => { const f = moneyFiguresIn(e.text).map((x) => Math.round(x.value * 100)); if (f.length && f.every((x) => figs.has(x))) return false; f.forEach((x) => figs.add(x)); return true; }).slice(-3);
     sentences.push(...est.map((e) => ({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), subject_id: subject })));
     const saidNow = [...texts, ...est.map((e) => e.text)].join(" ");
     // The person's own printed amounts read this conversation (a certificate's sum insured) that nothing says yet.
-    const amounts = [...ctx.values.entries()].filter(([, v]) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && live(evidenceIdOf(state, v.operand.evidence)) && !moneyFiguresIn(saidNow).some((f) => Math.abs(f.value * 100 - v.operand.cents!) < 1));
+    const amounts = [...ctx.values.entries()].filter(([vid, v]) => v.subjectId === subject && v.operand.valueKind === "money" && v.operand.cents != null && live(evidenceIdOf(state, v.operand.evidence)) && !moneyFiguresIn(saidNow).some((f) => Math.abs(f.value * 100 - v.operand.cents!) < 1) && !inapplicableIn(subject, { valueIds: [vid] }));
     const ctxText = [saidNow, question ?? "", ...(pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []).map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
     const percentOfSum = /%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText);
     if (!onlyCalcs && percentOfSum && !statesOwnAmount(saidNow, subject)) {
@@ -1570,7 +1902,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       } else {
         // The certificate amount was not read: the one bounded lookup, instead of saying it was not read.
         const look = await lookupSumInsured(subject);
-        if (look?.kind === "one") {
+        if (look?.kind === "one" && inapplicableIn(subject, { valueIds: [look.valueId] })) { /* the sum insured of a benefit the report excludes is not shown */ }
+        else if (look?.kind === "one") {
           const v = ctx.values.get(look.valueId)!; const e = v.operand.evidence;
           const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your document";
           const asOf = e.table?.asOf ? ` as of ${new Date(e.table.asOf + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}` : "";
@@ -1616,11 +1949,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
     const used = meter.usage.input + meter.usage.output;
-    if (!budgetWarned && step > 0 && (used > limits.maxTokensPerTurn * 0.5 || [...failures.values()].some((n) => n >= 2))) {
+    if (!budgetWarned && step > 0 && (used > limits.maxTokensPerTurn * 0.5 || lastRetrieval !== null || [...failures.values()].some((n) => n >= 2))) {
       const last = [...messages].reverse().find((x) => x.role === "tool") as { content: string } | undefined;
       if (last) { budgetWarned = true; try { last.content = JSON.stringify({ ...JSON.parse(last.content), notice: BUDGET_NOTICE }); } catch { last.content += "\n" + BUDGET_NOTICE; } }
     }
-    const m = await meter.next({ messages, tools, maxOutputTokens: limits.maxOutputTokens });
+    newToolRound();
+    // Once retrieval is closed the model is offered only what can still finish the turn (the answer, the question, the server-side
+    // evaluation): the lookups it was refused are not re-described to it on every call.
+    const m = await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
     trace.steps++; trace.modelId = out.modelId || trace.modelId;
@@ -1631,21 +1967,70 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
         // Reliable chat (contract C): statements of kind calculation / benefit_terms and contact next steps are written
         // by the server from the saved calculation or the resolved record; an id this turn did not produce is sent back.
+        // dj-live-3: a question for a death date that no uploaded wording turns on is not asked; what the turn already established
+        // is the answer (it keeps the household's "last week" as the range it is, and says so).
+        if (call.name === "ask_user") {
+          const un = await deathDateAskUnneeded(call.arguments).catch(() => null);
+          if (un) {
+            const subjU = String(call.arguments.subject_id ?? state.subjectId ?? "");
+            const note = { kind: "uncertainty", subject_id: subjU, evidence_ids: (Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []).filter((id) => state.evidence[id]), text: deferredDateNote(un.words, un.now) };
+            (trace.adjusted ??= []).push(`ask_user (${normalizeKey(call.arguments.fact_key)}): deferred -- ${un.reason}; answered with its statements`);
+            call.name = "final_answer";
+            call.arguments = { sentences: [...(call.arguments.statements as unknown[]), note], subject_id: call.arguments.subject_id ?? subjU, ...(call.arguments.next_steps ? { next_steps: call.arguments.next_steps } : {}) };
+          }
+        }
+        let askStepTmp = false;
         if (call.name === "final_answer" || call.name === "ask_user") {
           // PR #54 follow-up: the terms of a benefit whose own definition the household's report contradicts are left out
           // (it does not apply to what they described); the rest of the answer is unchanged.
           const field = call.name === "final_answer" ? "sentences" : "statements";
           const given = call.arguments[field] as Record<string, unknown>[] | undefined;
+          { const sj = String(call.arguments.subject_id ?? state.subjectId ?? ""); if (sj && familiesOf(input.message).has("death")) await causeGate(sj); }
           if (Array.isArray(given) && notApplicable.size) {
-            const keep = given.filter((x) => !(x?.kind === "benefit_terms" && [...notApplicable.keys()].some((k) => k.endsWith(`|${String(x.benefit_id ?? "")}`))));
-            if (keep.length !== given.length) { (trace.adjusted ??= []).push(`${call.name}: left out the terms of ${given.length - keep.length} benefit(s) whose definition does not fit what the household reported`); call.arguments = { ...call.arguments, [field]: keep }; }
+            const sjA = String(call.arguments.subject_id ?? state.subjectId ?? "");
+            const nm = (t: unknown) => String(t ?? "").toLowerCase().replace(/\(.*?\)/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+            const naNames = new Set([...notApplicable.keys()].map((k) => ctx.benefitRecords?.get(k.split("|")[1])?.benefit).filter((x): x is string => !!x).map(nm));
+            const keep = given.filter((x) => !((x?.kind === "benefit_terms" && [...notApplicable.keys()].some((k) => k.endsWith(`|${String(x.benefit_id ?? "")}`) && !askedDirectly(ctx.benefitRecords?.get(k.split("|")[1]) ?? { benefit: "" }))) || (x?.kind === "fact" && x.benefit && naNames.has(nm(x.benefit)) && !naRecordsFor(sjA).every((r) => askedDirectly(r) || nm(r.benefit) !== nm(x.benefit))) || (x?.kind !== "benefit_terms" && inapplicableIn(String(x?.subject_id ?? sjA), x ?? {}))));
+            if (keep.length !== given.length) {
+              (trace.adjusted ??= []).push(`${call.name}: left out the terms of ${given.length - keep.length} benefit(s) whose definition does not fit what the household reported`);
+              // (a benefit left out for the reported cause of death is NAMED, with its own printed condition, so the reply is never silent about it)
+              const sj2 = String(call.arguments.subject_id ?? state.subjectId ?? "");
+              const left = given.filter((x) => !keep.includes(x)).map((x) => String(ctx.benefitRecords?.get(String(x?.benefit_id ?? ""))?.benefit ?? x?.benefit ?? ""));
+              const cn0 = call.name === "final_answer" ? await causeNote(sj2, left, keep.map((x) => String(x?.text ?? ""))).catch(() => null) : null;
+              if (cn0?.length) { for (const n of cn0) { const i = keep.findIndex((x) => x?.kind === "fact" && String(x.text ?? "") === n.text); if (i >= 0) keep.splice(i, 1); } /* (a model copy of a server-written note is replaced by the note: its own citation may be the withheld amount row) */ keep.push(...cn0); causeNoted = true; (trace.adjusted ??= []).push("final_answer: stated how each accident-only death benefit's printed condition relates to the reported cause of death"); }
+              call.arguments = { ...call.arguments, [field]: keep };
+            }
           }
           await completeSchedules(call, field);
+          if (call.name === "final_answer") {
+            const subj = String(call.arguments.subject_id ?? state.subjectId ?? "");
+            // (Only when the reply has nothing to say about the person's benefits, or the turn's room ran short and retrieval was closed:
+            // a reply the model wrote with room to spare is its own selection and is not padded.)
+            const givenNow = (call.arguments.sentences as Record<string, unknown>[] | undefined) ?? [];
+            const dc = retrievalClosed || lastRetrieval || !givenNow.length ? await deathCompletion(subj, givenNow) : null;
+            if (dc) {
+              if (dc.extra.length) { call.arguments = { ...call.arguments, sentences: [...((call.arguments.sentences as unknown[] | undefined) ?? []), ...dc.extra] }; (trace.adjusted ??= []).push(`final_answer: added the printed terms of ${dc.rows.join("; ")} (benefits that pay on death for this person that the reply left out)`); }
+              if (!(Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length) && dc.steps.length) call.arguments = { ...call.arguments, next_steps: dc.steps };
+              if (dc.gap) deathGap = dc.gap;
+            }
+          }
+          // dj-live-3: a household that asks what to do gets the supported step with the reply, whichever way the turn ends -- a
+          // clarifying question never suppresses it (it is shown ahead of the question).
+          { const sjS = String(call.arguments.subject_id ?? state.subjectId ?? ""); const stepS = await contactStepFor(sjS, call.arguments.next_steps).catch(() => null);
+            serverAskSteps = null;
+            if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
           const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
+          if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
         if (call.name === "final_answer" || call.name === "ask_user") await bindCitedFigures(call);
+        if (call.name === "ask_user") {
+          // (the sections a cited passage spans are read here, before the synchronous check: see askScopes)
+          askScopesPre.clear();
+          const ids = new Set<string>([...(Array.isArray(call.arguments.because_evidence_ids) ? (call.arguments.because_evidence_ids as unknown[]).map(String) : []), ...[...requirements.values()].flatMap((r) => r.evidenceIds)]);
+          for (const id of ids) { askScopesPre.set(id, await scopeFor(id, `${String(call.arguments.question ?? "")} ${input.message}`)); }
+        }
         let r = action(call);
         // PR #54 (rc-live-8): a model statement about a benefit the server offered this turn that fails its check is
         // omitted whole; the benefit's own validated terms are kept, written by the same renderer from its record
@@ -1663,10 +2048,65 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
             }
           }
         }
+        // Death-journey live repair (dj-live-1 D2): a death question is answered for every documented death benefit of the person.
+        // One the reply left out, or whose sentence validation omitted whole, is added from its resolved record (the server's
+        // wording, never the model's); a benefit the reply already states is not repeated.
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences) && !deathToppedUp) {
+          deathToppedUp = true;
+          const sentences = call.arguments.sentences as Record<string, unknown>[];
+          const subj2 = String(call.arguments.subject_id ?? state.subjectId ?? "");
+          const dc2 = await deathCompletion(subj2, sentences, r.terminal.composed.sentences.map((x) => x.text), true);
+          if (dc2?.extra.length && !dc2.rows.includes("(no death benefit established)")) {
+            const nextSteps = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : dc2.steps;
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...dc2.extra], next_steps: nextSteps } };
+            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p3.length) {
+              await bindCitedFigures(again);
+              const r3 = action(again);
+              if (r3.terminal?.kind === "final") { r = r3; call.arguments = again.arguments; (trace.adjusted ??= []).push(`final_answer: added the printed terms of ${dc2.rows.join("; ")} (death benefits of this person the reply did not state)`); }
+            }
+          }
+        }
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences)) {
+          const again0 = causeNoted;
+          causeNoted = true;
+          const subj3 = String(call.arguments.subject_id ?? state.subjectId ?? "");
+          let cn = await causeNote(subj3, r.terminal.composed.sentences.map((x) => x.text));
+          // (a later final answer of the same turn that repeats a note the server already wrote -- a model copy cites the evidence IT chose,
+          // possibly the withheld amount's row -- is bound to the note's own evidence again; a note the answer does not repeat is not re-added)
+          if (again0 && cn) cn = cn.filter((n) => r.terminal?.kind === "final" && r.terminal.composed.sentences.some((x) => x.text === n.text && x.evidenceIds.join() !== (n.evidence_ids as string[]).join()));
+          if (cn?.length) {
+            const sentences = call.arguments.sentences as Record<string, unknown>[];
+            const steps5 = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : ((await deathCompletion(subj3, sentences, [], true).catch(() => null))?.steps ?? []);
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences.filter((x) => !(x?.kind === "fact" && cn.some((n) => n.text === String(x.text ?? "")))), ...cn], next_steps: steps5 } };
+            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p5.length) {
+              await bindCitedFigures(again);
+              const prevNotes = r.terminal.composed.notes ?? [];
+              const r5 = action(again);
+              if (r5.terminal?.kind === "final" && r5.terminal.composed.sentences.some((x) => cn.some((n) => x.text === n.text))) { r5.terminal.composed.notes = [...new Set([...prevNotes, ...(r5.terminal.composed.notes ?? [])])]; r = r5; call.arguments = again.arguments; (trace.adjusted ??= []).push("final_answer: stated how each accident-only death benefit's printed condition relates to the reported cause of death"); }
+            }
+          }
+        }
+        if (r.terminal?.kind === "final" && call.name === "final_answer" && Array.isArray(call.arguments.sentences) && !relationNoted) {
+          relationNoted = true;
+          const note = await relationNote(String(call.arguments.subject_id ?? state.subjectId ?? ""), r.terminal.composed.sentences.map((x) => x.text));
+          if (note) {
+            const sentences = call.arguments.sentences as Record<string, unknown>[];
+            const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, note] } };
+            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref) => evidenceIdOf(state, ref, "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            if (!p4.length) {
+              await bindCitedFigures(again);
+              const r4 = action(again);
+              if (r4.terminal?.kind === "final" && r4.terminal.composed.sentences.some((x) => x.text === note.text)) { r = r4; call.arguments = again.arguments; (trace.adjusted ??= []).push("final_answer: stated what the documents establish about how the benefits asked about relate (listed separately) and that whether they can be paid together is open"); }
+            }
+          }
+        }
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
           if (repair) { gateRepaired = true; beforeRepair = r.terminal; meter.grantRepairCall(); r = { result: { ok: false, error: repair } }; }
         } else if (r.terminal?.kind === "final" && gateRepaired) limitDateDrops(r.terminal.composed, call);
+        if (deathGap && call.name === "final_answer" && r.terminal?.kind === "final" && !r.terminal.composed.notes.includes(deathGap)) r.terminal.composed.notes = [...r.terminal.composed.notes, deathGap];
         record(call.name, call.arguments, r.result.ok !== false, [], r.result.ok === false ? String(r.result.error) : undefined);
         messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
         if (r.terminal && TERMINAL.has(call.name)) reply = r.terminal;
@@ -1675,9 +2115,29 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (call.name === "calculate") await readTableRest(call);
       const refusal = preflight(call);
       if (refusal) { record(call.name, call.arguments, false, [], refusal); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: refusal }) }); continue; }
+      if (call.name === "search_passages" || call.name === "read_page") {
+        const room = retrievalRoom({ used: meter.usage.input + meter.usage.output, callTokens: estimateTokens({ messages, tools }) + limits.maxOutputTokens, resultTokens, limit: limits.maxTokensPerTurn, idle: idleSearches });
+        const closed = room.closed;
+        if (room.last) lastRetrieval ??= room.last;
+        if (closed) {
+          retrievalClosed ??= closed;
+          const why = `retrieval is closed: ${closed}. Write the answer now from what you already hold (final_answer): every benefit person_benefits returned for this person, cited, and say what you could not look up.`;
+          record(call.name, call.arguments, false, [], why);
+          messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: why, notice: BUDGET_NOTICE }) });
+          continue;
+        }
+      }
       const toolT0 = Date.now();
+      newToolRound();
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
       { const tm = (toolMs[call.name] ??= { n: 0, ms: 0 }); tm.n++; tm.ms += Date.now() - toolT0; }
+      if (call.name === "search_passages") {
+        // (every hit's evidence id is allocated in result order first, as before: ids recorded in earlier turns keep their meaning)
+        if (res.ok) for (const h of ((res.data as { hits?: { evidence?: unknown }[] })?.hits ?? [])) if (isRef(h?.evidence)) evidenceIdOf(state, h.evidence, call.name);
+        const pr = compactSearch(res as { ok: boolean; data?: unknown; evidence: unknown }, shownSpans, (ref) => evidenceIdOf(state, ref, call.name));
+        idleSearches = res.ok && pr.novel === 0 ? idleSearches + 1 : 0;
+        (trace.adjusted ??= []).push(`search_passages: ${pr.hits} hit(s), ${pr.novel} new, ${pr.repeated} already returned this turn${pr.dropped ? `, ${pr.dropped} more left out` : ""}`);
+      }
       await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
       const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
@@ -1710,7 +2170,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           const id = r.person.id;
           if (pendingBefore?.kind === "person" && pendingBefore.purpose === "speaker" && pendingBefore.options.some((o) => o.id === id) && !state.speakerId) {
             // The household said who is typing: that is the speaker, not who the conversation is about.
-            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id;
+            state.speakerId = id; state.speakerConfirmed = true; ctx.conversation.speakerId = id; ctx.conversation.speakerConfirmed = true;
           } else setSubject(id, r.via === "self");
           unsettled = new Set();
           if (state.pending?.kind === "person") state.pending = null;
@@ -1726,12 +2186,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const d = res.ok ? (res.data as Record<string, unknown>) : null;
       record(call.name, call.arguments, res.ok, ids, res.ok ? undefined : res.error, d ? brief({ status: d.status, valueId: d.valueId, resultId: d.resultId, value: d.value, amount: d.amount, kind: d.kind, column: d.columnHeader, row: d.rowLabel, hits: Array.isArray(d.hits) ? d.hits.length : undefined }) : undefined);
       messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(shown) });
+      if (call.name === "search_passages" || call.name === "read_page") resultTokens = Math.max(RESULT_ALLOWANCE > resultTokens ? RESULT_ALLOWANCE : resultTokens, Math.ceil(JSON.stringify(shown).length / 3.5));
     }
   }
   trace.latencyMs = Date.now() - t0;
   trace.usage = { ...meter.usage };
   trace.calls = meter.calls;
-  { const modelMs = (meter.calls ?? []).reduce((a, c) => a + (c.latencyMs ?? 0), 0), tools = Object.values(toolMs).reduce((a, c) => a + c.ms, 0); trace.timings = { modelMs, toolMs, resolve: { n: ctx.timing?.resolveCount ?? 0, ms: ctx.timing?.resolveMs ?? 0 }, otherMs: Math.max(0, trace.latencyMs - modelMs - tools) }; }
+  { const modelMs = (meter.calls ?? []).reduce((a, c) => a + (c.latencyMs ?? 0), 0), tools = Object.values(toolMs).reduce((a, c) => a + c.ms, 0); trace.timings = { modelMs, toolMs, resolve: { n: ctx.timing?.resolveCount ?? 0, ms: ctx.timing?.resolveMs ?? 0 }, otherMs: Math.max(0, trace.latencyMs - modelMs - tools), ...(turnStoreStats() ? { store: { ...turnStoreStats()! } } : {}) }; }
   state.seq = ctx.seq;
 
   // V1.2: a calculation left unresolved only for household facts (kept per benefit, with its validated arguments) is
@@ -1890,6 +2351,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       trace.limit = { kind: stop?.kind ?? "turn_calls", detail: stop?.detail ?? "the turn ended without an answer" };
     }
   }
+  /** The last consistency check of every output path (normal completion, repair, budget fallbacks): a statement that says no
+   * amount is given for a benefit is left out, as a unit, when another statement of the same answer displays that benefit's
+   * amount -- the answer never says "no amount is given" while showing it. */
+  const dropContradictions = (c: Composed | null | undefined) => {
+    if (!c) return;
+    const NO_AMOUNT = /\bno (?:amount|figure|sum)\b[^.]{0,40}\b(?:given|stated|printed|shown|listed)\b/i;
+    const recs = [...(ctx.benefitRecords?.values() ?? [])].filter((r) => r.printed?.kind === "money");
+    const texts = c.sentences.map((x) => x.text);
+    const keep = c.sentences.filter((x, i) => {
+      if (!NO_AMOUNT.test(x.text)) return true;
+      const bad = recs.some((r) => { const cents = (r.printed as { cents: number }).cents; const name = " " + nmL(r.benefit) + " "; return (" " + nmL(x.text) + " ").includes(name) && texts.some((t, j) => j !== i && (" " + nmL(t) + " ").includes(name) && moneyFiguresIn(t).some((f) => Math.round(f.value * 100) === cents)); });
+      if (bad) c.dropped.push({ sentence: x.text, reason: "says no amount is given for a benefit whose amount this answer displays" });
+      return !bad;
+    });
+    if (keep.length !== c.sentences.length) { c.sentences = keep; (trace.adjusted ??= []).push("final answer: left out a statement saying no amount is given for a benefit whose amount the answer shows"); }
+  };
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {
@@ -1906,7 +2383,12 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const kind = stop?.kind ?? "turn_calls";
     // Round 7 (A3): a turn stopped by its own budget answers with what it had already established -- the printed
     // figures it read (bound and gated like any answer) and what is still missing -- never only the limit text.
-    const partial = BUDGET_STOPS.has(kind) ? partialAnswer() : null;
+    // Death-journey release: a death question stopped by its budget is finished from the benefits already resolved for the person
+    // (each with its printed terms), the remaining gap named -- not a single figure and the limit text.
+    if (BUDGET_STOPS.has(kind) && state.subjectId && familiesOf(input.message).has("death")) await causeGate(String(state.subjectId));
+    const deathStop = BUDGET_STOPS.has(kind) ? await deathStopAnswer() : null;
+    const partial = deathStop ?? (BUDGET_STOPS.has(kind) ? partialAnswer() : null);
+    dropContradictions(partial);
     final = partial ? { kind: "final", composed: partial } : { kind: "fallback", text: LIMIT_TEXT[kind] };
     if (partial) { trace.dropped = partial.dropped; trace.evidenceChosen.push(...partial.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id))); }
     trace.limit = { kind, detail: stop?.detail ?? "the turn ended without an answer" };
@@ -1915,6 +2397,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   else if (done.kind === "ask") {
     final = done;
     const c = done.composed;
+    dropContradictions(c);
     if (c) {
       remember(c);
       trace.dropped = c.dropped;
@@ -1931,6 +2414,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   else if (done.kind === "final") {
     final = done;
     const c = done.composed;
+    dropContradictions(c);
     remember(c);
     trace.outcome = "final_answer";
     trace.dropped = c.dropped;
@@ -1938,7 +2422,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Precision: each cited passage narrowed to the sentence / row the answer's sentence rests on (internal; the page
     // stays the household-facing link).
     // A span found at search time (for the query) is replaced by the one for the sentence actually said.
-    for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
+    for (const sent of c.sentences) for (const id of sent.evidenceIds) { const sc = await scopeFor(id, `${sent.benefit ?? ""} ${sent.text}`); await narrow(id, sent.text, sc && sc !== "none" ? sc.ranges : null); }
     if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
     if (state.claim) for (const s of c.sentences) if ((s.estimate || s.kind === "conditional_illustration") && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn, evidenceIds: s.evidenceIds });
@@ -1960,7 +2444,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // event happened, the sentence about accidents; otherwise the one closest to the question.
   if (final.kind === "ask" && final.pending.kind === "fact") {
     const p = final.pending;
-    for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
+    for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "), askScopes.get(id)?.ranges ?? null);
   }
   // PR #54 follow-up: every earlier illustration of this conversation is re-checked against its benefit's definition with
   // what the household has now reported (a correction may have changed it under any key): one that no longer fits is

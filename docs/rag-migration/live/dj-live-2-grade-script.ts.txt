@@ -1,0 +1,12 @@
+import fs from "node:fs";
+import { DEATH_GRADERS, DEATH_GRADER_VERSION } from "./death-check";
+const run = "docs/rag-migration/live/RUN-dj-live-2-2026-10-18T17-18-26";
+const out: any[] = [];
+for (const id of ["D1","D2","D3","F1","DI"]) {
+  const conv = JSON.parse(fs.readFileSync(run + "/conv-" + id + ".json", "utf8"));
+  const g = DEATH_GRADERS[id](id, conv);
+  out.push(g);
+}
+fs.writeFileSync("docs/rag-migration/live/dj-live-2-grade.json", JSON.stringify(out, null, 1));
+for (const g of out) console.log(g.scenario, g.verdict, "failed:", g.checks.filter((c: any) => !c.ok).map((c: any) => c.id).join(",") || "-", g.note ?? "");
+console.log(DEATH_GRADER_VERSION);

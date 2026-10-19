@@ -1,0 +1,107 @@
+[
+ {
+  "scenario": "DI",
+  "verdict": "PASS",
+  "checks": [
+   {
+    "id": "G1",
+    "dim": "C",
+    "name": "no budget-only dead end, refusal or “couldn't confirm” text, and no model error",
+    "ok": true,
+    "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; that dated amount is not confirmation of cover on the date he died.\nThe Group Insurance Product Summary says Group Term Life pays 100% of the Sum Assured for death or terminal illness, provided death occurs while the insured person is covered, and defines the Sum Assured as the amount on the person’s certificate.\nDaniel's certificate lists Daniel under Group Term Life as of 06/10/2022.\nThe Compassionate Death Allowance wording applies to death as a result of an accident, so it does not fit the circumstances you described.\nFor a death reported as an illness, Compassionate Death Allowance Benefit is printed as accident-only (printed condition: “If an Insured Person dies as a result of an Accident”), so it does not fit that report and no amount is given for it.\nFor a death reported as an illness, Group Personal "
+   },
+   {
+    "id": "G2",
+    "dim": "C",
+    "name": "no unfinished clause: no cut quotation, no orphan fragment, every line ends as a sentence or a question",
+    "ok": true,
+    "detail": ""
+   },
+   {
+    "id": "G3",
+    "dim": "S",
+    "name": "no payment promise",
+    "ok": true,
+    "detail": "Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; that dated amount is not confirmation of cover on the date he died.\nThe Group Insurance Product Summary says Group Term Life pays 100% of the Sum Assured for death or terminal illness, provided death occurs while the insured person is covered, and defines the Sum Assured as the amount on the person’s certificate.\nDaniel's certificate lists Daniel under Group Term Life as of 06/10/2022.\nThe Compassionate Death Allowance wording applies to death as a result of an accident, so it does not fit the circumstances you des"
+   },
+   {
+    "id": "G4",
+    "dim": "S",
+    "name": "no raw internal identifier",
+    "ok": true,
+    "detail": ""
+   },
+   {
+    "id": "G5",
+    "dim": "S",
+    "name": "no invented paperwork, deadline or party",
+    "ok": true,
+    "detail": ""
+   },
+   {
+    "id": "G6",
+    "dim": "U",
+    "name": "returned = saved = displayed: the answer the browser was given equals the saved answer, whole",
+    "ok": true,
+    "detail": "[{\"saved\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; that dated amount is not confirmation of cover on the date he died.\\nThe Group Insurance Product Summary says Group Term \",\"returned\":\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022; that dated amount is not confirmation of cover on the date he died.\\nThe Group Insurance Product Summary says Group Term \"}]"
+   },
+   {
+    "id": "G7",
+    "dim": "U",
+    "name": "every saved next step is visible (none saved but not shown)",
+    "ok": true,
+    "detail": "[[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]]"
+   },
+   {
+    "id": "I1",
+    "dim": "K",
+    "name": "Daniel's Group Term Life S$1,000,000 is stated on a line naming Term Life and Daniel, with the certificate date, not presented as current cover",
+    "ok": true,
+    "detail": "[\"Daniel’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022\",\"Daniel's certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.\"]"
+   },
+   {
+    "id": "I2",
+    "dim": "K",
+    "name": "no accident-only benefit's figure (S$600,000, Accidental Death 100%, the allowance's 2,000) is presented as potentially payable: any line with one says it is accident-only / does not fit",
+    "ok": true,
+    "detail": "[]"
+   },
+   {
+    "id": "I3",
+    "dim": "K",
+    "name": "Personal Accident / Accidental Death / the allowance, if named, are said to depend on an Accident (the death was reported as an illness)",
+    "ok": true,
+    "detail": "[\"The Compassionate Death Allowance wording applies to death as a result of an accident, so it does not fit the circumstances you described.\",\"For a death reported as an illness, Compassionate Death Allowance Benefit is printed as accident-only (printed condition: “If an Insured Person dies as a result of an Accident”), so it does not fit that report and no amount is given for it.\",\"For a death reported as an illness, Group Personal Accident is printed as accident-only, so it does not fit that report and no amount is given for it.\",\"For a death reported as an illness, Accidental Death is printed as accident-only and Death due to natural catastrophe is printed for a natural catastrophe, so they do not fit that report and no amount is given for them.\"]"
+   },
+   {
+    "id": "I4",
+    "dim": "K",
+    "name": "no dismemberment / fracture benefit, row, figure or window for a death question",
+    "ok": true,
+    "detail": ""
+   },
+   {
+    "id": "I5",
+    "dim": "U",
+    "name": "a visible next step: contact the person's own insurer (Aldermoor Life Ltd) about a claim",
+    "ok": true,
+    "detail": "[\"Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.\"]"
+   },
+   {
+    "id": "I6",
+    "dim": "U",
+    "name": "no unnecessary question: the person and the cause (illness) are known",
+    "ok": true,
+    "detail": "[]"
+   },
+   {
+    "id": "I7",
+    "dim": "K",
+    "name": "Grace's figures (S$200,000 / S$100,000) are not attached to Daniel",
+    "ok": true,
+    "detail": "[]"
+   }
+  ],
+  "note": null
+ }
+]
