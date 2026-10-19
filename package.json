@@ -208,6 +208,7 @@
     "e2e:rag2-s52-replay": "playwright test -c e2e/support/playwright.rag2-s52-replay.config.ts",
     "e2e:reliable-chat": "playwright test -c e2e/support/playwright.reliable-chat.config.ts",
     "e2e:reliable-chat-booklet": "playwright test -c e2e/support/playwright.reliable-chat-booklet.config.ts",
+    "e2e:reliable-chat-fracture": "playwright test -c e2e/support/playwright.reliable-chat-fracture.config.ts",
     "e2e:rag2-pr50": "playwright test -c e2e/support/playwright.rag2-pr50.config.ts",
     "e2e:rag2-livelib": "playwright test -c e2e/support/playwright.rag2-livelib.config.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
