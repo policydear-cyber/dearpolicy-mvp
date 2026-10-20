@@ -178,7 +178,7 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
     const saidAbove = !!bottomLine && /\balternatives?\b|\beither\b/i.test(bottomLine);
     blocks.push(<div key={"g-" + g.id} className="answer-either" data-testid="answer-either" role="group" aria-label="Alternative amounts, not a total">
       <p className="answer-either-note"><b>Either / or</b>{saidAbove ? null : <> {noteText}</>}</p>
-      {shared.length ? <ul className="answer-card-conditions answer-either-shared" data-testid="answer-either-shared">{shared.map((c, i) => <li key={i}>{render(withoutFooterClause(c))}</li>)}</ul> : null}
+      {shared.length ? <p className="answer-either-shared" data-testid="answer-either-shared"><b>Both options:</b> {shared.map((c) => render(withoutFooterClause(c))).join(" ")}</p> : null}
       {members.map((m, i) => <Fragment key={m.id}>{i ? <div className="answer-either-or" aria-hidden="true"><span>or</span></div> : null}{one(own(m))}</Fragment>)}
     </div>);
   }
