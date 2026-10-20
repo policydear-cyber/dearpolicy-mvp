@@ -2226,3 +2226,39 @@ once, or keeping the sentence with the figure removed.
 **Safe to merge while switched off. Close to ready to switch on:** the structure is now right and no longer tuned to
 this household. Fix R40-1 (a small generic rule) before switching on; R40-2 is recommended so the answer stays useful;
 R40-3 is optional.
+
+---
+
+# Round 41: PR #71 (simple chat) at `788f3de`, re-check of round 40
+
+Method: local tsx probes of `statesMoney` and `verifyAnswer` (32 prose wordings, plus the real household snapshot kept out
+of Git). No paid model calls.
+
+## Round 40 items
+
+- **R40-1: fixed.** All ten round-40 slips are now dropped ("1.25k", "1250", "About 120k…", "20% of 600k", "600000",
+  "1 250 … 200", "1.4 thousand", "one thousand two hundred and fifty dollars", "two hundred", "five thousand"), as are
+  "120 K" and "990 over ten days". Kept as they should be: "within 30 days", "within 365 days", "Page 13 lists 25%",
+  "The 2023 schedule", "dated 06/10/2022", "starts 19 Oct 2026", "Clause 4.12", "age 65", "Pages 12 and 13".
+- **R40-2: fixed.** Desmond's wrist card now reads "MINDEF & MHA Group Insurance (Product Summary) prints: “Arm , Elbow,
+  Wrist or Ribs 25%”" beside S$1,250; his S$600,000 card quotes his certificate line. A bottom line that only named an
+  amount becomes "Your documents list this benefit for Tan Yi Chuen Desmond. This is the wrist fracture benefit. The
+  amount is shown below."
+- **R40-3: fixed.** The 20% row now gives one fact card.
+- containsMoney in `monetary-boundary.ts` being unchanged is acceptable: the simple path writes prose only after
+  `withoutMoney`, and amounts only on server cards.
+
+## Remaining (all Low, none blocks switching on)
+
+- **R41-1 (Low):** still kept: "She gets 2000 for the ambulance" and "She gets 1999 in total" (bare 1900 to 2099 read as
+  a year), "Twelve fifty for the fracture", "One twenty k at most", "Several thousands are payable", "It pays hundreds
+  for each night" (`\bhundred\b` misses the plural). Each needs the model to disobey the prompt and pick an unusual
+  wording. Cheap tightening: match `hundreds?|thousands?|millions?`, and exempt a bare 19xx/20xx only after in, since,
+  from, until, by, before, after, of or a month name. The year trade-off is acceptable if left as is.
+- **R41-2 (Low, usefulness):** next steps lose a helpline or policy number ("Call the hotline on 1800 123 4567", "Quote
+  policy number 12345678") and "See p. 113". Acceptable for now; the source cards stay one tap away.
+
+## Verdict on PR #71 at `788f3de`
+
+**Ready to switch on, apart from the one paid smoke test it still needs.** Safe to merge. R41-1 and R41-2 are optional
+tightening.
