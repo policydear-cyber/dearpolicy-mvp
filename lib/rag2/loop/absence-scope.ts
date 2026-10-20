@@ -136,7 +136,7 @@ export const UNCHECKED_ABSENCE_DROP = /^(?:not supported by its evidence|states 
 
 export type AbsenceSource = { docs: DocRow[]; links: { policyId: string; memberId: string }[]; pages: { policyId: string; page: number; text: string }[];
   /** The household's members (G1 reads the certificate rows that name the subject by their full name). */
-  members?: Pick<MemberRow, "id" | "displayName">[] };
+  members?: Pick<MemberRow, "id" | "displayName" | "preferredName">[] };
 /** The documents an absence statement is checked against. */
 export function scopeDocs(src: AbsenceSource, opts: { policyIds: string[] | null; subjectId: string | null }): { docs: DocRow[]; scope: AbsenceCheck["scope"]; problem: string | null } {
   if (opts.policyIds?.length) {
@@ -191,12 +191,15 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   // whatever words the model searched for: those sentences are the answer, quoted.
   const docsOf = scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) }));
   const medical = claim === "benefit_not_found" && st.terms.some((t) => MEDICAL_TOPIC.test(t));
-  const medicalHits = medical ? medicalExpenseSentences(docsOf) : [];
+  // (critic round 6 R6-2: C2's term veto stays beside the sentence rule -- a label-style benefit, "Medical Expenses Benefit / Up to $2,000
+  // per Accident for medical expenses incurred", has no payment verb but is medical-expense wording; a scheme's bare policy list is not)
+  const termHits = medical ? scanScope(docsOf, MEDICAL_BILL_TERMS).filter((h) => !inPolicyList(pagesOf, h)) : [];
+  const medicalHits: SentenceHit[] = medical ? [...medicalExpenseSentences(docsOf), ...termHits] : [];
   // PR #57 follow-up (G1, DC's GP-bill answer): a scheme document's own list of its group policies names a policy ("Outpatient Medicare
   // Policy ("OPMC")") without describing it. When EVERY hit is such a name, and the person's own certificate, read in full, lists neither
   // that name nor its abbreviation, the hit is set aside and said in its own sentence (the scheme names it, the certificate does not list
   // it, the insurer confirms current cover); the absence is then decided over the rest as usual. Any other hit refuses as before.
-  const scheme = claim === "benefit_not_found" && scope.scope === "subject" && hits.length && !medicalHits.length ? schemeListing(scope.docs, pagesOf, hits, st.terms, labels, src.members?.find((m) => m.id === subjectId)?.displayName ?? null) : null;
+  const scheme = claim === "benefit_not_found" && scope.scope === "subject" && hits.length && !medicalHits.length ? schemeListing(scope.docs, pagesOf, hits, st.terms, labels, subjectId ?? null, src.members ?? []) : null;
   if ((hits.length && !scheme) || medicalHits.length) {
     const all: SentenceHit[] = [...medicalHits, ...hits];
     const shown = all.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
@@ -223,7 +226,12 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
     const full = scope.docs.filter((d) => !partial.includes(d)).map((d) => labels.get(d.id) ?? "document");
     const part = partial.map((d) => { const ns = [...new Set((pagesOf.get(d.id) ?? []).filter((p) => p.text.trim()).map((p) => p.page))].sort((a, b) => a - b); return `the ${labels.get(d.id) ?? "document"} (page${ns.length > 1 ? "s" : ""} ${ranges(ns)}${d.pageCount != null ? ` of ${d.pageCount}` : ""})`; });
     const whose = scope.scope === "subject" && ctx.who ? `${ctx.who}’s documents` : "the documents";
-    const text = `${scheme ? scheme.text(ctx.who) + " " : ""}Only part of ${whose} could be checked for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. The pages that were read do not mention ${t.topic}; the rest is not stored and could not be checked, so this is not an answer about whether there is such cover.`;
+    // (C4, UX on C3: said as what was checked and what the upload holds -- never as lost or broken data)
+    const unreadable = partial.some((d) => (pagesOf.get(d.id) ?? []).some((p) => !p.text.trim()));
+    const missing = partial.some((d) => { const ps = pagesOf.get(d.id) ?? []; return d.pageCount == null || ps.length < d.pageCount; });
+    const unknownCount = partial.some((d) => d.pageCount == null);
+    const why = [missing ? (unknownCount ? "may not all be in the copy that was uploaded" : "are not in the copy that was uploaded") : "", unreadable ? "have no readable text" : ""].filter(Boolean).join(" or ");
+    const text = `${scheme ? scheme.text(ctx.who) + " " : ""}I checked ${whose} for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. Those pages do not mention ${t.topic}. The other pages ${why}, so I can't say either way whether there is such cover.`;
     return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked`, partial: { text, check } };
   }
   const check: AbsenceCheck = {
@@ -233,6 +241,8 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   return { ok: true, check, text: `${scheme ? scheme.text(ctx.who) + " " : ""}${renderAbsence(check, ctx.who)}` };
 }
 
+/** Words a document would print for paying a doctor's or medical bill (C2's veto, critic round 4 condition 5). */
+const MEDICAL_BILL_TERMS = ["medical expenses", "medical expense", "medical reimbursement", "medical bills", "medical treatment", "medical fees", "outpatient", "clinic", "general practitioner", "consultation"];
 /** A topic about a doctor's or medical bill (the terms the model or the server searched for). */
 const MEDICAL_TOPIC = /medic|outpatient|clinic|doctor|physician|practitioner|consultation|\bgp\b/i;
 /** A sentence that reimburses or pays for medical treatment: a payment verb, and a medical word next to what is paid (expenses, charges,
@@ -266,15 +276,21 @@ const inPolicyList = (pagesOf: Map<string, { page: number; text: string }[]>, h:
 
 /** G1: whether every hit is the name of a group policy in a scheme document's own list of its policies (a sentence naming three or more
  * policies with their abbreviations), that the person's certificate, read in full, does not list. Null when anything is in doubt. */
-function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text: string }[]>, hits: ScopeHit[], terms: string[], labels: Map<string, string>, rowName: string | null): { text: (who: string | null) => string } | null {
-  if (!rowName) return null;
+function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text: string }[]>, hits: ScopeHit[], terms: string[], labels: Map<string, string>, subjectId: string | null, members: Pick<MemberRow, "id" | "displayName" | "preferredName">[]): { text: (who: string | null) => string } | null {
+  const me = members.find((m) => m.id === subjectId);
+  if (!me) return null;
   const certs = docs.filter((d) => d.documentRole === "certificate" && d.personalCoverageConfirmed);
   const full = (d: DocRow) => { const ps = pagesOf.get(d.id) ?? []; const have = new Set(ps.filter((p) => p.text.trim()).map((p) => p.page)); return d.pageCount != null && d.pageCount > 0 && Array.from({ length: d.pageCount }, (_, i) => i + 1).every((n) => have.has(n)); };
   if (!certs.length || !certs.every(full)) return null;
   const certText = certs.flatMap((d) => (pagesOf.get(d.id) ?? []).map((p) => p.text)).join("\n");
   // (what the certificate lists FOR THIS PERSON -- critic round 5 A2: the product headings with a row naming them under it, never a
   // spouse's -- and the date those rows are printed as of: one date, or G1 does not fire)
-  const person = new RegExp(`(?:^|\\t)\\s*${flat(rowName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}\\s*(?:\\t|$)`, "i");
+  // (critic round 6 R6-1: a row is this person's when it names them -- the display or preferred name, word-bounded, or every word of
+  // the display name in any order ("Lee Wei Ming, Daniel" for "Daniel Lee Wei Ming") -- and names no other member of the household)
+  const word = (w: string) => new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}(?![\\p{L}])`, "iu");
+  const names = (m: (typeof members)[number]) => [m.displayName, m.preferredName].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => flat(n));
+  const namesMember = (l: string, m: (typeof members)[number]) => { const ws = flat(m.displayName).split(/[\s,]+/).filter((w) => w.length >= 2); return names(m).some((n) => word(n).test(l)) || (ws.length >= 2 && ws.every((w) => word(w).test(l))); };
+  const person = { test: (l: string) => namesMember(l, me) && !members.some((o) => o.id !== me.id && namesMember(l, o)) };
   const products: string[] = []; const dates = new Set<string>();
   let heading: string | null = null;
   for (const l of certText.split(/\n+/)) {
