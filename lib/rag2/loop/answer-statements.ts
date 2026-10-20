@@ -8,16 +8,21 @@ import type { AnswerStatement, ChatAnswer } from "@/types";
 import { tidyNames, type Composed, type NamedPerson } from "./compose";
 import type { StructuredDraft } from "./statement-render";
 import { reconcileStatements } from "@/lib/chat/monetary-boundary";
+import { sentencesOf } from "@/lib/chat/answer-verification";
 
 const squash = (t: string) => t.replace(/\s+/g, " ").trim();
 /** A count said in words (a bottom line states no number that is not on an amount card). */
 const COUNT = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 const count = (n: number) => COUNT[n] ?? "several";
+/** A paragraph saying a printed benefit does not apply here: a condition not met, a trip or period that does not fit. */
+const VERDICT = /\bnot met\b|\bnot an amount for\b|\bdoes(?:n['’]t| not) (?:fit|cover|apply)\b|\boutside (?:the|its) (?:period|trip|dates)\b|\bended\b/i;
 
 /** The evidence of the composed sentences a paragraph shows (a paragraph is one sentence, or notes joined with it). */
 function evidenceOf(paragraph: string, composed: Composed | null): string[] {
   const p = squash(paragraph);
-  return [...new Set((composed?.sentences ?? []).filter((s) => s.text.trim() && p.includes(squash(s.text))).flatMap((s) => s.evidenceIds))];
+  // (Critic R23-3: a paragraph the figure gate shortened -- a sentence of it left out -- still rests on its sentence's evidence)
+  const parts = sentencesOf(paragraph).map(squash).filter((x) => x.length >= 40);
+  return [...new Set((composed?.sentences ?? []).filter((s) => { const t = squash(s.text); return t && (p.includes(t) || parts.some((x) => t.includes(x))); }).flatMap((s) => s.evidenceIds))];
 }
 
 /** The answer's statements and bottom line, and its citations narrowed to what it shows: the evidence of the composed sentences still in
@@ -42,10 +47,17 @@ export function buildStatements(answer: ChatAnswer, composed: Composed | null, r
     const { citeIds: _c, ...src } = source ?? { citeIds: undefined };
     return { id: `s${i + 1}`, ...rest, text: short, fullText: p, source: source ? { ...(src as Omit<NonNullable<StructuredDraft["source"]>, "citeIds">), citationIds: cites(p, d).map((id) => "rag2:" + id) } : null };
   });
-  // (two documents' amounts for the same event are alternatives: marked as one either-or group, so they are never read as a total)
-  const conflict = statements.find((s) => s.kind === "uncertainty" && s.source?.policyName.includes(" and "));
-  const alternatives = statements.filter((s) => s.amount && s.kind === "calculation");
-  if (conflict && alternatives.length >= 2) for (const s of alternatives) s.group = { id: "g1", kind: "either_or", note: "These are alternatives from different documents, never a total. The documents don't say which one applies; the insurer decides." };
+  // (Evidence Reviewer 2/5: an amount another paragraph says does not apply here -- a condition not met, a trip that does not fit -- is
+  // never a card: it goes as plain text, next to that verdict)
+  // (... and an amount printed for a period that had ended before today -- a trip schedule's "10/03/2025 to 17/03/2025" -- is not a card)
+  const ended = (c: string) => [...c.matchAll(/\b\d{1,2}\/\d{1,2}\/\d{4}\s+to\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g)].some((m) => Date.UTC(+m[3], +m[2] - 1, +m[1]) < Date.now());
+  for (const [i, st] of statements.entries()) {
+    if (!st.amount) continue;
+    if (st.conditions.some(ended)) { statements[i] = { id: st.id, kind: "fact", text: st.fullText, fullText: st.fullText, conditions: [] }; continue; }
+    const name = st.text.split(/[:(]/)[0].replace(/^.*?\b(?:lists|prints)\s+/i, "").trim().toLowerCase();
+    if (name.length >= 6 && statements.some((o, j) => j !== i && o.fullText.toLowerCase().includes(name) && VERDICT.test(o.fullText)))
+      statements[i] = { id: st.id, kind: "fact", text: st.fullText, fullText: st.fullText, conditions: [] };
+  }
   answer.statements = statements;
   answer.bottomLine = bottomLine(statements, answer.nextSteps);
   reconcileStatements(answer);
@@ -58,21 +70,23 @@ function bottomLine(statements: AnswerStatement[], nextSteps: string[]): string 
   const amounts = statements.filter((s) => s.amount);
   const step = nextSteps.find((x) => x.trim() && !/\d/.test(x));
   const then = (said: string) => step ? `${said}; the next step is to ${step.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()).replace(/[.\s]+$/, "")}.` : `${said}.`;
-  const either = amounts.filter((s) => s.group?.kind === "either_or");
-  if (either.length >= 2) {
+  const groups = [...new Set(amounts.map((a) => a.group?.id).filter((g): g is string => !!g))];
+  const either = groups.length === 1 ? amounts.filter((s) => s.group?.id === groups[0]) : [];
+  if (either.length >= 2 && either.length === amounts.length) {
     const list = either.map((a) => a.amount!.text);
     const who = either[0].personName;
     return then(`${who ? `${who}'s documents` : "The documents"} print either ${list.slice(0, -1).join(", ")} or ${list.at(-1)} for this (alternatives, not a total), and only the insurer decides which applies`);
   }
-  // (one printed amount is the outcome only when nothing else in the answer qualifies it -- "its accident condition is not met")
-  if (amounts.length === 1 && (amounts[0].kind === "calculation" || statements.length === 1)) {
-    const a = amounts[0];
-    const said = a.text.replace(/[.\s]+$/, "");
-    return then(a.kind === "calculation" ? `${said}, and only the insurer decides whether it applies` : `${a.personName ? `For ${a.personName}, ` : ""}${said.replace(/^./, (c) => c.toLowerCase())}, if its conditions are met, and only the insurer can confirm it applies to this event`);
-  }
-  if (amounts.length > 1 && amounts.every((x) => x.kind === "calculation")) return then(`The documents print ${count(amounts.length)} amounts that may apply, each with its own conditions below, and only the insurer decides which applies`);
+  // (one illustration is the outcome with its "if"; a printed amount alone never is -- its dates, trip and conditions are on its card,
+  // Evidence Reviewer 1)
+  if (amounts.length === 1 && amounts[0].kind === "calculation") return then(`If it applies, ${amounts[0].personName ? `${amounts[0].personName}'s documents give` : "the documents give"} an illustration of ${amounts[0].amount!.text}, and only the insurer decides whether it applies`);
+  if (amounts.length >= 1) return then(`Your documents print ${count(amounts.length)} ${amounts.length > 1 ? "amounts" : "amount"} that may apply, each with its own conditions and dates below, and only the insurer decides whether ${amounts.length > 1 ? "any applies" : "it applies"}`);
+  // (Evidence Reviewer 5: a printed benefit whose condition the household's account does not meet is the outcome -- said as the answer
+  // says it, with whose decision it is)
+  const verdict = statements.flatMap((s) => sentencesOf(s.fullText)).find((x) => VERDICT.test(x) && /\binsurer/i.test(x));
+  if (verdict) return then(verdict.trim().replace(/[.\s]+$/, ""));
   const missing = statements.find((s) => s.kind === "not_found");
-  if (missing && missing === statements[0]) return `${missing.text.replace(/[.\s]+$/, "")}. Only the insurer can confirm whether anything else applies.`;
+  if (missing) return /\binsurer\b/i.test(missing.text) ? missing.text.trim() : `${missing.text.replace(/[.\s]+$/, "")}. Only the insurer can confirm whether anything else applies.`;
   if (step) return `If you go ahead, start here: ${step}`;
   return null;
 }

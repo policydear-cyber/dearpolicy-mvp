@@ -148,7 +148,7 @@ async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: strin
     const amount = { text: p.currency ? amt : `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""}`, currencyResolved: !!p.currency, illustration: false };
     const src = (note: string | null = null) => ({ policyName: r.policy.product ?? "document", page: r.source.page ?? null, rowLabel: null, footnote: null, note });
     if (r.applicability === "person_row") { const v = r.personBenefit ? await personAmountValue(d.ctx, r.personBenefit, r.memberName, r.memberId) : null; return { text: `${who}'s ${docName(r)} lists ${pretty(r.benefit)} of ${amt}${r.asOf ? ` as of ${fmtDate(r.asOf)}` : ""}.`, evidence_ids: ev, value_ids: v ? [v] : [],
-      draft: { kind: "benefit_terms", short: `${who}'s ${docName(r)} lists ${pretty(r.benefit)} of ${amt}.`, personName: who, amount, basis: null, conditions: [], asOf: r.asOf ?? null, source: src() } }; }
+      draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())} · ${who}'s ${docName(r)}`, personName: who, amount, basis: null, conditions: [], asOf: r.asOf ?? null, source: src() } }; }
     // PR #54 (rc-live-8): a benefit printed under its own heading, or a row with a footnote, is said in ONE sentence with
     // its name, its section, what it is for, its amount -- or that the document leaves the currency of its bare "$"
     // unstated -- and its own printed conditions, quoted from its own lines (with their own evidence). The clause that
@@ -163,14 +163,14 @@ async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: strin
       const conds = t.conditions.map((c) => `“${c.replace(/[“”]/g, "\"")}”`);
       const list = conds.length > 1 ? `${conds.slice(0, -1).join(", ")} and ${conds.at(-1)}` : conds[0] ?? "";
       return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}.`, evidence_ids: ev, value_ids: [],
-        draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())}${t.covers ? ` for ${t.covers}` : ""}: ${t.cap ? t.cap + " " : ""}${amount.text}.`, personName: who, amount, basis: null, conditions: t.conditions.map((c) => c.replace(/[“”]/g, "\"")), asOf: null, source: src(pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `under “${pb.benefit.section}”` : null) } };
+        draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())}${t.covers ? ` · ${t.covers}` : ""}`, personName: who, amount, basis: null, conditions: [...(t.cap ? [`${t.cap.replace(/^./, (c) => c.toUpperCase())} this amount.`] : []), ...t.conditions.map((c) => c.replace(/[“”]/g, "\""))], asOf: null, source: src(pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `under “${pb.benefit.section}”` : null) } };
     }
     // (PR #57 follow-up, UX L2: a one-line benefit keeps the condition printed on its own line after the amount -- "S$2,000 per
     // Insured Person, if death occurs outside Singapore as a result of an Accident" -- quoted, never dropped)
     const own = pb?.benefit.source === "label_line" ? r.conditions.find((c) => c.startsWith(pb.benefit.label)) : undefined;
     const rest = own?.slice(pb!.benefit.label.length).replace(/^\s*:\s*/, "").replace(/^(?:S\$|SGD\s?|US\$|\$)?\s?[\d,]+(?:\.\d+)?/, "").replace(/^[\s,;]+/, "").replace(/[.\s]+$/, "").trim();
     return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}${rest ? `, with the printed condition “${rest.replace(/[“”]/g, "\"")}”` : ""}.`, evidence_ids: ev, value_ids: [],
-      draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())}: ${amt}.`, personName: who, amount, basis: null, conditions: rest ? [rest.replace(/[“”]/g, "\"")] : [], asOf: null, source: src() } };
+      draft: { kind: "benefit_terms", short: pretty(r.benefit).replace(/^./, (c) => c.toUpperCase()), personName: who, amount, basis: null, conditions: rest ? [rest.replace(/[“”]/g, "\"")] : [], asOf: null, source: src() } };
   }
   if (p?.kind === "percent") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${p.percent}%${p.of ? ` of the ${p.of}` : ""}.`, evidence_ids: ev, value_ids: [] };
   if (p?.kind === "reference") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) defines ${pretty(r.benefit)} as the ${p.of}.`, evidence_ids: ev, value_ids: [] };
@@ -239,19 +239,30 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // "Hip" -- carries the same plain note after a correction as a labelled row does: neither kind is defined here)
     const bothKinds = !tagged && /\bSimple Fracture\b[^.]*\bOther Fracture\b/i.test(c.benefit) && ![...(d.ctx.benefitRecords?.values() ?? [])].some((r) => r.policy.id === c.policyId && r.definitions.length);
     const undefinedNote = bothKinds ? " (the benefit names Simple Fracture and Other Fracture alike, and this row is labelled as neither; these documents do not define either kind, so the insurer decides how it applies)" : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
-    const full = `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision${rowNote(c.record?.rowNotes)}.`;
+    // (Evidence Reviewer E1: the cause the benefit's own lead-in prints before its table -- "If an Insured Person sustains bodily injury as a
+    // result of an Accident, which results in ..." -- travels with the amount; read from the table's own page, never assumed)
+    const sched = [...(d.ctx.benefitRecords?.values() ?? [])].find((r) => r.kind === "percentage_schedule" && r.policy.id === c.policyId && r.benefit === c.benefit && r.schedule)?.schedule;
+    const lead = sched ? sched.pageText.slice(Math.max(0, sched.table.headerStart - 600), sched.table.headerStart).replace(/\s+/g, " ") : "";
+    const cause = /\bbodily injury as a result of an Accident\b/i.test(lead) ? "bodily injury as a result of an Accident" : null;
+    const causeText = cause ? `, and only if it results from ${cause} (as the page prints)` : "";
+    const full = `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${causeText}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision${rowNote(c.record?.rowNotes)}.`;
     // (answer shape: the same statement as fields -- the case and its own conditions stay with the amount; the document, page, row label and
     // the date the base was printed move to where it comes from)
     const baseShort = !base ? "" : base.role === "sum_insured" ? `${who}'s sum insured of ${money(Number(base.value), base.currency)}` : `the ${pretty(base.label)} of ${money(Number(base.value), base.currency)}`;
     const notes = c.record?.rowNotes ?? [];
     const conditions = [
+      // (UX designer on PR #70: the card's text is a label; its "if" and "not a decision" travel here, with the amount)
+      `Only if the ${named} applies${pct ? ` to ${who}'s case` : ""}; an illustration from the document's terms, not a payment or an insurer's decision.`,
+      ...(cause ? [`Only if it results from ${cause}.`] : []),
       ...(undefinedNote ? [undefinedNote.trim().replace(/^\(|\)$/g, "").replace(/^./, (x) => x.toUpperCase()) + "."] : []),
       ...notes.map((n) => noteText(n.text).replace(/[.!?]+$/, "") + "."),
     ];
     const marked = notes.find((n) => n.marker);
-    structure(d, full, { kind: "calculation", short: `If the ${named} applies${pct ? ` to ${who}'s case “${label}”` : ""}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseShort}` : ""}.`, personName: who,
+    structure(d, full, { kind: "calculation", short: `${named.replace(/ benefit$/i, "").replace(/^./, (x) => x.toUpperCase())}${pct ? ` · ${label}` : ""}`, personName: who,
       amount: { text: money(c.amount, c.currency), currencyResolved: true, illustration: true }, basis: pct && base ? `${pct.value}% of ${baseShort}` : null, conditions, asOf: baseAsOf ?? null,
-      source: { policyName: alt?.label ?? product, page: alt?.page ?? null, rowLabel: pct?.label ?? null, footnote: marked ? { marker: marked.marker, text: noteText(marked.text) } : null, note: undefinedNote ? undefinedNote.trim().replace(/^\(|\)$/g, "") : null } });
+      source: { policyName: alt?.label ?? product, page: alt?.page ?? null, rowLabel: pct?.label ?? null, footnote: marked ? { marker: marked.marker, text: noteText(marked.text) } : null, note: undefinedNote ? undefinedNote.trim().replace(/^\(|\)$/g, "") : null },
+      // (Critic R23-2: only the illustrations the two-document relation note re-rendered are alternatives to each other)
+      ...(alt ? { group: { id: `alt:${c.subjectId}`, kind: "either_or" as const, note: "These are alternatives from different documents, never a total. The documents don't say which one applies; the insurer decides." } } : {}) });
     return full;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {

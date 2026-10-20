@@ -311,6 +311,9 @@ const HEDGED = /\b(?:if|may|might|only|whether|not|insurer decides|insurer (?:ca
  * figure it states is on a kept amount statement and it carries its own qualifier. Pure and idempotent: the same on return, save and
  * reopen (sanitizeStoredAnswer), so returned = saved = reopened. */
 export function reconcileStatements(answer: ChatAnswer): void {
+  // (Critic R23-1: an answer withdrawn as out of date -- lib/chat/stale-answers.ts invalidatedAnswer, whatever the reason -- shows its
+  // notice only: no card and no bottom line, on return, save and reopen)
+  if (answer.invalidated) { answer.statements = []; answer.bottomLine = null; return; }
   if (!Array.isArray(answer.statements)) { if (answer.bottomLine !== undefined) answer.bottomLine = null; return; }
   const paragraphs = [answer.summary, ...answer.details].filter((p) => typeof p === "string" && p.trim());
   const byFull = new Map<string, AnswerStatement>();
@@ -335,7 +338,9 @@ export function reconcileStatements(answer: ChatAnswer): void {
   answer.statements = out;
   const b = typeof answer.bottomLine === "string" ? answer.bottomLine.trim() : "";
   const onCards = out.filter((st) => st.amount).flatMap((st) => [st.text, st.basis ?? "", st.amount!.text, ...st.conditions].flatMap(numbersIn));
-  answer.bottomLine = b && HEDGED.test(b) && flagUnclearFigures(b) === b && numbersIn(b).every((n) => onCards.includes(n)) ? b : null;
+  // (amounts and percentages only: a date or a page number in the bottom line is not an amount -- Evidence Reviewer 4)
+  const stated = [...amountsIn(b), ...[...b.matchAll(/(\d[\d,]*(?:\.\d+)?)\s?%/g)].map((m) => m[1].replace(/,/g, ""))];
+  answer.bottomLine = b && HEDGED.test(b) && flagUnclearFigures(b) === b && stated.every((n) => onCards.includes(n)) ? b : null;
 }
 
 /** Read-side boundary for answers persisted before this boundary existed

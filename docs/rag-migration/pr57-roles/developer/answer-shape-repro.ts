@@ -11,6 +11,8 @@ import { FX_REPAIR_SCENARIOS } from "../../../../scripts/fixtures/reliable-chat/
 import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { reconcileStatements, sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { excerptOf } from "@/lib/rag2/evidence";
+import { invalidatedAnswer } from "@/lib/chat/stale-answers";
+import { buildStatements } from "@/lib/rag2/loop/answer-statements";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 const want = (process.argv[2] ?? "").split(",").filter(Boolean);
@@ -68,6 +70,18 @@ async function main() {
   reconcileStatements(extra);
   const ok3 = !extra.statements[0].amount && extra.statements[0].text === amountCut.summary;
   console.log(`UNIT a card stating an amount its paragraph does not is sent as plain text: ${ok3}`); if (!ok3) failed++;
+  // Critic R23-1: an out-of-date answer (every reason) keeps no card and no bottom line, on return and after reconcile.
+  const ok4 = (["policy_deleted", "documents_added"] as const).every((r) => { const a: any = invalidatedAnswer(JSON.parse(JSON.stringify({ ...amountCut, statements: [{ id: "x", kind: "fact", text: "t", fullText: "t", conditions: [] }], bottomLine: "Grace's documents print S$1,250." })), r); reconcileStatements(a); return Array.isArray(a.statements) && a.statements.length === 0 && a.bottomLine === null; });
+  console.log(`UNIT an invalidated answer (deleted or added documents) has no statements and no bottom line: ${ok4}`); if (!ok4) failed++;
+  // Critic R23-2: only the calculations the relation note rendered are an either/or group; a third, independent one stays outside it.
+  const P = ["If it applies to Grace, the Policy A illustration is S$1,250: 25% of S$5,000.", "If it applies to Grace, the Policy B illustration is S$2,000: 20% of S$10,000.", "If it applies to Grace, the Policy C hospital cash is S$300: S$100 a day for 3 days."];
+  const grp = { id: "alt:g", kind: "either_or" as const, note: "These are alternatives from different documents, never a total." };
+  const draft = (short: string, amt: string, basis: string, group?: any): any => ({ kind: "calculation", short, personName: "Grace", amount: { text: amt, currencyResolved: true, illustration: true }, basis, conditions: [], group, source: null });
+  const three: any = { summary: P[0], details: [P[1], P[2]], claimItems: [], nextSteps: ["Contact the insurer."], citations: [], questions: [], mode: "answer" };
+  buildStatements(three, null, new Map([[P[0], draft("Policy A: S$1,250", "S$1,250", "25% of S$5,000", grp)], [P[1], draft("Policy B: S$2,000", "S$2,000", "20% of S$10,000", grp)], [P[2], draft("Policy C hospital cash: S$300", "S$300", "S$100 a day for 3 days")]]), []);
+  const st = three.statements ?? [];
+  const ok5 = st.length === 3 && st[0].group?.id === "alt:g" && st[1].group?.id === "alt:g" && !st[2].group && !!st[2].amount && !/either/.test(three.bottomLine ?? "");
+  console.log(`UNIT only the relation note's calculations are grouped; a third independent one is not, and the bottom line says no "either": ${ok5} (${JSON.stringify(three.bottomLine)})`); if (!ok5) failed++;
   console.log(failed ? `\n${failed} FAILED` : "\nall consistent");
   process.exit(failed ? 1 : 0);
 }
