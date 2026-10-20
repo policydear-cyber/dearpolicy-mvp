@@ -169,6 +169,7 @@ export async function evaluateBenefit(ctx: ToolContext, a: Record<string, unknow
       base: s.base.kind === "fixed_limit" || s.base.kind === "sum_insured" ? { label: s.base.label, amount: formatMoney(s.base.cents, s.base.currency) } : null,
       amount: d.amount != null && d.currency ? formatMoney(Math.round(Number(d.amount) * 100), String(d.currency)) : null,
       conditions: d.conditions, requirements: d.requirements, missing: d.missing, suggested_evidence: d.suggested_evidence,
+      ...(row.notes.length ? { row_footnotes: row.notes.map((n) => `${n.marker} ${n.text.replace(/\s+/g, " ")}`) } : {}),
       note: kind === "conditional_illustration" ? "State it with a statement of kind calculation citing result_id (the server writes the figures and their sources); it is an illustration, never a payment or decision." : undefined }, [...res.evidence, ...appEvidence]);
   }
 

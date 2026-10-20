@@ -1,0 +1,2453 @@
+{
+ "K2": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 3,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "Grace was hospitalised for three days last week because she was sick. Does her accident cover pay anything?",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 328,
+    "pages": [
+     "BS:3",
+     "BS:5",
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13"
+    ],
+    "request_keys": [
+     "A/K2#0",
+     "A/K2#1",
+     "A/K2#2"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 3,
+    "usage": {
+     "input": 36249,
+     "output": 462
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": true,
+      "args": {
+       "facts": [
+        {
+         "key": "hospital_stay_duration",
+         "value": "3 days",
+         "words": "hospitalised for three days last week"
+        },
+        {
+         "key": "how_it_happened",
+         "value": "she was sick",
+         "words": "she was sick"
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "accident cover and hospitalisation because she was sick",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 5,
+       "query": "Accidental Hospital Recuperation Benefit accident bodily injury hospitalised continuous period 24 hours sickness illness exclusion",
+       "policy_ids": [
+        "7d000000-0000-4000-8000-000000000103"
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e19",
+       "e20",
+       "e21",
+       "e22",
+       "e23"
+      ],
+      "error": null,
+      "summary": "{\"hits\":5}"
+     },
+     {
+      "name": "ask_user",
+      "ok": true,
+      "args": {
+       "kind": "fact",
+       "fact_key": "how_it_happened",
+       "question": "Was Grace’s hospitalisation medically necessary because of an accidental injury, or was it due to an illness without an accident?",
+       "statements": [
+        {
+         "kind": "fact",
+         "text": "Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me this benefit's condition is not met and no amount is given for it.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e13"
+         ]
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "because_evidence_ids": [
+        "e13",
+        "e19"
+       ]
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 5 hit(s), 5 new, 0 already returned this turn",
+     "stated how the reported cause (“she was sick”) fits the printed accident condition of Accidental Hospital Recuperation Benefit; its terms and amount are left out for a cause it does not fit",
+     "ask_user (how_it_happened): not asked -- how it happened is already recorded (how_it_happened: “she was sick”); answered with its statements instead"
+    ],
+    "evidence_chosen": [
+     "e13"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e13",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 9,
+      "pageEnd": 9,
+      "excerpt": "In addition to the specific exclusions listed below, if within 30 days following bodily injury as a result of an Accident, it is medically necessary"
+     }
+    ],
+    "calculations": [],
+    "timings_ms": {
+     "latency_total_in_process": 269,
+     "phases": {
+      "gateMs": 0,
+      "loopMs": 382,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 12,
+      "composeMs": 3,
+      "gateReportMs": 0
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 9
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 99
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 17
+      }
+     },
+     "store": {
+      "rounds": 6,
+      "docsSql": 3,
+      "linksSql": 4,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 29,
+      "membersSql": 4,
+      "memoMisses": 6,
+      "pagesServed": 127
+     },
+     "model_in_process": 7,
+     "other": 137,
+     "sandbox": 575
+    },
+    "error": null
+   }
+  ]
+ },
+ "K3t1": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 4,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "grace fell down and broke her arm",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 2056,
+    "pages": [
+     "BS:1",
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13",
+     "PS:8"
+    ],
+    "request_keys": [
+     "A/K3t1#0",
+     "A/K3t1#1",
+     "A/K3t1#2",
+     "A/K3t1#3"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 4,
+    "usage": {
+     "input": 54769,
+     "output": 948
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": true,
+      "args": {
+       "facts": [
+        {
+         "key": "how_it_happened",
+         "value": "fell down",
+         "words": "Grace fell down"
+        },
+        {
+         "key": "injury",
+         "value": "broke her arm",
+         "words": "broke her arm"
+        }
+       ]
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "fracture after a fall",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "broke her arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury"
+       ],
+       "benefit_id": "b80a32aeffb",
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "assumption_words": "broke her arm"
+      },
+      "evidence_ids": [
+       "e5",
+       "e20",
+       "e21"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$1,250\"}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "broke her arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury",
+        "how_it_happened"
+       ],
+       "benefit_id": "b731d37a353",
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "assumption_words": "broke her arm"
+      },
+      "evidence_ids": [
+       "e2",
+       "e14"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$120,000\"}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 10,
+       "query": "fracture benefit conditions X-ray registered medical practitioner arm fracture accident",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e22",
+       "e23",
+       "e24",
+       "e25",
+       "e26",
+       "e27",
+       "e28",
+       "e29",
+       "e30",
+       "e31"
+      ],
+      "error": null,
+      "summary": "{\"hits\":10}"
+     },
+     {
+      "name": "ask_user",
+      "ok": false,
+      "args": {
+       "kind": "fact",
+       "preface": "I’m sorry Grace was hurt.",
+       "question": "Was Grace’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?",
+       "statements": [
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
+         "result_id": "k403ea1708d"
+        },
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Tan Hui Min Grace (Grace)'s sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.",
+         "result_id": "k84d4dfe01a"
+        },
+        {
+         "kind": "uncertainty",
+         "text": "Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17",
+          "e32",
+          "e33",
+          "e34"
+         ]
+        }
+       ]
+      },
+      "evidence_ids": [],
+      "error": "a fact question needs the fact_key its answer is recorded under",
+      "summary": ""
+     },
+     {
+      "name": "ask_user",
+      "ok": true,
+      "args": {
+       "kind": "fact",
+       "preface": "I’m sorry Grace was hurt.",
+       "fact_key": "fracture_confirmation",
+       "question": "Was Grace’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?",
+       "statements": [
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
+         "result_id": "k403ea1708d"
+        },
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Tan Hui Min Grace (Grace)'s sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.",
+         "result_id": "k84d4dfe01a"
+        },
+        {
+         "kind": "uncertainty",
+         "text": "Grace’s documents give different alternatives for this event, and do not establish which applies; the amounts are not to be added together.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The Product Summary and Certificate of Insurance Part 2 use different bases for their fracture percentages, and the uploaded documents do not establish which document governs this event.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17",
+          "e32",
+          "e33",
+          "e34"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17",
+          "e32",
+          "e33",
+          "e34"
+         ]
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "because_evidence_ids": [
+        "e26",
+        "e27"
+       ]
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 10 hit(s), 10 new, 0 already returned this turn",
+     "ask_user (fracture_confirmation): not asked -- the cited wording (e26, e27) does not print what it asks (confirm, ray, certifi, register, medical, practitioner); answered with its statements instead"
+    ],
+    "evidence_chosen": [
+     "e5",
+     "e20",
+     "e21",
+     "e2",
+     "e14",
+     "e16",
+     "e17",
+     "e32",
+     "e33",
+     "e34"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e5",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Simple Fracture Benefit Limit: S$5,000"
+     },
+     {
+      "chunkId": "rag2:e20",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Arm , Elbow, Wrist or Ribs\t25%"
+     },
+     {
+      "chunkId": "rag2:e21",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "For the avoidance of doubt, any fractures of thumb, finger and palm are not"
+     },
+     {
+      "chunkId": "rag2:e2",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022"
+     },
+     {
+      "chunkId": "rag2:e14",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+     },
+     {
+      "chunkId": "rag2:e16",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered"
+     },
+     {
+      "chunkId": "rag2:e17",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+     },
+     {
+      "chunkId": "rag2:e32",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+     },
+     {
+      "chunkId": "rag2:e33",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "Information is accurate as at July 2021."
+     },
+     {
+      "chunkId": "rag2:e34",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+     }
+    ],
+    "calculations": [
+     {
+      "benefit": "Simple Fracture",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 1250,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 125000,
+        "inputs": [
+         "benefit_limit",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "benefit_limit",
+        "role": "limit",
+        "label": "Simple Fracture benefit limit",
+        "value": 5000,
+        "unit": "money",
+        "row": "Simple Fracture Benefit Limit: S$5,000",
+        "binding": {
+         "column": null,
+         "benefit": "Simple Fracture benefit limit",
+         "pageEnd": 13,
+         "passage": "Simple Fracture Benefit Limit: S$5,000",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs",
+        "value": 25,
+        "unit": "percent",
+        "row": "#\nArm , Elbow, Wrist or Ribs\t25%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs",
+         "pageEnd": 13,
+         "passage": "#\nArm , Elbow, Wrist or Ribs\t25%",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       }
+      ]
+     },
+     {
+      "benefit": "Simple Fracture or Other Fracture due to Accident",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 120000,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 12000000,
+        "inputs": [
+         "sum_insured",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "sum_insured",
+        "role": "sum_insured",
+        "label": "Group Personal Accident",
+        "value": 600000,
+        "unit": "money",
+        "row": "S****822B",
+        "binding": {
+         "asOf": "2022-10-06",
+         "column": null,
+         "layout": "person_row",
+         "benefit": "Group Personal Accident",
+         "pageEnd": 1,
+         "passage": "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022",
+         "policyId": "7d000000-0000-4000-8000-000000000101",
+         "pageStart": 1,
+         "rowPerson": "Tan Hui Min Grace",
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-cert"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+        "value": 20,
+        "unit": "percent",
+        "row": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+         "pageEnd": 8,
+         "passage": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+         "policyId": "7d000000-0000-4000-8000-000000000103",
+         "pageStart": 8,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-benefit-summary"
+        }
+       }
+      ]
+     }
+    ],
+    "timings_ms": {
+     "latency_total_in_process": 438,
+     "phases": {
+      "gateMs": 8,
+      "loopMs": 578,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 19,
+      "composeMs": 18,
+      "gateReportMs": 15
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 7
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 101
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 14
+      },
+      "evaluate_benefit": {
+       "n": 2,
+       "ms": 60
+      }
+     },
+     "store": {
+      "rounds": 9,
+      "docsSql": 9,
+      "linksSql": 3,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 45,
+      "membersSql": 6,
+      "memoMisses": 6,
+      "pagesServed": 186
+     },
+     "model_in_process": 10,
+     "other": 246,
+     "sandbox": 868
+    },
+    "error": null
+   }
+  ]
+ },
+ "K4b": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 7,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "grace fell down and broke her arm",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 1733,
+    "pages": [
+     "BS:1",
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13",
+     "PS:8"
+    ],
+    "request_keys": [
+     "A/K4b#0",
+     "A/K4b#1",
+     "A/K4b#2"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 3,
+    "usage": {
+     "input": 37751,
+     "output": 486
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": true,
+      "args": {
+       "facts": [
+        {
+         "key": "how_it_happened",
+         "value": "fell down",
+         "words": "Grace fell down"
+        },
+        {
+         "key": "injury",
+         "value": "broke her arm",
+         "words": "broke her arm"
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "fracture / broken arm after a fall",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "broke her arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury"
+       ],
+       "benefit_id": "b80a32aeffb",
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "assumption_words": "broke her arm"
+      },
+      "evidence_ids": [
+       "e5",
+       "e20",
+       "e21"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$1,250\"}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "broke her arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury",
+        "how_it_happened"
+       ],
+       "benefit_id": "b731d37a353",
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "assumption_words": "broke her arm"
+      },
+      "evidence_ids": [
+       "e2",
+       "e14"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$120,000\"}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 10,
+       "query": "fracture benefit conditions X-ray registered medical practitioner definition accident fracture arm",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e22",
+       "e23",
+       "e24",
+       "e25",
+       "e26",
+       "e27",
+       "e28",
+       "e29",
+       "e30",
+       "e31"
+      ],
+      "error": null,
+      "summary": "{\"hits\":10}"
+     },
+     {
+      "name": "ask_user",
+      "ok": true,
+      "args": {
+       "kind": "fact",
+       "fact_key": "fracture_confirmation",
+       "question": "Was Grace’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?",
+       "statements": [
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
+         "result_id": "k403ea1708d"
+        },
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Tan Hui Min Grace (Grace)'s case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Tan Hui Min Grace (Grace)'s sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.",
+         "result_id": "k84d4dfe01a"
+        },
+        {
+         "kind": "uncertainty",
+         "text": "Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e16",
+          "e17",
+          "e32",
+          "e33",
+          "e34"
+         ]
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002",
+       "because_evidence_ids": [
+        "e26",
+        "e27",
+        "e20",
+        "e14"
+       ]
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 10 hit(s), 10 new, 0 already returned this turn",
+     "ask_user (fracture_confirmation): not asked -- the cited wording (e26, e27, e20, e14) does not print what it asks (confirm, ray, certifi, register, medical, practitioner); answered with its statements instead"
+    ],
+    "evidence_chosen": [
+     "e5",
+     "e20",
+     "e21",
+     "e2",
+     "e14",
+     "e16",
+     "e17",
+     "e32",
+     "e33",
+     "e34"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e5",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Simple Fracture Benefit Limit: S$5,000"
+     },
+     {
+      "chunkId": "rag2:e20",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Arm , Elbow, Wrist or Ribs\t25%"
+     },
+     {
+      "chunkId": "rag2:e21",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "For the avoidance of doubt, any fractures of thumb, finger and palm are not"
+     },
+     {
+      "chunkId": "rag2:e2",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022"
+     },
+     {
+      "chunkId": "rag2:e14",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+     },
+     {
+      "chunkId": "rag2:e16",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered"
+     },
+     {
+      "chunkId": "rag2:e17",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+     },
+     {
+      "chunkId": "rag2:e32",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+     },
+     {
+      "chunkId": "rag2:e33",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "Information is accurate as at July 2021."
+     },
+     {
+      "chunkId": "rag2:e34",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+     }
+    ],
+    "calculations": [
+     {
+      "benefit": "Simple Fracture",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 1250,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 125000,
+        "inputs": [
+         "benefit_limit",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "benefit_limit",
+        "role": "limit",
+        "label": "Simple Fracture benefit limit",
+        "value": 5000,
+        "unit": "money",
+        "row": "Simple Fracture Benefit Limit: S$5,000",
+        "binding": {
+         "column": null,
+         "benefit": "Simple Fracture benefit limit",
+         "pageEnd": 13,
+         "passage": "Simple Fracture Benefit Limit: S$5,000",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs",
+        "value": 25,
+        "unit": "percent",
+        "row": "#\nArm , Elbow, Wrist or Ribs\t25%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs",
+         "pageEnd": 13,
+         "passage": "#\nArm , Elbow, Wrist or Ribs\t25%",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       }
+      ]
+     },
+     {
+      "benefit": "Simple Fracture or Other Fracture due to Accident",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 120000,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 12000000,
+        "inputs": [
+         "sum_insured",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "sum_insured",
+        "role": "sum_insured",
+        "label": "Group Personal Accident",
+        "value": 600000,
+        "unit": "money",
+        "row": "S****822B",
+        "binding": {
+         "asOf": "2022-10-06",
+         "column": null,
+         "layout": "person_row",
+         "benefit": "Group Personal Accident",
+         "pageEnd": 1,
+         "passage": "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022",
+         "policyId": "7d000000-0000-4000-8000-000000000101",
+         "pageStart": 1,
+         "rowPerson": "Tan Hui Min Grace",
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-cert"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+        "value": 20,
+        "unit": "percent",
+        "row": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+         "pageEnd": 8,
+         "passage": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+         "policyId": "7d000000-0000-4000-8000-000000000103",
+         "pageStart": 8,
+         "subjectId": "7d000000-0000-4000-8000-000000000002",
+         "documentHash": "sha256:fx-benefit-summary"
+        }
+       }
+      ]
+     }
+    ],
+    "timings_ms": {
+     "latency_total_in_process": 362,
+     "phases": {
+      "gateMs": 14,
+      "loopMs": 480,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 17,
+      "composeMs": 12,
+      "gateReportMs": 14
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 6
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 102
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 19
+      },
+      "evaluate_benefit": {
+       "n": 2,
+       "ms": 52
+      }
+     },
+     "store": {
+      "rounds": 8,
+      "docsSql": 7,
+      "linksSql": 3,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 43,
+      "membersSql": 6,
+      "memoMisses": 6,
+      "pagesServed": 176
+     },
+     "model_in_process": 4,
+     "other": 179,
+     "sandbox": 720
+    },
+    "error": null
+   },
+   {
+    "turn": 2,
+    "user": "Actually it was Daniel who broke his arm, not Grace.",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 2400,
+    "pages": [
+     "BS:1",
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13",
+     "PS:37",
+     "PS:8"
+    ],
+    "request_keys": [
+     "A/K4b#3",
+     "A/K4b#4",
+     "A/K4b#5",
+     "A/K4b#6"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 4,
+    "usage": {
+     "input": 48842,
+     "output": 616
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Daniel"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": true,
+      "args": {
+       "facts": [
+        {
+         "key": "injury",
+         "value": "broke his arm",
+         "words": "broke his arm"
+        },
+        {
+         "key": "how_it_happened",
+         "value": "fell down",
+         "words": "fell down"
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000001"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "fracture after falling down",
+       "subject_id": "7d000000-0000-4000-8000-000000000001"
+      },
+      "evidence_ids": [
+       "e35",
+       "e36",
+       "e37",
+       "e38",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "policies_for",
+      "ok": true,
+      "args": {
+       "topic": "fracture",
+       "subject_id": "7d000000-0000-4000-8000-000000000001"
+      },
+      "evidence_ids": [
+       "e39",
+       "e40"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury",
+        "how_it_happened"
+       ],
+       "benefit_id": "bb01760beec",
+       "subject_id": "7d000000-0000-4000-8000-000000000001",
+       "assumption_words": "broke his arm"
+      },
+      "evidence_ids": [
+       "e5",
+       "e20",
+       "e21"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$1,250\"}"
+     },
+     {
+      "name": "evaluate_benefit",
+      "ok": true,
+      "args": {
+       "case": "arm",
+       "purpose": "claim",
+       "fact_keys": [
+        "injury",
+        "how_it_happened"
+       ],
+       "benefit_id": "bd4c7000dd1",
+       "subject_id": "7d000000-0000-4000-8000-000000000001",
+       "assumption_words": "broke his arm"
+      },
+      "evidence_ids": [
+       "e36",
+       "e14"
+      ],
+      "error": null,
+      "summary": "{\"status\":\"conditional_illustration\",\"amount\":\"S$120,000\"}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 10,
+       "query": "Simple Fracture arm fracture conditions X-ray registered medical practitioner accident",
+       "subject_id": "7d000000-0000-4000-8000-000000000001"
+      },
+      "evidence_ids": [
+       "e27",
+       "e26",
+       "e22",
+       "e23",
+       "e29",
+       "e25",
+       "e24",
+       "e31",
+       "e28",
+       "e41"
+      ],
+      "error": null,
+      "summary": "{\"hits\":10}"
+     },
+     {
+      "name": "final_answer",
+      "ok": true,
+      "args": {
+       "sentences": [
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture benefit applies to Lee Wei Ming, Daniel (Daniel)'s case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
+         "result_id": "k446824d010"
+        },
+        {
+         "kind": "calculation",
+         "text": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Lee Wei Ming, Daniel (Daniel)'s case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Lee Wei Ming, Daniel (Daniel)'s sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.",
+         "result_id": "k20ff9459be"
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The uploaded documents do not establish which of these two fracture provisions applies to Daniel's event; the Product Summary says precise terms are in the certificate, while the certificate wording has a separate fracture benefit.",
+         "evidence_ids": [
+          "e41",
+          "e27"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The certificate wording also leaves open whether Daniel's diagnosis meets its definition of the listed arm fracture; that requires the insurer's medical assessment.",
+         "evidence_ids": [
+          "e27"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.",
+         "subject_id": "7d000000-0000-4000-8000-000000000001",
+         "evidence_ids": [
+          "e16",
+          "e17"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Daniel's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.",
+         "subject_id": "7d000000-0000-4000-8000-000000000001",
+         "evidence_ids": [
+          "e16",
+          "e17",
+          "e32",
+          "e33",
+          "e34"
+         ]
+        }
+       ],
+       "next_steps": [
+        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim."
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000001"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [
+     {
+      "reason": "not supported by its evidence: “that requires the insurer's medical assessment.”: its evidence does not mention what it is about (requir, insurer, medical, assessment)",
+      "sentence": "The certificate wording also leaves open whether Daniel's diagnosis meets its definition of the listed arm fracture; that requires the insurer's medical assessment."
+     }
+    ],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 10 hit(s), 10 new, 0 already returned this turn"
+    ],
+    "evidence_chosen": [
+     "e5",
+     "e20",
+     "e21",
+     "e36",
+     "e14",
+     "e41",
+     "e27",
+     "e16",
+     "e17",
+     "e32",
+     "e33",
+     "e34"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e5",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Simple Fracture Benefit Limit: S$5,000"
+     },
+     {
+      "chunkId": "rag2:e20",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "Arm , Elbow, Wrist or Ribs\t25%"
+     },
+     {
+      "chunkId": "rag2:e21",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "For the avoidance of doubt, any fractures of thumb, finger and palm are not"
+     },
+     {
+      "chunkId": "rag2:e36",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of 06/10/2022"
+     },
+     {
+      "chunkId": "rag2:e14",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+     },
+     {
+      "chunkId": "rag2:e41",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "plan are set out in the certificate of insurance."
+     },
+     {
+      "chunkId": "rag2:e27",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "If an Insured Person sustains bodily injury as a result of an Accident, which results in a Simple Fracture or Other Fracture of the nature"
+     },
+     {
+      "chunkId": "rag2:e16",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered"
+     },
+     {
+      "chunkId": "rag2:e17",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+     },
+     {
+      "chunkId": "rag2:e32",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+     },
+     {
+      "chunkId": "rag2:e33",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 37,
+      "pageEnd": 37,
+      "excerpt": "Information is accurate as at July 2021."
+     },
+     {
+      "chunkId": "rag2:e34",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+     }
+    ],
+    "calculations": [
+     {
+      "benefit": "Simple Fracture",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 1250,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 125000,
+        "inputs": [
+         "benefit_limit",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "benefit_limit",
+        "role": "limit",
+        "label": "Simple Fracture benefit limit",
+        "value": 5000,
+        "unit": "money",
+        "row": "Simple Fracture Benefit Limit: S$5,000",
+        "binding": {
+         "column": null,
+         "benefit": "Simple Fracture benefit limit",
+         "pageEnd": 13,
+         "passage": "Simple Fracture Benefit Limit: S$5,000",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000001",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs",
+        "value": 25,
+        "unit": "percent",
+        "row": "#\nArm , Elbow, Wrist or Ribs\t25%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs",
+         "pageEnd": 13,
+         "passage": "#\nArm , Elbow, Wrist or Ribs\t25%",
+         "policyId": "7d000000-0000-4000-8000-000000000102",
+         "pageStart": 13,
+         "subjectId": "7d000000-0000-4000-8000-000000000001",
+         "documentHash": "sha256:fx-product-summary"
+        }
+       }
+      ]
+     },
+     {
+      "benefit": "Simple Fracture or Other Fracture due to Accident",
+      "kind": "conditional_illustration",
+      "result": {
+       "value": 120000,
+       "currency": "SGD"
+      },
+      "steps": [
+       {
+        "id": "s_part",
+        "op": "percent_of",
+        "out": 12000000,
+        "inputs": [
+         "sum_insured",
+         "percent"
+        ]
+       }
+      ],
+      "operands": [
+       {
+        "id": "sum_insured",
+        "role": "sum_insured",
+        "label": "Group Personal Accident",
+        "value": 600000,
+        "unit": "money",
+        "row": "S****411A",
+        "binding": {
+         "asOf": "2022-10-06",
+         "column": null,
+         "layout": "person_row",
+         "benefit": "Group Personal Accident",
+         "pageEnd": 1,
+         "passage": "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of 06/10/2022",
+         "policyId": "7d000000-0000-4000-8000-000000000101",
+         "pageStart": 1,
+         "rowPerson": "Lee Wei Ming, Daniel",
+         "subjectId": "7d000000-0000-4000-8000-000000000001",
+         "documentHash": "sha256:fx-cert"
+        }
+       },
+       {
+        "id": "percent",
+        "role": "percent",
+        "label": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+        "value": 20,
+        "unit": "percent",
+        "row": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+        "binding": {
+         "column": null,
+         "benefit": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+         "pageEnd": 8,
+         "passage": "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%",
+         "policyId": "7d000000-0000-4000-8000-000000000103",
+         "pageStart": 8,
+         "subjectId": "7d000000-0000-4000-8000-000000000001",
+         "documentHash": "sha256:fx-benefit-summary"
+        }
+       }
+      ]
+     }
+    ],
+    "timings_ms": {
+     "latency_total_in_process": 188,
+     "phases": {
+      "gateMs": 8,
+      "loopMs": 232,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 21,
+      "composeMs": 10,
+      "gateReportMs": 8
+     },
+     "tool": {
+      "policies_for": {
+       "n": 1,
+       "ms": 24
+      },
+      "resolve_person": {
+       "n": 1,
+       "ms": 3
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 56
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 12
+      },
+      "evaluate_benefit": {
+       "n": 2,
+       "ms": 23
+      }
+     },
+     "store": {
+      "rounds": 10,
+      "docsSql": 8,
+      "linksSql": 5,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 46,
+      "membersSql": 7,
+      "memoMisses": 6,
+      "pagesServed": 187
+     },
+     "model_in_process": 6,
+     "other": 64,
+     "sandbox": 309
+    },
+    "error": null
+   }
+  ]
+ },
+ "K6a": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 3,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "What does Grace's Group Living Care pay if she is diagnosed with cancer?",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 550,
+    "pages": [
+     "BS:1",
+     "BS:3",
+     "BS:5",
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13",
+     "PS:8"
+    ],
+    "request_keys": [
+     "A/K6a#0",
+     "A/K6a#1",
+     "A/K6a#2"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 3,
+    "usage": {
+     "input": 36520,
+     "output": 386
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": false,
+      "args": {
+       "facts": [
+        {
+         "key": "diagnosis",
+         "value": "cancer",
+         "words": "diagnosed with cancer"
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": "diagnosis: diagnosis=cancer is a policy-defined classification the household did not state; record how it happened in their words (key how_it_happened) and, if the cause changes which benefit applies, ask how it happened",
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "Group Living Care cancer",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 10,
+       "query": "Group Living Care cancer benefit what it pays for cancer diagnosis definition amount conditions",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e20",
+       "e21",
+       "e22",
+       "e23",
+       "e24",
+       "e25",
+       "e26",
+       "e27",
+       "e28",
+       "e29"
+      ],
+      "error": null,
+      "summary": "{\"hits\":10}"
+     },
+     {
+      "name": "select_table_value",
+      "ok": true,
+      "args": {
+       "by": "composition (figure identity)",
+       "want": "amount",
+       "benefit": "Group Living Care",
+       "policy_id": "7d000000-0000-4000-8000-000000000101",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\",\"value\":350000,\"key\":\"vb1_1\"}"
+     },
+     {
+      "name": "final_answer",
+      "ok": true,
+      "args": {
+       "sentences": [
+        {
+         "kind": "not_found",
+         "text": "The Scheme X Group Insurance does not state what Group Living Care pays for cancer. That is not the same as saying it is excluded or not covered: it only means this document does not show it, and only the insurer can confirm it.",
+         "claim": "document_silent",
+         "terms": [
+          "cancer",
+          "cancer benefit",
+          "malignant tumour",
+          "malignant tumor"
+         ],
+         "topic": "what Group Living Care pays for cancer",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e29"
+         ],
+         "scope_policy_ids": [
+          "7d000000-0000-4000-8000-000000000103"
+         ]
+        },
+        {
+         "kind": "fact",
+         "text": "Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; this is the amount shown on that date, not confirmation of cover now.",
+         "evidence_ids": [
+          "e3"
+         ]
+        }
+       ],
+       "next_steps": [
+        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim."
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 10 hit(s), 10 new, 0 already returned this turn"
+    ],
+    "evidence_chosen": [
+     "e29",
+     "e3"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e29",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 5,
+      "pageEnd": 5,
+      "excerpt": "BENEFIT 2: GROUP PERSONAL ACCIDENT"
+     },
+     {
+      "chunkId": "rag2:e3",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****822B\tTan Hui Min Grace\tS$350,000\tAs of 06/10/2022"
+     }
+    ],
+    "calculations": [],
+    "timings_ms": {
+     "latency_total_in_process": 296,
+     "phases": {
+      "gateMs": 10,
+      "loopMs": 410,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 14,
+      "composeMs": 3,
+      "gateReportMs": 8
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 8
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 127
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 24
+      }
+     },
+     "store": {
+      "rounds": 6,
+      "docsSql": 4,
+      "linksSql": 4,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 32,
+      "membersSql": 5,
+      "memoMisses": 6,
+      "pagesServed": 143
+     },
+     "model_in_process": 6,
+     "other": 131,
+     "sandbox": 638
+    },
+    "error": null
+   }
+  ]
+ },
+ "K6b": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 3,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "Does Grace's cover pay for dental treatment?",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 352,
+    "pages": [
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13"
+    ],
+    "request_keys": [
+     "A/K6b#0",
+     "A/K6b#1",
+     "A/K6b#2"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 3,
+    "usage": {
+     "input": 28652,
+     "output": 147
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "dental treatment",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "final_answer",
+      "ok": true,
+      "args": {
+       "sentences": [
+        {
+         "kind": "not_found",
+         "text": "Tan Hui Min Grace (Grace)’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.",
+         "claim": "benefit_not_found",
+         "terms": [
+          "dental",
+          "dentist",
+          "tooth"
+         ],
+         "topic": "dental treatment",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e4",
+          "e17",
+          "e19"
+         ]
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": null,
+    "evidence_chosen": [
+     "e4",
+     "e17",
+     "e19"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e4",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****822B\tTan Hui Min Grace\tS$300,000\tAs of 06/10/2022"
+     },
+     {
+      "chunkId": "rag2:e17",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "product_summary",
+      "pageStart": 13,
+      "pageEnd": 13,
+      "excerpt": "^\tFor the avoidance of doubt, any fractures of toe and foot are not covered"
+     },
+     {
+      "chunkId": "rag2:e19",
+      "policyName": "Scheme X Group Insurance",
+      "documentRole": "certificate",
+      "pageStart": 8,
+      "pageEnd": 8,
+      "excerpt": "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+     }
+    ],
+    "calculations": [],
+    "timings_ms": {
+     "latency_total_in_process": 206,
+     "phases": {
+      "gateMs": 0,
+      "loopMs": 332,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 11,
+      "composeMs": 2,
+      "gateReportMs": 1
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 7
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 105
+      }
+     },
+     "store": {
+      "rounds": 5,
+      "docsSql": 3,
+      "linksSql": 3,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 28,
+      "membersSql": 4,
+      "memoMisses": 5,
+      "pagesServed": 132
+     },
+     "model_in_process": 8,
+     "other": 86,
+     "sandbox": 545
+    },
+    "error": null
+   }
+  ]
+ },
+ "K6c": {
+  "arm": "A",
+  "complete": true,
+  "stats": {
+   "replayed": 3,
+   "recorded": 0,
+   "pending": [],
+   "diverged": []
+  },
+  "turns": [
+   {
+    "turn": 1,
+    "user": "Grace has just been told she has cancer. How much will her Group Living Care pay out?",
+    "returned_saved_reopened_identical": true,
+    "visible_chars": 428,
+    "pages": [
+     "BS:7",
+     "BS:8",
+     "BS:9",
+     "CERT:1",
+     "PS:12",
+     "PS:13",
+     "PS:37",
+     "PS:8"
+    ],
+    "request_keys": [
+     "A/K6c#0",
+     "A/K6c#1",
+     "A/K6c#2"
+    ],
+    "questions": [],
+    "saved_questions": [],
+    "outcome": "final_answer",
+    "model_steps": 3,
+    "usage": {
+     "input": 36445,
+     "output": 435
+    },
+    "tool_calls": [
+     {
+      "name": "resolve_person",
+      "ok": true,
+      "args": {
+       "mention": "Grace"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": "{\"status\":\"ok\"}"
+     },
+     {
+      "name": "note_facts",
+      "ok": true,
+      "args": {
+       "facts": [
+        {
+         "key": "diagnosis_report",
+         "value": "has cancer",
+         "words": "she has cancer"
+        }
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     },
+     {
+      "name": "person_benefits",
+      "ok": true,
+      "args": {
+       "topic": "Group Living Care cancer",
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e1",
+       "e2",
+       "e3",
+       "e4",
+       "e5",
+       "e6",
+       "e7",
+       "e8",
+       "e9",
+       "e10",
+       "e11",
+       "e12",
+       "e13",
+       "e14",
+       "e15",
+       "e16",
+       "e17",
+       "e18",
+       "e19"
+      ],
+      "error": null,
+      "summary": "{}"
+     },
+     {
+      "name": "search_passages",
+      "ok": true,
+      "args": {
+       "k": 10,
+       "query": "Group Living Care cancer definition covered cancer diagnosis waiting period survival period benefit amount conditions",
+       "policy_ids": [
+        "7d000000-0000-4000-8000-000000000102",
+        "7d000000-0000-4000-8000-000000000101"
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [
+       "e20",
+       "e21",
+       "e22",
+       "e23",
+       "e24",
+       "e25",
+       "e26",
+       "e27",
+       "e28",
+       "e29"
+      ],
+      "error": null,
+      "summary": "{\"hits\":10}"
+     },
+     {
+      "name": "final_answer",
+      "ok": true,
+      "args": {
+       "sentences": [
+        {
+         "kind": "fact",
+         "text": "Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; that dated amount does not confirm cover now.",
+         "benefit": "Group Living Care",
+         "value_ids": [
+          "v3"
+         ],
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e3"
+         ]
+        },
+        {
+         "kind": "uncertainty",
+         "text": "The uploaded documents do not establish whether Grace’s cancer meets the policy definition or what amount would be payable for it.",
+         "subject_id": "7d000000-0000-4000-8000-000000000002",
+         "evidence_ids": [
+          "e3"
+         ]
+        }
+       ],
+       "next_steps": [
+        "Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim."
+       ],
+       "subject_id": "7d000000-0000-4000-8000-000000000002"
+      },
+      "evidence_ids": [],
+      "error": null,
+      "summary": ""
+     }
+    ],
+    "dropped": [],
+    "gate": [],
+    "incomplete": null,
+    "adjusted": [
+     "search_passages: 10 hit(s), 10 new, 0 already returned this turn"
+    ],
+    "evidence_chosen": [
+     "e3"
+    ],
+    "citations": [
+     {
+      "chunkId": "rag2:e3",
+      "policyName": "Scheme X Group Insurance Scheme",
+      "documentRole": "certificate",
+      "pageStart": 1,
+      "pageEnd": 1,
+      "excerpt": "S****822B\tTan Hui Min Grace\tS$350,000\tAs of 06/10/2022"
+     }
+    ],
+    "calculations": [],
+    "timings_ms": {
+     "latency_total_in_process": 312,
+     "phases": {
+      "gateMs": 5,
+      "loopMs": 438,
+      "checkMs": 0,
+      "rescueMs": 0,
+      "storeSql": 14,
+      "composeMs": 4,
+      "gateReportMs": 7
+     },
+     "tool": {
+      "resolve_person": {
+       "n": 1,
+       "ms": 9
+      },
+      "person_benefits": {
+       "n": 1,
+       "ms": 102
+      },
+      "search_passages": {
+       "n": 1,
+       "ms": 17
+      }
+     },
+     "store": {
+      "rounds": 6,
+      "docsSql": 4,
+      "linksSql": 5,
+      "memoHits": 5,
+      "pagesSql": 1,
+      "pageChars": 15876,
+      "docsServed": 30,
+      "membersSql": 4,
+      "memoMisses": 6,
+      "pagesServed": 126
+     },
+     "model_in_process": 9,
+     "other": 175,
+     "sandbox": 639
+    },
+    "error": null
+   }
+  ]
+ }
+}

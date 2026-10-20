@@ -54,7 +54,9 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const DATE_CELL = /^(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4})$/;
 /** A date printed in a cell, as ISO (day-first for d/m/y, as Singapore documents print it); null when none. */
 export function cellDate(text: string): string | null {
-  const t = text.trim();
+  // A certificate prints its effective date as ONE cell: "As of 06/10/2022" (also "w.e.f.", "Effective from"). The marker
+  // is only the label of the date, so it is removed; what remains must still be a whole date (nothing else is read).
+  const t = text.trim().replace(/^(?:as\s+(?:of|at)|w\.?e\.?f\.?|with\s+effect\s+from|effective(?:\s+(?:from|date|on))?)\s*:?\s+/i, "");
   const dmy = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
   if (dmy) { const d = Number(dmy[1]), m = Number(dmy[2]); return d >= 1 && d <= 31 && m >= 1 && m <= 12 ? `${dmy[3]}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null; }
   return DATE_CELL.test(t) ? isoDate(t) : null;

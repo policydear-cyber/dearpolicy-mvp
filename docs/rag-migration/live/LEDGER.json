@@ -759,6 +759,34 @@
       "refused": 0,
       "failed": 0,
       "note": "Single DI confirmation (death by illness applicability control) on the synthetic death-journey household, product code 654121f; original dj-live-2 and dj-live-3 grades unchanged; existing dedicated connection and loopback relay (stopped after the run). US$0 preflight first (RUN-dj-live-4-pre). Actual spend from the run budgetUsed. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
+    },
+    {
+      "run_id": "fx-live-1",
+      "tested_code_sha": "e04cb61d6816c15e4ff7dce30027525bddcb2c00",
+      "request_sha": "058e1e7c62aa735b3e6091a38c131ebc75d99318eb36565a71f950c2ca110e6f",
+      "at": "2026-10-19T14:50:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.25,
+      "spent_usd": 0.055757,
+      "reserved_unsettled_usd": 0,
+      "calls": 55,
+      "refused": 0,
+      "failed": 0,
+      "note": "Courier-mediated live comparison on the synthetic fracture household with the dedicated test connection (model gpt-6-luna): arm A = frozen candidate through the real chat route, arm B = one no-tool call per turn with the complete stored text. 55 calls (A 43, B 12), no divergence, none refused or failed. Spend is booked at the upper bound without the cached-input discount (US$0.055757); the application-price estimate with the cached discount is US$0.023623; neither is provider-billed, so the larger figure is charged. The synthetic copy does not verify the actual library. The open US$0.15 trial-codespace-1 reservation and every earlier entry are unchanged; the reservation is not counted as available."
+    },
+    {
+      "run_id": "fx-live-2",
+      "tested_code_sha": "c4edd48cf8b01054fc2f592516ebd7cdec07407a",
+      "request_sha": "7d199a1b27dac87c8403ed7484eb85762a0e343aee9a446d2d506e4482dd8368",
+      "at": "2026-10-20T02:39:03.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.029663,
+      "reserved_unsettled_usd": 0,
+      "calls": 23,
+      "refused": 0,
+      "failed": 0,
+      "note": "Courier-mediated live confirmation of PR #57 on the synthetic fracture household with the dedicated test connection (model gpt-6-luna): arm A only (frozen candidate through the real chat route), six pre-registered conversations (dental, cancer, cancer paraphrase, sickness, fracture alternatives, person correction) run once each, no reruns, limits or expectation changes after results. 23 calls, none refused or failed; one courier checksum refusal (HTTP 400) occurred before any model call and the identical request was resent once. Spend is booked at the upper bound without the cached-input discount (US$0.029663); the application-price estimate with the cached discount is US$0.012903; neither is provider-billed, so the larger figure is charged. Only this run's US$0.05 was authorised; the US$0.15 trial-codespace-1 reservation is unchanged and not available to automated runs."
     }
   ]
 }

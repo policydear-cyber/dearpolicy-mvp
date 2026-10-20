@@ -24,6 +24,7 @@
  * state, create, sum, convert or relabel an amount. Idempotent.
  */
 import { flagUnclearFigures } from "@/lib/documents/messy";
+import { recomputeCalculation } from "@/lib/claims/calc-record";
 import type { ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
 
 export const POLICY_STATED_LIMIT_LABEL = "Policy-stated coverage limit" as const;
@@ -313,5 +314,60 @@ export function sanitizeStoredAnswer<T>(stored: T): T {
   copy.nextSteps = Array.isArray(copy.nextSteps) ? copy.nextSteps : [];
   copy.missingFacts = Array.isArray(copy.missingFacts) ? copy.missingFacts : [];
   copy.claimItems = copy.claimItems.map((item) => ({ ...item, conditions: Array.isArray(item.conditions) ? item.conditions : [], reason: typeof item.reason === "string" ? item.reason : "" }));
-  return enforceLiveChatMonetaryBoundary(copy) as unknown as T;
+  // Production fracture conversation (19 Oct 2026): the conversational loop's answer was written with claimContext:false, but a
+  // question turn has mode "fact_finding", which the default reads as a claim turn, so reopening the conversation left out the
+  // illustrations and added "I left out a sentence that stated an amount": what was shown was not what was saved. Reopening applies
+  // the context the answer was WRITTEN under -- when its provenance validates (see storedRenderContext). A calculation count alone
+  // proves nothing about the rest of an answer; anything that does not validate is read under the default, claim-aware context.
+  const written = storedRenderContext(copy);
+  return enforceLiveChatMonetaryBoundary(copy, written === null ? {} : { claimContext: written }) as unknown as T;
+}
+
+/** The numbers a stored record states (its result and its own operands), as money amounts. */
+function recordAmounts(r: { result?: { value?: unknown }; operands?: unknown[]; value?: unknown }): Set<number> {
+  const out = new Set<number>();
+  const add = (n: unknown) => { if (typeof n === "number" && Number.isFinite(n)) out.add(Math.round(n * 100) / 100); };
+  add(r.result?.value); add(r.value);
+  for (const o of r.operands ?? []) { const x = o as { value?: unknown; result?: { value?: unknown }; computation?: { result?: { value?: unknown } } }; add(x?.value); add(x?.result?.value); add(x?.computation?.result?.value); }
+  return out;
+}
+const asAmount = (raw: string): number | null => {
+  const m = /(\d[\d,]*(?:\.\d+)?)\s?(k|m|mil|million|thousand|bn|billion)?\b/i.exec(raw);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ""));
+  const mult = m[2] ? ({ k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, bn: 1e9, billion: 1e9 } as Record<string, number>)[m[2].toLowerCase()] ?? NaN : 1;
+  return Number.isFinite(n * mult) ? Math.round(n * mult * 100) / 100 : null;
+};
+const flat = (t: string) => t.replace(/\s+/g, " ").trim();
+/**
+ * The monetary-boundary context a stored answer was written under, when that can be shown (null = use the default, claim-aware context).
+ * It is honoured only when ALL of these hold: the conversational loop recorded it (renderContext) -- an answer saved before that, or by the
+ * claim pipeline, has none; the answer carries no claim items or composition and at least one stored calculation; every stored calculation recomputes from its own operands
+ * and steps; and every money figure in the visible text is stated by a sentence that a stored, re-verifiable record (a calculation, a
+ * computation or a figure binding) carries and is one of that record's own numbers. The monetary boundary itself and the document
+ * lifecycle checks (lib/chat/stale-answers.ts) still run on top of it: only the claim/non-claim reading of the text is restored.
+ */
+export function storedRenderContext(a: Partial<ChatAnswer>): boolean | null {
+  const rc = a.renderContext;
+  if (!rc || rc.origin !== "rag_loop" || rc.claimContext !== false) return null;
+  if ((a.claimItems?.length ?? 0) > 0 || a.composition) return null;
+  const calcs = Array.isArray(a.calculations) ? a.calculations : [];
+  // (the restored context exists for the answers that carry re-verifiable calculations -- the production defect; an answer without one is read
+  // exactly as before: under the default context, which also labels the printed figures it states as policy-stated limits)
+  if (!calcs.length) return null;
+  for (const c of calcs) if (!c || typeof c.sentence !== "string" || !c.sentence || !recomputeCalculation(c).ok) return null;
+  const records = [
+    ...calcs.map((c) => ({ sentence: flat(c.sentence), amounts: recordAmounts(c) })),
+    ...(Array.isArray(a.computations) ? a.computations : []).filter((c) => c && typeof c.sentence === "string" && c.sentence).map((c) => ({ sentence: flat(c.sentence), amounts: recordAmounts(c) })),
+    ...(Array.isArray(a.figureBindings) ? a.figureBindings : []).filter((b) => b && typeof b.sentence === "string" && b.sentence).map((b) => ({ sentence: flat(b.sentence), amounts: recordAmounts({ value: b.value }) })),
+  ];
+  const texts = [a.summary, ...(a.details ?? []), ...(a.nextSteps ?? [])].filter((t): t is string => typeof t === "string");
+  for (const t of texts) {
+    const text = flat(t);
+    for (const m of text.matchAll(new RegExp(MONEY_PATTERN.source, "gi"))) {
+      const v = asAmount(m[0]);
+      if (v == null || !records.some((r) => text.includes(r.sentence) && r.amounts.has(v))) return null;
+    }
+  }
+  return false;
 }

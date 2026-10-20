@@ -12,7 +12,8 @@
 import { isHeadingLine, paragraphs, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
-import { RENDERED, RENDERED_STEPS } from "./statement-render";
+import { ABSENCE_OF, RENDERED, RENDERED_STEPS } from "./statement-render";
+import type { AbsenceCheck } from "./absence-scope";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
 import { currencyDeclarationLine, documentCurrency, moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
@@ -28,7 +29,7 @@ import { CAUSE_KEYS, confirmed, contentWords, EVENT_KEY, factConcept, numbersIn 
 import { checkCitedStatement, instructionLines, internalIdsIn, payoutOrDecision, stripInternalIds, unsafeNextStep, withoutInstructions, withoutNegatedDecisions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
-export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement";
+export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement" | "absence";
   /** Agent P: the position of the model's sentence this came from (final_answer order). */
   at?: number;
   /** Agent P: for a requirement, the fact concepts it asks the household for (admission, discharge, bill, ...). */
@@ -50,6 +51,8 @@ export type Composed = {
   /** Agent F (D24): what the household is told about what was left out and why (specific, figure-free). */
   notes: string[];
   evidenceIds: string[]; subjectId: string | null;
+  /** fx-live-1: what the server checked for each "not found in these documents" statement it wrote (saved with the answer: ChatAnswer.absenceChecks). */
+  absenceChecks?: AbsenceCheck[];
 };
 /** Agent P: what the household is told when NOTHING of the answer could be kept and no requirement or caveat applies
  * (accurate for every verification failure: the answer could not be confirmed from their documents). Never shown
@@ -278,6 +281,13 @@ export function amountAbsenceContradiction(text: string, subjectId: string | nul
  * another member's row, never counts. The product scope of a wording passage cited in the answer (a paragraph benefit)
  * comes from that document's own section headings, never from its title.
  */
+/** A row's printed benefit label as a reader expects it ("GROUP LIVING CARE(POLICY NO. 3037850)" -> "Group Living Care"). */
+export function listedBenefitLabel(raw: string): string {
+  const s = raw.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
+  return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s;
+}
+/** fx-live-1 (K6a): the limit a dated sum-insured listing carries when the statement that qualified it was left out. */
+export const listedSumNote = (benefit: string) => `The sum insured listed for ${benefit} does not by itself say what is paid for a particular diagnosis or event.`;
 export const LATER_DATE_NOTE = "A dated certificate shows who it listed on that date; it does not by itself establish cover on a later date.";
 const ENROL_NEG = [
   /\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t|did\s+not|cannot|can['’]t|not)\s+(?:\w+\s+){0,2}?(?:confirm|show|establish|list|name|include|record|evidence|prove|mention|verify)\w*\b[^.;]{0,90}?\b(?:enrol\w*|membership|a member|insured person|is insured|participat\w*|(?:is|are|was) (?:listed|named|covered))\b/i,
@@ -1013,7 +1023,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   const answerBenefit = answerBenefits.length === 1 ? answerBenefits[0] : null;
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
   const drops: DropInfo[] = [];
-  let cur = -1, curEstimate = false;
+  let cur = -1, curEstimate = false, curKind = "";
   const staleNotes = new Set([...(ctx.stale?.values() ?? [])]);
   const drop = (sentence: string, reason: string, householdNote?: string) => {
     out.dropped.push({ sentence, reason });
@@ -1021,7 +1031,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       : householdNote === INSTRUCTION_NOTE ? "instruction" : householdNote === SUM_NOTE ? "sum" : householdNote === UNRESOLVED_NOTE ? "unresolved" : householdNote === MISSING_FACT_NOTE ? "missing"
       : householdNote && staleNotes.has(householdNote) ? "stale" : /(?:calculation|computation)[’']s result|arithmetic/.test(reason) ? "calc" : "verify";
     const need = cat === "missing" ? (/uses (?:the household[’']s )?(.+?)(?: = | \(“)/.exec(reason)?.[1] ?? null) : null;
-    drops.push({ at: cur, cat, sentence, estimate: curEstimate || /\bestimat\w*\b/i.test(sentence), need, note: cat === "stale" ? householdNote ?? null : null });
+    drops.push({ at: cur, cat, sentence, estimate: curEstimate || /\bestimat\w*\b/i.test(sentence), need, note: cat === "stale" ? householdNote ?? null : null, kind: curKind });
   };
   const conditioned: { at: number; words: string[] }[] = [];
   // V1.3: figures refused because the sentence put them under another benefit the same document prints (Term Life
@@ -1042,6 +1052,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     for (const x of out.sentences) x.at ??= cur;
     cur = i;
     const s = sentencesIn[i];
+    curKind = typeof s.kind === "string" ? s.kind : "";
     // Agent P: names as the household uses them; never "Full Name (Short)'s", never a full name twice in a sentence.
     // Round 6 (A3): ids the model wrote into the sentence ("[e9, e6]") are never shown; the ones a tool returned are
     // kept as the sentence's citations (the household sees them as its page links), checked like any other.
@@ -1072,6 +1083,17 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const explicitSubject = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : null;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
+    // fx-live-1 (K6a / K6b): "the documents do not describe X" is a claim about a search scope. The server read the full text of that
+    // scope, found nothing, and wrote the sentence (statement-render.ts / absence-scope.ts); it is kept whole, with what was checked.
+    if (s.kind === "not_found") {
+      const checked = ABSENCE_OF.get(s);
+      if (!checked || !RENDERED.has(s)) { drop(text, "a not_found statement is written by the server after it reads the documents, and this one was not"); continue; }
+      const live = evIds.filter((id) => !ctx.stale?.has(id));
+      out.evidenceIds.push(...live.filter((x) => !out.evidenceIds.includes(x)));
+      out.sentences.push({ text, evidenceIds: live, estimate: false, factKeys: [], kind: "absence" });
+      (out.absenceChecks ??= []).push(checked);
+      continue;
+    }
     // V1.4: an insurer is named for a person only when one of that person's linked documents is from it -- never an
     // insurer whose only document is linked to nobody (another family's pet policy) or to someone else.
     const wrongInsurer = insurerNotFor(text, subjectId, ctx, false, relevantPolicies);
@@ -1606,7 +1628,7 @@ function requirementOf(c: CalcOutcome, ctx: Ctx, out: Composed, evIds: string[])
 
 // ------------------------------------------------------------------------------- Agent P: presenting the answer
 type DropCat = "payout" | "decision" | "instruction" | "sum" | "unresolved" | "missing" | "stale" | "calc" | "verify" | "step";
-type DropInfo = { at: number; cat: DropCat; sentence: string; estimate: boolean; need?: string | null; note?: string | null };
+type DropInfo = { at: number; cat: DropCat; sentence: string; estimate: boolean; need?: string | null; note?: string | null; /** the statement kind the model gave the sentence */ kind?: string };
 
 /** A household member as a sentence may name them: the full (display) name and the short name the household uses. */
 export type NamedPerson = { full: string; short: string | null };
@@ -1801,6 +1823,15 @@ function settleAnswer(out: Composed, drops: DropInfo[], conditioned: { at: numbe
   // Notes: caveats the household needs (never "I left out ..."), or one accurate explanation when nothing is left.
   const notes: string[] = [];
   const add = (n: string | null | undefined) => { if (n && !notes.includes(n)) notes.push(n); };
+  // fx-live-1 (K6a): a dated listing of a sum insured answers "what is listed", never "what is paid for a diagnosis". When the sentence that
+  // qualified it (an uncertainty, or an absence, about that benefit) is left out, the listing carries its own limit: the amount is never
+  // left looking like the answer to the question the qualifying sentence was about.
+  for (const b of out.figureBindings) {
+    if (b.layout !== "person_row" || !b.asOf || !out.sentences.some((x) => x.text.includes(b.sentence))) continue;
+    const label = listedBenefitLabel(b.benefit);
+    const key = label.toLowerCase().replace(/^group\s+/, "");
+    if (key.length >= 4 && drops.some((d) => d.at >= 0 && (d.kind === "uncertainty" || d.kind === "not_found") && d.sentence.toLowerCase().includes(key))) add(listedSumNote(label));
+  }
   // (a dated listing said in place of an enrolment caveat carries its limit: cover on a later date is not established)
   if (out.notes.includes(LATER_DATE_NOTE) && out.sentences.some((x) => / certificate lists /.test(x.text))) add(LATER_DATE_NOTE);
   for (const d of drops) if (d.cat === "stale") add(d.note); // user-facing at the source (loop.ts revalidateEvidence)

@@ -13,12 +13,14 @@ import { createHash } from "node:crypto";
 import { personBenefits, type PersonBenefit, type PrintedValue } from "./benefits";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow } from "./store";
-import { percentTables, type PctTable } from "./calc/pct-rows";
+import { percentTables, rowNotes, type PctTable } from "./calc/pct-rows";
 import { sharedTopic, topicStems } from "./loop/topic";
 import { productSection } from "./headings";
 import { definitionFor, definitionsIn, type Definition } from "./applicability";
 
-export type ScheduleRow = { id: string; label: string; percent: number; ppm: number; evidence: EvidenceRef };
+/** A footnote the page prints for THIS row (its marker is on the row; calc/pct-rows.ts rowNotes), with the span it is printed in. */
+export type ScheduleNote = { marker: string; text: string; evidence: EvidenceRef };
+export type ScheduleRow = { id: string; label: string; percent: number; ppm: number; evidence: EvidenceRef; notes: ScheduleNote[] };
 export type ScheduleBase =
   | { kind: "fixed_limit"; label: string; cents: number; currency: string; evidence: EvidenceRef }
   | { kind: "sum_insured"; label: string; cents: number; currency: string; evidence: EvidenceRef; from: PersonBenefit; section?: string }
@@ -156,7 +158,8 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
     for (const t of percentTables(p.text)) {
       const benefit = tableBenefit(t); if (!benefit) continue;
       const rows: ScheduleRow[] = t.rows.filter((r) => r.percents.length === 1).map((r, i) => ({ id: `${hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit)}r${i + 1}`, label: r.label, percent: r.percents[0], ppm: Math.round(r.percents[0] * 10_000),
-        evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: r.start, end: r.end, subjectId: null }) }));
+        evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: r.start, end: r.end, subjectId: null }),
+        notes: rowNotes(p.text, t, r).map((n) => ({ marker: n.marker, text: n.text, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: n.start, end: n.end, subjectId: null }) })) }));
       if (!rows.length) continue;
       const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName, before);
       const id = hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit);
@@ -198,6 +201,6 @@ export function recordForModel(r: BenefitRecord): Record<string, unknown> {
   return { benefit_id: r.id, benefit: r.benefit, product: r.policy.product, insurer: r.policy.insurer, document: r.policy.personalProof ? "personal proof (lists this person)" : r.applicability === "amendment" ? "amendment" : "reference wording",
     kind: r.kind, ...(printed ? { printed } : {}), ...(r.asOf ? { as_of: r.asOf } : {}), ...(r.conditions.length ? { conditions: r.conditions } : {}), page: r.source.page,
     ...(s ? { schedule: { percentage_of: s.base.kind === "fixed_limit" ? `${s.base.label} (${money(s.base.cents, s.base.currency)})` : s.base.kind === "sum_insured" ? `${s.base.label} (${money(s.base.cents, s.base.currency)})` : `unresolved: ${s.base.why}`,
-      cases: s.rows.map((x) => ({ option_id: x.id, case: x.label, percent: x.percent })) } } : {}),
+      cases: s.rows.map((x) => ({ option_id: x.id, case: x.label, percent: x.percent, ...(x.notes.length ? { footnote: x.notes.map((n) => `${n.marker} ${n.text.replace(/\s+/g, " ")}`) } : {}) })) } } : {}),
     status: r.status, ...(r.unknowns.length ? { unknown: r.unknowns } : {}), evidence: r.source.evidence };
 }

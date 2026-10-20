@@ -38,6 +38,9 @@ export interface LoopModel { readonly id: string; readonly kind: "hosted" | "scr
 export type LoopFact = { value: string | number | boolean; words: string; turn: number; source?: "user_reported" | "document" | "medical_evidence"; basis?: "stated" | "paraphrased"; evidenceIds?: string[];
   /** PR #54 follow-up: the household's message recording it corrected something ("actually", "sorry", "not ..."). */
   cue?: boolean;
+  /** fx-live-1 (K4b): the household's description of the event, copied to the person it was corrected to (the subject id it came from).
+   * It is not something they said about THIS person: a later report for this person replaces it without being a "correction". */
+  carriedFrom?: string;
   previous?: { value: string | number | boolean; words: string; turn: number; source?: LoopFact["source"]; basis?: LoopFact["basis"] }[] };
 export type LoopClaim = { subjectId: string | null; facts: Record<string, LoopFact>; derived: LoopDerived[];
   /** Agent G: the calculations worked out for this claim (by calc id), with the facts and evidence each rests on, so a

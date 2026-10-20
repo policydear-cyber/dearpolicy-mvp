@@ -141,6 +141,72 @@ export function choosePercentRow(tables: PctTable[], benefit: string, condition:
   return { row, table };
 }
 
+/**
+ * fx-live-1 (omitted footnote): a row of a percentage table can carry a footnote marker ("Leg^", or "#" on the line above
+ * "Arm , Elbow, Wrist or Ribs"), and the page prints what the marker means directly under the table ("^ For the
+ * avoidance of doubt, any fractures of toe and foot are not covered"). The footnote qualifies THE ROWS THAT PRINT ITS
+ * MARKER and no others. Nothing here interprets the wording: a note is attached only when
+ *   - the row itself prints the marker (attached to a word of its label, leading the label, or alone on the line above it), and
+ *   - the page prints a definition of that very marker directly after the table's last percentage row
+ *     (the marker, then its text on the same line or the next, plus continuation lines up to the next definition,
+ *      a bullet, a blank line or a sentence end).
+ * A marker with no definition, a definition no row refers to, or text further down the page that merely begins with the
+ * same symbol ("*This Benefit can only be claimed ..." under a list of bullets) is attached to nothing.
+ */
+export type RowNote = { marker: string; text: string; start: number; end: number };
+const MARKER = "(?:[#^*†‡]+|[¹²³⁴⁵⁶⁷⁸⁹]+)";
+const MARKER_ONLY = new RegExp(`^${MARKER}$`);
+export function rowMarkers(row: PctRow): string[] {
+  const out = new Set<string>();
+  for (const ln of row.text.split("\n")) {
+    const t = ln.trim();
+    if (MARKER_ONLY.test(t)) { out.add(t); continue; }
+    const cells = ln.split(/\t+| {3,}/);
+    const label = cells[0];
+    const lead = new RegExp(`^\\s*(?:[•▪●◦]\\s*)?(${MARKER})\\s+\\S`).exec(label);
+    if (lead) out.add(lead[1]);
+    for (const m of label.matchAll(new RegExp(`(?<=[A-Za-z)])(${MARKER})(?=[\\s,;]|$)`, "g"))) out.add(m[1]);
+  }
+  return [...out];
+}
+export function tableNotes(page: string, table: PctTable): RowNote[] {
+  const real = [...table.rows].reverse().find((r) => r.percents.length > 0);
+  if (!real) return [];
+  const lines: { text: string; start: number; end: number }[] = [];
+  let at = real.end;
+  for (const t of page.slice(real.end).split("\n")) { lines.push({ text: t, start: at, end: at + t.length }); at += t.length + 1; }
+  lines.shift(); // the rest of the last row's own line
+  const DEF = new RegExp(`^(${MARKER})(?:[\\t ]+(\\S.*)|(?<=[*†‡])(?=[A-Z])(\\S.*))$`);
+  const BULLET = /^[•▪●◦]/;
+  const out: RowNote[] = [];
+  let cur: { marker: string; parts: { text: string; start: number; end: number }[] } | null = null;
+  const flush = () => { if (cur && cur.parts.length) out.push({ marker: cur.marker, text: cur.parts.map((p) => p.text).join(" ").replace(/\s{2,}/g, " ").trim(), start: cur.parts[0].start, end: cur.parts.at(-1)!.end }); cur = null; };
+  let blanks = 0, i = 0;
+  for (; i < lines.length; i++) {
+    const l = lines[i], t = l.text.trim(), lead = l.text.length - l.text.trimStart().length;
+    const at0 = l.start + lead;
+    if (!t) { flush(); if (++blanks > 1) break; continue; }
+    blanks = 0;
+    if (BULLET.test(t) || pctsOf(t).length || /^page\s+\d+\s+of\s+\d+$/i.test(t)) break; // the next benefit, another row or the page footer: the notes are over
+    if (MARKER_ONLY.test(t)) { flush(); cur = { marker: t, parts: [] }; continue; } // the text is on the next line(s)
+    const d = DEF.exec(t);
+    if (d) { flush(); const body = (d[2] ?? d[3]).trim(); cur = { marker: d[1], parts: [{ text: body, start: l.start + l.text.indexOf(body, lead + d[1].length), end: l.end }] }; if (/[.!?;:]$/.test(body)) flush(); continue; }
+    if (!cur) break; // not a footnote line and none is open: the table's notes are over
+    if (CELL_GAP.test(l.text) || l.text.includes("\t")) break;
+    if (cur.parts.length >= 3 || /[.!?;:]$/.test(cur.parts.at(-1)?.text ?? "")) break;
+    cur.parts.push({ text: t, start: at0, end: l.end });
+    if (/[.!?;:]$/.test(t)) flush();
+  }
+  flush();
+  return out;
+}
+/** The footnotes that qualify ONE row of a table (see RowNote). */
+export function rowNotes(page: string, table: PctTable, row: PctRow): RowNote[] {
+  const marks = rowMarkers(row);
+  if (!marks.length) return [];
+  return tableNotes(page, table).filter((n) => marks.includes(n.marker));
+}
+
 /** The reconstructed row a stored span lies in (its first character), if it is in one. */
 export function rowAt(tables: PctTable[], start: number): { row: PctRow; table: PctTable } | null {
   for (const table of tables) for (const row of table.rows) if (row.start <= start && start <= row.end) return { row, table };

@@ -75,6 +75,46 @@ export function relevantEvidence(question: string, factKey: string, evidenceText
 
 
 /**
+ * Production fracture conversation (19 Oct 2026): "Was Charmaine's fracture confirmed by X-ray and certified by a
+ * registered medical practitioner?" passed relevantEvidence because ONE word ("fracture") was shared with the cited
+ * clause, although neither cited page prints an X-ray or a practitioner's certificate for that benefit. A question that
+ * asks for a requirement is justified only by wording that prints it. Returns the asked words the cited wording does not
+ * contain when the question is mostly such words (a long question of which under a third is in the cited wording);
+ * null when the wording supports the question or the question is too short to judge (never refuses a short question).
+ */
+export function unprintedAsk(question: string, factKey: string, evidenceTexts: string[], names: string[] = []): string[] | null {
+  const c = factConcept(factKey);
+  if (VOCAB[c.concept]) return null; // admission / discharge / cause / bill / hospital facts have their own vocabulary check
+  // Only a question asserting a condition for a yes/no answer ("Was it confirmed by ...?"): one choosing among printed cases
+  // ("Which bone ...?") is answered by the printed list.
+  if (/^\s*(?:which|what|when|where|who|whom|whose|how|why|on\s+what|in\s+which)\b/i.test(question)) return null;
+  const nameWords = new Set(names.flatMap((n) => contentWords(n)));
+  const useful = (ws: string[]) => [...new Set(ws.filter((w) => !GENERIC.has(w) && !nameWords.has(w)))];
+  const have = new Set(contentWords(evidenceTexts.join("\n")));
+  // (1) A question that asserts a PROCEDURE or proof ("confirmed by X-ray", "certified by a registered medical practitioner") is a
+  // requirement the wording either prints or does not, however short the question is: it is supported when the cited wording prints
+  // anything of that procedure (what is done, or by whom), and not asked when it prints none of it.
+  const proc = PROCEDURE.exec(question);
+  if (proc) {
+    const terms = useful(contentWords(question.slice(proc.index)));
+    return terms.length && !terms.some((w) => have.has(w)) ? terms : null;
+  }
+  // (2) Otherwise word overlap is only a heuristic. A question phrased differently from the print ("Did the stay run through a whole
+  // day?") is still about the printed requirement when the fact the model keyed it under is named in the cited wording
+  // (continuous_confinement: "confined ... continuous period"): that question is asked. Only a long question that shares under a
+  // third of its words with the wording, under a key the wording does not print either, is not asked.
+  const keyWords = useful(contentWords(factKey.replace(/_/g, " ")));
+  const printed = (w: string) => have.has(w) || (w.length >= 5 && [...have].some((h) => h.length >= 5 && h.slice(0, 5) === w.slice(0, 5)));
+  if (keyWords.length && keyWords.every(printed)) return null;
+  const asked = useful(contentWords(question));
+  if (asked.length < 4) return null;
+  const missing = asked.filter((w) => !have.has(w));
+  return (asked.length - missing.length) / asked.length < 1 / 3 ? missing : null;
+}
+/** A question asserting that something was done or proved by someone or something. */
+const PROCEDURE = /\b(?:confirm\w*|certif\w*|verif\w*|prov(?:ed|en)|diagnos\w*|document\w*|attest\w*|witness\w*|sign(?:ed)?|approv\w*|author[ie]s?d|endors\w*|referr?ed|prescrib\w*)\b[^?]{0,60}\b(?:by|with|from|through)\b/i;
+
+/**
  * Agent P (task 5): the words of the household's message that already give the fact a question would ask for (null
  * when the message does not give it). Admission / discharge: the keyword with a date or time in the same clause;
  * a bill: a money figure next to bill / invoice / cost wording; how it happened: an accident mechanism in their words.
