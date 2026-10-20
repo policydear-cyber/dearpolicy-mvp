@@ -229,8 +229,9 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
     // (C4, UX on C3: said as what was checked and what the upload holds -- never as lost or broken data)
     const unreadable = partial.some((d) => (pagesOf.get(d.id) ?? []).some((p) => !p.text.trim()));
     const missing = partial.some((d) => { const ps = pagesOf.get(d.id) ?? []; return d.pageCount == null || ps.length < d.pageCount; });
-    const unknownCount = partial.some((d) => d.pageCount == null);
-    const why = [missing ? (unknownCount ? "may not all be in the copy that was uploaded" : "are not in the copy that was uploaded") : "", unreadable ? "have no readable text" : ""].filter(Boolean).join(" or ");
+    // (C5: definite when the page count proves pages are missing -- "4 of 37"; "may" only when no page count is known)
+    const provenMissing = partial.some((d) => d.pageCount != null && new Set((pagesOf.get(d.id) ?? []).map((p) => p.page)).size < d.pageCount);
+    const why = [missing ? (provenMissing ? "are not in the copy that was uploaded" : "may not all be in the copy that was uploaded") : "", unreadable ? "have no readable text" : ""].filter(Boolean).join(" or ");
     const text = `${scheme ? scheme.text(ctx.who) + " " : ""}I checked ${whose} for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. Those pages do not mention ${t.topic}. The other pages ${why}, so I can't say either way whether there is such cover.`;
     return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked`, partial: { text, check } };
   }

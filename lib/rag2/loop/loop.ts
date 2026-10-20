@@ -1645,20 +1645,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       if (labelled || /\b(?:term life|personal accident|accidental death|compassionate death|repatriation|funeral|burial|booklet|handbook|brochure|wording)\b/i.test(input.message)) return null;
     }
     const covered = new Set(given.filter((x) => x && x.kind === "benefit_terms").map((x) => String(x.benefit_id)));
-    // (PR #57 follow-up, Evidence Reviewer on C3: a single-trip schedule's amount is that trip's -- its page prints the period and
-    // destination. It is not added to a death the household places elsewhere, or after that period ended: shown beside a death in
-    // Japan, "Accidental Death: S$100,000" for a March 2025 trip to Indonesia is a misleading amount)
-    const otherTrip = async (r: (typeof recs)[number]) => {
-      const page = (await pagesOf(r.policy.id)).get(r.source.page) ?? "";
-      const dest = /^\s*Destination\s*:\s*(.+?)\s*$/im.exec(page)?.[1];
-      const until = /\bPeriod of Insurance\s*:\s*\S+\s+(?:to|-|–)\s+(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/i.exec(page);
-      const ended = until ? new Date(Date.UTC(+until[3], +until[2] - 1, +until[1])) < new Date(new Date().toISOString().slice(0, 10)) : false;
-      const elsewhere = dest ? !dest.split(/\s*(?:,|;|\/|\band\b)\s*/i).some((d) => d.length >= 3 && new RegExp(`\\b${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(input.message)) : false;
-      return ended || elsewhere;
-    };
-    const tripOff = new Set<string>();
-    for (const r of recs) if (await otherTrip(r)) tripOff.add(r.id);
-    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && !tripOff.has(r.id) && !(namedIn(r.benefit, shown) && amountShownIn(r, shown)) &&(familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
+    const mine = recs.filter((r) => r.status !== "unsupported" && !covered.has(r.id) && !(namedIn(r.benefit, shown) && amountShownIn(r, shown)) &&(familiesOf(r.benefit).has("death") || productFamilies(r.benefit).has("death")) && ![...notApplicable.keys()].some((k) => k === `${subject}|${r.id}`));
     const seen = new Set<string>();
     const extra: Record<string, unknown>[] = [];
     const rows: string[] = [];

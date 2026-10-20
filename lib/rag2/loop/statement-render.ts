@@ -9,12 +9,12 @@
  * composer: a statement that fails is omitted as a unit, never edited into a different claim.
  */
 import type { ToolContext } from "../tools";
-import { evidenceFor, type EvidenceRef } from "../evidence";
+import { evidenceAt, evidenceFor, type EvidenceRef } from "../evidence";
 import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
-import { loadDocs, loadLinks, loadMembers, type DocRow, type LinkRow } from "../store";
+import { loadDocs, loadLinks, loadMembers, pageMap, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
 import { ATTRIBUTES, reportedValue } from "../applicability";
 import { documentLabel, profileDocument, standingClause } from "./relation";
@@ -71,7 +71,29 @@ export function quotePrinted(lines: PrintedLine[], evidenceId: (ref: EvidenceRef
 }
 
 /** A benefit's printed terms, written from its record (with the evidence and value ids that bind each figure). */
+/** C5 (Policy Evidence Reviewer on C4): a trip schedule's amount is that trip's. The lines its own page prints for whom, when and where
+ * ("Insured Person: ...", "Period of Insurance: ... to ...", "Destination: ...") are said beside the amount, cited -- never the amount
+ * without them, and never left out: the household and the insurer judge whether the trip fits the event. */
+const listOf = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] ?? "";
+async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence: EvidenceRef[] } | null> {
+  const page = (await pageMap(d.ctx.accountId, r.policy.id).catch(() => new Map<number, string>())).get(r.source.page) ?? "";
+  if (!/^\s*(?:Period of Insurance|Destination)\s*:/im.test(page)) return null;
+  const out: { label: string; value: string; ev: EvidenceRef }[] = [];
+  let at = 0;
+  for (const line of page.split("\n")) {
+    const m = /^(\s*)(Insured Person|Period of Insurance|Destination)\s*:\s*(.+?)\s*$/i.exec(line);
+    if (m) out.push({ label: m[2], value: m[3], ev: evidenceAt({ policyId: r.policy.id, documentHash: r.policy.version.documentHash, page: r.source.page, pageText: page, start: at + m[1].length, end: at + line.length, subjectId: r.memberId }) });
+    at += line.length + 1;
+  }
+  if (!out.some((x) => /period|destination/i.test(x.label))) return null;
+  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; whether that trip fits this event is for the insurer to confirm.`, evidence: out.map((x) => x.ev) };
+}
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
+  const w = await renderTermsBody(r, d);
+  const trip = await tripLimits(r, d);
+  return trip ? { text: w.text + trip.text, evidence_ids: [...new Set([...w.evidence_ids, ...trip.evidence.map((e) => d.evidenceId(e))])], value_ids: w.value_ids } : w;
+}
+async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
   const who = r.memberName;
   const ev = [d.evidenceId(r.source.evidence)];
   if (r.kind === "percentage_schedule" && r.schedule) {
@@ -184,7 +206,7 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // (C4, Policy Evidence Reviewer / UX on C3: beside that figure, plainly: what is not defined, the household's own reported kind of
     // fracture, and that the insurer decides)
     const kind = tagged ? reportedValue(ATTRIBUTES[0], d.ctx.reportedFacts?.get(c.subjectId) ?? []).value : null;
-    const undefinedNote = tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
+    const undefinedNote = tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
     return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision${rowNote(c.record?.rowNotes)}.`;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {
