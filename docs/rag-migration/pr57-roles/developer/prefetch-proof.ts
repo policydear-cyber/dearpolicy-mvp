@@ -1,14 +1,17 @@
 /**
- * Speed (server makes the first resolve_person call): offline proof on the scripted harness. Every scripted conversation is run twice --
- * as today, and with DEARPOLICY_PREFETCH_PERSON=1 (the server's call replaces the model's first step when that step was that same call) --
- * and the answers (text, statements, bottom line, citations) and the turn's tool calls and results are compared. No spend.
+ * Speed (the server looks up the person a first message names): offline proof on the scripted harness. Every scripted conversation, and
+ * one written here whose first message names Daniel with a capital, is run twice -- as today, and with DEARPOLICY_PREFETCH_PERSON=1 -- and
+ * the answers (text, statements, bottom line, citations) and the turn's tool calls and results are compared. Then the names the server
+ * must never take as a person (Critic R26-1). No spend.
  *   node --import tsx docs/rag-migration/pr57-roles/developer/prefetch-proof.ts
  */
 import { setEnv, startHarness } from "../../../../scripts/fixtures/rag2-loop/harness";
 import * as FX from "../../../../scripts/fixtures/reliable-chat/fracture-conversation";
 import { FRACTURE_SCENARIOS } from "../../../../scripts/fixtures/reliable-chat/fracture-scenarios";
 import { FX_REPAIR_SCENARIOS } from "../../../../scripts/fixtures/reliable-chat/fx-repairs-scenarios";
-import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
+import { ScriptedLoopModel, type ScriptTurn } from "@/lib/rag2/loop/scripted-model";
+import { prefetchMention } from "@/lib/rag2/loop/loop";
+import { call, benefitIdOf, resultIds, CERT } from "../../../../scripts/fixtures/reliable-chat/fracture-script";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 const canon = (v: any): any => Array.isArray(v) ? v.map(canon) : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => [k, canon(v[k])])) : v;
@@ -35,7 +38,18 @@ async function main() {
   const h = await startHarness(FX as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
   let same = 0, differ = 0, used = 0;
-  for (const sc of [...FRACTURE_SCENARIOS(), ...FX_REPAIR_SCENARIOS()] as any[]) {
+  // (Daniel's arm, scripted as a model would play it: who, then his benefits, then the two schedules, then the answer)
+  const DAN = FX.M.daniel.id;
+  const ids: { sb?: string; so?: string } = {};
+  const DANIEL: ScriptTurn = { user: /Daniel tripped/, steps: [
+    () => [call("resolve_person", { mention: "Daniel" })],
+    () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "tripped", words: "tripped" }, { key: "injury", value: "broke his arm", words: "broke his arm" }], subject_id: DAN }), call("person_benefits", { topic: "fracture after a fall", subject_id: DAN })],
+    (v) => { ids.sb = benefitIdOf(v, /^Simple Fracture$/i); ids.so = benefitIdOf(v, /Simple Fracture or Other Fracture/i);
+      const ev = (id: string) => call("evaluate_benefit", { case: "broke his arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: DAN, assumption_words: "broke his arm" });
+      return [ev(ids.sb!), ev(ids.so!)]; },
+    (v) => [call("final_answer", { sentences: resultIds(v).map((r) => ({ kind: "calculation", text: "-", result_id: r })), next_steps: ["contact:" + CERT], subject_id: DAN })],
+  ] };
+  for (const sc of [{ id: "DANIEL-ARM", messages: ["Daniel tripped on the stairs and broke his arm."], turns: [DANIEL] }, ...FRACTURE_SCENARIOS(), ...FX_REPAIR_SCENARIOS()] as any[]) {
     // (the server's call replaces the model's first step only where that step is the same single call: a script that starts otherwise is
     // a model that chose otherwise, and runs as today -- shown as "not applicable")
     const first = sc.turns[0]?.steps[0];
@@ -57,6 +71,12 @@ async function main() {
     }
   }
   console.log(`\n${same} identical, ${differ} different; the server's call was used on ${used} turn(s)`);
-  process.exit(differ ? 1 : 0);
+  // Critic R26-1: messages whose words are not the person the question is about -- the server must not take them as a name.
+  const people = [{ id: "g", name: "Tan Hui Min Grace (Grace)" }, { id: "w", name: "Will Tan (Will)" }, { id: "m", name: "Lim Min (Min)" }, { id: "d", name: "Lee Wei Ming, Daniel (Daniel)" }, { id: "a", name: "Wong Jia Hui, Adrian (Adrian)" }];
+  const never = ["What is the grace period for my premium?", "Will my policy cover dental?", "I waited 30 min at the clinic", "Sarah, Grace's colleague, broke her arm", "Grace period: when does it end?", "Daniel's GP bill is $800, can he claim?", "Hypothetically, Adrian died in a car accident in Japan.", "Daniel and Grace were both hurt.", "Min broke her wrist"];
+  let bad = 0;
+  for (const m of never) { const got = prefetchMention(m, people); console.log(`${got ? "FAIL" : "PASS"} no person taken from ${JSON.stringify(m)}${got ? ` (took ${got})` : ""}`); if (got) bad++; }
+  for (const [m, want] of [["Daniel tripped on the stairs and broke his arm.", "Daniel"], ["Adrian broke his leg yesterday.", "Adrian"]] as const) { const got = prefetchMention(m, people); console.log(`${got === want ? "PASS" : "FAIL"} ${JSON.stringify(m)} -> ${got}`); if (got !== want) bad++; }
+  process.exit(differ || bad ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
