@@ -1,0 +1,21 @@
+import { chromium } from '/home/user/dearpolicy-mvp/node_modules/playwright/index.mjs';
+const [,,vw]=process.argv;
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: vw==='m'?{width:390,height:844}:{ width: 1366, height: 900 }, hasTouch: vw==='m' });
+const reqs=[]; p.on('response', r=>{ if(r.request().method()==='POST') reqs.push(r.url().replace('http://localhost:3300','')+' '+r.status()); });
+await p.goto('http://localhost:3300/policies',{waitUntil:'domcontentloaded'}); await p.waitForTimeout(4000);
+const picker = p.locator('[data-testid=covers-picker]').first(); await picker.scrollIntoViewIfNeeded();
+console.log('PICKER:', (await picker.innerText()).replace(/\n/g,' | '));
+await p.screenshot({path:`cov-0-${vw}.png`});
+const btns = await picker.locator('button').allInnerTexts(); console.log('buttons', btns);
+const change = picker.getByRole('button',{name:/change|edit/i}); if (await change.count()) { await change.first().click(); await p.waitForTimeout(500); }
+console.log('OPEN:', (await picker.innerText()).replace(/\n/g,' | '));
+await p.screenshot({path:`cov-1-${vw}.png`});
+const grace = picker.locator('label,button,[role=checkbox]',{hasText:/Tan Hui Min Grace/}).first();
+await grace.click(); await p.waitForTimeout(3000);
+console.log('AFTER UNTICK:', (await picker.innerText()).replace(/\n/g,' | '));
+await p.screenshot({path:`cov-2-${vw}.png`});
+await p.reload({waitUntil:'domcontentloaded'}); await p.waitForTimeout(4000);
+console.log('AFTER RELOAD:', (await p.locator('[data-testid=covers-picker]').first().innerText()).replace(/\n/g,' | '));
+console.log(reqs.join(' ; '));
+await b.close();

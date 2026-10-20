@@ -1,0 +1,147 @@
+
+===== USER (1): grace fell down and broke her arm
+[status 202; first feedback 73ms; settled ~6114ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 1
+You
+
+grace fell down and broke her arm
+
+DearPolicy
+
+Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
+
+===== USER (2): yes it was xray'd and the doctor signed off on it
+[status 202; first feedback 72ms; settled ~1416ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 1
+You
+
+grace fell down and broke her arm
+
+DearPolicy
+
+Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+
+SOURCES
+You
+
+yes it was xray'd and the doctor signed off on it
+
+DearPolicy
+
+I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
+
+===== sources (1) =====
+SOURCES
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 13
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 13
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 13
+Aldermoor Life Ltd · Scheme X Group Insurance Scheme
+Your uploaded document
+Page 1
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 8
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 8
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 13
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 8
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 37
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 37
+Aldermoor Life Ltd · Scheme X Group Insurance
+Your uploaded document
+Page 1
+links: 
+
+===== after reload =====
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Mention a name, relationship, “I”, or ask about the whole family
+New chat
+Previous chats · 1
+You
+
+grace fell down and broke her arm
+
+DearPolicy
+
+Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+
+SOURCES
+You
+
+yes it was xray'd and the doctor signed off on it
+
+DearPolicy
+
+I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

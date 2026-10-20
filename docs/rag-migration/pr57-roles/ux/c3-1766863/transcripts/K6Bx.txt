@@ -1,0 +1,25 @@
+
+===== USER (1): Does Grace's cover pay for dental treatment?
+[status 202; first feedback 66ms; settled ~1385ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 2
+You
+
+Does Grace's cover pay for dental treatment?
+
+DearPolicy
+
+Only part of Grace’s documents could be checked for dental treatment: the Scheme X Group Insurance Scheme (page 1), the Scheme X Group Insurance (product summary) (pages 8, 12-13, 37) and the Scheme X Group Insurance (certificate summary) (pages 1, 3, 5, 7-9). The pages that were read do not mention dental treatment; the rest is not stored and could not be checked, so this is not an answer about whether there is such cover.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

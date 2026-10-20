@@ -1,0 +1,30 @@
+
+===== USER (1): grace was in hospital 3 days last week, she was sick not an accident. does her accident cover pay anything?
+[status 202; first feedback 72ms; settled ~1388ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 5
+You
+
+grace was in hospital 3 days last week, she was sick not an accident. does her accident cover pay anything?
+
+DearPolicy
+
+The Scheme X Group Insurance (page 9) prints the Accidental Hospital Recuperation Benefit, 250 (printed with a bare “$” sign; the Scheme X Group Insurance does not say which currency), with the printed conditions “In addition to the specific exclusions listed below”, “if within 30 days following bodily injury as a result of an Accident”, “it is medically necessary due to the said injury (whether directly or indirectly necessary) of the Insured Person to be confined as a resident patient in a Hospital for a continuous period of at least 24 hours on the recommendation of a Registered Medical Practitioner but not for the purpose of convalescent rest”, “Subsequent hospitalisation resulting from the same injury will not be payable.” and “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.”.
+
+Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's.
+
+Grace's certificate also lists Group Living Care and Group Living Care Plus (listed as of 6 October 2022).
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

@@ -1,0 +1,25 @@
+
+===== USER (1): Does Grace's cover pay for dental treatment?
+[status 202; first feedback 100ms; settled ~1415ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 8
+You
+
+Does Grace's cover pay for dental treatment?
+
+DearPolicy
+
+I couldn’t confirm an answer to that from your documents.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

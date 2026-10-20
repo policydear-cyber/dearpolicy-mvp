@@ -1,0 +1,43 @@
+
+===== USER (1): Hypothetically, Adrian died in a car accident in Japan. What can I do?
+[status 202; first feedback 79ms; settled ~2586ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Adrian Wong Jia Hui until you mention someone else
+New chat
+Previous chats · 1
+You
+
+Hypothetically, Adrian died in a car accident in Japan. What can I do?
+
+DearPolicy
+
+Adrian’s certificate lists Group Term Life of S$1,000,000 as of 6 October 2022.
+
+Adrian's certificate lists Group Personal Accident of S$600,000 as of 6 October 2022.
+
+The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Accidental Death: 100% of the Sum Insured.
+
+The Public Officers Group Personal Accident - Summary of Benefits (page 9) prints Repatriation of Mortal Remains: S$2,000, with the printed condition “per Insured Person, if death occurs outside Singapore as a result of an Accident”.
+
+The Public Officers Group Term Life - Product Summary (page 1) defines Death Benefit as the Sum Assured.
+
+The Public Officers Group Term Life - Product Summary (page 1) defines Terminal Illness Benefit as the Sum Assured.
+
+The Single Trip Travel Insurance - Policy Schedule (page 1) prints Accidental Death: S$100,000. The schedule prints this cover for the insured person “Wong Jia Hui, Adrian”, the period of insurance “10/03/2025 to 17/03/2025” and the destination “Indonesia”; whether that trip fits this event is for the insurer to confirm.
+
+NEXT STEPS
+Notify Kestrel Life Ltd of the death and ask which claim forms they need.
+Ask the employer or scheme administrator for the certificate in force on the date of death.
+Suggestion, not stated in your documents (confirm with the insurer): Keep the death certificate and any repatriation receipts together.
+Contact Kestrel Life Ltd (through the employer or scheme administrator, for this group scheme) about the Public Officers Group Insurance Scheme - Certificate to ask what it needs for a claim.
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

@@ -1,0 +1,83 @@
+
+===== USER (1): Daniel fell off a ladder at home in an accident. The doctor says he fractured his hip, or possibly his tibia - they're not sure yet. It's a closed fracture. What would his accident cover pay?
+[status 202; first feedback 74ms; settled ~1405ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Daniel Lee Wei Ming until you mention someone else
+New chat
+Previous chats · 2
+You
+
+Daniel fell off a ladder at home in an accident. The doctor says he fractured his hip, or possibly his tibia - they're not sure yet. It's a closed fracture. What would his accident cover pay?
+
+DearPolicy
+
+The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The page also prints footnotes for these cases: for “Jaw, Pelvis, Leg, Ankle or Knee”: “For the avoidance of doubt, any fractures of toe and foot are not covered” (marked ^); for “Arm, Elbow, Wrist or Ribs”: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #). The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. Under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”. Daniel's documents give two different answers for the same kind of event, and what they say does not settle which applies: these are alternatives from separate documents, never a total. The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+A FACT THAT CHANGES THIS ASSESSMENT
+Which of these cases is it: Hip or Jaw, Pelvis, Leg, Ankle or Knee?
+This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee 50%” (page 13)
+Hip
+Jaw, Pelvis, Leg, Ankle or Knee
+Show full assessment
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
+
+===== USER (2): The scan shows it's the tibia.
+[status 202; first feedback 89ms; settled ~1412ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Daniel Lee Wei Ming until you mention someone else
+New chat
+Previous chats · 2
+You
+
+Daniel fell off a ladder at home in an accident. The doctor says he fractured his hip, or possibly his tibia - they're not sure yet. It's a closed fracture. What would his accident cover pay?
+
+DearPolicy
+
+The Group Insurance Product Summary (page 13) pays the Simple Fracture as a percentage of the Simple Fracture Benefit Limit of S$5,000 for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs 25%. The page also prints footnotes for these cases: for “Jaw, Pelvis, Leg, Ankle or Knee”: “For the avoidance of doubt, any fractures of toe and foot are not covered” (marked ^); for “Arm, Elbow, Wrist or Ribs”: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #). The Group Personal Accident Benefit Summary (page 8) pays the Simple Fracture or Other Fracture due to Accident as a percentage of Daniel's own sum insured (S$600,000 on the certificate) for each listed case: Neck, Skull or Spine (Full Break) 100%; Hip 75%; Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture) 50%; Cheekbone, Shoulder or Hairline Fracture of Skull or Spine 30%; Arm, Elbow, Wrist or Ribs (Other Fracture) 20%. Under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”. Daniel's documents give two different answers for the same kind of event, and what they say does not settle which applies: these are alternatives from separate documents, never a total. The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+A FACT THAT CHANGES THIS ASSESSMENT
+Which of these cases is it: Hip or Jaw, Pelvis, Leg, Ankle or Knee?
+This changes what your policy pays under: “Hip 75%”; “Jaw, Pelvis, Leg, Ankle or Knee 50%” (page 13)
+Hip
+Jaw, Pelvis, Leg, Ankle or Knee
+Show full assessment
+You
+
+The scan shows it's the tibia.
+
+DearPolicy
+
+Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, in the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of toe and foot are not covered” (marked ^).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 1 April 2024, not confirmation of cover on a later date), in the Group Personal Accident Benefit Summary (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+You told me it's the tibia.
+
+The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask which of the two schedules applies to this event, and what it needs for a claim.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

@@ -1,0 +1,93 @@
+
+===== USER (1): Daniel fractured his tibia in an accident. It's a closed fracture. What would his accident cover pay?
+[status 202; first feedback 84ms; settled ~3117ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Daniel Lee Wei Ming until you mention someone else
+New chat
+Previous chats · 1
+You
+
+Daniel fractured his tibia in an accident. It's a closed fracture. What would his accident cover pay?
+
+DearPolicy
+
+Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, in the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of toe and foot are not covered” (marked ^).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 1 April 2024, not confirmation of cover on a later date), in the Group Personal Accident Benefit Summary (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask which of the two schedules applies to this event, and what it needs for a claim.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
+
+===== USER (2): Correction: it was his hip, not his tibia. Keep this as a hypothetical closed fracture.
+[status 202; first feedback 80ms; settled ~1401ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Daniel Lee Wei Ming until you mention someone else
+New chat
+Previous chats · 1
+You
+
+Daniel fractured his tibia in an accident. It's a closed fracture. What would his accident cover pay?
+
+DearPolicy
+
+Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee”, the conditional illustration is S$2,500: 50% of the Simple Fracture benefit limit of S$5,000, in the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of toe and foot are not covered” (marked ^).
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Jaw, Pelvis, Leg, Ankle or Knee” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$300,000: 50% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 1 April 2024, not confirmation of cover on a later date), in the Group Personal Accident Benefit Summary (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask which of the two schedules applies to this event, and what it needs for a claim.
+
+SOURCES
+You
+
+Correction: it was his hip, not his tibia. Keep this as a hypothetical closed fracture.
+
+DearPolicy
+
+Updated: injury is now closed hip fracture (you said closed tibia fracture at first). The earlier estimate worked out from it no longer applies.
+
+Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+If the Simple Fracture benefit applies to Daniel's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, in the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision.
+
+If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Hip”, the conditional illustration is S$450,000: 75% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 1 April 2024, not confirmation of cover on a later date), in the Group Personal Accident Benefit Summary (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+
+The Group Insurance Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Group Personal Accident Benefit Summary (page 8) takes its percentage of Daniel's own sum insured. Neither document says whether one amends, replaces or adds to the other.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask which of the two schedules applies to this event, and what it needs for a claim.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

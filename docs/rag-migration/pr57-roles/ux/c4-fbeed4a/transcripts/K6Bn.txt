@@ -1,0 +1,25 @@
+
+===== USER (1): does grace have dental?
+[status 202; first feedback 78ms; settled ~1403ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 3
+You
+
+does grace have dental?
+
+DearPolicy
+
+I checked Grace’s documents for dental treatment: the Scheme X Group Insurance Scheme (page 1), the Scheme X Group Insurance (product summary) (pages 8, 12-13, 37) and the Scheme X Group Insurance (certificate summary) (pages 1, 3, 5, 7-9). Those pages do not mention dental treatment. The other pages may not all be in the copy that was uploaded, so I can't say either way whether there is such cover.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
