@@ -9,6 +9,8 @@ type Member = {
 };
 
 const RELATIONSHIPS = ["self","spouse","parent","child","sibling","grandparent","dependant","other"];
+/** How a relationship reads on screen ("self" is the person using DearPolicy). */
+const relationshipLabel = (r: string) => r === "self" ? "Me" : r.charAt(0).toUpperCase() + r.slice(1);
 
 /** Today as YYYY-MM-DD in the person's own time zone (a birth date can't be later). */
 function todayIso() {
@@ -23,7 +25,8 @@ export default function FamilyPage() {
   const [family, setFamily] = useState<Member[]>([]);
   const [baseline, setBaseline] = useState<Record<string, Member>>({});
   const [name, setName] = useState("");
-  const [relationship, setRelationship] = useState("parent");
+  // No default: a guessed "parent" was silently saved for people added in a hurry.
+  const [relationship, setRelationship] = useState("");
   const [dob, setDob] = useState("");
   const [preferred, setPreferred] = useState("");
   const [status, setStatus] = useState("");
@@ -87,10 +90,10 @@ export default function FamilyPage() {
       <section className="profile-add-panel">
         <form onSubmit={add} className="profile-add-grid">
           <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tan Yi Chuen, Desmond" required /></div>
-          <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
+          <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
           <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
           <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Desmond" /></div>
-          <button className="button primary" type="submit" disabled={!name.trim()}>+ Add person</button>
+          <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
       </section>
@@ -103,12 +106,12 @@ export default function FamilyPage() {
               <div className="avatar profile-avatar">{member.display_name.slice(0,1).toUpperCase()}</div>
               <div className="profile-fields">
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
               <div className="profile-actions">
-                <span>{member.policy_count} linked documents</span>
+                <a className="text-link" href={`/ledger?member=${member.id}`}>{member.policy_count === 1 ? "1 linked document" : `${member.policy_count} linked documents`} · see cover →</a>
                 <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
                 <button className="button secondary" onClick={() => remove(member)} aria-label={confirmId === member.id ? `Confirm delete ${member.display_name}` : `Delete ${member.display_name}`}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>
                 {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}

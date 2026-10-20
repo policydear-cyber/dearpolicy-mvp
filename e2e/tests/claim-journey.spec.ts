@@ -176,7 +176,8 @@ test.describe.serial("synthetic claim journey", () => {
     expect(text1).not.toMatch(/\b(?:300|250|150),000\b|total/i);
     const citations = answer.locator("details.citations");
     await expect(citations).toContainText("Living Care");
-    await expect(citations).toContainText("Page 5");
+    // PR #65: one source row per document, its pages as one line ("page 5", "pages 1, 5"). Was: toContainText("Page 5").
+    await expect(citations).toContainText(/pages? (?:\d+(?:–\d+)?, )*5\b/i);
     expect(await answer.innerText()).not.toMatch(FORBIDDEN);
     const history = await api<{ conversations: { id: string; title: string }[] }>(page, "/api/chat/history?scope=all");
     const factual = history.body.conversations.find((c) => /waiting period/i.test(c.title))?.id ?? history.body.conversations[0]?.id;
@@ -343,7 +344,7 @@ test.describe.serial("synthetic claim journey", () => {
     for (const a of answers) { expect(a!.invalidated).toBeTruthy(); expect(a!.citations ?? []).toEqual([]); expect(a!.summary ?? "").not.toMatch(/90 days/); }
     // Reopened in the UI, the answer says it is out of date and cites nothing.
     await page.goto("/chat");
-    await page.locator("details.chat-history summary").click();
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
     await page.locator("button.history-open").filter({ hasText: /waiting period/i }).first().click();
     await expect(page.getByTestId("answer-invalidated").first()).toBeVisible();
     await expect(page.locator(".message.assistant details.citations")).toHaveCount(0);

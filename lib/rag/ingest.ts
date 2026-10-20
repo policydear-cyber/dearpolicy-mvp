@@ -615,9 +615,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
     const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
     if (args.linkUploadMember && (isPaymentDocument || noCover || readInPart || (namedNobodyPrinted && !linkedByPrintedName)) && !extraction.personalCoverageConfirmed) {
+      const { notExcludedClause } = await import("@/lib/policies/member-exclusions");
       await query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
-         VALUES($1,$2,$3,'upload_hint',0.70) ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
+         SELECT $1::uuid,$2::uuid,$3::uuid,'upload_hint',0.70 WHERE true${await notExcludedClause("$3::uuid", "$1::uuid", "$2::uuid")}
+         ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
         [args.policyId, args.familyMemberId, args.accountId],
       );
     }
@@ -876,6 +878,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
          WHERE id=$1 AND account_id=$2`,
         [args.policyId, args.accountId],
       ).catch(() => { /* Never let the note itself fail the upload. */ });
+      const { BENEFIT_READ_FAILURE_KEY, noteReadFailure } = await import("@/lib/policies/read-failures");
+      await noteReadFailure(args.accountId, args.policyId, BENEFIT_READ_FAILURE_KEY, error);
       console.warn("Benefit cataloguing failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
 

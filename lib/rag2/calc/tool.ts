@@ -14,7 +14,7 @@ import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, waitingNotReached, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
 import { isCalendarDate } from "@/lib/claims/day-count";
 import { amendmentDayEdges, applyAmendmentDayEdges, readBenefitTerms } from "./terms";
-import { benefitRowProblem, ownTables, percentTables, rowAt, rowNotes } from "./pct-rows";
+import { benefitRowProblem, ownTables, percentTables, rowAt, rowNotes, tableConditions } from "./pct-rows";
 
 const outcomes = new WeakMap<ToolContext, Map<string, CalcOutcome>>();
 /** The calculations made in this tool context (calc id -> outcome). */
@@ -186,7 +186,8 @@ export async function runCalculate(ctx: ToolContext, args: Record<string, unknow
       const tables = percentTables(page), at = rowAt(tables, ev.passage.start);
       if (at && at.table.name && !ownTables(tables, benefit).includes(at.table) && ownTables(tables, benefit).length < tables.length) return fail(`lump_sum: the percentage “${at.row.label}” is printed in the ${at.table.name} table, not in the table for ${benefit}`);
       // fx-live-1: the footnotes the page prints for THIS row (its marker is on the row; the page defines it under the table)
-      if (at) rowNotesOf = rowNotes(page, at.table, at.row).flatMap((n) => { const nev = evidenceFor({ policyId: ev.policyId, documentHash: doc.fileHash ?? null, page: ev.passage.onPage, pageText: page, passage: page.slice(n.start, n.end), near: n.start, subjectId: null }); return nev ? [{ marker: n.marker, text: n.text, evidence: nev }] : []; });
+      // (PR #57 follow-up, QC Q1: and the conditions it prints under the table for the table's benefit, unmarked -- marker "")
+      if (at) rowNotesOf = [...rowNotes(page, at.table, at.row), ...tableConditions(page, at.table)].flatMap((n) => { const nev = evidenceFor({ policyId: ev.policyId, documentHash: doc.fileHash ?? null, page: ev.passage.onPage, pageText: page, passage: page.slice(n.start, n.end), near: n.start, subjectId: null }); return nev ? [{ marker: n.marker, text: n.text, evidence: nev }] : []; });
     }
     // V1.3: what the percentage is OF is read from its own wording (the table header / the sentence above it), never
     // assumed to be the certificate's general sum insured. A fixed benefit limit or sub-limit is read from the same

@@ -275,7 +275,7 @@ export default function OperatorDocumentsPage() {
         <div className="field"><label>PDF password <span>(if protected)</span></label><input type="password" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
       </form>
-      <div className="note">The password is used only for this processing job and is not stored. Reference documents do not need to be assigned to a family member.</div>
+      <div className="note">The password is used only for this processing job and is not stored. Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
       {status && <div className="upload-status">{status}</div>}
     </section>
 

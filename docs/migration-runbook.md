@@ -509,3 +509,14 @@ Also stop if any of these happen:
 
 ### 14.6 Rehearsed in CI
 `npm run security:processing-failure-migration-procedure-test` (`scripts/processing-failure-migration-procedure-regressions.ts`) runs these exact pre/post SQL files on a PGlite database with every earlier migration applied, Supabase-style default grants and synthetic raw-text rows, applies both files in one transaction, re-applies it (no-op), and shows that applying the migration alone leaves the table readable by `authenticated` (negative control). PGlite is not Supabase; the live run is still required and is not done.
+
+## 15. `policy-member-exclusions.sql` (PR #67): remembered removals
+
+**Not applied to any live database.** Applying it needs the owner's explicit authorization.
+
+- **What it does:** creates `policy_member_exclusions` (document, person, household) with the same household-member RLS policies as `policy_members`, in the same file. Additive only: no existing table, column or row changes.
+- **Why:** when a household removes a person from a document, re-reading the document rebuilt the automatic link and brought them back. With this table, automatic link writers skip the remembered pair.
+- **Order:** requires `schema.sql` and `household-rls.sql` (`is_household_member`). Code and schema can go in either order: the build checks `to_regclass` and behaves as before until the table exists.
+- **Apply (staging first, as table owner):** `psql -v ON_ERROR_STOP=1 --single-transaction -f sql/policy-member-exclusions.sql`
+- **Check:** `BEGIN; SET LOCAL ROLE anon; SELECT count(*) FROM policy_member_exclusions; ROLLBACK;` must fail with `permission denied`; `SELECT relrowsecurity FROM pg_class WHERE relname='policy_member_exclusions';` must be `t`.
+- **Rollback:** `DROP TABLE policy_member_exclusions;` Removals made since are then forgotten (re-reads can link those people back, as before).

@@ -1,0 +1,19 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [AC] 1 GP bill -> "what do i do now": not "couldn't confirm"; says these are the steps from the last answer; the contact step is shown
+PASS [GUARD] 1 the repeat carries only what the first answer showed (no S$2,500, no stated requirement, no 30 days)
+PASS [GUARD] 1: every turn returned = saved = reopened
+PASS [GUARD] 2 Grace -> "it was Daniel" -> "what do i do now": nothing repeated from Grace's answer
+PASS [GUARD] 2: every turn returned = saved = reopened
+PASS [AC] 3 death -> fracture ask card -> "what do i do now": nothing repeated from the death answer
+PASS [GUARD] 3 the middle turn ends with a question card (who broke their arm)
+PASS [GUARD] 3: every turn returned = saved = reopened
+PASS [AC] 3c control: death answer -> "what do i do now" repeats its step
+PASS [GUARD] 3c: every turn returned = saved = reopened
+PASS [GUARD] 4 the fracture answer before the deletion shows its contact step (setup)
+PASS [AC] 4 withdrawn answer -> "what do i do now": says the earlier estimate no longer applies; its steps are not repeated
+PASS [GUARD] 4 no figure from the withdrawn estimate is shown again (S$1,250, S$120,000)
+PASS [GUARD] 4: every turn returned = saved = reopened
+PASS [AC] 4c control: the same answer, not withdrawn -> "what do i do now" repeats its step
+PASS [GUARD] 4c: every turn returned = saved = reopened
+
+AC 5 passed, 0 failed | GUARD 11 passed, 0 failed

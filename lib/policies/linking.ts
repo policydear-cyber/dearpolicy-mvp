@@ -3,6 +3,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCoverageCategory, normalizePersonName } from "@/lib/insurance";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { isExcluded, notExcludedClause } from "@/lib/policies/member-exclusions";
 
 /** The ISO code of a currency the document printed, or null. Unlike
  * normalizeCurrencyCode() on its own, a bare "$" or an unrecognised marker is
@@ -63,6 +64,9 @@ const SAME_POLICY_NUMBER = (a: string, b: string) =>
   `(length(regexp_replace(coalesce(${a}.policy_number,''),'[^A-Za-z0-9]','','g'))>=5 AND upper(regexp_replace(${a}.policy_number,'[^A-Za-z0-9]','','g'))=upper(regexp_replace(coalesce(${b}.policy_number,''),'[^A-Za-z0-9]','','g')))`;
 
 export async function linkRelatedReferenceDocuments(accountId: string, policyId: string, groupPolicyNumber?: string | null) {
+  // A person the household removed from a document is never matched back onto it.
+  const toRef = await notExcludedClause("$1", "ref.id", "pm.family_member_id");
+  const toCurrent = await notExcludedClause("$1", "current.id", "pm.family_member_id");
   // Match reference material conservatively: same group-policy number is strongest; exact insurer + product name is the fallback.
   await query(
     `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
@@ -81,11 +85,13 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
           -- Round 8b: the same policy number (letters and digits only) and product -- an endorsement names the policy it
           -- amends, while the insurer's name is read differently from page to page ("... Pte. Ltd." or not).
           (${SAME_POLICY_NUMBER("current", "ref")} AND current.product_name IS NOT NULL AND ref.product_name IS NOT NULL AND lower(current.product_name)=lower(ref.product_name))
-        )
+        )${toRef}
       -- Round 10: one row per (document, person) even when several documents match
       -- (a schedule and its photo, last year's schedule); Postgres refuses a second.
       ORDER BY ref.id,pm.family_member_id,(current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number) DESC
-     ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence`,
+     ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence
+       -- a person the household ticked stays ticked (the picker hides matching-wording links)
+       WHERE policy_members.source<>'user_declared'`,
     [accountId, policyId],
   );
   await query(
@@ -101,9 +107,11 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
           (current.insurer IS NOT NULL AND personal.insurer IS NOT NULL AND lower(current.insurer)=lower(personal.insurer)
            AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name)) OR
           (${SAME_POLICY_NUMBER("current", "personal")} AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name))
-        )
+        )${toCurrent}
       ORDER BY pm.family_member_id,(current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number) DESC
-     ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence`,
+     ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence
+       -- a person the household ticked stays ticked (the picker hides matching-wording links)
+       WHERE policy_members.source<>'user_declared'`,
     [accountId, policyId],
   );
 }
@@ -111,9 +119,13 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
 export async function syncInsuredPersonToMember(args: { accountId:string; sourcePolicyId:string; familyMemberId:string; detectedName:string; extraction:PolicyExtraction;
   /** How the person was linked: a name match (default, 0.95), or the member the
    * uploader chose for a document naming one person no profile matched. */
-  link?: { source: "ai_name_match" | "upload_hint"; confidence: number }; }) {
+  link?: { source: "ai_name_match" | "upload_hint" | "user_declared"; confidence: number };
+  /** The household itself is linking this person, so a remembered removal does not apply. */
+  householdChoice?: boolean; }) {
   const person = args.extraction.insuredPeople.find((p)=>normalizePersonName(p.name)===normalizePersonName(args.detectedName));
   if (!person) return;
+  // The household removed this person from this document: a re-read does not put them back.
+  if (!args.householdChoice && args.link?.source !== "user_declared" && await isExcluded(args.accountId, args.sourcePolicyId, args.familyMemberId)) return;
   const link = args.link ?? { source: "ai_name_match" as const, confidence: 0.95 };
   await query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,$4,$5)
     ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source=EXCLUDED.source,confidence=EXCLUDED.confidence`,[args.sourcePolicyId,args.familyMemberId,args.accountId,link.source,link.confidence]);

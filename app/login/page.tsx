@@ -37,6 +37,7 @@ function LoginForm() {
   const params = useSearchParams();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const linkError = params.get("error");
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -75,8 +76,8 @@ function LoginForm() {
 
   return (
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
-      <h1>DearPolicy</h1>
-      <p className="lead">Sign in to your household.</p>
+      <h1>Welcome back</h1>
+      <p className="lead">Sign in to see your family&rsquo;s policies and ask about them.</p>
       {linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}
@@ -89,7 +90,10 @@ function LoginForm() {
         <label htmlFor="dp-password" style={{ marginTop: 12 }}>
           Password
         </label>
-        <input id="dp-password" suppressHydrationWarning name="password" type="password" autoComplete="current-password" required />
+        <div className="password-field">
+          <input id="dp-password" suppressHydrationWarning name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required />
+          <button type="button" className="mini-button" aria-pressed={showPassword} aria-controls="dp-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
+        </div>
         {error ? (
           <div className="alert error" role="alert">
             {error}

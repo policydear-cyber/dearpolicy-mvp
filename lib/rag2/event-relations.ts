@@ -13,7 +13,8 @@ const RULES: [Family, RegExp][] = [
   // (dismemberment first: "total and permanent disablement" is not a fracture, and "loss of ... leg" is not a death)
   ["dismemberment", /\b(?:dismember\w*|disablement|disabilit\w*|amputat\w*|paralys\w*|loss of (?:one |two |a |an |the |his |her )?(?:limbs?|legs?|arms?|hands?|feet|foot|eyes?|sight|hearing|speech|use)|lost (?:his|her|a|an|the|my|one|both)\s+(?:limbs?|legs?|arms?|hands?|feet|foot|eyes?|sight|hearing))\b/i],
   ["fracture", /\b(?:fractur\w*|broke|broken|break|breaks|cracked)\b/i],
-  ["death", /\b(?:death|deaths|dies|die|died|dying|dead|deceased|funeral|passed away|passes away|killed|fatal\w*|term life|life (?:insurance|cover|benefit|assured)|bereavement|terminal illness)\b/i],
+  // (PR #57 follow-up, UX L2: "Repatriation of Mortal Remains" pays on a death; a medical repatriation of a living person does not)
+  ["death", /\b(?:death|deaths|dies|die|died|dying|dead|deceased|funeral|passed away|passes away|killed|fatal\w*|term life|life (?:insurance|cover|benefit|assured)|bereavement|terminal illness|mortal remains|repatriation of (?:the )?remains|return(?:ing)? (?:of )?the remains)\b/i],
   ["hospital", /\b(?:hospital\w*|warded|admitted|inpatient|confinement|confined)\b/i],
 ];
 

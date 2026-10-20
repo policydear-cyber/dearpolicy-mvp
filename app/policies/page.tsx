@@ -7,11 +7,11 @@ import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-docu
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
- * state, raw processing errors, confidence scores or a Re-analyse button.
- * Those, with field corrections, are in the operator area
- * (/operator/documents). Processing failures are retried automatically; a
- * document that stays unreadable gets one plain sentence about what is
- * unavailable and what the person can do. */
+ * state, raw processing errors or confidence scores. Those, with field
+ * corrections, are in the operator area (/operator/documents). Processing
+ * failures are retried automatically; a document that stays unreadable gets
+ * one plain sentence about what is unavailable, a "Try reading it again"
+ * button, and what to do if that fails. */
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
 type LinkedPerson = { id: string; name: string; relationship: string; source: string; planTier?: string | null };
@@ -53,6 +53,10 @@ function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.proces
 const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
+/** What a household calls a document: its product, else its file name, never blank. */
+function documentName(policy: Pick<Policy, "product_name" | "original_filename">) {
+  return policy.product_name?.trim() || policy.original_filename?.trim() || "Untitled document";
+}
 function roleLabel(role: string | null) { return (role ?? "document").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
 function stageLabel(_stage: string | null, status: string) {
   if (status === "failed") return "Could not be read";
@@ -71,10 +75,14 @@ export default function PoliciesPage() {
   const [file, setFile] = useState<File | null>(null);
   const [pdfPassword, setPdfPassword] = useState("");
   const [status, setStatus] = useState("");
+  // An upload that failed or was refused is shown as an error, never in the
+  // same box (and colour) as a successful one.
+  const [statusIsError, setStatusIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -82,6 +90,19 @@ export default function PoliciesPage() {
   // document covers, unlocking), shown where the person is looking.
   const [libraryNotice, setLibraryNotice] = useState("");
   const [loaded, setLoaded] = useState(false);
+  // "Open in Documents" from a chat source lands here with #doc-<id>: once the
+  // library has loaded, bring that document into view and outline it.
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined") return;
+    const id = window.location.hash.slice(1);
+    if (!id.startsWith("doc-")) return;
+    const card = document.getElementById(id);
+    if (!card) return;
+    card.scrollIntoView({ block: "center" });
+    card.classList.add("focused");
+    const timer = setTimeout(() => card.classList.remove("focused"), 2400);
+    return () => clearTimeout(timer);
+  }, [loaded]);
 
   async function refresh() {
     const [f, p] = await Promise.all([
@@ -114,6 +135,7 @@ export default function PoliciesPage() {
   useEffect(() => {
     if (previousActiveCount.current > 0 && activeCount === 0) {
       const failed = policies.filter((p) => p.processing_status === "failed").length;
+      setStatusIsError(!!failed);
       setStatus(failed ? "Finished. One document could not be read — see below." : "Your documents are ready. Your portfolio has been updated.");
     }
     previousActiveCount.current = activeCount;
@@ -123,6 +145,7 @@ export default function PoliciesPage() {
     e.preventDefault();
     if (!file) return;
     setBusy(true);
+    setStatusIsError(false);
     setStatus("Uploading document…");
     try {
       // Straight to secure storage (components/upload-document.ts): large
@@ -138,16 +161,41 @@ export default function PoliciesPage() {
       if (fileInput.current) fileInput.current.value = "";
       await refresh();
     } catch (err) {
-      setStatus(customerError(err, "The upload did not go through. Please try again."));
+      setStatusIsError(true);
+      setStatus(customerError(err, "The upload did not go through. Please try again.").replace(/\s--\s/g, " — "));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Reads an unreadable document again from the PDF DearPolicy already
+   * kept: nothing is re-uploaded, and it is the same request the locked-PDF
+   * form uses, without a password. Offered only when no pages were stored:
+   * re-reading a partly stored document rewrites its pages in place, and
+   * answers saved from them are not withdrawn (open item C1-3). */
+  async function retryReading(policy: Policy) {
+    const label = documentName(policy);
+    setRetryingId(policy.id);
+    try {
+      const response = await fetch("/api/policies/reprocess", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ policyId: policy.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not start reading it again.");
+      setLibraryNotice(`Reading ${label} again…`);
+      await refresh();
+    } catch (err) {
+      setLibraryNotice(customerError(err, "Could not start reading it again. Please try later."));
+    } finally {
+      setRetryingId(null);
     }
   }
 
   /** Give the password for a locked PDF that is already in the library:
    * it is read again with that password; nothing is re-uploaded. */
   async function unlock(policy: Policy, password: string) {
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     const response = await fetch("/api/policies/reprocess", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ policyId: policy.id, pdfPassword: password }),
@@ -162,7 +210,7 @@ export default function PoliciesPage() {
   // the employee, spouse and children), each with the cover tier they hold
   // when the booklet has tiers.
   async function saveCoverage(policy: Policy, assignments: { familyMemberId: string; planTier: string | null }[]) {
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     const response = await fetch("/api/policies/link-person", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ policyId: policy.id, assignments }),
@@ -201,7 +249,7 @@ export default function PoliciesPage() {
     // (isProcessing()'s raw check) indefinitely, with no other way for the
     // person to remove it. See isQuarantineHeld()/isScanRejected() above.
     if (isProcessing(policy) && !isQuarantineHeld(policy) && !isScanRejected(policy)) return;
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     // A native confirm() blocks the tab's whole event loop until dismissed --
     // an inline arm-then-confirm click (see the Delete button below) avoids
     // that while still requiring a deliberate second click first.
@@ -231,9 +279,8 @@ export default function PoliciesPage() {
   };
 
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">DearPolicy decides what is personal proof, what is legal/reference wording, who is actually insured and which facts are safe to show on the portfolio.</p></div></header>
+    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule or summary. DearPolicy reads it and works out who it covers.</p></div></header>
 
-    <section className="trust-strip"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
     {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This page updates on its own. You can keep using the app.</small></div></div>}
@@ -241,14 +288,16 @@ export default function PoliciesPage() {
 
     <section className="upload-panel">
       <form onSubmit={upload} className="upload-form">
-        <div className="field"><label htmlFor="up-profile">Profile hint <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure — let DearPolicy detect names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
+        <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks the names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         <div className="field"><label htmlFor="up-file">Insurance document <span>(up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
         <div className="field"><label htmlFor="up-password">PDF password <span>(if protected)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
       </form>
-      <div className="note">The password is used only for this processing job and is not stored. Reference documents do not need to be assigned to a family member.</div>
-      {status && <div className="upload-status">{status}</div>}
+      <div className="note">The password is used only for this processing job and is not stored. Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
+      {status && <div className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}</div>}
     </section>
+
+    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     <section className="section">
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
@@ -270,14 +319,14 @@ export default function PoliciesPage() {
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
         const pct = Math.max(0, Math.min(100, Number(policy.processing_progress ?? 0)));
-        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} data-policy-id={policy.id}>
+        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{policy.product_name ?? policy.original_filename}</strong><span>{policy.insurer ?? "Insurer pending"} · {processing ? stageLabel(policy.processing_stage, policy.processing_status) : roleLabel(policy.document_role)}</span></div>
-            <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? "Reading" : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
+            <div className="document-title"><strong>{documentName(policy)}</strong><span>{processing ? "Usually ready in under a minute" : `${policy.insurer ?? "Insurer not known yet"} · ${roleLabel(policy.document_role)}`}</span></div>
+            {!processing && <div className={`document-authority ${policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>}
           </div>
 
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{!processing && <span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
 
@@ -302,11 +351,22 @@ export default function PoliciesPage() {
 
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
             ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
-            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{customerMessage(policy.processing_error, "Its benefits and amounts are not available for answers.")}</span><small>If you have a clearer copy or the original file, delete this one and upload that instead.</small></div>)}
+            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span>{policy.page_count
+              ? <small>If you have a clearer copy or the original file, delete this one and upload that instead.</small>
+              : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
   </div>;
+}
+
+/** The stored reason a document could not be read, in household words. The
+ * stored messages name the operator's "Re-analyse" button; the household's
+ * card offers "Try reading it again" instead. */
+function unreadableReason(error: string | null): string {
+  return customerMessage(error, "Its benefits and amounts are not available for answers.")
+    .replace(/;?\s*use Re-analyse to try again\.?/i, ".")
+    .replace(/\.\.$/, ".");
 }
 
 /** A locked PDF already in the library: enter its password here and it is
@@ -354,10 +414,11 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   const covered = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   const current = () => covered.map((p) => ({ familyMemberId: p.id, planTier: p.planTier ?? null }));
   async function save(next: { familyMemberId: string; planTier: string | null }[]) {
     setBusy(true); setError("");
-    try { await onSave(next); }
+    try { await onSave(next); setSaved(true); }
     catch (err) { setError(customerError(err, "Could not save that. Please try again in a moment.")); }
     finally { setBusy(false); }
   }
@@ -370,26 +431,39 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   function setTier(memberId: string, tier: string) {
     void save(current().map((a) => a.familyMemberId === memberId ? { ...a, planTier: tier || null } : a));
   }
+  const [open, setOpen] = useState(covered.length === 0);
+  useEffect(() => { if (!saved) return; const t = setTimeout(() => setSaved(false), 2500); return () => clearTimeout(t); }, [saved]);
+  const summary = covered.map((p) => p.planTier ? `${p.name} (${p.planTier})` : p.name).join(", ");
+  const planMissing = tiers.length > 0 && covered.some((p) => !p.planTier);
+  // Collapsed to one line once someone is linked; opened by "Change", or
+  // open from the start when nobody is linked yet (that is the next step).
+  if (!open) return <div className="covers-summary" data-testid="covers-picker">
+    <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
+    {saved && <span className="covers-saved" role="status">Saved</span>}
+    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>Change</button>
+  </div>;
   return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
     <strong>Who does this document cover?</strong>
-    <p>{named.length ? `It names ${named.map((n) => n.name).join(", ")}. ` : ""}Press everyone in your family it covers{tiers.length ? ", then choose the cover each person has" : ""} — one person or several. DearPolicy then uses its benefits when answering questions about them. Amounts printed here stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
-    <div className="declare-owner" role="group" aria-label="Family members this document covers">{family.map((m) => {
+    <p>Tap everyone it covers. DearPolicy then uses it when you ask about them.{named.length ? ` It names ${named.map((n) => n.name).join(", ")}.` : ""}</p>
+    <div className="declare-owner covers-chips" role="group" aria-label="Family members this document covers">{family.map((m) => {
       const on = covered.some((p) => p.id === m.id);
-      return <button key={m.id} type="button" className={`button ${on ? "primary" : "secondary"}`} aria-pressed={on} disabled={busy} onClick={() => toggle(m)}>
-        {on ? `${m.display_name} \u2713` : m.display_name}{!on && namedFor(m) ? " · named" : ""}
+      return <button key={m.id} type="button" className={`chip-toggle${on ? " on" : ""}`} aria-pressed={on} disabled={busy} onClick={() => { setSaved(false); toggle(m); }}>
+        <span className="chip-check" aria-hidden="true">{on ? "\u2713" : ""}</span>{m.display_name}{!on && namedFor(m) ? <small> · named in it</small> : null}
       </button>;
     })}</div>
     {tiers.length > 0 && covered.length > 0 && <div className="covers-list">{covered.map((p) => (
       <div className="covers-row" key={p.id}>
-        <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover</label>
-        <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => setTier(p.id, e.target.value)}>
-          <option value="">Choose…</option>
+        <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover (which plan?)</label>
+        <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => { setSaved(false); setTier(p.id, e.target.value); }}>
+          <option value="">Not sure</option>
           {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
     ))}</div>}
+    <p className="covers-note">Amounts in it stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
     {error && <small role="alert" className="row-error">{error}</small>}
     {referenceLinks.length > 0 && <small>Also available as matching wording for {referenceLinks.join(", ")}.</small>}
+    <div className="covers-actions">{covered.length > 0 && <button type="button" className="mini-button" onClick={() => setOpen(false)} disabled={busy}>Done</button>}{busy ? <span className="covers-saved" role="status">Saving…</span> : saved && !error ? <span className="covers-saved" role="status">Saved</span> : null}</div>
   </div></div>;
 }
 

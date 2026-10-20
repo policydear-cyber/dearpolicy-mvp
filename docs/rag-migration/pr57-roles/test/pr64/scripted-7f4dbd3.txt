@@ -1,0 +1,74 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [GUARD] J (place not said) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (place not said) the panel GP line (page 25) is quoted
+PASS [AC] R (place not said) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (place not said) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (place not said) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (place not said) returned = saved = reopened
+PASS [GUARD] J (in Singapore) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (in Singapore) the panel GP line (page 25) is quoted
+PASS [AC] R (in Singapore) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (in Singapore) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (in Singapore) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (in Singapore) returned = saved = reopened
+PASS [GUARD] J (on holiday in Bangkok) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (on holiday in Bangkok) the panel GP line (page 25) is quoted
+PASS [AC] R (on holiday in Bangkok) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (on holiday in Bangkok) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (on holiday in Bangkok) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (on holiday in Bangkok) returned = saved = reopened
+PASS [GUARD] J (a GP in Tampines) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (a GP in Tampines) the panel GP line (page 25) is quoted
+PASS [AC] R (a GP in Tampines) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (a GP in Tampines) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (a GP in Tampines) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (a GP in Tampines) returned = saved = reopened
+PASS [GUARD] J (place not said, with the model's own fact) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (place not said, with the model's own fact) the panel GP line (page 25) is quoted
+PASS [AC] R (place not said, with the model's own fact) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (place not said, with the model's own fact) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (place not said, with the model's own fact) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (place not said, with the model's own fact) returned = saved = reopened
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) the panel GP line (page 25) is quoted
+PASS [AC] R (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) returned = saved = reopened
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) the panel GP line (page 25) is quoted
+PASS [AC] R (his certificate lists GROUP OUTPATIENT MEDICARE) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (his certificate lists GROUP OUTPATIENT MEDICARE) returned = saved = reopened
+PASS [GUARD] J (his certificate lists GROUP OPMC) the answer is not "couldn't confirm" or the model-error reply
+PASS [GUARD] J (his certificate lists GROUP OPMC) the panel GP line (page 25) is quoted
+PASS [AC] R (his certificate lists GROUP OPMC) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+PASS [GUARD] J (his certificate lists GROUP OPMC) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (his certificate lists GROUP OPMC) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (his certificate lists GROUP OPMC) returned = saved = reopened
+PASS [AC] P (place not said) the overseas-only line is never quoted as the answer: when shown, it is said apart as applying only if the treatment was abroad
+PASS [AC] P (a GP in Tampines (not abroad words)) the overseas-only line is never quoted as the answer: when shown, it is said apart as applying only if the treatment was abroad
+PASS [AC] P (in Singapore) the overseas-only line is not quoted at all
+PASS [AC] P (on holiday in Bangkok) the overseas-only line is quoted as printed (not set apart), with the panel GP line
+PASS [AC] C (not on his certificate) the note says his certificate does not list the scheme's Outpatient Medicare Policy, with the certificate's date
+PASS [AC] C (his certificate lists GROUP OUTPATIENT MEDICARE) nothing says his certificate does not list it, and the listed product is named
+PASS [AC] C (his certificate lists GROUP OPMC) nothing says his certificate does not list it, and the listed product is named
+PASS [GUARD] W no answer opens a household quote without its own words marked (no 'You told me tripped')
+PASS [GUARD] W no 'Policy Policy'
+FAIL [INFO] O (place not said) the panel GP line is said before the overseas-only line
+     You told me: “tripped on the kerb”.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints a benefit only for treatment outside Singapore, which applies only if the treatment was abroad: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident”.
+     The Scheme X Group Insurance (product summary) (page 25) prints: “Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP consultation: up to 30 (printed with a “$” sign; the document does not say which currency) per visit”.
+     Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care and Group Living Care Plus (as of 6 October 2022). The Scheme X Group Insurance (certificate summary) (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list. The Scheme X Group Insurance (product summary) (page 25) prints that line under “Panel GP Benefit” in “SECTION 6: CLINICAL BENEFITS”, and it does not say whose cover it is. Only the insurer or the scheme administrator can confirm whether it applies to Daniel.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [INFO] O (a GP in Tampines) the panel GP line is said before the overseas-only line
+     You told me: “tripped on the kerb”.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints a benefit only for treatment outside Singapore, which applies only if the treatment was abroad: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident”.
+     The Scheme X Group Insurance (product summary) (page 25) prints: “Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP consultation: up to 30 (printed with a “$” sign; the document does not say which currency) per visit”.
+     Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care and Group Living Care Plus (as of 6 October 2022). The Scheme X Group Insurance (certificate summary) (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list. The Scheme X Group Insurance (product summary) (page 25) prints that line under “Panel GP Benefit” in “SECTION 6: CLINICAL BENEFITS”, and it does not say whose cover it is. Only the insurer or the scheme administrator can confirm whether it applies to Daniel.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+
+AC 23 passed, 0 failed | GUARD 34 passed, 0 failed | INFO 0 yes, 2 no

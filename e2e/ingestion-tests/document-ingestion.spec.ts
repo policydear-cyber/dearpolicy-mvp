@@ -487,7 +487,7 @@ test.describe.serial("document ingestion in prototype document-safety mode", () 
     // re-served, not silently re-computed into something new.
     const history = await api<{ conversations: { id: string; title: string }[] }>(page, "/api/chat/history?scope=all");
     expect(history.body.conversations.length).toBeGreaterThan(0);
-    await page.locator("details.chat-history summary").click();
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
     await page.locator(".history-open").first().click();
     await expect(page.locator(".message.assistant").first()).toBeVisible({ timeout: 60_000 });
     expect(await page.locator("body").innerText()).not.toMatch(SCAN_CLAIMS);

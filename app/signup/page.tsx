@@ -15,6 +15,10 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // The button stays disabled until the form can be sent; these lines say
+  // why, instead of leaving a greyed-out button with no reason.
+  const [emailTouched, setEmailTouched] = useState(false);
+  const emailLooksWrong = emailTouched && !!email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +59,8 @@ export default function SignupPage() {
         <label htmlFor="su-email" style={{ marginTop: 12 }}>
           Email
         </label>
-        <input id="su-email" suppressHydrationWarning type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input id="su-email" suppressHydrationWarning type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => setEmailTouched(true)} aria-invalid={emailLooksWrong || undefined} aria-describedby="su-email-hint" />
+        <p id="su-email-hint" className={`field-hint${emailLooksWrong ? " invalid" : ""}`} aria-live="polite">{emailLooksWrong ? "That doesn’t look like an email address." : ""}</p>
         <label htmlFor="su-password" style={{ marginTop: 12 }}>
           Password
         </label>
@@ -65,8 +70,9 @@ export default function SignupPage() {
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          aria-describedby="su-password-hint"
         />
-        <p style={{ fontSize: 13, opacity: 0.75, marginTop: 4 }}>At least 8 characters.</p>
+        <p id="su-password-hint" className={`field-hint${password && password.length < 8 ? " invalid" : ""}`} aria-live="polite">{password && password.length < 8 ? `At least 8 characters (${8 - password.length} more).` : "At least 8 characters."}</p>
         {error ? (
           <div className="alert error" role="alert">
             {error}
@@ -77,9 +83,10 @@ export default function SignupPage() {
             {notice}
           </div>
         ) : null}
-        <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8} style={{ marginTop: 10 }}>
+        <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8} style={{ marginTop: 10 }} aria-describedby="su-ready-hint">
           {busy ? "Creating…" : "Create household"}
         </button>
+        {!busy && (!email.trim() || password.length < 8) ? <p id="su-ready-hint" className="field-hint">Enter your email and a password of at least 8 characters to continue.</p> : null}
       </form>
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href="/login">Sign in</Link>
