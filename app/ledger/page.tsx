@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
-import { COVER_KINDS,coverGaps,coverKindOf,listOf } from "@/components/cover-kinds";
+import { COVER_KINDS,coverGaps,isToConfirm,kindOfName,kindOfRow,listOf } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
@@ -27,7 +27,7 @@ type Reading={pending:number;inProgress:boolean;documents?:ReadingDocument[]};
 const slug=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 
 const KINDS=COVER_KINDS;
-const kindOf=(row:Row)=>coverKindOf(row.eventType);
+const kindOf=(row:Row)=>kindOfRow(row);
 
 /** The server's pays text, read aloud: a capital first letter, and "after the first 1" says what the 1 counts. */
 const plainPays=(pays:string)=>pays.replace(/after the first (\d+)\b(?! day)/,(_,n)=>`after the first ${n==="1"?"day":n+" days"}`).replace(/^./,c=>c.toUpperCase());
@@ -35,6 +35,8 @@ const plainPays=(pays:string)=>pays.replace(/after the first (\d+)\b(?! day)/,(_
 /** The amount in plain words: a row the documents give no figure for says so, without "on file" or "as stated". */
 function amountLine(row:Row){
   if(row.hasFigure)return plainPays(row.pays);
+  // A plan type's usual benefit, seeded from a schedule line, is not cover the documents confirm.
+  if(isToConfirm(row))return "Plans like this usually include this. Your documents don’t confirm it or print an amount.";
   if(row.paysKind==="stated"||!row.pays)return "Covered. Your documents don’t print an amount for this.";
   return plainPays(row.pays);
 }
@@ -66,6 +68,15 @@ export default function CoveragePage(){
   const [readStalled,setReadStalled]=useState(false);
   const stuck=stuckDocuments(reading.documents);
   const [retrying,setRetrying]=useState(false);
+  /** Kinds of cover each person has on Benefits (by benefit name), so a benefit listed only there is not called missing. */
+  const [benefitKinds,setBenefitKinds]=useState<Record<string,string[]>>({});
+  useEffect(()=>{
+    fetch("/api/benefits",{cache:"no-store"}).then(r=>r.ok?r.json():null).then((d:{benefits?:{benefitName:string;owners?:string[]}[]}|null)=>{
+      const by:Record<string,Set<string>>={};
+      for(const b of d?.benefits??[])for(const owner of b.owners??[])(by[owner]??=new Set()).add(kindOfName(b.benefitName).id);
+      setBenefitKinds(Object.fromEntries(Object.entries(by).map(([k,v])=>[k,[...v]])));
+    }).catch(()=>undefined);
+  },[]);
 
   const load=async(who=member):Promise<Reading|null>=>{
     try{
@@ -114,11 +125,11 @@ export default function CoveragePage(){
       // An either/or pair is one choice for this person: drawn once, where its first option appears.
       const seen=new Set<string>();
       const shown=own.filter(r=>{const g=hasAlternatives(r.alternatives)?r.alternatives.groupId:null;if(!g)return true;if(seen.has(g))return false;seen.add(g);return true;});
-      const kinds=KINDS.map(k=>({...k,rows:shown.filter(r=>kindOf(r).id===k.id)})).filter(k=>k.rows.length);
-      const gaps=coverGaps(own.map(r=>r.eventType));
+      const kinds=KINDS.map(k=>({...k,rows:shown.filter(r=>kindOf(r).id===k.id)})).filter(k=>k.rows.length).map(k=>({...k,toConfirm:k.rows.every(isToConfirm)}));
+      const gaps=coverGaps(own,benefitKinds[name]??[]);
       return {name,kinds,gaps,count:own.length};
     });
-  },[rows,family,member]);
+  },[rows,family,member,benefitKinds]);
   const stillReading=reading.pending>0||reading.inProgress;
   /** A document that could not be read will not be read on its own: gaps are then "in the documents read so far". */
   const unreadable=stuck.length||(readStalled?Math.max(1,reading.pending):0);
@@ -149,7 +160,7 @@ export default function CoveragePage(){
       <div className="section-heading"><h2>{person.name}</h2></div>
       {/* At a glance: the kinds of cover found, then the main kinds that are not in the documents. */}
       <div className="coverage-glance">
-        {person.kinds.length?<ul className="coverage-kinds" aria-label="Covered for">{person.kinds.map(k=><li key={k.id}><a href={`#cover-${slug(person.name)}-${k.id}`}>{k.label}</a></li>)}</ul>:null}
+        {person.kinds.length?<ul className="coverage-kinds" aria-label="Covered for">{person.kinds.map(k=><li key={k.id} className={k.toConfirm?"to-confirm":undefined}><a href={`#cover-${slug(person.name)}-${k.id}`}>{k.label}{k.toConfirm?" (to confirm)":""}</a></li>)}</ul>:null}
         {(person.gaps.missing.length||person.gaps.notes.length)&&person.count?<p className="coverage-gaps" data-testid="coverage-gaps">
           {person.gaps.missing.length?<><b>{unreadable?"Not found in the documents read so far":`Not found in your uploaded documents${stillReading?" yet":""}`}:</b> {listOf(person.gaps.missing).replace(/^./,c=>c.toUpperCase())}. {unreadable?`${unreadableNote} ${person.gaps.missing.length===1?"it":"them"}.`:stillReading?"More may appear once all your documents are read.":`A plan you haven’t uploaded may still cover ${person.gaps.missing.length===1?"it":"them"}.`}</>:null}
           {person.gaps.notes.length?<span className="coverage-gap-notes"> {person.gaps.notes.join(" ")}</span>:null}</p>:null}
@@ -166,6 +177,7 @@ export default function CoveragePage(){
               <div className="benefit-head"><strong>{row.eventLabel}</strong>{row.detail?<small>{row.detail}</small>:null}</div>
               {alt?null:<p className={row.hasFigure?"pays-cell":"muted-cell"}>{amountLine(row)}</p>}
             </div>
+            {row.hasFigure&&isToConfirm(row)?<p className="coverage-unconfirmed" data-testid="coverage-to-confirm">To confirm: plans like this usually include this, but your documents don&rsquo;t confirm it yet.</p>:null}
             {alt?<AlternativeAmountsBlock alternatives={alt} rowId={plans.length>1?"":row.id}/>:null}
             {!alt&&glance.lines.length?<p className="coverage-conditions">{glance.lines.join(" · ")}{glance.more?` · ${glance.more} more condition${glance.more===1?"":"s"} below`:""}</p>:null}
             <p className="coverage-plan">{plans.join(" or ")}{!alt&&row.insurer?` · ${row.insurer}`:""}</p>

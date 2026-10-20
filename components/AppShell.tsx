@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 
 
 const icon = {
@@ -69,6 +70,7 @@ function SignOutButton() {
   const [busy, setBusy] = useState(false);
   const signOut = async () => {
     setBusy(true);
+    clearHouseholdDeviceMemory();
     try { await fetch("/api/auth/signout", { method: "POST" }); } catch { /* navigate anyway */ }
     router.push("/login");
     router.refresh();

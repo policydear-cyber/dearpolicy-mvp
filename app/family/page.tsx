@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
-import { COVER_KINDS, coverKindOf } from "@/components/cover-kinds";
+import { COVER_KINDS, isToConfirm, kindOfRow, type KindRow } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -46,11 +46,15 @@ export default function FamilyPage() {
     const members: Member[] = data.family ?? [];
     setFamily(members);
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
-    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: { familyMemberId: string; eventType: string; status: string }[] } | null) => {
+    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[] } | null) => {
       if (!l) return;
-      const by: Record<string, Set<string>> = {};
-      for (const r of l.rows ?? []) if (r.status !== "rejected") (by[r.familyMemberId] ??= new Set()).add(coverKindOf(r.eventType).id);
-      setKinds(Object.fromEntries(Object.entries(by).map(([id, set]) => [id, COVER_KINDS.filter((k) => set.has(k.id)).map((k) => k.label)])));
+      // Per person, each kind found and whether any of its rows is confirmed; a kind only a schedule line suggests is "to confirm".
+      const by: Record<string, Map<string, boolean>> = {};
+      for (const r of l.rows ?? []) if (r.status !== "rejected") {
+        const kinds = by[r.familyMemberId] ??= new Map(), id = kindOfRow(r).id;
+        kinds.set(id, kinds.get(id) === true || !isToConfirm(r));
+      }
+      setKinds(Object.fromEntries(Object.entries(by).map(([id, found]) => [id, COVER_KINDS.filter((k) => found.has(k.id)).map((k) => found.get(k.id) ? k.label : `${k.label} (to confirm)`)])));
     }).catch(() => undefined);
   }
   useEffect(() => { void refresh(); }, []);

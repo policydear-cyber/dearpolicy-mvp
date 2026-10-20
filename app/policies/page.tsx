@@ -6,6 +6,8 @@ import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } f
 import { customerError, customerMessage } from "@/components/customer-text";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 import type { ReadingDocument } from "@/components/reading-status";
+import { isToConfirm, type KindRow } from "@/components/cover-kinds";
+import { NOT_FAMILY_KEY } from "@/components/device-memory";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -65,7 +67,6 @@ function foundLine(labels: string[]) {
   const l = labels;
   return l.length <= 3 ? l.join(l.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1") : `${l.slice(0, 3).join(", ")} and ${l.length - 3} more`;
 }
-const NOT_FAMILY_KEY = "dearpolicy.notFamily";
 function stageLabel(_stage: string | null, status: string) {
   if (status === "failed") return "Could not be read";
   if (status === "ready") return "Ready";
@@ -177,17 +178,23 @@ export default function PoliciesPage() {
   // What each document was found to pay for (Coverage rows by document), and documents whose benefits are still
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
   const [found, setFound] = useState<Record<string, string[]>>({});
+  const [toConfirm, setToConfirm] = useState<Record<string, string[]>>({});
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
   async function refresh() {
     const [f, p] = await Promise.all([
       fetch("/api/family", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
     ]);
-    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: { policyId: string | null; eventLabel: string; status: string }[]; reading?: { documents?: ReadingDocument[] } } | null) => {
+    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { policyId: string | null; eventLabel: string; status: string })[]; reading?: { documents?: ReadingDocument[] } } | null) => {
       if (!l) return;
-      const byDoc: Record<string, string[]> = {};
-      for (const r of l.rows ?? []) if (r.policyId && r.status !== "rejected" && !(byDoc[r.policyId] ??= []).includes(r.eventLabel)) byDoc[r.policyId].push(r.eventLabel);
+      // What a document was found to pay for, and apart from it what only its schedule line suggests (to confirm).
+      const byDoc: Record<string, string[]> = {}, guessed: Record<string, string[]> = {};
+      for (const r of l.rows ?? []) if (r.policyId && r.status !== "rejected") {
+        const into = isToConfirm(r) ? guessed : byDoc;
+        if (!(into[r.policyId] ??= []).includes(r.eventLabel)) into[r.policyId].push(r.eventLabel);
+      }
       setFound(byDoc);
+      setToConfirm(Object.fromEntries(Object.entries(guessed).map(([id, labels]) => [id, labels.filter((x) => !byDoc[id]?.includes(x))])));
       setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
     }).catch(() => undefined);
     setFamily(f.family ?? []);
@@ -438,10 +445,10 @@ export default function PoliciesPage() {
 
           {!processing && policy.processing_status === "ready" && (() => {
             const state = benefitReading[policy.id];
-            const labels = found[policy.id] ?? [];
+            const labels = found[policy.id] ?? [], guesses = toConfirm[policy.id] ?? [];
             if (state && (state.state === "failed" || state.state === "backed_off")) return <p className="document-found warn" data-testid="document-found">Its benefits couldn&rsquo;t be read for Coverage yet{state.reason ? `: ${state.reason.charAt(0).toLowerCase()}${state.reason.slice(1).replace(/\.?\s*$/, ".")}` : "."}{state.state === "backed_off" && state.retryAfter ? " DearPolicy tries again later on its own." : ""} You can still ask about it.</p>;
             if (state) return <p className="document-found" data-testid="document-found">Reading its benefits for Coverage…</p>;
-            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
+            if (labels.length || guesses.length) return <p className="document-found" data-testid="document-found">{labels.length ? <><b>Found</b> {foundLine(labels)}. </> : null}{guesses.length ? <span className="document-to-confirm">{labels.length ? "Plans like this also usually include" : "Plans like this usually include"} {foundLine(guesses)}, but this document doesn&rsquo;t confirm {guesses.length === 1 ? "it" : "them"}. </span> : null}<Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
