@@ -20,6 +20,8 @@ import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
 import { GET as listPolicies } from "@/app/api/policies/route";
 import { searchPassages } from "@/lib/rag2/search";
+import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
+import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
 import type { Interpretation } from "@/lib/chat/facts";
@@ -50,6 +52,8 @@ async function main(){
   // for a non-Supabase Postgres, including this PGlite instance, to behave
   // the same way).
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
+  // Remembered removals ("who does this cover"), after is_household_member().
+  await db.exec(await readFile(path.resolve("sql/policy-member-exclusions.sql"),"utf8"));
   // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
   // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
   // so that column exists here too.
@@ -1256,6 +1260,48 @@ async function main(){
       assert.deepEqual(await links(foreignCert),[foreignPerson]);
       assert.deepEqual(await links(cert),[grace,scheme].sort());
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,foreignCert]]);
+    });
+    await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
+      const [daniel,grace]=[people[0].id,people[1].id];
+      const [schedule,summary,graceSchedule]=[uuid(701800),uuid(701801),uuid(701802)];
+      const extraction={insuredPeople:[{name:people[0].display_name,relationshipHint:"employee",coverages:[]},
+        {name:people[1].display_name,relationshipHint:"spouse",coverages:[{category:"Hospitalisation",amount:200,currency:"SGD",productName:"Remember Plan",notes:null,sourcePage:1,evidenceText:"Daily hospital cash SGD 200",evidenceVerified:true}]}],
+        paymentRecords:[],personalCoverageConfirmed:true} as unknown as PolicyExtraction;
+      const insert=(id:string,owner:string,personal:boolean,role:string)=>db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,extracted_json,ledger_read_at) VALUES($1,$2,$3,'Example Insurer','Remember Plan','REM-1','GREM-1','Hospital',$5,$4,60,'ready',$7,$7,'scan_clean',$6::jsonb,now())",[id,account,owner,personal,role,JSON.stringify(extraction),id+".pdf"]);
+      await insert(schedule,daniel,true,"personal_schedule");
+      await insert(summary,daniel,false,"product_summary");
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$4,'ai_name_match',0.95),($1,$3,$4,'ai_name_match',0.95),($5,$2,$4,'ai_name_match',0.95),($5,$3,$4,'ai_name_match',0.95)",[schedule,daniel,grace,account,summary]);
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:schedule,familyMemberId:grace,detectedName:people[1].display_name,extraction});
+      assert.equal((await db.query("SELECT 1 FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[schedule,grace])).rows.length,1);
+      const save=(policyId:string,ids:string[])=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId,assignments:ids.map(familyMemberId=>({familyMemberId,planTier:null}))})}));
+      const linked=async(policyId:string)=>(await db.query<{family_member_id:string;source:string}>("SELECT family_member_id::text,source FROM policy_members WHERE policy_id=$1",[policyId])).rows;
+      const has=async(policyId:string,member:string)=>(await linked(policyId)).some(r=>r.family_member_id===member);
+
+      assert.equal((await save(schedule,[daniel])).status,200);
+      assert.equal((await save(summary,[daniel])).status,200);
+      assert.equal((await db.query("SELECT 1 FROM policy_member_exclusions WHERE policy_id=ANY($1::uuid[]) AND family_member_id=$2",[[schedule,summary],grace])).rows.length,2,"The removal is remembered");
+
+      // The document is read again (or a read in flight finishes after "Saved"): her printed name does not link her back.
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:schedule,familyMemberId:grace,detectedName:people[1].display_name,extraction});
+      assert.equal(await has(schedule,grace),false,"A re-read does not undo the household's removal");
+      assert.equal((await db.query("SELECT 1 FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[schedule,grace])).rows.length,0);
+      // Another of her documents of the same scheme does not match her back onto the summary either.
+      await insert(graceSchedule,grace,true,"personal_schedule");
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'ai_name_match')",[graceSchedule,grace,account]);
+      await linkRelatedReferenceDocuments(account,graceSchedule,"GREM-1");
+      assert.equal(await has(summary,grace),false,"Matching wording does not undo the removal");
+
+      // Ticking her again links her, forgets the removal and restores her cover from the stored reading.
+      assert.equal((await save(schedule,[daniel,grace])).status,200);
+      assert.equal((await linked(schedule)).find(r=>r.family_member_id===grace)?.source,"user_declared");
+      assert.equal((await db.query("SELECT 1 FROM policy_member_exclusions WHERE policy_id=$1 AND family_member_id=$2",[schedule,grace])).rows.length,0);
+      assert.equal(Number((await db.query<{amount:string}>("SELECT amount::text FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[schedule,grace])).rows[0]?.amount),200,"Her cover is back without a re-analysis");
+      assert.equal((await db.query<{ledger_read_at:string|null}>("SELECT ledger_read_at FROM policies WHERE id=$1",[schedule])).rows[0].ledger_read_at,null,"The ledger reads the document again for her");
+      // A household tick survives a later matching-wording pass (it stays shown as covered).
+      await linkRelatedReferenceDocuments(account,graceSchedule,"GREM-1");
+      assert.equal((await linked(schedule)).find(r=>r.family_member_id===grace)?.source,"user_declared");
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[schedule,summary,graceSchedule]]);
     });
     await test("Coverage and Benefits say which document is still waiting and which failed, and why, in safe words",async()=>{
       // UX acceptance on ca6af69 (item 3): with every document Ready, both pages

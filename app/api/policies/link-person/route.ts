@@ -6,6 +6,8 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
+import { rebuildForAddedPeople, saveDocumentCoverage } from "@/lib/policies/coverage-assignments";
+import { exclusionsReady } from "@/lib/policies/member-exclusions";
 import { ensurePolicyMemberTierSchema, loadTableTiers, normalizePlanTier, tierOptionsForDocument } from "@/lib/policies/member-tier";
 
 export const runtime = "nodejs";
@@ -35,9 +37,6 @@ class PolicyNotFound extends Error {}
 class FamilyMemberNotFound extends Error {}
 class NobodyLeft extends Error {}
 
-/** Links the "who does this cover" picker does not show as covered. */
-const NOT_SHOWN_AS_COVERED = ["scheme_reference_match"];
-
 export async function POST(request: NextRequest) {
   try {
     const raw = await request.json().catch(() => ({}));
@@ -45,7 +44,9 @@ export async function POST(request: NextRequest) {
       const assignment = AssignmentsSchema.parse(raw);
       const assignCtx = await requireHouseholdContext(request);
       await ensurePolicyMemberTierSchema();
-      const assigned = await createUserSupabaseClient(assignCtx.userId, async (client) => {
+      // Authorise the document and every person against this household
+      // through the RLS-scoped client; the save itself is one transaction.
+      const checked = await createUserSupabaseClient(assignCtx.userId, async (client) => {
         const policyRow = await client.query<{ id: string; family_member_id: string; extracted_json: PolicyExtraction | null; group_policy_number: string | null; policy_type: string | null }>(
           `SELECT id, family_member_id, extracted_json, group_policy_number, policy_type FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
           [assignment.policyId, assignCtx.householdId],
@@ -64,50 +65,21 @@ export async function POST(request: NextRequest) {
         const people = policyRow.rows[0].extracted_json?.insuredPeople;
         const tableTiers = (await loadTableTiers(client, assignCtx.householdId, [assignment.policyId])).get(assignment.policyId) ?? [];
         const offered = tierOptionsForDocument({ hints: Array.isArray(people) ? people.map((p) => p?.relationshipHint) : [], groupPolicyNumber: policyRow.rows[0].group_policy_number, policyType: policyRow.rows[0].policy_type, tableTiers });
-        for (const id of ids) {
-          const tier = normalizePlanTier(assignment.assignments.find((a) => a.familyMemberId === id)?.planTier, offered);
-          await client.query(
-            `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier)
-             VALUES($1,$2,$3,'user_declared',1.0,$4)
-             ON CONFLICT(policy_id,family_member_id) DO UPDATE SET benefit_tier=EXCLUDED.benefit_tier`,
-            [assignment.policyId, id, assignCtx.householdId, tier],
-          );
-        }
-        const removed = (await client.query<{ family_member_id: string }>(
-          `DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND NOT (source=ANY($4::text[])) AND NOT (family_member_id=ANY($3::uuid[]))
-           RETURNING family_member_id::text AS family_member_id`,
-          [assignment.policyId, assignCtx.householdId, ids, NOT_SHOWN_AS_COVERED],
-        )).rows.map((r) => r.family_member_id);
-        if (removed.length) {
-          // What was read from this document for the people just removed goes
-          // with the link, so no screen or answer keeps using their cover. The
-          // household's own ledger entries (origin 'person') are kept;
-          // policy_coverages is cleared below (server-written).
-          await client.query(`DELETE FROM premium_records WHERE account_id=$1 AND source_document_id=$2 AND family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, removed]);
-          await client.query(`UPDATE policy_detected_people SET matched_family_member_id=NULL WHERE account_id=$1 AND policy_id=$2 AND matched_family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, removed]);
-          if ((await client.query<{ t: string | null }>("SELECT to_regclass('public.coverage_rules')::text AS t")).rows[0]?.t) {
-            await client.query(`DELETE FROM coverage_rules WHERE account_id=$1 AND policy_id=$2 AND family_member_id=ANY($3::uuid[]) AND origin<>'person'`, [assignCtx.householdId, assignment.policyId, removed]);
-          }
-        }
-        const linked = (await client.query<{ family_member_id: string }>(
-          `SELECT family_member_id::text AS family_member_id FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND NOT (source=ANY($3::text[])) ORDER BY family_member_id`,
-          [assignment.policyId, assignCtx.householdId, NOT_SHOWN_AS_COVERED],
-        )).rows.map((r) => r.family_member_id);
-        return { assigned: ids.length, removed, linked, moveOwnerTo: ids.includes(policyRow.rows[0].family_member_id) ? null : ids[0] };
+        return {
+          ownerId: policyRow.rows[0].family_member_id,
+          extraction: policyRow.rows[0].extracted_json,
+          assignments: ids.map((id) => ({ familyMemberId: id, tier: normalizePlanTier(assignment.assignments.find((a) => a.familyMemberId === id)?.planTier, offered) })),
+        };
       });
-      // Server-written columns, after the household's change has committed
-      // (both ids were authorised against this household above).
-      if (assigned.removed.length) {
-        await query(`DELETE FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, assigned.removed]);
-      }
-      // The upload profile moves to someone the document still covers.
-      if (assigned.moveOwnerTo) {
-        await query(`UPDATE policies SET family_member_id=$3,updated_at=now() WHERE id=$1 AND account_id=$2`, [assignment.policyId, assignCtx.householdId, assigned.moveOwnerTo]);
-      }
-      return NextResponse.json({ ok: true, assigned: assigned.assigned, removed: assigned.removed, linked: assigned.linked });
+      const saved = await saveDocumentCoverage({ accountId: assignCtx.householdId, policyId: assignment.policyId, ownerId: checked.ownerId, assignments: checked.assignments });
+      // Someone ticked again gets back what was read from the document for them.
+      await rebuildForAddedPeople({ accountId: assignCtx.householdId, policyId: assignment.policyId, added: saved.added, extraction: checked.extraction })
+        .catch((error) => console.warn("Rebuilding cover for re-linked people failed:", error instanceof Error ? error.message : error));
+      return NextResponse.json({ ok: true, assigned: saved.assigned, removed: saved.removed, linked: saved.linked });
     }
     const body = Schema.parse(raw);
     const ctx = await requireHouseholdContext(request);
+    const remembersRemovals = await exclusionsReady();
 
     const result = await createUserSupabaseClient(ctx.userId, async (client) => {
       // Both ids are client-supplied -- authorize each against the caller's
@@ -126,6 +98,10 @@ export async function POST(request: NextRequest) {
         [body.familyMemberId, ctx.householdId],
       );
       if (!memberRow.rows[0]) throw new FamilyMemberNotFound();
+      // The household is linking this person by hand: forget any earlier removal.
+      if (remembersRemovals) {
+        await client.query(`DELETE FROM policy_member_exclusions WHERE policy_id=$1 AND account_id=$2 AND family_member_id=$3`, [body.policyId, ctx.householdId, body.familyMemberId]);
+      }
 
       // Somebody who uploads their own welcome booklet is telling you they hold
       // that cover. The document still cannot prove their personal sum insured,
@@ -149,6 +125,7 @@ export async function POST(request: NextRequest) {
         familyMemberId: body.familyMemberId,
         detectedName: body.detectedName!,
         extraction,
+        householdChoice: true,
       });
       const unmatched = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count FROM policy_detected_people WHERE account_id=$1 AND policy_id=$2 AND matched_family_member_id IS NULL`,
@@ -172,7 +149,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
     if (error instanceof PolicyNotFound) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     if (error instanceof FamilyMemberNotFound) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers, or delete it if it isn't your family's." }, { status: 409 });
+    if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers (add them on the Family page first if they aren't listed), or delete the document if it isn't your family's." }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Link failed" }, { status: 500 });
     return authResponse;
