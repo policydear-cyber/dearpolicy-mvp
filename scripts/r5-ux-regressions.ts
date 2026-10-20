@@ -91,12 +91,19 @@ async function main() {
     assert.equal(tiers.normalizePlanTier("", ["Employee"]), null);
     const route = read("app/api/policies/link-person/route.ts");
     assert.match(route, /assignments: z\.array/);
-    assert.match(route, /source IN \('user_declared','upload_hint'\)/, "only household-made links are ever removed");
+    // Expectation change (Test engineer, PR #67): was
+    //   assert.match(route, /source IN \('user_declared','upload_hint'\)/, "only household-made links are ever removed");
+    // which required the bug PR #67 fixes (unticking a person the reading had linked said "Saved" but kept the link).
+    // Now everyone the picker shows as covered can be removed; only matching-wording links are left alone.
+    assert.doesNotMatch(route, /source IN \('user_declared','upload_hint'\)/, "links the reading made can be removed too");
+    assert.match(route, /saveDocumentCoverage/, "the picker's save goes through the shared coverage save");
+    assert.match(read("lib/policies/coverage-assignments.ts"), /NOT_SHOWN_AS_COVERED = \["scheme_reference_match"\]/, "matching-wording links, which the picker does not show, are left alone");
     // One tier column (policy_members.benefit_tier), shared with the reading
     // pipeline and claims; the table's own column headings are offered first.
     assert.doesNotMatch(read("sql/schema.sql"), /plan_tier/);
     assert.match(read("sql/v11-ingestion-evidence.sql"), /ALTER TABLE IF EXISTS policy_members ADD COLUMN IF NOT EXISTS benefit_tier text;/);
-    assert.match(route, /SET benefit_tier=EXCLUDED\.benefit_tier/);
+    // PR #67 moved the picker's save to lib/policies/coverage-assignments.ts (was: assert.match(route, ...)).
+    assert.match(read("lib/policies/coverage-assignments.ts"), /SET benefit_tier=EXCLUDED\.benefit_tier/);
     assert.deepEqual(tiers.tierOptionsForDocument({ hints: ["employee", "child"], tableTiers: ["Adult", "Child", "Child"] }), ["Adult", "Child"], "a benefit table's own columns are the vocabulary");
     assert.equal(tiers.namedTierFor("daughter", ["Adult", "Child"], ["Adult", "Child"]), "Child");
     const page = read("app/policies/page.tsx");
