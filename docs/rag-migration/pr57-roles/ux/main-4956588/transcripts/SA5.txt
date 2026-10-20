@@ -1,0 +1,30 @@
+
+===== USER (1): If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?
+[status 202; first feedback 83ms; settled ~1406ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Daniel Lee Wei Ming until you mention someone else
+New chat
+Previous chats · 5
+You
+
+If Daniel died in an accident, what would our booklet pay towards his funeral, and what documents would the insurer want from us?
+
+DearPolicy
+
+The Group Insurance Benefits Booklet (page 9, under “Section 5 - Compassionate Death Allowance Benefit”) prints the Compassionate Death Allowance Benefit for the funeral expenses incurred, up to 2,000 (printed with a bare “$” sign; the Group Insurance Benefits Booklet does not say which currency), with the printed conditions “If an Insured Person dies as a result of an Accident”, “on receipt of proof of death and the relevant documents in our prescribed form” and “This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme.”.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance - Certificate to ask what it needs for a claim.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.

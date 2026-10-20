@@ -1,0 +1,13 @@
+import { chromium } from '/home/user/dearpolicy-mvp/node_modules/playwright/index.mjs';
+const [,, path, name, vw] = process.argv;
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const mobile = vw === 'm';
+const p = await b.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1366, height: 900 } });
+const t0 = Date.now();
+await p.goto('http://localhost:3300' + path, { waitUntil: 'networkidle' });
+console.log('load ms', Date.now() - t0, 'url', p.url());
+await p.screenshot({ path: `${name}.png`, fullPage: true });
+console.log((await p.innerText('body')).slice(0, 4000));
+const links = await p.$$eval('a,button', els => els.map(e => `${e.tagName}:${(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,40)}:${e.getAttribute('href')||''}`));
+console.log('--- controls\n' + links.join('\n'));
+await b.close();

@@ -1,0 +1,32 @@
+
+===== USER (1): what does grace get if she gets cancer
+[status 202; first feedback 82ms; settled ~1399ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Following Tan Hui Min Grace until you mention someone else
+New chat
+Previous chats · 7
+You
+
+what does grace get if she gets cancer
+
+DearPolicy
+
+Grace’s certificate lists Group Living Care of S$350,000 as of 6 October 2022; this is the amount shown on that date, not confirmation of cover now.
+
+The Scheme X Group Insurance Scheme does not state what Group Living Care pays for cancer. That is not the same as saying it is excluded or not covered: it only means this document does not show it, and only the insurer can confirm it.
+
+NEXT STEP
+
+Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+
+SOURCES
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
