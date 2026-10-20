@@ -404,6 +404,108 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
   } };
 }
 
+/** Production 0417567 (GP bill; RELEASE-SET B2, Evidence Reviewer R3): what the documents show about a doctor's (GP) bill for a person whose
+ * own confirmed certificate, read in full, does not list the scheme policy that holds the GP benefit. Each sentence is the server's, with
+ * the printed lines it rests on: what the certificate lists (dated); the scheme's GP lines, under the heading that names that policy; that
+ * the policy is not among those on the certificate, with the scheme's own rule that a benefit applies only when its policy is stated on
+ * the certificate (when the documents print one); and the person's listed accident cover's benefits for specific results of an accident
+ * short of death or permanent disablement, each only if that result happened. Null when anything is in doubt. */
+export type CitedSentence = { text: string; cite: PrintedLine[] };
+const GP_LINE = /\b(?:general practitioner|GP)\b/i;
+const PART1_RULE = /\bBenefit is only applicable to you if the Policy containing the Benefit is (?:specifically )?(?:stated|listed|specified) in Part 1\b[^.]*\./i;
+const GRAVE = /\b(?:dies|died|death|disab\w*|dismember\w*|disappear\w*|comatose)\b/i;
+export function unlistedGpCover(src: AbsenceSource, ctx: { subjectId: string | null; who: string | null }): CitedSentence[] | null {
+  const scope = scopeDocs(src, { policyIds: null, subjectId: ctx.subjectId });
+  if (scope.problem || scope.scope !== "subject") return null;
+  const pagesOf = new Map<string, { page: number; text: string }[]>();
+  for (const p of src.pages) { const l = pagesOf.get(p.policyId) ?? []; l.push({ page: p.page, text: p.text }); pagesOf.set(p.policyId, l); }
+  for (const l of pagesOf.values()) l.sort((a, b) => a.page - b.page);
+  const cert = certificateListing(scope.docs, pagesOf, ctx.subjectId, src.members ?? []);
+  if (!cert) return null;
+  const labels = documentLabels(scope.docs);
+  const line = (d: DocRow, page: number, text: string, l: string): PrintedLine => ({ policyId: d.id, name: labels.get(d.id) ?? "document", page, line: l, pageText: text, fileHash: d.fileHash ?? null });
+  const rows: PrintedLine[] = [], headings: PrintedLine[] = [];
+  for (const d of cert.certs) for (const p of pagesOf.get(d.id) ?? []) {
+    let heading: string | null = null;
+    for (const l of p.text.split(/\n+/).map((x) => x.trim()).filter(Boolean)) {
+      if (/^\s*([A-Z][A-Z &]{3,60}?)\s*\(\s*POLICY NO/.test(l)) { heading = l; continue; }
+      if (heading && cert.namesPerson(l)) { if (!headings.some((h) => h.line === heading)) headings.push(line(d, p.page, p.text, heading)); rows.push(line(d, p.page, p.text, l)); }
+    }
+  }
+  const others = scope.docs.filter((d) => !cert.certs.includes(d));
+  const unlisted = (name: string, abbr: string) => distinct(name).length > 0 && !new RegExp(`\\b${abbr}\\b`).test(cert.certText) && !new RegExp(`\\b${name.replace(/\s+/g, "\\s+")}\\b`, "i").test(cert.certText)
+    && cert.products.every((p) => { const pw = distinct(p); return !pw.some((w) => distinct(name).includes(w)) && !pw.includes(abbr.toLowerCase()); });
+  // (the scheme's own list of its policies: a sentence naming three or more with their abbreviations)
+  const entries = new Map<string, { name: string; abbr: string }>();
+  for (const d of others) for (const p of pagesOf.get(d.id) ?? []) for (const sen of flat(p.text).split(/(?<=\.)\s+(?=[A-Z])/)) {
+    const es = [...sen.matchAll(POLICY_ENTRY)].map((m) => ({ name: m[1].replace(/^(?:and|or|the)\s+/i, "").trim(), abbr: m[2] }));
+    if (es.length >= 3) for (const e of es) if (unlisted(e.name, e.abbr)) entries.set(e.abbr, e);
+  }
+  // (the page whose own heading names one of those policies and prints GP lines with an amount or "as charged"; a heading that says
+  // "... POLICY" first)
+  type Section = { d: DocRow; page: number; text: string; heading: string; gp: string[]; currency: string | null; entry: { name: string; abbr: string }; named: boolean };
+  const sections: Section[] = [];
+  for (const entry of entries.values()) {
+    const want = distinct(entry.name).join(" ");
+    for (const d of others) for (const p of pagesOf.get(d.id) ?? []) {
+      const ls = p.text.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+      const head = ls.slice(0, 3).find((l) => distinct(l.replace(/\bpolicy\b/i, "")).join(" ") === want);
+      if (!head) continue;
+      const gp: string[] = [];
+      ls.forEach((l, i) => { if (GP_LINE.test(l) && /as charged|\d/i.test(l)) { gp.push(l); const next = ls[i + 1]; if (next && /^co-?payment\b/i.test(next) && !GP_LINE.test(ls[i + 2] ?? "") && !gp.includes(next)) gp.push(next); } });
+      if (!gp.length) continue;
+      sections.push({ d, page: p.page, text: p.text, heading: head, gp, currency: ls.find((l) => /^\((?:S\$|SGD\$?)\)$/.test(l)) ?? null, entry, named: /\bPOLICY\b/.test(head) });
+    }
+  }
+  if (!sections.length || new Set(sections.map((x) => x.entry.abbr)).size !== 1) return null;
+  const sec = sections.find((x) => x.named) ?? sections[0];
+  const policy = `${sec.entry.name.replace(/\s+Policy$/i, "")} Policy`;
+  let rule: PrintedLine | null = null;
+  for (const d of others) for (const p of pagesOf.get(d.id) ?? []) { const m = rule ? null : PART1_RULE.exec(flat(p.text)); if (m) rule = line(d, p.page, p.text, (/[A-Z][^.]*$/.exec(flat(p.text).slice(0, m.index))?.[0] ?? "") + m[0]); }
+  // (the listed accident policy's lettered benefits, under its own "BENEFIT n: <PRODUCT>" heading, whose wording opens on an accident and
+  // names no death, disablement, dismemberment, disappearance or coma)
+  const accident = cert.products.find((p) => /\baccident\b/i.test(p)) ?? null;
+  const results: PrintedLine[] = [];
+  if (accident) for (const d of others) {
+    let inside = false;
+    for (const p of pagesOf.get(d.id) ?? []) {
+      const ls = p.text.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+      ls.forEach((l, i) => {
+        const b = /^BENEFIT\s+\d+\s*:\s*(.+)$/i.exec(l); if (b) { inside = distinct(b[1]).join(" ") === distinct(accident).join(" "); return; }
+        if (/^[A-Z][A-Z &]{3,}\s+POLICY$/.test(l)) { inside = false; return; }
+        if (!inside || !/^[A-Z][.,]\s+\S/.test(l) || /\(continued\)/i.test(l)) return;
+        const body = ls.slice(i + 1, i + 3).join(" ");
+        if (/\baccident/i.test(body) && !GRAVE.test(`${l} ${body}`)) results.push(line(d, p.page, p.text, l));
+      });
+    }
+    if (results.length) break;
+  }
+  const who = ctx.who ?? "this person";
+  const whose = ctx.who ? `${ctx.who}’s` : "This person’s";
+  const q = (l: string) => `“${l.replace(/\t+/g, " ").replace(/^[•·]\s*/, "").replace(/[.\s]+$/, "")}”`;
+  const at = (x: { d: DocRow; page: number }) => `the ${labels.get(x.d.id) ?? "document"} (page ${x.page})`;
+  const gpLines = sec.gp.map((l) => line(sec.d, sec.page, sec.text, l));
+  const out: CitedSentence[] = [
+    { text: `${whose} certificate lists ${listOf(cert.products.map(titleCase))} (as of ${cert.asOf}).`, cite: rows },
+    { text: `The scheme’s GP benefit is in its ${policy} (${sec.entry.abbr}): ${at(sec)} prints ${q(sec.heading)} and, under it, ${listOf(sec.gp.map(q))}${sec.currency ? `, in ${q(sec.currency)}` : ""}.`, cite: [line(sec.d, sec.page, sec.text, sec.heading), ...gpLines, ...(sec.currency ? [line(sec.d, sec.page, sec.text, sec.currency)] : [])] },
+  ];
+  if (rule) out.push({ text: `The ${(rule as PrintedLine).name} (page ${(rule as PrintedLine).page}) prints: ${q((rule as PrintedLine).line)}.`, cite: [rule] });
+  out.push({ text: `The ${policy} is not among the policies on ${whose.replace(/^This/, "this")} certificate, so the GP benefit is not shown to be ${who}’s.`, cite: [...headings, line(sec.d, sec.page, sec.text, sec.heading)] });
+  if (results.length) {
+    const pages = [...new Set(results.map((r) => r.page))];
+    out.push({ text: `${whose} ${titleCase(accident!)} cover has benefits for specific results of an accident, each only if that result happened: the ${results[0].name} (page${pages.length > 1 ? `s ${pages[0]} to ${pages.at(-1)}` : ` ${pages[0]}`}) prints ${listOf(results.map((r) => q(r.line.replace(/^[A-Z][.,]\s+/, ""))))}.`, cite: results });
+  }
+  return out;
+}
+
+export async function checkUnlistedGpCover(accountId: string, ctx: { subjectId: string | null; who: string | null }): Promise<CitedSentence[] | null> {
+  const docs = await loadDocs(accountId);
+  const links = await loadLinks(accountId, docs.map((d) => d.id));
+  const pages = await loadPages(accountId, docs.map((d) => d.id));
+  const members = await loadMembers(accountId);
+  return unlistedGpCover({ docs, links, pages, members }, ctx);
+}
+
 /** Loads the household's readable documents, links and stored pages for the turn, then decides. */
 export async function checkNotFound(accountId: string, s: Record<string, unknown>, ctx: { subjectId: string | null; who: string | null; names: string[] }): Promise<NotFoundResult> {
   const docs = await loadDocs(accountId);

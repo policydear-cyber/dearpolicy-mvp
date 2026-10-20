@@ -52,7 +52,10 @@ type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceR
   /** A model-written statement the server's own statement replaced (recorded in the trace, not as a verification failure). */
   superseded?: (text: string) => void;
   /** The errors of this turn's earlier tool calls (a refusal the model was already given). */
-  priorErrors?: () => string[] };
+  priorErrors?: () => string[];
+  /** Production 0417567 (GP bill): no further model call fits this question's model-use limit, so a statement refused now could never
+   * be restated -- the server says what it can in its place (loop.ts noRoomForAnother). */
+  lastCall?: () => boolean };
 
 /** What the documents print for a refused absence's topic, quoted line by line and cited to its page. */
 export function quotePrinted(lines: PrintedLine[], evidenceId: (ref: EvidenceRef, via?: string) => string, subjectId: string | null): { text: string; evidence_ids: string[] } | null {
@@ -261,6 +264,9 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
           // the reply, or the server's fallback for a reported bill, answers)
           omitted.push(i); continue;
         }
+        // (no further model call fits: an absence the model could never restate is left out, and the rest of the reply -- with the
+        // server's statement of what was read, or its fallback for a reported bill -- answers)
+        if (list && d.lastCall?.()) { omitted.push(i); continue; }
         problems.push(`statement ${i + 1}: ${r.problem}`); continue;
       }
       s.text = r.text; if (r.check.subjectId) s.subject_id = r.check.subjectId; RENDERED.add(s); ABSENCE_OF.set(s, r.check);

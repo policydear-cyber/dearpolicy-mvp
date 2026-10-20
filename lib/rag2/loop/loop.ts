@@ -15,7 +15,7 @@ import { planSchedules } from "./schedule-disposition";
 import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
 import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
 import type { ChatAnswer } from "@/types";
-import { evidenceAt, refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
+import { evidenceAt, evidenceFor, refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import type { TableValueOperand } from "../compute";
 import type { SelectedValue } from "../tables";
 import { loadDocs, loadPages, newToolRound, pageMap, policyFamily, turnStoreStats, withTurnStore } from "../store";
@@ -36,7 +36,7 @@ import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept,
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage, unprintedAsk } from "./questions";
 import { internalIdsIn } from "./statements";
-import { checkNotFound, SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
+import { checkNotFound, checkUnlistedGpCover, SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
 import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { ABSENCE_OF, quotePrinted, QUOTED, RENDERED, renderStatements } from "./statement-render";
@@ -85,14 +85,16 @@ export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTu
   /** Agent G: conclusions withdrawn this turn because the only source supporting them was deleted or superseded. */
   invalidated?: SourceInvalidation[] };
 
+/** (Production 0417567: never "ask about one person" to a question already about one person -- the hint says when it applies.) */
+const SPLIT_HINT = "If the question is about several people or policies, asking about each one separately usually stays within it.";
 /** Agent F (D23): the turn used every lookup step it is allowed: said as what happened (a limit), not "ask again". */
-export const FALLBACK_TEXT = "I couldn’t finish: looking this up needed more steps than the limit set for a single question, so I stopped before answering. Asking about one policy or one person at a time usually stays within it.";
+export const FALLBACK_TEXT = `I couldn’t finish: looking this up needed more steps than the limit set for a single question, so I stopped before answering. ${SPLIT_HINT}`;
 /** Honest replies when a usage limit or a timeout stops the turn (nothing is answered from a half-finished turn). */
 export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
   turn_calls: FALLBACK_TEXT,
-  turn_tokens: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
-  turn_tokens_used: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
-  turn_usd: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+  turn_tokens: `I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. ${SPLIT_HINT}`,
+  turn_tokens_used: `I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. ${SPLIT_HINT}`,
+  turn_usd: `I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. ${SPLIT_HINT}`,
   turn_time: "I couldn’t finish: the time set aside for this answer ran out, so I stopped before answering. Please ask again.",
   timeout: "I couldn’t finish: the model took too long to reply, so I stopped the request before answering. Please ask again in a moment.",
   cancelled: "I stopped before answering because the request was cancelled.",
@@ -382,6 +384,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const t0 = Date.now();
   const toolMs: Record<string, { n: number; ms: number }> = {};
   const meter = new LoopUsageMeter({ model: input.model, accountId: input.accountId, limits, startedAt: t0, promptVersion: LOOP_PROMPT_VERSION, signal: input.signal ?? null });
+  /** Production 0417567 (GP bill): no further model call fits this question's limits (usage-meter.ts roomForAnother). */
+  const noRoomForAnother = () => !meter.roomForAnother({ messages, tools });
   let stop: MeterStop | null = null;
 
   // Who is meant, while unsettled: candidates resolve_person offered (this turn, or the person question pending from
@@ -823,6 +827,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   let followUp = false;
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
+  /** Production 0417567 (GP bill): the turn was stopped by its budget, and the server answers the household's report itself. */
+  let budgetStopped = false;
   let deathToppedUp = false, causeNoted = false;
   let relationNoted = false;
   /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
@@ -2051,7 +2057,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   let lookupAsk: Extract<LoopPending, { kind: "fact" }> | null = null;
   const groundedFallback = async (r: LoopReply | null): Promise<LoopReply | null> => {
     if (!r || (r.kind !== "final" && r.kind !== "ask")) return r;
-    const repaired = gateRepaired || finalRepaired || completionNudged;
+    const repaired = gateRepaired || finalRepaired || completionNudged || budgetStopped || noRoomForAnother();
     const c0 = r.composed ?? null;
     const subject = (c0?.subjectId ?? (r.kind === "ask" && r.pending.kind === "fact" ? r.pending.subjectId : null) ?? state.claim?.subjectId ?? state.subjectId) || null;
     if (!subject || !recordedNow.some((x) => x.subject === subject)) return r;
@@ -2143,7 +2149,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       }
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
-    let serverSaid = false;
+    let serverSaid = false, gpCover = false;
     const underQuote: { text: string; note: string }[] = [];
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
     for (const m of missing) {
@@ -2171,6 +2177,17 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b/i.test(input.message);
           const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(input.message);
           const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject, bill_place: away && !home ? "abroad" : home && !away ? "home" : "unknown" };
+          // (production 0417567, RELEASE-SET B2: a GP bill is answered from the server's reading of what the person's certificate lists and the
+          // scheme policy that holds the GP benefit, when that policy is not on it -- never a line that pays only abroad, never the household's echo)
+          const cover = ask.bill_place !== "abroad" ? await checkUnlistedGpCover(input.accountId, { subjectId: subject, who: short || null }).catch(() => null) : null;
+          if (cover) {
+            for (const c of cover) {
+              const ids = c.cite.map((l) => evidenceFor({ policyId: l.policyId, documentHash: l.fileHash, page: l.page, pageText: l.pageText, passage: l.line, subjectId: subject })).filter((x): x is NonNullable<typeof x> => !!x).map((ref) => evidenceIdOf(state, ref, "statement"));
+              if (!ids.length) continue;
+              const st = { kind: "fact", text: c.text, evidence_ids: [...new Set(ids)], subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true;
+            }
+            if (said) { gpCover = true; serverSaid = true; notes.push(`Only the insurer or the scheme administrator can confirm ${short || "this person"}’s current cover.`); continue; }
+          }
           const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: short || null, names: input.people.flatMap((p) => [p.name]) });
           const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
           refused = !nf.ok && !nf.partial;
@@ -2191,6 +2208,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       }
       else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
     }
+    // (B2: the server's GP answer stands on the documents; the household's own words are not said back beside it)
+    if (gpCover) for (let i = sentences.length - 1; i >= 0; i--) if (!RENDERED.has(sentences[i]) && sayBacks.includes(String(sentences[i].text))) sentences.splice(i, 1);
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
     // (the note goes first among the notes, so it reads directly under the server's quote -- and only when that quote was kept)
     notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => u.note));
@@ -2302,7 +2321,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             serverAskSteps = null;
             if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
-          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
+          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? ""), lastCall: noRoomForAnother });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
           if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
@@ -2644,7 +2663,13 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
    * (Critic R14-1, R14-2). An open question is not repeated here: the answer ends with it as its question card (R14-4). */
   const whatToDo = (r: LoopReply | null): LoopReply | null => {
     if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
-    if (r.composed.sentences.length || r.composed.nextSteps.length || corrections.length || invalidated.length) return r;
+    if (corrections.length || invalidated.length) return r;
+    // (production 0417567, "what do i do now": a reply with a next step and no sentence opens with the step, never "I couldn't confirm")
+    if (!r.composed.sentences.length && r.composed.nextSteps.length && (!r.composed.notes.length || r.composed.notes.includes(DROPPED_NOTE))) {
+      (trace.adjusted ??= []).push("the household asked what to do: the reply opens with its next step instead of saying nothing was confirmed");
+      return { ...r, composed: { ...r.composed, notes: ["Here is what you can do next.", ...r.composed.notes.filter((n) => n !== DROPPED_NOTE)] } };
+    }
+    if (r.composed.sentences.length || r.composed.nextSteps.length) return r;
     // Critic R17-1/R17-3: only the answer shown just before this message (an ask card or a withdrawn answer in between shows nothing old).
     const prev = state.turns.filter((t) => t.turn < state.turn).at(-1)?.shown;
     const subject = r.composed.subjectId ?? state.subjectId;
@@ -2696,6 +2721,19 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       state.established = [...(state.established ?? []).filter((e) => !(e.text === entry.text && e.subjectId === entry.subjectId)), entry].slice(-6);
     }
   };
+  /** Production 0417567 (GP bill, 59 s, then only the limit text): a turn stopped by its budget, whose household reported a bill or a
+   * hospital stay this turn, is answered by the server's own check of what the documents print for it -- the same grounded fallback
+   * a reply that left the report unaddressed gets (groundedFallback) -- with no further model call. */
+  const reportStopAnswer = async (): Promise<Composed | null> => {
+    const subject = state.claim?.subjectId ?? state.subjectId;
+    const REPORTS = new Set(["bill", "stay_length", "admission", "discharge", "hospital"]);
+    if (!subject || !recordedNow.some((x) => x.subject === subject && REPORTS.has(factConcept(x.key).concept))) return null;
+    budgetStopped = true;
+    const r = await groundedFallback({ kind: "final", composed: composeFinal({ sentences: [], subjectId: subject }, composeCtx()) });
+    if (r?.kind !== "final" || !r.composed.sentences.length) return null;
+    (trace.adjusted ??= []).push("the turn's budget stopped it before an answer: the household's report was answered from the server's own check of the documents");
+    return r.composed;
+  };
   let final: LoopReply;
   if (!done) {
     const kind = stop?.kind ?? "turn_calls";
@@ -2705,7 +2743,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     // (each with its printed terms), the remaining gap named -- not a single figure and the limit text.
     if (BUDGET_STOPS.has(kind) && state.subjectId && familiesOf(input.message).has("death")) await causeGate(String(state.subjectId));
     const deathStop = BUDGET_STOPS.has(kind) ? await deathStopAnswer() : null;
-    const partial = deathStop ?? (BUDGET_STOPS.has(kind) ? partialAnswer() : null);
+    const partial = deathStop ?? (BUDGET_STOPS.has(kind) ? partialAnswer() ?? await reportStopAnswer() : null);
     dropContradictions(partial);
     final = partial ? { kind: "final", composed: partial } : { kind: "fallback", text: LIMIT_TEXT[kind] };
     if (partial) { trace.dropped = partial.dropped; trace.evidenceChosen.push(...partial.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id))); }

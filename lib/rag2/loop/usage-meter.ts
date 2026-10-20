@@ -139,6 +139,14 @@ export class LoopUsageMeter {
    * time and spend limits still apply). */
   private repairCall = 0;
   grantRepairCall() { this.repairCall = 1; }
+  /** Production 0417567 (GP bill): whether one more call with about this prompt still fits the turn's call, token and spend limits
+   * -- asked BEFORE the server sends something back for the model to restate, so a refusal is never the turn's last word. */
+  roomForAnother(input: Pick<ModelTurnInput, "messages" | "tools">): boolean {
+    const L = this.o.limits;
+    if (this.calls.length >= L.maxCallsPerTurn + this.repairCall) return false;
+    if (this.usage.input + this.usage.output + estimateTokens(input) + L.maxOutputTokens > L.maxTokensPerTurn) return false;
+    return !this.hosted || this.usd < L.maxTurnUsd;
+  }
   constructor(private readonly o: { model: LoopModel; accountId: string; limits: LoopLimits; startedAt: number; promptVersion: string; signal?: AbortSignal | null; now?: () => number }) {}
   private now() { return this.o.now ? this.o.now() : Date.now(); }
   private get hosted() { return this.o.model.kind === "hosted"; }
