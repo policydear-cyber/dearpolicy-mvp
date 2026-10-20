@@ -46,3 +46,24 @@ C0: 55 exit 0, 3 red. C1: 52 exit 0, 6 red. Typecheck clean on both.
 - `reliable-chat-absence-scope-test.ts`: each unit document's `pageCount` equals the pages its test actually stores (no test changes which pages are stored).
 - Acceptance script: M5 (no absence over the fixture's partial library), M0-M4 on fully stored documents, M2b (a page never stored), H1.6 ("Daniel broke his arm too, but it wasn't Grace's fault."), N7 (no next-benefit heading or amount inside the S$120,000 sentence), R10 reduced to "cites no passage" (whether an absence may be said is M5).
 - Not changed: fx-repairs C2/C3 (QC ruling), any expectation of `structured-answers-test`, `tools-test`, or the replay's recorded calls.
+
+## C1.1: the fixture change alone, run against C1 code
+
+C1.1 is test-only (fixtures, the absence-scope unit fixture, the acceptance script). To show it forces nothing green, its test files were
+copied onto exactly C1 (`8c63250`) and onto exactly C0 (`4956588`) and only the affected suites were run. Outputs: `c1.1-on-c1/`.
+
+| run | C1 code | C0 code |
+| --- | --- | --- |
+| acceptance script | AC 9 passed, 8 failed; GUARD 27 passed, **1 failed (H1.6)** | AC 0 passed, 17 failed; GUARD 28 passed, 0 failed |
+| `reliable-chat:absence-scope-test` | 32/32 | 30/32 (S12, S13, the two new partial-document checks, fail: C0 has no full-read rule) |
+| `reliable-chat:fx-repairs-test` | 79/86 | (not run) |
+| fracture replay | 32/32 | (not run) |
+| typecheck | clean | |
+
+- Every AC fails on C0 and every GUARD passes there, so each check can fail and the controls do not depend on the repair.
+- **Page counts.** Certificate 1 (prints "Page 1 of 1"). Product Summary **37**, not 36: the fixture stores page index 37, which prints "Page 36 of 36", so the PDF has an unnumbered first page; a count of 36 would sit below a stored page. Benefit Summary unknown (no page prints a total). Both summaries stay incomplete, so **M5** (no absence over the fixture's own library) passes on C1 and fails on C0, and fx-repairs A2-A5, A9 (the three-document dental answer) **stay red on C1**: those expectations assumed a partial copy could be read in full. They are not changed here; whether to keep them as they are or re-point them at a fully stored household is for the Critic.
+- **H1.6 is a C1 regression:** "Daniel broke his arm too, but it wasn't Grace's fault." passes on C0 and is treated as a correction on C1 (the Critic's C1 finding, now a check).
+- **M2c (new AC) fails on C1:** with `page_count` 2 and pages 1 and 3 stored, C1 counts two stored pages and says the absence; page 2 was never read. The full-read rule counts pages instead of checking 1..N.
+- **N7 passes on C1** with the fracture fixture: no next-benefit text in the S$120,000 sentence. The Critic's "F. Ambulance Cost ... up to $500" leak is not reproduced on this fixture's page 8 layout; the check stays as a GUARD.
+- **R8 replay limit:** the recorded K6a calls end in an absence over the partial "Scheme X Group Insurance", which C1 now refuses, and the recording has no repair step, so the replayed turn ends in the error answer (INFO R8x). The live K6a answer of fx-live-2 made that absence over a document with 4 of 37 pages stored. Showing what the model does after the refusal needs a live run.
+- fx-repairs C2, C3 (K2 S$250) not changed, awaiting Policy QC.

@@ -32,6 +32,8 @@ export type FxDoc = {
   lifecycle?: string; quarantine?: string; superseded?: boolean; account?: string; pages: Record<number, string>;
   /** processing_status (default 'ready') and processing_error: an upload that could not be read. */
   processing?: string; processingError?: string | null; filename?: string;
+  /** policies.page_count: how many pages the document has (null = unknown). An absence is only said over a document whose every page is stored. */
+  pageCount?: number | null;
 };
 
 const PA_P1 = [

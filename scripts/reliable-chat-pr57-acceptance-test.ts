@@ -16,6 +16,7 @@
  *   M1  Critic M1: a reported part the row's own footnote prints as not covered gets no amount for that row
  *   M2  Critic M2: an absence over a document with an unreadable (empty) page is refused
  *   M3  Critic M3: the topic's own word is searched even when the product name contains it
+ *       M5: the fixture library (two partial copies) never gets an absence; M0-M4 run on documents stored in full
  *   M4  Critic M4: a saved "not described" answer is withdrawn when a document is added to its scope
  *   N   negative controls: wrong person, product, version and percentage base; supported information surviving verification
  *   Q3  Policy QC Q3: a person correction where the two people's sums insured differ recalculates from the new person's own row
@@ -126,10 +127,14 @@ async function main() {
     const k6a = out.K6a[0].v;
     const amountSentence = sentences(k6a).find((s) => /S\$350,000/.test(s)) ?? "";
     check("AC", "R7 (K6a) the S$350,000 sentence itself carries the limitation that the documents do not show what Living Care pays for cancer", /cancer/i.test(amountSentence) && /(?:do(?:es)? not|doesn.t) (?:state|show|say|describe|establish)/i.test(amountSentence), amountSentence);
-    check("GUARD", "R8 (K6a, K6c) S$350,000 is dated and never presented as what will be paid", [k6a, out.K6c[0].v].every((x) => /S\$350,000/.test(x) && /6 October 2022/.test(x) && !/will (?:pay|receive)[^.]*S\$350,000/i.test(x)), k6a + "\n--\n" + out.K6c[0].v);
+    // A recorded conversation cannot go on past a refusal the live run never met (the recorded calls have no repair step): such a turn
+    // ends in the error answer. That is an evidence limit of the replay, reported as INFO, and R8 judges the turns that completed.
+    const done = [out.K6a[0], out.K6c[0]].filter((o) => o.trace.outcome !== "error");
+    for (const [id, o] of [["K6a", out.K6a[0]], ["K6c", out.K6c[0]]] as const) if (o.trace.outcome === "error") check("INFO", `R8x (${id}) the recorded calls reach a refusal the live run did not meet, so the replay ends there (needs a live run): ${String((o.trace.toolCalls ?? []).find((c: any) => c.name === "final_answer" && !c.ok)?.error ?? "").slice(0, 160)}`, false);
+    check("GUARD", "R8 (K6a, K6c, the turns that completed) S$350,000 is dated and never presented as what will be paid", done.length > 0 && done.every((o) => /S\$350,000/.test(o.v) && /6 October 2022/.test(o.v) && !/will (?:pay|receive)[^.]*S\$350,000/i.test(o.v)), done.map((o) => o.v).join("\n--\n"));
     const k6c = out.K6c[0].v;
     check("AC", "R9 (K6c) no definition is implied where none was shown ('meets the policy definition')", !/(?:meets?|satisf\w*|under|within|fall\w* within) (?:the|its|a|her) (?:policy(?:.s)? )?definition/i.test(k6c), k6c);
-    check("GUARD", "R10 (K6b) the dental absence answer cites no passage", (out.K6b[0].answer.citations ?? []).length === 0 && /dental/i.test(out.K6b[0].v), JSON.stringify(out.K6b[0].answer.citations ?? []).slice(0, 400));
+    check("GUARD", "R10 (K6b) the dental answer cites no passage (whether the absence is said over the fixture's partial documents is M5)", (out.K6b[0].answer.citations ?? []).length === 0, JSON.stringify(out.K6b[0].answer.citations ?? []).slice(0, 400));
     check("GUARD", "R11 every replayed turn: returned = saved = reopened", Object.values(out).flat().every(same), Object.values(out).flat().filter((o) => !same(o)).map((o) => `${o.shown}\n--\n${o.reopened}`).join("\n====\n"));
   }
 
@@ -140,11 +145,11 @@ async function main() {
       () => [call("note_facts", { facts: [{ key: "injury", value: "broke his arm", words: "broke his arm" }], subject_id: DAN })],
       () => [call("final_answer", { subject_id: G, sentences: [{ kind: "suggestion", text: "You can ask me to go on with the question about Grace." }] })],
     ] }], async () => { const a1 = await turn("H1 turn 1", "grace fell down and broke her arm"); const a2 = await turn(`H1 ${msg}`, msg, a1.conv); return { a2, s2: await stateOf(a2) }; });
-    const msgs = ["Daniel broke his arm too. It was not serious.", "Daniel broke his arm too. I mean, he fell off his bike.", "Daniel broke his arm too, he slipped rather than fell."];
+    const msgs = ["Daniel broke his arm too. It was not serious.", "Daniel broke his arm too. I mean, he fell off his bike.", "Daniel broke his arm too, he slipped rather than fell.", "Daniel broke his arm too, but it wasn't Grace's fault."];
     for (const [i, msg] of msgs.entries()) {
       const r = await too(msg);
       const gc = claimOf(r.s2, G);
-      check("AC", `H1.${i + 1} "${msg}" is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice`, gc?.facts?.injury?.value === "broke her arm" && gc.facts.how_it_happened?.value === "fell down" && live(gc).length === 2 && r.s2.pending?.subjectId === G && !/Updated: this is about/.test(r.a2.v), JSON.stringify({ grace: gc?.facts, live: live(gc).length, pending: r.s2.pending?.subjectId, v: r.a2.v }));
+      check(i === 3 ? "GUARD" : "AC", `H1.${[1, 2, 3, 6][i]} "${msg}" is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice`, gc?.facts?.injury?.value === "broke her arm" && gc.facts.how_it_happened?.value === "fell down" && live(gc).length === 2 && r.s2.pending?.subjectId === G && !/Updated: this is about/.test(r.a2.v), JSON.stringify({ grace: gc?.facts, live: live(gc).length, pending: r.s2.pending?.subjectId, v: r.a2.v }));
     }
     const plain = await too("Daniel broke his arm too.");
     const gp = claimOf(plain.s2, G);
@@ -191,7 +196,18 @@ async function main() {
   }
 
   // ================================================================================================ M2-M4: absence scope
-  const BSUM = FX.doc("BENEFIT_SUMMARY").id;
+  // The fracture fixture's Product Summary and Benefit Summary are partial copies (4 of 37 pages; 6 pages of an unknown total), so an
+  // absence over them must be refused (M5). M0-M4 run on a library whose documents are all stored in full: those two are set aside
+  // (soft-deleted) for the group and a two-page "Hospital Plan" for Grace (page_count 2, both pages stored) joins the certificate (1 of 1).
+  const PSUM = FX.doc("PRODUCT_SUMMARY").id, BSUM = FX.doc("BENEFIT_SUMMARY").id;
+  const HOSP = "7d000000-0000-4000-8000-000000000198", NEW = "7d000000-0000-4000-8000-000000000199";
+  const addDoc = async (id: string, product: string, pages: string[], pageCount: number | null, hash: string) => {
+    await h.db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,superseded_at,file_hash,effective_date,renewal_or_expiry_date,document_date,page_count)
+      VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,'ready',$10,$10,'scan_clean','active',NULL,$11,NULL,NULL,NULL,$12)`, [id, FX.ACCOUNT, G, "Example Insurer", product, "H-1", "Hospital insurance", "policy_wording", false, product + ".pdf", hash, pageCount]);
+    await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,NULL)", [id, G, FX.ACCOUNT]);
+    for (const [i, t] of pages.entries()) await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [FX.ACCOUNT, id, i + 1, t]);
+  };
+  const HOSP_PAGES = ["Hospital Plan: Schedule of Benefits\nHospital Cash: S$100 per day of confinement, up to 30 days per policy year.", "General Exclusions\nWe will not pay for cosmetic surgery or any treatment received outside Singapore."];
   const dentalAbsence = (terms: string[]) => play([{ steps: [
     () => [call("resolve_person", { mention: "Grace" })],
     () => [call("person_benefits", { subject_id: G, topic: "dental treatment" })],
@@ -200,42 +216,53 @@ async function main() {
   ] }], () => turn(`absence ${terms.join(",")}`, "Does Grace's cover pay for dental treatment?"));
   const ABSENT = /do not describe a benefit for dental/;
   if (only("M2") || only("M3") || only("M4")) {
-    const base = await dentalAbsence(["dental", "dentist", "tooth"]);
-    check("GUARD", "M0 (setup) the dental absence is said over the three documents as stored", ABSENT.test(base.v), base.v);
-  }
-  if (only("M2")) {
-    const p = (await h.db.query("SELECT page_number, text FROM policy_pages WHERE policy_id=$1 ORDER BY page_number LIMIT 1", [BSUM])).rows[0] as { page_number: number; text: string };
-    await h.db.query("UPDATE policy_pages SET text='' WHERE policy_id=$1 AND page_number=$2", [BSUM, p.page_number]);
-    let m2: Out;
-    try { m2 = await dentalAbsence(["dental", "dentist", "tooth"]); } finally { await h.db.query("UPDATE policy_pages SET text=$3 WHERE policy_id=$1 AND page_number=$2", [BSUM, p.page_number, p.text]); }
-    check("AC", `M2 with one stored page of a scoped document empty (Benefit Summary page ${p.page_number}), 'do not describe a benefit for dental' is not said over pages that were never read`, !ABSENT.test(m2.v), m2.v);
-  }
-  if (only("M3")) {
-    const p9 = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=9", [BSUM])).rows[0] as { text: string };
-    const prod = (await h.db.query("SELECT product_name FROM policies WHERE id=$1", [BSUM])).rows[0] as { product_name: string };
-    await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=9", [BSUM, p9.text + "\nDental Benefit: up to S$500 per policy year for dental treatment by a registered dental surgeon."]);
-    let ctrl: Out, m3: Out;
+    const m5 = await dentalAbsence(["dental", "dentist", "tooth"]);
+    check("AC", "M5 over the fixture's own library (Product Summary 4 of 37 pages stored; Benefit Summary of unknown length) no absence of dental is said", !ABSENT.test(m5.v), m5.v);
+    await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id = ANY($1::uuid[])", [[PSUM, BSUM]]);
+    await addDoc(HOSP, "Hospital Plan", HOSP_PAGES, 2, "sha256:pr57-hospital-plan");
     try {
-      ctrl = await dentalAbsence(["dentist"]);
-      await h.db.query("UPDATE policies SET product_name=$2 WHERE id=$1", [BSUM, "Scheme X Dental Plan"]);
-      m3 = await dentalAbsence(["dentist"]);
+      const base = await dentalAbsence(["dental", "dentist", "tooth"]);
+      check("GUARD", "M0 (setup) over documents stored in full (certificate 1 of 1, Hospital Plan 2 of 2) the dental absence is said", ABSENT.test(base.v), base.v);
+      if (only("M2")) {
+        await h.db.query("UPDATE policy_pages SET text='' WHERE policy_id=$1 AND page_number=2", [HOSP]);
+        let m2: Out;
+        try { m2 = await dentalAbsence(["dental", "dentist", "tooth"]); } finally { await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=2", [HOSP, HOSP_PAGES[1]]); }
+        check("AC", "M2 with one stored page of a scoped document empty (Hospital Plan page 2), 'do not describe a benefit for dental' is not said over a page that was never read", !ABSENT.test(m2.v), m2.v);
+        await h.db.query("UPDATE policies SET page_count=3 WHERE id=$1", [HOSP]);
+        let m2b: Out;
+        try { m2b = await dentalAbsence(["dental", "dentist", "tooth"]); } finally { await h.db.query("UPDATE policies SET page_count=2 WHERE id=$1", [HOSP]); }
+        check("AC", "M2b with a page of the Hospital Plan never stored (page_count 3, pages 1-2 stored), no absence is said", !ABSENT.test(m2b.v), m2b.v);
+        await h.db.query("UPDATE policy_pages SET page_number=3 WHERE policy_id=$1 AND page_number=2", [HOSP]);
+        let m2c: Out;
+        try { m2c = await dentalAbsence(["dental", "dentist", "tooth"]); } finally { await h.db.query("UPDATE policy_pages SET page_number=2 WHERE policy_id=$1 AND page_number=3", [HOSP]); }
+        check("AC", "M2c with page_count 2 but pages 1 and 3 stored (page 2 never stored), no absence is said: a count of stored pages is not a full read", !ABSENT.test(m2c.v), m2c.v);
+      }
+      if (only("M3")) {
+        await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=2", [HOSP, HOSP_PAGES[1] + "\nDental Benefit: up to S$500 per policy year for dental treatment by a registered dental surgeon."]);
+        let ctrl: Out, m3: Out;
+        try {
+          ctrl = await dentalAbsence(["dentist"]);
+          await h.db.query("UPDATE policies SET product_name='Hospital and Dental Plan' WHERE id=$1", [HOSP]);
+          m3 = await dentalAbsence(["dentist"]);
+        } finally {
+          await h.db.query("UPDATE policies SET product_name='Hospital Plan' WHERE id=$1", [HOSP]);
+          await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=2", [HOSP, HOSP_PAGES[1]]);
+        }
+        check("GUARD", "M3.1 (control) a page that prints a dental benefit refuses the absence (terms ['dentist'], topic 'dental treatment')", !ABSENT.test(ctrl.v), ctrl.v);
+        check("AC", "M3.2 the same page refuses it when the document's product name contains 'Dental' (the topic word is still searched)", !ABSENT.test(m3.v), m3.v);
+      }
+      if (only("M4")) {
+        const m4 = await dentalAbsence(["dental", "dentist", "tooth"]);
+        check("GUARD", "M4.0 (setup) the absence is said and saved before the new document arrives", ABSENT.test(m4.v), m4.v);
+        await addDoc(NEW, "Smile Plan", ["Dental Benefit: up to S$500 per policy year for dental treatment."], 1, "sha256:pr57-new-dental");
+        let after: string;
+        try { after = visible((await reopen(m4.conv.id)).at(-1)); } finally { await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [NEW]); }
+        check("AC", "M4 after a document for Grace that prints a dental benefit is added, the reopened answer no longer says her documents do not describe one", !ABSENT.test(after), after);
+      }
     } finally {
-      await h.db.query("UPDATE policies SET product_name=$2 WHERE id=$1", [BSUM, prod.product_name]);
-      await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=9", [BSUM, p9.text]);
+      await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [HOSP]);
+      await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id = ANY($1::uuid[])", [[PSUM, BSUM]]);
     }
-    check("GUARD", "M3.1 (control) a page that prints a dental benefit refuses the absence (terms ['dentist'], topic 'dental treatment')", !ABSENT.test(ctrl.v), ctrl.v);
-    check("AC", "M3.2 the same page refuses it when the document's product name contains 'Dental' (the topic word is still searched)", !ABSENT.test(m3.v), m3.v);
-  }
-  if (only("M4")) {
-    const m4 = await dentalAbsence(["dental", "dentist", "tooth"]);
-    const NEW = "7d000000-0000-4000-8000-000000000199";
-    await h.db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,superseded_at,file_hash,effective_date,renewal_or_expiry_date,document_date)
-      VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,'ready',$10,$10,'scan_clean','active',NULL,$11,NULL,NULL,NULL)`, [NEW, FX.ACCOUNT, G, "Example Dental Insurer", "Smile Plan", "D-1", "Dental insurance", "policy_wording", false, "Smile Plan.pdf", "sha256:pr57-new-dental"]);
-    await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,NULL)", [NEW, G, FX.ACCOUNT]);
-    await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [FX.ACCOUNT, NEW, "Dental Benefit: up to S$500 per policy year for dental treatment."]);
-    let after: string;
-    try { after = visible((await reopen(m4.conv.id)).at(-1)); } finally { await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [NEW]); }
-    check("AC", "M4 after a document for Grace that prints a dental benefit is added, the reopened answer no longer says her documents do not describe one", !ABSENT.test(after), after);
   }
 
   // ================================================================================================ Q3: correction with different sums insured
@@ -282,6 +309,8 @@ async function main() {
     await h.db.query("UPDATE policies SET file_hash='sha256:fx-benefit-summary' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
     check("GUARD", "N5a (version) with the Benefit Summary deleted, the reopened answer no longer shows its S$120,000", !/S\$120,000/.test(gone), gone);
     check("AC", "N5b (version) with the Benefit Summary's stored file hash changed in place (another version of the file), the reopened calculation answer no longer shows its S$120,000 (on C0 only absence answers compare file hashes: lib/chat/stale-answers.ts)", !/S\$120,000/.test(replaced), replaced);
+    const certLine = ok.v.split("\n").find((x) => /S\$120,000/.test(x)) ?? "";
+    check("GUARD", "N7 the S$120,000 illustration carries nothing of the next benefit printed below its table (no 'Ambulance', no 'up to $500', no lettered heading)", /S\$120,000/.test(certLine) && !/Ambulance|up to \$\s?500|\bF\.\s/i.test(certLine), certLine);
     check("GUARD", "N6 and with the original version restored the reopened answer is whole again", visible((await reopen(ok.conv.id)).at(-1)) === ok.saved);
   }
 

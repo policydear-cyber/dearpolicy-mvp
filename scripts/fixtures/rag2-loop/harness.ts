@@ -59,6 +59,7 @@ export async function startHarness(household: HarnessHousehold = DEFAULT_HOUSEHO
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$19,$11,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.filename ?? d.key.toLowerCase() + ".pdf", d.quarantine ?? "scan_clean", d.lifecycle ?? "active", d.superseded ? new Date().toISOString() : null, d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processing ?? "ready"]);
     if (d.processingError) await db.query("UPDATE policies SET processing_error=$2 WHERE id=$1", [d.id, d.processingError]);
+    if (d.pageCount != null) await db.query("UPDATE policies SET page_count=$2 WHERE id=$1", [d.id, d.pageCount]);
     for (const m of d.members) await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);
   }
