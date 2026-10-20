@@ -2314,3 +2314,29 @@ and "Policy no.: 778899". No paid model calls.
 ## Verdict on PR #71 at `1a62deb`
 
 **Ready to switch on, apart from the one paid smoke test.** Safe to merge. R43-1 is optional.
+
+---
+
+# Round 44: PR #77 at `3a24587` (two commits on top of `c0969e5`, passed in round 34)
+
+Commits: fb29af8 (`app/api/family/route.ts`) and 3a24587 (`app/api/dashboard/route.ts`). Both counts now join
+`policies p ON p.id=pm.policy_id AND p.account_id=f.account_id AND p.superseded_at IS NULL AND p.lifecycle_state='active'`,
+the same filter GET /api/policies uses (`app/api/policies/route.ts:56`). Read-only review; no DB or paid runs.
+
+- **Removing a person with an active document stays blocked.** The count is only a display hint. The server check is
+  separate and unchanged: DELETE /api/family/[id] calls `requestFamilyMemberDeletion` (`lib/lifecycle/coordinator.ts`,
+  around line 1038). It counts active policies through `policy_members`, the legacy `policies.family_member_id`, chats, claim
+  sessions, coverage rules and premium records, and throws `HasLinkedActivityError` (409) when any exist. An active,
+  current document still counts in the new UI query, so the Family page still shows "Go to Documents" instead of Delete.
+- **Household scoping holds.** `f.account_id=$1`; both joins are tied to `f.account_id`, so another household's policy rows
+  cannot be counted. GET /api/family still runs through the user-scoped client (`createUserSupabaseClient`).
+- **R44-1 (Low, wording only):** the server check does not exclude replaced (superseded) documents and also counts the
+  legacy `policies.family_member_id` column and chats/claims; the new UI count excludes the first and never included the
+  others. A person linked only to a replaced document (or with a chat) now shows "No documents linked yet" and a Delete
+  button, then gets the 409 "has linked documents or activity" message. It fails safe. Optional: align the server's
+  policy_members count with `superseded_at IS NULL` if replaced documents should not block, or keep superseded in the UI
+  count if they should.
+
+## Verdict on PR #77 at `3a24587`
+
+**Ready to merge.** R44-1 is optional.
