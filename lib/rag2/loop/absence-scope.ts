@@ -266,6 +266,7 @@ function billLines(kept: (ScopeHit & { full?: boolean })[], place: "abroad" | "h
   return { chosen: home.slice(0, 2), abroad: place === "unknown" || !home.length ? away[0] ?? null : null };
 }
 
+const distinct = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "plan", "benefit", "benefits", "insurance", "scheme", "the", "and"].includes(w));
 /** What a person's own confirmed certificate(s), read in full, list for them: the product headings with a row naming them, and the one
  * "As of" date of those rows. Null when anything is in doubt. */
 function certificateListing(docs: DocRow[], pagesOf: Map<string, { page: number; text: string }[]>, subjectId: string | null, members: Pick<MemberRow, "id" | "displayName" | "preferredName">[]) {
@@ -306,22 +307,35 @@ function whoseLines(docs: DocRow[], pagesOf: Map<string, { page: number; text: s
   const foreign = chosen.filter((h) => !own(h));
   if (!foreign.length) return { before: null, after: null };
   const whoS = who ? `${who}’s` : "this person’s";
-  const listed = (name: string) => !!cert && new RegExp(`\\b${esc(flat(name)).replace(/\s+/g, "\\s+")}\\b`, "i").test(cert.certText);
+  // (Critic R11-1: "does not list" is said only when NONE of the products on the person's own rows shares a distinctive word with the
+  // policy's name or is its abbreviation -- "GROUP OUTPATIENT MEDICARE" and "GROUP OPMC" both list the Outpatient Medicare Policy. A
+  // spouse's rows never count; when in doubt nothing is said about listing)
+  const words = distinct;
+  const unlisted = (name: string, abbr: string | null) => !!cert && words(name).length > 0 && cert.products.every((p) => { const pw = words(p); return !pw.some((w) => words(name).includes(w)) && !(abbr && pw.includes(abbr.toLowerCase())); });
+  const policyNamed = (n: string) => `${n.replace(/\s+Policy$/i, "")} Policy`; // (R11-4 / R6-4: never "Policy Policy")
+  const schemeEntries = docs.flatMap((d) => (pagesOf.get(d.id) ?? []).flatMap((p) => [...flat(p.text).matchAll(POLICY_ENTRY)].map((m) => ({ name: m[1].replace(/^(?:and|or|the)\s+/i, "").trim(), abbr: m[2] }))));
   let before: string | null = null;
   if (cert) {
     const scheme = new Map<string, string>();
     for (const h of all) { const entries = policyList(pagesOf, h); const re = termPattern(h.term); const e = entries?.find((x) => re.test(x.name));
-      if (e && !listed(e.name) && !new RegExp(`\\b${e.abbr}\\b`).test(cert.certText)) scheme.set(`${h.policyId}:${e.abbr}`, `the ${labels.get(h.policyId) ?? "document"} (page ${h.page}) names the scheme’s ${e.name} Policy (${e.abbr})`); }
+      if (e && unlisted(e.name, e.abbr)) scheme.set(`${h.policyId}:${e.abbr}`, `the ${labels.get(h.policyId) ?? "document"} (page ${h.page}) names the scheme’s ${policyNamed(e.name)} (${e.abbr})`); }
     const names = [...scheme.values()].join(", and ");
     before = `${who ? `${who}’s` : "This person’s"} certificate lists ${listOf(cert.products.map(titleCase))} (as of ${cert.asOf}).${names ? ` ${names.charAt(0).toUpperCase() + names.slice(1)}, which that certificate does not list.` : ""}`;
   }
   const parts = foreign.filter((h, i, a) => a.findIndex((x) => x.policyId === h.policyId && x.page === h.page) === i).map((h) => {
     const lines = ((pagesOf.get(h.policyId) ?? []).find((p) => p.page === h.page)?.text ?? "").split(/\n+/).map((l) => l.trim()).filter(Boolean);
     const at = lines.findIndex((l) => l.startsWith(h.line.replace(/\.\.\.$/, "").slice(0, 40)));
-    const head = [...lines.slice(0, Math.max(at, 0))].reverse().find((l) => !/[a-z]/.test(l) && /[A-Z]{3}/.test(l) || /\bpolicy\b/i.test(l) && l.split(/\s+/).length <= 8) ?? null;
-    const policyName = head && /\bpolicy\b/i.test(head) ? head.replace(/^SECTION\s+\w+\s*:\s*/i, "") : null;
-    const unlisted = !!cert && !!policyName && !listed(policyName.replace(/\s*policy\b.*$/i, ""));
-    return `The ${labels.get(h.policyId) ?? "document"} (page ${h.page}) does not say whose cover that line is${head ? `; it sits under “${head}”${unlisted ? `, which ${whoS} certificate does not list` : ""}` : ""}`;
+    const above = lines.slice(0, Math.max(at, 0)).reverse();
+    // (Evidence Reviewer 13: the benefit's own name printed just above the line, and the section it sits in)
+    const name = at > 0 && isHeading(lines[at - 1]) && /[a-z]/.test(lines[at - 1]) ? lines[at - 1] : null;
+    const section = above.find((l) => !/[a-z]/.test(l) && /[A-Z]{3}/.test(l)) ?? null;
+    // (R11-1: a policy name is read from the section only from an explicit "... POLICY" phrase)
+    const pol = section ? /(?:^|[(:]\s*)([A-Z][A-Z &]*?)\s+POLICY\b/.exec(section)?.[1] ?? null : null;
+    // (and only when the scheme's own list gives that policy's abbreviation, so a "GROUP OPMC" row is recognised; without it nothing is said)
+    const abbr = pol ? schemeEntries.find((e) => words(e.name).join(" ") === words(pol).join(" "))?.abbr ?? null : null;
+    const off = !!pol && !!abbr && unlisted(pol, abbr);
+    const where = [name ? `under “${name}”` : null, section ? `in “${section}”${off ? ` (a policy ${whoS} certificate does not list)` : ""}` : null].filter(Boolean).join(" ");
+    return `The ${labels.get(h.policyId) ?? "document"} (page ${h.page}) prints that line${where ? ` ${where}` : ""}, and it does not say whose cover it is`;
   });
   return { before, after: `${parts.join(". ")}. Only the insurer or the scheme administrator can confirm whether it applies to ${who ?? "them"}.` };
 }
@@ -376,6 +390,8 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
     if (!entry || !re.test(h.line) || [...h.line.matchAll(new RegExp(re.source, "gi"))].length !== 1) return null;
     // (not listed: neither the full name nor the abbreviation appears anywhere on the certificate)
     if (new RegExp(`\\b${entry.name.replace(/\s+/g, "\\s+")}\\b`, "i").test(certText) || new RegExp(`\\b${entry.abbr}\\b`).test(certText)) return null;
+    // (Critic R11-1: nor does any product on the certificate share a distinctive word with it -- "GROUP OUTPATIENT MEDICARE(POLICY NO")
+    if (products.some((p) => distinct(p).some((w) => distinct(entry.name).includes(w)))) return null;
     named.set(`${h.policyId}:${entry.abbr}`, { ...entry, doc: labels.get(h.policyId) ?? "document", page: h.page });
   }
   if (!named.size) return null;
@@ -383,7 +399,7 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
   return { text: (who) => {
     const whose = who ? `${who}’s` : "This person’s";
     const names = [...named.values()];
-    const scheme = names.map((n) => `the ${n.doc} (page ${n.page}) names the scheme’s ${n.name} Policy (${n.abbr})`).join(", and ");
+    const scheme = names.map((n) => `the ${n.doc} (page ${n.page}) names the scheme’s ${n.name.replace(/\s+Policy$/i, "")} Policy (${n.abbr})`).join(", and ");
     return `${whose} certificate lists ${listOf(list)} (as of ${asOf}). ${scheme.charAt(0).toUpperCase() + scheme.slice(1)}, which that certificate does not list; only the insurer or the scheme administrator can confirm ${who ? `${who}’s` : "their"} current cover.`;
   } };
 }

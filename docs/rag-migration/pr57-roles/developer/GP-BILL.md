@@ -133,3 +133,17 @@ whether a panel GP was seen (depends on the model).
 
 `gp-bill-live-repro.ts` now runs three cases: place not said, the bill in Bangkok, and the panel GP line under an "OUTPATIENT MEDICARE
 POLICY" heading. The original fixture (`gp-bill-reconstruction.ts` variant C) is unchanged: G1 still states the certificate and OPMC.
+
+### PR #64 third commit: Critic round 11 (R11-1 to R11-4), Evidence Reviewer 13
+
+- **R11-1**: "which that certificate does not list" is said only when none of the products on the person's own rows shares a distinctive
+  word with the policy name (Group / Policy / Plan / Benefit / Insurance / Scheme ignored) or is its abbreviation. A section heading
+  gives a policy name only from an explicit "... POLICY" phrase, and only when the scheme's own list gives its abbreviation; otherwise
+  nothing is said about listing. G1's scheme sentence uses the same word check. Cases E ("GROUP OUTPATIENT MEDICARE") and E2
+  ("GROUP OPMC") on Daniel's rows: no "does not list".
+- **R11-2**: a bill is abroad only on explicit words in the current message (overseas, abroad, on holiday, travelling, a trip);
+  "a GP in Tampines" and "fell in Grace's room" are "not said".
+- **R11-3**: the whose-cover note is the first note, directly under the server's quote, and only when that quote survived composing.
+- **R11-4**: "The only line found for this is in the X (page N), and it pays only for treatment outside Singapore, ..."; never
+  "Policy Policy" (G1's sentence too, R6-4).
+- **Evidence Reviewer 13**: the note names the benefit printed just above the line ("under “Panel GP Benefit”") and its section.

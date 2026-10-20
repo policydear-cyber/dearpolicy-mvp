@@ -2116,6 +2116,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
     let serverSaid = false;
+    const underQuote: { text: string; note: string }[] = [];
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
     for (const m of missing) {
       const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
@@ -2138,23 +2139,22 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic|physician)\b/i.test(words)) {
           // (critic round 5 A3: the doctor's own words are searched too; a page that reimburses medical treatment refuses the absence)
           // (PR #64, Critic R10-2: where the household placed the bill decides whether a line that pays only abroad is quoted)
-          const told = userTexts.join(" ");
-          const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b|\bin (?!Singapore\b|(?:January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|A&E)\b)[A-Z][a-z]+\b/.test(told);
-          const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(told);
+          // (Critic R11-2: explicit words in this message only; anything else is "not said", which never quotes an abroad-only line as the answer)
+          const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b/i.test(input.message);
+          const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(input.message);
           const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject, bill_place: away && !home ? "abroad" : home && !away ? "home" : "unknown" };
           const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: short || null, names: input.people.flatMap((p) => [p.name]) });
           const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
           refused = !nf.ok && !nf.partial;
           if (server) { const { check, ...st } = server; RENDERED.add(st); ABSENCE_OF.set(st, check); sentences.push(st); said = true; }
           else if (!nf.ok && (nf.printed?.length || nf.abroad)) {
-            // (PR #64: whose cover a quoted line is not shown to be, said beside it; a line that pays only abroad, said apart when the
-            // household did not place the bill abroad)
+            // (PR #64: a line that pays only abroad, said apart when the household did not place the bill abroad; then the quote; then -- only
+            // if the quote survives composing (Critic R11-3) -- whose cover that line is not shown to be, directly under it)
             const idOf = (ref: Parameters<typeof evidenceIdOf>[1], via?: string) => evidenceIdOf(state, ref, via ?? "statement");
             const q = nf.printed?.length ? quotePrinted(nf.printed, idOf, subject) : null;
-            // (the quote is checked against its lines like any quote; what is said of whose cover it is follows it as the server's own note)
-            if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; if (nf.before || nf.after) notes.push([nf.before, nf.after].filter(Boolean).join(" ")); }
             const a = nf.abroad ? quotePrinted([nf.abroad], idOf, subject) : null;
-            if (a && nf.abroad) { const st = { kind: "fact", text: `${q ? "The" : "The only line found is in the"} ${nf.abroad.name} (page ${nf.abroad.page})${q ? " also" : ""} prints a benefit for treatment outside Singapore, which applies only if the treatment was abroad: ${a.text.replace(/^.*? prints: /, "")}`, evidence_ids: a.evidence_ids, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; }
+            if (a && nf.abroad) { const line = a.text.replace(/^.*? prints: /, ""); const st = { kind: "fact", text: q ? `The ${nf.abroad.name} (page ${nf.abroad.page}) prints a benefit only for treatment outside Singapore, which applies only if the treatment was abroad: ${line}` : `The only line found for this is in the ${nf.abroad.name} (page ${nf.abroad.page}), and it pays only for treatment outside Singapore, so it applies only if the treatment was abroad: ${line}`, evidence_ids: a.evidence_ids, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; }
+            if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; if (nf.before || nf.after) underQuote.push({ text: st.text, note: [nf.before, nf.after].filter(Boolean).join(" ") }); }
           }
         }
         // (critic round 5 F2: "do not print" only when no check refused -- a refusal means the documents print something for it, or were not read)
@@ -2164,6 +2164,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
     }
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
+    // (the note goes first among the notes, so it reads directly under the server's quote -- and only when that quote was kept)
+    notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => u.note));
     const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], ...(c0.absenceChecks || composed.absenceChecks ? { absenceChecks: [...(c0.absenceChecks ?? []), ...(composed.absenceChecks ?? [])] } : {}), notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n) && !(serverSaid && n === DROPPED_NOTE)) } : (composed ?? c0);
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.

@@ -22,7 +22,9 @@ const PS_P20 = ["SECTION 4: TRAVEL ASSISTANCE", "Emergency Outpatient Treatment 
 const PS_P25 = ["SECTION 6: CLINICAL BENEFITS", "Panel GP Benefit", "Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP consultation: up to $30 per visit."].join("\n");
 // (Critic R10-1: the same panel GP line under a heading that names the scheme's Outpatient Medicare Policy, which Daniel's certificate does not list)
 const PS_P25_OPMC = PS_P25.replace("SECTION 6: CLINICAL BENEFITS", "OUTPATIENT MEDICARE POLICY");
-const household = (p25: string) => { const DOCS = FX.DOCS.map((d: any) => d.key === "PRODUCT_SUMMARY" ? { ...d, pages: { ...d.pages, 20: PS_P20, 25: p25 } } : d); return { ...FX, DOCS, doc: (k: string) => DOCS.find((d: any) => d.key === k)! }; };
+// (Critic R11-1 cases E / E2: Daniel's own certificate rows include the outpatient policy, under either heading form)
+const withRow = (heading: string) => FX.CERT_P1.replace("This certificate is issued", `${heading}(POLICY NO. 3037850)\nS****411A\tLee Wei Ming, Daniel\tPlan A\tAs of 06/10/2022\nThis certificate is issued`);
+const household = (p25: string, cert?: string) => { const DOCS = FX.DOCS.map((d: any) => d.key === "PRODUCT_SUMMARY" ? { ...d, pages: { ...d.pages, 20: PS_P20, 25: p25 } } : d.key === "CERT" && cert ? { ...d, pages: { 1: cert } } : d); return { ...FX, DOCS, doc: (k: string) => DOCS.find((d: any) => d.key === k)! }; };
 
 // The model records the fact in its own words and answers without addressing the bill (the case where the server's G2 check runs).
 const final = (): ScriptCall[] => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "fact", text: "Daniel's documents do not include a benefit that pays for a GP bill after a fall.", subject_id: DAN }], next_steps: ["contact:" + CERT] })];
@@ -33,15 +35,19 @@ const TURN: ScriptTurn = { steps: [
   ...Array.from({ length: 6 }, () => final),
 ] };
 
-const CASES: [string, string, string][] = [
+const CASES: [string, string, string, string?][] = [
   ["A place not said (the live question)", MSG, PS_P25],
-  ["the bill abroad (Critic R10-2)", "daniel tripped on the kerb in Bangkok and fell, his GP bill is $800, can he claim for this?", PS_P25],
+  ["the bill abroad (Critic R10-2)", "daniel tripped on the kerb on holiday in Bangkok and fell, his GP bill is $800, can he claim for this?", PS_P25],
   ["panel GP under the Outpatient Medicare Policy heading (Critic R10-1)", MSG, PS_P25_OPMC],
+  ["E: his certificate lists GROUP OUTPATIENT MEDICARE (Critic R11-1)", MSG, PS_P25_OPMC, withRow("GROUP OUTPATIENT MEDICARE")],
+  ["E2: his certificate lists GROUP OPMC (Critic R11-1)", MSG, PS_P25_OPMC, withRow("GROUP OPMC")],
+  ["a GP in Tampines (Critic R11-2: not abroad)", "daniel tripped on the kerb and saw a GP in Tampines, his GP bill is $800, can he claim for this?", PS_P25],
+  ["fell in Grace's room (Critic R11-2: not abroad)", "daniel tripped and fell in Grace's room, his GP bill is $800, can he claim for this?", PS_P25],
 ];
 async function main() {
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
-  for (const [name, msg, p25] of CASES) {
-  const HH = household(p25);
+  for (const [name, msg, p25, cert] of CASES) {
+  const HH = household(p25, cert);
   setEnv(HH as any);
   const h = await startHarness(HH as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
