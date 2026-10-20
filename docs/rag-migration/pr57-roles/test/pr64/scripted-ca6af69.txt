@@ -1,0 +1,186 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [GUARD] J (place not said) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (place not said) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (place not said) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (place not said) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (place not said) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (place not said) returned = saved = reopened
+PASS [GUARD] J (in Singapore) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (in Singapore) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (in Singapore) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (in Singapore) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (in Singapore) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (in Singapore) returned = saved = reopened
+PASS [GUARD] J (on holiday in Bangkok) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (on holiday in Bangkok) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (on holiday in Bangkok) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (on holiday in Bangkok) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (on holiday in Bangkok) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (on holiday in Bangkok) returned = saved = reopened
+PASS [GUARD] J (a GP in Tampines) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (a GP in Tampines) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (a GP in Tampines) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (a GP in Tampines) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (a GP in Tampines) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (a GP in Tampines) returned = saved = reopened
+PASS [GUARD] J (place not said, with the model's own fact) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (place not said, with the model's own fact) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (place not said, with the model's own fact) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (place not said, with the model's own fact) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (place not said, with the model's own fact) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (place not said, with the model's own fact) returned = saved = reopened
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (panel GP under OUTPATIENT MEDICARE POLICY, not on his certificate) returned = saved = reopened
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident”; and the Scheme X Group Insurance Scheme (page 1) prints: “GROUP OUTPATIENT MEDICARE(POLICY NO. 3037850)”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (his certificate lists GROUP OUTPATIENT MEDICARE) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident”; and the Scheme X Group Insurance Scheme (page 1) prints: “GROUP OUTPATIENT MEDICARE(POLICY NO. 3037850)”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (his certificate lists GROUP OUTPATIENT MEDICARE) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (his certificate lists GROUP OUTPATIENT MEDICARE) returned = saved = reopened
+PASS [GUARD] J (his certificate lists GROUP OPMC) the answer is not "couldn't confirm" or the model-error reply
+FAIL [GUARD] J (his certificate lists GROUP OPMC) the panel GP line (page 25) is quoted
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] R (his certificate lists GROUP OPMC) render: the whose-cover note is the line directly under the panel GP quote, and says only the insurer or the scheme administrator can confirm
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] J (his certificate lists GROUP OPMC) "$800" stays the household's figure: never S$800 and never an amount payable
+PASS [GUARD] J (his certificate lists GROUP OPMC) printed bare-"$" amounts stay currency-unresolved (no S$30, no S$1,000)
+PASS [AC] R (his certificate lists GROUP OPMC) returned = saved = reopened
+FAIL [AC] P (place not said) the overseas-only line is never quoted as the answer: when shown, it is said apart as applying only if the treatment was abroad
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+FAIL [AC] P (a GP in Tampines (not abroad words)) the overseas-only line is never quoted as the answer: when shown, it is said apart as applying only if the treatment was abroad
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+FAIL [AC] P (in Singapore) the overseas-only line is not quoted at all
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] P (on holiday in Bangkok) the overseas-only line is quoted as printed (not set apart), with the panel GP line
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] C (not on his certificate) the note says his certificate does not list the scheme's Outpatient Medicare Policy, with the certificate's date
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] C (his certificate lists GROUP OUTPATIENT MEDICARE) nothing says his certificate does not list it, and the listed product is named
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident”; and the Scheme X Group Insurance Scheme (page 1) prints: “GROUP OUTPATIENT MEDICARE(POLICY NO. 3037850)”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] C (his certificate lists GROUP OPMC) nothing says his certificate does not list it, and the listed product is named
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [GUARD] W no answer opens a household quote without its own words marked (no 'You told me tripped')
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ===
+PASS [GUARD] W no 'Policy Policy'
+FAIL [INFO] O (place not said) the panel GP line is said before the overseas-only line
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [INFO] O (a GP in Tampines) the panel GP line is said before the overseas-only line
+     You told me tripped on the kerb.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 20) prints: “TRAVEL ASSISTANCE Emergency Outpatient Treatment Overseas We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to 1,000 (printed with a “$” sign; the document does not say which currency) per Accident” and “Emergency Outpatient Treatment Overseas”.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+
+AC 8 passed, 15 failed | GUARD 25 passed, 9 failed | INFO 0 yes, 2 no
