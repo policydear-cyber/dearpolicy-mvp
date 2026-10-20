@@ -9,7 +9,7 @@ Integration branch: `claude/pr57-followup-pgaq7d`
 | Candidate | SHA | Recorded | What it is |
 | --- | --- | --- | --- |
 | C0 | `4956588a4e2cae948809e34d78d3b728a99a96ed` | 2026-10-20 | `main` head: merge of PR #57 (after PR #58). Verified equal to `origin/main` before the branch was created. |
-| C1 | not frozen yet | | Developer's repair, after the Critic's findings |
+| C1 | `8c63250cec7acb4e21fb41655a057f7ffc8ee65b` | 2026-10-20 | Developer's repair after the Critic's verdict (product code, types, `.env.example`), on top of the Test engineer's acceptance checks `a63040b`. Later commits on the branch may change only tests, fixtures and docs; any product-code change needs a new candidate. See `developer/C1.md` |
 
 ## Ownership
 
