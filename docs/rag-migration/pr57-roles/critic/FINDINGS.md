@@ -1804,3 +1804,58 @@ is a wrong pairing note. Accept for now.
 ## Verdict on PR #74 at `25365a5`
 
 **Not ready: fix R31-1 first** (one regex plus one case). R31-2 is a follow-up and a post-deploy check. R31-3 is accepted.
+
+# Round 32: PR #77 design pass at `12eac98`
+
+Read the diff from the merge base `0417567` (pages, components, CSS; nothing in lib/ or app/api/). Focus: anything readable as a
+coverage claim (Coverage gaps line, either/or block, amounts without a figure) and whether Family remove and "Not in my family"
+can touch another household. No builds or browser runs.
+
+Passes:
+- Either/or (`components/alternative-amounts.tsx`): drawn only for a complete group (≥2 options), once per person per group,
+  labelled "Either / or" with "or" between options and the server's note; no total is computed anywhere. Benefits draws it only
+  for an established line. It stays dormant until #74 sends `alternatives`.
+- Gaps line wording: "Not found in your uploaded documents" / "in the documents read so far", plus "a plan you haven't uploaded
+  may still cover", "more may appear", or the unreadable-document note. It never says "not covered". Good.
+- Isolation: "Not in my family" and Undo only call #76's `POST /api/policies/link-person`, which authorises the document and
+  name against the caller's household (round 30). The browser fallback keys on `policyId:name`, and policy ids are per household,
+  so it can't hide anything in another household. Family removal still uses the existing server path; "Go to Documents" only
+  replaces the button. `?person=` filters the household's own list in the browser. Pass.
+- Chat: conflict, stopped-waiting and failure messages are kept. The wait names a step only when the server sends `stageId`.
+
+## R32-1 (High, fix before merge): "Covered." is printed for plan-type guesses whose own note says "if covered"
+
+`app/ledger/page.tsx` `amountLine`: any row with `paysKind==="stated"` now reads **"Covered. Your documents don't print an amount
+for this."** (main showed "as stated in the plan — no figure on file"). Many stated rows are not read from any benefit. They are
+seeded from `PRODUCT_DEFAULTS` (`lib/ledger/events.ts:173-200`, `store.ts:164-173`, origin `schedule`, status `proposed`) only
+because a schedule line names a plan type. Their notes are "fractures, **if covered**, are paid from the plan's fracture table",
+"accident medical expenses, **if covered** …", "early-stage conditions, **if covered** …", and the travel, motor and home ones.
+So a Group Personal Accident line alone makes Coverage say "Fracture: Covered." That is an unconfirmed coverage claim, and the
+"if covered" qualifier is stripped. The same rows also feed the Documents "found" line and the Family kinds chips (both read
+`/api/ledger` rows with `status !== "rejected"`), so the document card says it was found to pay for fractures.
+
+Fix: say "Covered." only for a row the person confirmed or one read from the wording (`status==="confirmed" || origin==="wording"`).
+For a proposed schedule row, say something like "Plans like this usually include this. Your documents don't confirm it or print
+an amount." Leave proposed schedule rows out of the Documents "found" line and the Family chips (or label them "to confirm").
+
+## R32-2 (Low): gaps come from Coverage event types only
+
+`coverGaps` maps ledger `eventType`s to kinds. A benefit the reader typed `other` (or one that is only on the Benefits page, not
+in the ledger) doesn't count, so for example "hospital or medical cover" can be listed as not found while Benefits shows a
+hospital benefit. The wording is hedged, so this is a misleading pointer, not a false "not covered". Follow-up: also treat a
+Benefits row of that kind as found, or add "see Benefits by policy" to the line.
+
+## R32-3 (Low): before #76, "Not in my family" shows an error, not the device-only fallback
+
+On main, `link-person` still requires `familyMemberId`, so `{notFamily:true}` gets a 400 and the page shows "Could not save that
+answer". The PR body says it falls back. It's harmless, but merge #76 first.
+
+## R32-4 (Low): device-only answers are not cleared at sign-out
+
+`localStorage["dearpolicy.notFamily"]` keeps document ids and printed names after sign-out on a shared device. Nothing crosses
+households (the ids are per household), but it's a privacy leftover. Optional: clear it on sign-out or once the server remembers.
+
+## Verdict on PR #77 at `12eac98`
+
+**Not ready: fix R32-1 first** (the stated-amount line, plus the found and chips filters). Everything else asked about passes. Merge
+after #76. R32-2..4 are follow-ups.
