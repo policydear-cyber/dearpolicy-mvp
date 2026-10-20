@@ -155,6 +155,7 @@ const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec
 /** Dates are not amounts: they are taken out before a sentence is read for money. */
 const DATES = new RegExp(String.raw`\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+${MONTH}\s+\d{4}\b|\b${MONTH}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b|\b${MONTH}\s+\d{4}\b`, "gi");
 /** What may follow a number of 100 or more without it being money: a percentage or a length of time. */
+const YEAR_BEFORE = new RegExp(String.raw`(?:\b(?:in|since|from|until|by|before|after|of)|\b${MONTH})\s+(?:the\s+)?$`, "i");
 const RATE_OR_TIME = /^\s*(?:%|per\s?cent|percent|(?:calendar\s+)?(?:days?|nights?|weeks?|months?|years?|hours?|minutes?)\b)/i;
 /** Whether a sentence states money, in any form (Critic round 40): a figure with a currency; "dollars"; a number with k, m,
  * mn, million, thousand, grand or bn after it; the words hundred, thousand, million, billion or grand; or any number of 100
@@ -166,20 +167,34 @@ export function statesMoney(sentence: string): boolean {
   const t = (sentence ?? "").replace(DATES, " ");
   if (/\b(?:dollars?|cents?|SGD|USD)\b/i.test(t) && /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand)\b/i.test(t)) return true;
   if (/\d(?:[\d,.]*\d)?\s*(?:k|m|mn|mil|million|thousand|grand|bn|billion)\b/i.test(t)) return true;
-  if (/\b(?:hundred|thousand|million|billion|grand)\b/i.test(t)) return true;
+  if (/\b(?:hundreds?|thousands?|millions?|billions?|grand)\b/i.test(t)) return true;
   for (const m of t.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
     const value = Number(m[0].replace(/,/g, "").replace(/\.$/, ""));
     if (!(value >= 100)) continue;
-    // A plain year (1900-2099, no separator) is a date, not money.
-    if (/^(?:19|20)\d\d$/.test(m[0])) continue;
     const at = m.index ?? 0;
-    if (RATE_OR_TIME.test(t.slice(at + m[0].length)) || /\bpages?\s*$/i.test(t.slice(Math.max(0, at - 8), at))) continue;
+    // A year (1900-2099, no separator) is a date only where a date is introduced: "in 2026", "of the 2026 summary",
+    // "October 2026". "She gets 2000" is money.
+    if (/^(?:19|20)\d\d,?$/.test(m[0]) && YEAR_BEFORE.test(t.slice(Math.max(0, at - 24), at))) continue;
+    if (RATE_OR_TIME.test(t.slice(at + m[0].length)) || /(?:\bpages?|\bpp?\.)\s*$/i.test(t.slice(Math.max(0, at - 8), at))) continue;
     return true;
   }
   return false;
 }
-function withoutMoney(text: string, dropped: string[]): string {
-  return sentencesOf(text ?? "").filter((s) => { const money = statesMoney(s); if (money) dropped.push(s); return !money; }).join(" ").trim();
+function withoutMoney(text: string, dropped: string[], keep: (s: string) => string = (s) => s): string {
+  return sentencesOf(text ?? "").filter((s) => { const money = statesMoney(keep(s)); if (money) dropped.push(s); return !money; }).join(" ").trim();
+}
+/** A next step may keep a helpline, policy, certificate or claim number, or a page, when it is labelled as one and the
+ * documents cited in this answer print it (R41-2): the number is read past, and the rest of the sentence still may not
+ * state money. */
+const LABELLED = /\b(?:phone|hotline|helpline|call|tel\.?|telephone|fax|(?:policy|certificate|claim)\s*(?:no\.?|number|#))\s*(?:on|at|is)?\s*:?\s*(\+?\d[\d\s-]*\d)|\b(?:p\.|pp\.|page)\s*(\d+)/gi;
+function labelledNumbersRead(citations: ChatCitation[]): (s: string) => string {
+  const printed = citations.map((c) => (c.excerpt ?? "").replace(/\D/g, ""));
+  const pages = new Set(citations.flatMap((c) => [c.pageStart, c.pageEnd]).filter((n): n is number => typeof n === "number"));
+  return (s) => s.replace(LABELLED, (whole, num?: string, page?: string) => {
+    if (page) return pages.has(Number(page)) ? " " : whole;
+    const digits = (num ?? "").replace(/\D/g, "");
+    return digits.length >= 3 && printed.some((p) => p.includes(digits)) ? " " : whole;
+  });
 }
 
 /** Whether every excerpt sits on the same line of the same page. */
@@ -307,7 +322,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
   else if (report.dropped.length) statements.push({ id: "left-out-fact", kind: "uncertainty", text: LEFT_OUT_FACT, fullText: LEFT_OUT_FACT, conditions: [] });
   let bottomLine = withoutMoney(model.bottomLine, report.sentencesLeftOut);
-  const nextSteps = model.nextSteps.map((x) => withoutMoney(x, report.sentencesLeftOut)).filter(Boolean);
+  const nextSteps = model.nextSteps.map((x) => withoutMoney(x, report.sentencesLeftOut, labelledNumbersRead(citations))).filter(Boolean);
   const question = model.question ? withoutMoney(model.question, report.sentencesLeftOut) : "";
   const shownAmounts = statements.filter((s) => s.amount).length;
   if (!bottomLine) {
