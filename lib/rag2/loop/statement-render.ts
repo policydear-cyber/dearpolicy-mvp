@@ -184,9 +184,12 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const r = await checkNotFound(d.ctx.accountId, s, { subjectId: subject, who: d.nameOf(subject) ?? null, names: members.flatMap((m) => [m.displayName, m.preferredName ?? ""]).filter(Boolean) });
       if (!r.ok) { problems.push(`statement ${i + 1}: ${r.problem}`); continue; }
       s.text = r.text; if (r.check.subjectId) s.subject_id = r.check.subjectId; RENDERED.add(s); ABSENCE_OF.set(s, r.check);
-      // (the pages of these documents read this turn are cited with it, so the household sees which documents were checked)
-      const read = Object.values(d.state.evidence).filter((e) => r.check.documents.some((x) => x.policyId === e.policyId));
-      s.evidence_ids = r.check.documents.flatMap((x) => { const mine = read.filter((e) => e.policyId === x.policyId); return mine.length ? [mine[mine.length - 1].id] : []; });
+      // fx-live-2 review: NO passage is cited for an absence. The household sees which documents were checked in the sentence itself, and
+      // the evidence for the scope is the saved check (ChatAnswer.absenceChecks: each document's id, name, file hash and revision, and the
+      // terms searched), which also withdraws the answer when one of those documents is deleted or replaced (lib/chat/stale-answers.ts).
+      // The last passage read from each document (an amount row, a footnote, a claim condition) says nothing about the topic, and listing
+      // it under Sources made a dental answer cite a S$300,000 row.
+      s.evidence_ids = [];
     }
   }
   let relationAsked = false;

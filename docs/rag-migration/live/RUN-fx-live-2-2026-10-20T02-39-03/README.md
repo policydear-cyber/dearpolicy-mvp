@@ -35,10 +35,13 @@ Request `A/K4b#6` (about 17,000 characters) was refused once by the courier with
 | `sent.jsonl` (request hash and key per call) | 2830 | `bf0b28e545c21fe3` |
 | `results.json` (graded; regenerate with `scripts/reliable-chat-usefulness-ab.ts report`) | 24795 | `e093a5c190e58a06` |
 | `requests.jsonl` (1.4 MB; regenerate by replaying `responses.jsonl` against the frozen SHA) | 1395487 | `7d199a1b27dac87c` |
+| `answers.json` (added in the PR review: the visible answers, questions and composer-drop records of the six conversations, as graded; `same: true` = returned, saved and reopened were identical, which they were on all seven turns; the reviewed grader reads it) | 10258 | `15e9a8ba29597b84` |
+| `criteria-reviewed.md` (added in the PR review: the registered and the reviewed grade of each failed check side by side) | 1397 | `412edd96590e3ff2` |
+| `DISPOSITION.md` (added in the PR review: a reviewed disposition of every failed check, with the complete answers) | 14414 | `51e529a26570b58e` |
 
 `sent.jsonl`, `results.json`, `criteria.json` and `requests.jsonl` are not stored in Git (size, or fully derivable). The full sha256 of `requests.jsonl` is `7d199a1b27dac87c8403ed7484eb85762a0e343aee9a446d2d506e4482dd8368`; it is the ledger entry's `request_sha`.
 
-CI is covered separately in `CI-FINDINGS.md` (same directory): the workflow file's YAML parse error, GitHub's billing refusal of the other checks, and a local run of the workflow's own steps on the PR tip. The YAML error and the billing refusal do not come from PR #57. Of the three steps red in the local run, all three are red on `main` too; the environment-contract suite is slightly worse on this branch (4 more undocumented variable names, all debug switches in this PR's new test script). Details and the exact counts are in `CI-FINDINGS.md`.
+CI is covered separately in `CI-FINDINGS.md` (same directory): the workflow file's YAML parse error, GitHub's billing refusal of the other checks, and a local run of the workflow's own steps on the PR tip. The YAML error and the billing refusal do not come from PR #57. Of the three steps red in the local run, all three are red on `main` too; the environment-contract suite was slightly worse on this branch when this record was written (4 more undocumented variable names, all debug switches in this PR's new test script); the switches have since been removed and the branch now fails on exactly the same 34 names as `main` (see the update in `CI-FINDINGS.md`). Details and the exact counts are in `CI-FINDINGS.md`.
 
 ## Results as registered (kept exactly as the graders returned them)
 
@@ -64,6 +67,8 @@ Applied mechanically, the registered recommendation rule ("merge for controlled 
 
 These readings are mine; they are not a regrade. The raw grades above stand.
 
+**Update (PR review, 20 Oct).** Each reading above is now written out with the complete answer in `DISPOSITION.md`, with controls for the negation and multi-sentence-limitation cases (`scripts/rag2-live/fx-live-2-criteria-v2.ts`, `fx-live-2-criteria-v2-regressions.ts`). The registered criteria and the v1 grader are byte-identical to the versions that graded this run and still return these grades on `answers.json`; `criteria-reviewed.md` prints both grades side by side. Original: 70 checks, 4 failed (plus v1's `K2.3`, `K3t1.6`, `V0`). Reviewed: 3 grader shortcomings, 1 safeguard drop (reported, not a pass), and `K2.3` stays an open usefulness gap. The registered recommendation rule still returns HOLD on the original grades.
+
 ## My reading of the complete visible answers
 
 I read all seven visible answers (full text in `report.md`). `K2`, `K3t1`, `K4b`, `K6a` and `K6b` are **regression data** (the conversations had been inspected and used for fixes before this run); `K6c` is the only fresh wording.
@@ -86,8 +91,10 @@ Across all answers: no payment promise, no unsupported applicability, no wrong p
 2. **Repetition in K3t1.** The same "alternatives / which applies is not established" claim appears about three times and the "different bases" claim twice in one reply. This is a readability defect, not a wrong fact. It is not in K4b turn 1 or turn 2.
 3. **The end state depends on the server guards.** The model tried to ask whether the stay was an accident in K2 although the household had already said "she was sick", and tried an X-ray / registered-practitioner question in K3t1 and K4b although no cited page prints that requirement. Server guards handled each: K2's question was "not asked -- how it happened is already recorded"; in K3t1 and K4b "the cited wording ... does not print what it asks"; in K3t1 an earlier call without a `fact_key` was also rejected; in K6a the model's first `note_facts` (`diagnosis=cancer`, a policy-defined classification the household did not state) was rejected. The visible answers and saved questions are clean because of those guards (see `adjusted` and `tool_calls` in `bindings.json`). Nothing here shows the model would stop attempting them.
 4. **K4b carry-over.** After the correction the model recorded Grace's "fell down" as Daniel's `how_it_happened`; the user's correction named only the broken arm. It is an inference that carried over, not visible in the answer, and not used in any figure.
+   *Review (20 Oct):* for this wording ("it was Daniel who broke his arm, not Grace") carrying the event description is a valid reassignment of the same event, not a defect; two real state defects around it were found and fixed in the PR (`docs/rag-migration/reliable-chat/PERSON-CORRECTION.md`).
 5. **K6a placement.** The absence limitation precedes the S$350,000 sentence by one explanatory sentence instead of attaching to it.
 6. **Sources under an absence answer.** The citations saved with K6b ("no dental benefit described") are a S$300,000 row on Grace's certificate, the toe/foot footnote and a page-8 claim-condition sentence; none mentions dental. They back "these documents were checked", so unrelated passages are expected, but a reader who opens Sources sees amounts and a fracture footnote under a dental answer. Not graded; a presentation question for the owner.
+   *Review (20 Oct):* fixed in the PR: an absence answer lists no passage under Sources (the checked scope stays saved with the answer as its evidence).
 7. **Latency** is relay-measured model time (K2 9.3 s, K3t1 12.9 s, K4b 7.7 s and 11.0 s, K6a 7.1 s, K6b 7.6 s, K6c 10.1 s) plus 0.1 to 0.2 s of tool time per turn. Browser and network time were not measured.
 
 ## Timings

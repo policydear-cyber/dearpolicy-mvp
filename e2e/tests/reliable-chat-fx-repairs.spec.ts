@@ -86,8 +86,14 @@ test("FX-K6B dental: 'the documents do not describe a dental benefit' (checked s
   // the checked scope, with its source versions, is saved with the answer
   const docs = t.saved.absenceChecks?.[0]?.documents ?? [];
   expect(docs).toHaveLength(3);
-  for (const d of docs) { expect(d.policyId).toBeTruthy(); expect(d.fileHash).toBeTruthy(); }
+  for (const d of docs) { expect(d.policyId).toBeTruthy(); expect(d.fileHash).toBeTruthy(); expect(d.rev).not.toBeUndefined(); }
+  // fx-live-2 review: nothing unrelated is listed under Sources. The last page read of each checked document (an amount row, a footnote, a
+  // claim condition) said nothing about dental; the scope evidence is the saved absenceChecks above, not a list of cited pages.
+  expect(t.returned.citations ?? []).toHaveLength(0);
+  expect(t.saved.citations ?? []).toHaveLength(0);
+  await expect(page.locator(".message.assistant").last().locator("details.citations")).toHaveCount(0);
   await reopened(page, t);
+  await expect(page.locator(".message.assistant").last().locator("details.citations")).toHaveCount(0);
 });
 
 test("FX-K6A cancer: the dated Living Care sum insured stays with 'the certificate does not state what it pays for cancer'", async ({ page, request }) => {
@@ -135,6 +141,10 @@ test("FX-K4B correction to Daniel: exactly one correction notice, Daniel's facts
   expect(t.state?.ragLoop?.claim?.subjectId).toBe(subjects[0]);
   expect(JSON.stringify(t.state?.ragLoop?.claim?.facts ?? {})).toMatch(/broke his arm/);
   expect(JSON.stringify(t.state?.ragLoop?.claim?.facts ?? {})).not.toMatch(/broke her arm/);
+  // fx-live-2 review (PERSON-CORRECTION.md): the event the household said was not Grace's is no longer on her claim, and her illustrations are withdrawn
+  const aside = t.state?.ragLoop?.otherClaims ?? {};
+  expect(JSON.stringify(Object.values(aside).map((c: any) => c.facts ?? {}))).not.toMatch(/broke her arm|fell down/);
+  expect(Object.values(aside).flatMap((c: any) => Object.values(c.calcs ?? {})).every((r: any) => r.withdrawn?.cause === "person")).toBe(true);
   noResidue(t.shown);
   await reopened(page, t);
 });
@@ -150,5 +160,7 @@ test("FR1 footnote: the '#' footnote is said with the Arm row of the Product Sum
   for (const p of summary) { expect(p).toMatch(/thumb, finger and palm are not covered/); expect(p).toMatch(/marked #/); }
   for (const p of certificate) expect(p).not.toMatch(/thumb|finger|palm|footnote/i);
   expect(t.shown).not.toMatch(/\btoes?\b|\bfoot\b|\bfeet\b/i);
+  // control: an answer that states figures still lists the pages they come from (the Sources change is only for an answer that states no figure)
+  await expect(page.locator(".message.assistant").last().locator("details.citations")).toHaveCount(1);
   await reopened(page, t);
 });

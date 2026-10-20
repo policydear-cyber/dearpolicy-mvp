@@ -50,6 +50,8 @@ Because GitHub cannot run them, all 168 `npm run` steps of `ci.yml` (steps 3 to 
 
 The 34 names red on `main` are pre-existing: for example `HH`, `PART`, `RAG2_LIVE_RUN_ID`, `REPLAY_RUN`, `SHOW`, `SKIP_REPLAY`, `STRESS_DEBUG`.
 
+**Update (PR review, 20 Oct): resolved on the branch.** The four reads (`DEBUGB`, `DEBUGC`, `DEBUGD`, `ONLY`) were removed from `scripts/reliable-chat-fx-repairs-test.ts`: the three debug switches are deleted and the group selector is now an argument (`--only=A,G`) instead of an environment variable. `npm run security:env-contract-test` on the branch now reports exactly the same 34 undocumented names as `main` (identical name lists; both runs fail, as before). The only difference is the reference counts of two names that were already undocumented on `main`: `DEARPOLICY_CHAT_CONTRACT` (referenced in 26 files on the branch, 22 on `main`) and `SHOW` (16 and 14), because the new test scripts read them like the existing ones. So the branch adds zero failures over `main`; the 34 remain `main`'s, to be documented separately. PR #58's YAML repair is untouched and still separate.
+
 **Not waived.** Step 140 is the one finding this PR makes slightly worse. It is a documentation-contract check, it affects no product behaviour, and it was already red on `main` and on the last GitHub run that executed anything. It should be closed by documenting the names in `.env.example` (or removing the four debug reads) in a small separate change, before any release that relies on this suite. Steps 43 and 112 need their tests or expectations brought up to date by whoever owns those areas; nobody should edit them to make them green without that review.
 
 ## 4. The suites this PR adds

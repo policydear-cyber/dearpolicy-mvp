@@ -11,7 +11,7 @@
  *   E  broad-change reviews (repair 5)              F  the footnote (repair 6)
  *
  *   node --import tsx scripts/reliable-chat-fx-repairs-test.ts          (SHOW=1 prints every answer)
- *   ONLY=A node --import tsx ...                                           (one group)
+ *   node --import tsx scripts/reliable-chat-fx-repairs-test.ts --only=A,G  (named groups only; an argument, not an environment variable)
  */
 import { NextRequest } from "next/server";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
@@ -26,7 +26,8 @@ process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 let failed = 0, passed = 0;
 const check = (name: string, ok: boolean, detail = "") => { if (ok) passed++; else failed++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${!ok && detail ? "\n     " + detail.split("\n").slice(0, 30).join("\n     ") : ""}`); };
 const visible = (a: any) => [a?.summary, ...(a?.details ?? []), ...(a?.questions ?? []).map((q: any) => q.text ?? ""), ...uniqueSteps(a?.nextSteps)].filter(Boolean).join("\n");
-const only = (g: string) => !process.env.ONLY || process.env.ONLY.split(",").includes(g);
+const onlyArg = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+const only = (g: string) => !onlyArg || onlyArg.split(",").includes(g);
 
 const K1_MSG = "How much Personal Accident cover does Grace have?";
 const K6B_MSG = "Does Grace's cover pay for dental treatment?";
@@ -42,13 +43,13 @@ async function main() {
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { GET: history } = await import("@/app/api/chat/history/[id]/route");
   const reopen = async (conv: string) => { const r = await history(new NextRequest(`http://localhost/api/chat/history/${conv}`), { params: Promise.resolve({ id: conv }) }); const j = await r.json(); return (j.messages ?? []).filter((m: any) => m.role === "assistant").map((m: any) => m.answer_json); };
-  type Out = { v: string; shown: string; reopened: string; saved: string; answer: any; trace: any; conv: { id: string; rev: number }; err?: string };
+  type Out = { v: string; shown: string; reopened: string; saved: string; answer: any; shownAnswer: any; reopenedAnswer: any; trace: any; conv: { id: string; rev: number }; err?: string };
   const turn = async (label: string, user: string, conv: { id?: string; rev?: number } = {}): Promise<Out> => {
     const a = await h.send(user, conv);
     const s = await h.savedAnswer(a.conversationId!);
     const re = (await reopen(a.conversationId!)).at(-1);
     const trace = s.state.ragLoop.turns.at(-1);
-    const o: Out = { v: visible(s.answer), shown: visible(a), reopened: visible(re), saved: visible(s.answer), answer: s.answer, trace, conv: { id: a.conversationId!, rev: a.conversationRevision! } };
+    const o: Out = { v: visible(s.answer), shown: visible(a), reopened: visible(re), saved: visible(s.answer), answer: s.answer, shownAnswer: a, reopenedAnswer: re, trace, conv: { id: a.conversationId!, rev: a.conversationRevision! } };
     if (process.env.SHOW) console.log(`--- ${label}\n${o.v}\n  outcome: ${trace.outcome}\n  dropped: ${JSON.stringify((trace.dropped ?? []).map((d: any) => d.reason))}\n  calls: ${JSON.stringify((trace.toolCalls ?? []).map((c: any) => `${c.name}${c.ok ? "" : " ERR"}`))}`);
     return o;
   };
@@ -67,6 +68,16 @@ async function main() {
     check("A3 (K6b) and that this is NOT 'you have no dental cover'", /not the same as saying there is no such cover/.test(a1.v) && !/\b(?:you|she|Grace) (?:has|have|had) no dental (?:cover|coverage)/i.test(a1.v) && !/not covered|excluded/i.test(a1.v.replace(/not the same as saying it is excluded or not covered/gi, "")), a1.v);
     check("A4 (K6b) the scope is named: the three documents checked", /Scheme X Group Insurance/.test(a1.v) && (a1.answer.absenceChecks?.[0]?.documents?.length ?? 0) === 3, JSON.stringify(a1.answer.absenceChecks));
     check("A5 (K6b) returned = saved = reopened, and the checked scope (with source versions) is saved with the answer", same(a1) && !!a1.answer.absenceChecks?.[0]?.documents?.every((d: any) => d.policyId && d.fileHash), `${a1.shown}\n--\n${a1.saved}\n--\n${a1.reopened}`);
+    // A8-A10 (fx-live-2 review): what Sources shows under an absence answer, and what still establishes its scope
+    const cites = (x: any) => (x?.citations ?? []).map((c: any) => `${c.policyName} p${c.pageStart}: ${String(c.excerpt).slice(0, 60)}`);
+    check("A8 (K6b) no passage is cited under 'no dental benefit is described': the last page read of each document (an amount row, a footnote, a claim condition) says nothing about dental -- shown, saved and reopened", cites(a1.shownAnswer).length === 0 && cites(a1.answer).length === 0 && cites(a1.reopenedAnswer).length === 0, JSON.stringify([cites(a1.shownAnswer), cites(a1.answer), cites(a1.reopenedAnswer)]));
+    const chk0 = a1.answer.absenceChecks?.[0];
+    check("A9 (K6b) the scope evidence is kept instead: the three documents checked (id, name, file hash, revision) and the terms searched, saved with the answer and identical when reopened", chk0?.documents?.length === 3 && chk0.documents.every((d: any) => d.policyId && d.name && d.fileHash && d.rev != null) && (chk0.terms ?? []).length > 0 && JSON.stringify(a1.reopenedAnswer.absenceChecks) === JSON.stringify(a1.answer.absenceChecks), JSON.stringify(chk0));
+    const benefitSummary = FX.doc("BENEFIT_SUMMARY").id;
+    await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [benefitSummary]);
+    const afterDeleteA = visible((await reopen(a1.conv.id)).at(-1));
+    await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id=$1", [benefitSummary]);
+    check("A10 (K6b) without any citation the answer is still withdrawn when a document it was checked against is deleted (the saved scope, not a cited page, ties it), and whole again when it is active", !/do not describe a benefit for dental/.test(afterDeleteA) && visible((await reopen(a1.conv.id)).at(-1)) === a1.saved, afterDeleteA);
 
     // A6: the model does not repair: fails closed (never an unverified absence, never 'no dental cover')
     const noRepair = await play(withContinuation("A/K6b", () => [call("final_answer", { subject_id: G, sentences: [{ kind: "uncertainty", text: "The uploaded documents I found for Grace do not establish cover for dental treatment; the Scheme X Group Insurance wording and certificate do not state a dental benefit, so I can’t confirm that her treatment would be paid.", evidence_ids: ["e22", "e23"] }] })]), () => turn("A6 K6b, model repeats the unchecked sentence", K6B_MSG));
@@ -89,7 +100,6 @@ async function main() {
     // B2: the model's own sentence (the recorded one, unchanged) is not repaired: the amount must not stand alone as the answer
     const legacy = (recordedTerminal("A/K6a").arguments as any).sentences[1];
     const b2 = await play(withContinuation("A/K6a", k6aFinal(legacy)), () => turn("B2 K6a, model repeats the recorded unchecked sentence", K6A_MSG));
-    if (process.env.DEBUGB) console.log(JSON.stringify(b2.answer.figureBindings?.map((b: any) => ({ ...b, passage: String(b.passage).slice(0, 80) })), null, 1));
     check("B2 (K6a, no repair) the unverified absence sentence is not shown", !/do not establish what Group Living Care pays for cancer/.test(b2.v), b2.v);
     check("B2b (K6a, no repair) the amount does NOT stand alone as the answer to the cancer question: its limitation (a listed sum insured does not say what is paid for a diagnosis) stays with it", /S\$350,000/.test(b2.v) && /(?:does not|doesn.t) (?:by itself )?(?:say|show|state|establish) what (?:is|it) pa(?:id|ys) for/i.test(b2.v) || !/S\$350,000/.test(b2.v), b2.v);
     check("B2c (K6a, no repair) returned = saved = reopened", same(b2), `${b2.shown}\n--\n${b2.reopened}`);
@@ -109,7 +119,6 @@ async function main() {
     check("C0b and keys about something else are not: accident_date, accident_location, accidental_death_amount, hospital_name, injury_type, continuous_confinement", ["accident_date", "accident_location", "accidental_death_amount", "hospital_name", "injury_type", "continuous_confinement"].every((k) => !isCauseKey(k)));
     const ask = recordedTerminal("A/K2").arguments as any;
     const c0 = await play(recordedTurns("A/K2"), () => turn("C0 K2 recorded", K2_MSG));
-    if (process.env.DEBUGC) console.log(JSON.stringify(c0.trace.toolCalls?.map((c: any) => [c.name, c.ok, String(c.error ?? c.summary ?? "").slice(0, 400)]), null, 1));
     check("C1 (K2) the household said it was sickness: the accident question is NOT asked again", !/accident|injury/i.test((c0.answer.questions ?? []).map((q: any) => q.text).join(" ")) && !(c0.answer.questions ?? []).length, JSON.stringify(c0.answer.questions));
     check("C2 (K2) the accident/injury requirement is quoted from the benefit's own wording, with its page, and the reported cause is said not to fit it", /Accidental Hospital Recuperation Benefit \(page 9\)/.test(c0.v) && /bodily injury as a result of an Accident/.test(c0.v) && /“she was sick”\) is an illness, not an accident/.test(c0.v) && /condition is not met/.test(c0.v), c0.v);
     check("C3 (K2) the $250 amount (a bare '$') is not left looking like what is payable for a sickness", !/\$\s?250|\b250\b/.test(c0.v), c0.v);
@@ -129,7 +138,6 @@ async function main() {
       () => [call("final_answer", { subject_id: G, sentences: ask.statements, next_steps: ["contact:" + CERT] })],
     ] };
     const c6 = await play([accidentTurn], () => turn("C6 accident reported", "Grace fell down the stairs and was hospitalised for three days last week. Does her accident cover pay anything?"));
-    if (process.env.DEBUGC) { const sv = await h.savedAnswer(c6.conv.id); console.log(JSON.stringify(sv.state.ragLoop.claim?.facts ?? null), JSON.stringify(Object.keys(sv.state.ragLoop.otherClaims ?? {}))); }
     check("C6 (accident reported) the accident question is not asked, the benefit's terms are kept and the reported cause is said to meet the accident condition", !(c6.answer.questions ?? []).length && /250/.test(c6.v) && /is an accident, which is what that condition requires/.test(c6.v), c6.v);
     // C7 (cause unknown, control): the accident question IS legitimately asked and nothing is said about fit
     const unknownTurn: ScriptTurn = { steps: [
@@ -139,7 +147,6 @@ async function main() {
       () => [call("ask_user", ask)],
     ] };
     const c7 = await play([unknownTurn], () => turn("C7 cause not reported (control)", "Grace was hospitalised for three days last week. Does her accident cover pay anything?"));
-    if (process.env.DEBUGC) console.log(JSON.stringify(c7.trace.toolCalls?.map((c: any) => [c.name, c.ok, String(c.error ?? "").slice(0, 900)])));
     check("C7 (control, cause not reported) the accident question is still asked, and nothing is said about a reported cause", (c7.answer.questions ?? []).length === 1 && !/The cause you reported/.test(c7.v), c7.v);
   }
 
@@ -147,7 +154,6 @@ async function main() {
   if (only("D")) {
     const rec = recordedTurns("A/K4b");
     const d = await play(rec, async () => { const t1 = await turn("D1 K4b turn 1", K4B_MSG1); const t2 = await turn("D2 K4b turn 2 (the correction to Daniel)", K4B_MSG2, t1.conv); return { t1, t2 }; });
-    if (process.env.DEBUGD) console.log(JSON.stringify(d.t2.trace.toolCalls?.map((c: any) => [c.name, c.ok, String(c.error ?? "").slice(0, 200), JSON.stringify(c.args).slice(0, 200)]), null, 1));
     const notices = (d.t2.v.match(/Updated:[^.]*\./g) ?? []);
     check("D1 (K4b) the correction produces exactly ONE person-correction notice, naming Daniel as the person now meant", notices.filter((n: string) => /this is about/i.test(n)).length === 1 && /this is about Daniel, not Grace/.test(d.t2.v), d.t2.v);
     check("D2 (K4b) no notice contradicts it: 'this is about Grace, not Daniel' never appears", !/this is about Grace, not Daniel/i.test(d.t2.v), d.t2.v);
@@ -155,12 +161,12 @@ async function main() {
     check("D4 (K4b) the answer uses Daniel's facts and documents: his figures, his name, not Grace's", /Daniel/.test(d.t2.v) && !/\bGrace\b[^.]*\b(?:S\$1,250|S\$120,000)/.test(d.t2.v.replace(/Updated:[^.]*\./g, "")), d.t2.v);
     check("D5 (K4b) returned = saved = reopened", same(d.t2), `${d.t2.shown}\n--\n${d.t2.reopened}`);
     const DAN = FX.M.daniel.id;
-    if (process.env.DEBUGD) console.log(JSON.stringify(Object.keys(d.t2.answer)), JSON.stringify((d.t2.answer.calculations ?? []).map((c: any) => Object.keys(c))), JSON.stringify((d.t2.answer.calculations ?? []).map((c: any) => c.subjectId ?? c.subject_id ?? c.who)));
     const calcSubjects = (a: any) => [...(a.calculations ?? []).map((c: any) => c.subjectId ?? c.subject_id), ...(a.figureBindings ?? []).map((b: any) => b.subjectId)];
     check("D6 (K4b) every calculation and figure of the corrected answer is bound to Daniel's own row", calcSubjects(d.t2.answer).length > 0 && calcSubjects(d.t2.answer).every((x: string) => x === DAN), JSON.stringify(calcSubjects(d.t2.answer)));
     const sv = await h.savedAnswer(d.t2.conv.id);
     const cl = sv.state.ragLoop.claim;
-    check("D7 (K4b) the saved active claim is Daniel's with his own words ('broke his arm'); Grace's claim is kept aside with hers", cl?.subjectId === DAN && /broke his arm/.test(JSON.stringify(cl.facts)) && !/broke her arm/.test(JSON.stringify(cl.facts)) && /broke her arm/.test(JSON.stringify(sv.state.ragLoop.otherClaims?.[G]?.facts ?? {})), JSON.stringify({ active: cl?.facts, other: sv.state.ragLoop.otherClaims?.[G]?.facts }));
+    const graceAside = sv.state.ragLoop.otherClaims?.[G];
+    check("D7 (K4b) the saved active claim is Daniel's: his own words ('broke his arm') and the event description the household gave about the event ('fell down', which the model restated for him); Grace's claim is kept aside WITHOUT that event (the household said it was not hers) and its calculations are withdrawn", cl?.subjectId === DAN && /broke his arm/.test(JSON.stringify(cl.facts)) && !/broke her arm/.test(JSON.stringify(cl.facts)) && cl.facts?.how_it_happened?.value === "fell down" && !!graceAside && Object.keys(graceAside.facts ?? {}).length === 0 && Object.values(graceAside.calcs ?? {}).every((r: any) => r.withdrawn?.cause === "person"), JSON.stringify({ active: cl?.facts, other: graceAside }));
     // D8: the other order of the same intermediate updates -- Daniel's facts first, Grace's after: still one notice, still Daniel
     const rr = recorded("A/K4b"); const mk = (calls: { name: string; arguments: Record<string, unknown> }[]) => () => calls.map((c) => ({ name: c.name, arguments: c.arguments }));
     const [resolveD, noteG] = rr[3].calls, [noteD, benefitsD] = rr[4].calls;
@@ -281,6 +287,98 @@ async function main() {
     check("F15 (control) two markers on two rows: each row gets its own note and not the other's", c6.find(([l]) => /Leg/.test(l))![1].join() === "Toe and foot are not covered" && c6.find(([l]) => /Wrist/.test(l))![1].join() === "Elbow is a separate case", JSON.stringify(c6));
     const c7 = notesOf(PAGE(base, ["Fractures are paid once per policy year.", "^\tToe and foot are not covered"]));
     check("F16 (control) an ordinary sentence under the table is not a footnote, and a marker line after it is not taken for this table's", c7.every(([, n]) => n.length === 0), JSON.stringify(c7));
+  }
+
+  // ================================================================================================ G: whose event, whose question, whose calculation (fx-live-2 review of K4b)
+  // The semantics are in docs/rag-migration/reliable-chat/PERSON-CORRECTION.md: a message that corrects WHO an event happened to REASSIGNS the event
+  // (what was reported about it moves to the person now meant and comes off the person corrected away from; their question and calculations are
+  // withdrawn); a message that starts ANOTHER person's scenario does not carry anything. Scripted model: no model call, no spend.
+  if (only("G")) {
+    const DAN = FX.M.daniel.id;
+    const stateOf = async (o: Out) => (await h.savedAnswer(o.conv.id)).state.ragLoop;
+    const QG = "Was Grace confined as a resident patient in a hospital for a continuous period of at least 24 hours?", QD = QG.replace("Grace", "Daniel");
+    const bind = (v: any, re: RegExp) => idsAny(v, re, "search_passages").slice(0, 1);
+    // the production shape: a fracture answer with its two illustrations, asking the confinement question for Grace
+    const t1g: ScriptTurn = { steps: [
+      () => [call("resolve_person", { mention: "grace" })],
+      () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: "broke her arm", words: "broke her arm" }], subject_id: G }), call("person_benefits", { topic: "fracture after a fall", subject_id: G })],
+      (v) => { const sb = benefitIdOf(v, /^Simple Fracture$/i), so = benefitIdOf(v, /Simple Fracture or Other Fracture/i); const ev = (id: string) => call("evaluate_benefit", { case: "broke her arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: G, assumption_words: "broke her arm" }); return [ev(sb), ev(so), call("search_passages", { k: 6, query: "accidental hospital recuperation benefit hospital 24 hours", policy_ids: [BS] })]; },
+      (v) => { const r = resultIds(v); return [call("ask_user", { kind: "fact", fact_key: "continuous_confinement", subject_id: G, question: QG, statements: [{ kind: "calculation", text: "-", result_id: r[0], subject_id: G }, { kind: "calculation", text: "-", result_id: r[1], subject_id: G }], because_evidence_ids: bind(v, /continuous period of at least 24 hours/) })]; },
+    ] };
+    // the correction: the model records only Daniel's own words (his arm) and relies on the server for the event description ("fell down")
+    const t2g: ScriptTurn = { steps: [
+      () => [call("resolve_person", { mention: "Daniel" })],
+      () => [call("note_facts", { facts: [{ key: "injury", value: "broke his arm", words: "broke his arm" }], subject_id: DAN }), call("person_benefits", { topic: "fracture after a fall", subject_id: DAN })],
+      (v) => { const sb = benefitIdOf(v, /^Simple Fracture$/i), so = benefitIdOf(v, /Simple Fracture or Other Fracture/i); const ev = (id: string) => call("evaluate_benefit", { case: "broke his arm", purpose: "claim", fact_keys: ["injury", "how_it_happened"], benefit_id: id, subject_id: DAN, assumption_words: "broke his arm" }); return [ev(sb), ev(so), call("search_passages", { k: 6, query: "accidental hospital recuperation benefit hospital 24 hours", policy_ids: [BS] })]; },
+      (v) => { const r = resultIds(v); return [call("ask_user", { kind: "fact", fact_key: "continuous_confinement", subject_id: DAN, question: QD, statements: [{ kind: "calculation", text: "-", result_id: r[0], subject_id: DAN }, { kind: "calculation", text: "-", result_id: r[1], subject_id: DAN }], because_evidence_ids: bind(v, /continuous period of at least 24 hours/) })]; },
+    ] };
+    const t3g: ScriptTurn = { steps: [
+      () => [call("note_facts", { facts: [{ key: "continuous_confinement", value: "yes", words: "Yes" }], subject_id: DAN })],
+      () => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "suggestion", text: "You can ask me to go through Daniel's other benefits." }] })],
+    ] };
+    const t4g: ScriptTurn = { steps: [
+      () => [call("resolve_person", { mention: "Grace" })],
+      () => [call("note_facts", { facts: [{ key: "injury", value: "hurt her ankle", words: "hurt her ankle" }, { key: "how_it_happened", value: "slipped in the bathroom", words: "slipped in the bathroom" }], subject_id: G })],
+      () => [call("final_answer", { subject_id: G, sentences: [{ kind: "suggestion", text: "You can ask me what Grace's accident cover pays for an ankle injury." }] })],
+    ] };
+    const g = await play([t1g, t2g, t3g, t4g], async () => {
+      const a1 = await turn("G1 Grace fell down and broke her arm (asks the confinement question)", K4B_MSG1);
+      const s1 = await stateOf(a1);
+      const a2 = await turn("G2 the correction to Daniel", K4B_MSG2, a1.conv);
+      const s2 = await stateOf(a2);
+      const a3 = await turn("G3 'yes' to the question that is now Daniel's", "Yes, he was in hospital for two days.", a2.conv);
+      const s3 = await stateOf(a3);
+      const a4 = await turn("G4 a separate scenario for Grace", "Separately, Grace slipped in the bathroom and hurt her ankle.", a3.conv);
+      const s4 = await stateOf(a4);
+      return { a1, a2, a3, a4, s1, s2, s3, s4 };
+    });
+    const live = (c: any) => Object.values(c?.calcs ?? {}).filter((r: any) => !r.withdrawn) as any[];
+    const calcSubj = (a: any) => [...(a.calculations ?? []).map((c: any) => c.subjectId ?? c.subject_id), ...(a.figureBindings ?? []).map((b: any) => b.subjectId)];
+    check("G1 (setup) Grace's turn leaves one question pending, for Grace, and two live illustrations", g.s1.pending?.kind === "fact" && g.s1.pending.subjectId === G && g.s1.pending.factKey === "continuous_confinement" && live(g.s1.claim).length === 2, JSON.stringify({ pending: g.s1.pending, calcs: live(g.s1.claim).length }));
+    const notice = g.a2.v.match(/Updated: this is about [^.]*\./g) ?? [];
+    check("G2 the correction says it once, and the open question is now Daniel's: the pending question is his, the saved question names him and not Grace", notice.length === 1 && /this is about Daniel, not Grace/.test(g.a2.v) && g.s2.pending?.subjectId === DAN && /Daniel/.test(g.s2.pending?.question ?? "") && !/Grace/.test(g.s2.pending?.question ?? "") && (g.a2.answer.questions ?? []).length === 1 && /Daniel/.test(g.a2.answer.questions[0].text) && !/Grace/.test(g.a2.answer.questions[0].text), JSON.stringify({ notice, pending: g.s2.pending, questions: g.a2.answer.questions }));
+    const graceAside2 = g.s2.otherClaims?.[G];
+    check("G3 Grace's claim no longer holds the event the household said was not hers (no 'broke her arm', no 'fell down'), and her illustrations are withdrawn for that reason", !!graceAside2 && Object.keys(graceAside2.facts ?? {}).length === 0 && live(graceAside2).length === 0 && Object.values(graceAside2.calcs ?? {}).length === 2 && Object.values(graceAside2.calcs ?? {}).every((r: any) => r.withdrawn?.cause === "person"), JSON.stringify(graceAside2));
+    const cl2 = g.s2.claim;
+    check("G4 Daniel's claim holds his own words ('broke his arm') and the event description the household gave ('fell down', recorded as carried from Grace's report); nothing of Grace's calculations or documents", cl2?.subjectId === DAN && cl2.facts?.injury?.value === "broke his arm" && !cl2.facts.injury.carriedFrom && cl2.facts?.how_it_happened?.value === "fell down" && cl2.facts.how_it_happened.carriedFrom === G && live(cl2).length >= 2 && live(cl2).every((r: any) => r.factKeys.includes("how_it_happened") && r.policyId), JSON.stringify(cl2));
+    check("G4b every figure of the corrected answer is bound to Daniel's own row", calcSubj(g.a2.answer).length > 0 && calcSubj(g.a2.answer).every((x: string) => x === DAN), JSON.stringify(calcSubj(g.a2.answer)));
+    const cl3 = g.s3.claim;
+    check("G5 'Yes' answers Daniel's question and only his: it is recorded for Daniel, Grace's claim gains nothing, and nothing is pending", cl3?.subjectId === DAN && cl3.facts?.continuous_confinement?.value === "yes" && !g.s3.otherClaims?.[G]?.facts?.continuous_confinement && !g.s3.pending, JSON.stringify({ pending: g.s3.pending, daniel: cl3?.facts, grace: g.s3.otherClaims?.[G]?.facts }));
+    const cl4 = g.s4.claim;
+    const gk = Object.keys(cl4?.facts ?? {}).sort();
+    check("G6 a LATER scenario of Grace's own is hers alone: only what was said about her ankle, no leftover from the arm (no 'broke her arm', no _detail key mixing the two events)", cl4?.subjectId === G && gk.join() === "how_it_happened,injury" && cl4.facts.injury.value === "hurt her ankle" && cl4.facts.how_it_happened.value === "slipped in the bathroom" && !/arm|fell down|_detail/.test(JSON.stringify(cl4.facts)) && !/\barm\b/.test(g.a4.v) && (g.a4.v.match(/Updated:[^.]*\./g) ?? []).length === 0, JSON.stringify({ facts: cl4?.facts, v: g.a4.v }));
+    check("G6b and Daniel's claim, kept aside, is exactly as it was (his arm, 'fell down', his 'yes' and his live illustrations)", g.s4.otherClaims?.[DAN]?.facts?.injury?.value === "broke his arm" && g.s4.otherClaims[DAN].facts.continuous_confinement?.value === "yes" && live(g.s4.otherClaims[DAN]).length >= 2, JSON.stringify(g.s4.otherClaims?.[DAN]?.facts));
+    check("G7 every turn: returned = saved = reopened", [g.a1, g.a2, g.a3, g.a4].every(same), [g.a1, g.a2, g.a3, g.a4].filter((x) => !same(x)).map((x) => `${x.shown}\n--\n${x.reopened}`).join("\n=====\n"));
+
+    // ---- controls: a DIFFERENT person's scenario is not a correction. Nothing is carried.
+    let seenByModel = "";
+    const lazy = (msg: string, extra: any[] = []): ScriptTurn => ({ steps: [
+      () => [call("resolve_person", { mention: "Daniel" })],
+      // the lazy copy of a model that treats "also fell down" as established for the second person
+      () => [call("note_facts", { facts: [{ key: "injury", value: "broke his arm", words: "broke his arm" }, { key: "how_it_happened", value: "fell down", words: "fell down" }, ...extra], subject_id: DAN })],
+      (v) => { seenByModel = JSON.stringify(v.turn.filter((o) => o.name === "note_facts").map((o) => o.result)); return [call("final_answer", { subject_id: G, sentences: [{ kind: "suggestion", text: "You can ask me to go on with the question about Grace." }] })]; },
+    ] });
+    const g8 = await play([t1g, lazy("Daniel broke his arm too.")], async () => { const a1 = await turn("G8 turn 1", K4B_MSG1); const a2 = await turn("G8 another person's scenario, with a lazy copy of 'fell down'", "Daniel broke his arm too.", a1.conv); return { a2, s2: await stateOf(a2) }; });
+    const dClaim8 = g8.s2.claim?.subjectId === DAN ? g8.s2.claim : g8.s2.otherClaims?.[DAN];
+    const gClaim8 = g8.s2.claim?.subjectId === G ? g8.s2.claim : g8.s2.otherClaims?.[G];
+    check("G8 (control) 'Daniel broke his arm too.' starts a different scenario: Daniel's claim has his arm and NOT Grace's 'fell down' (the server refused the copy: it was recorded as Grace's report, and this message does not say it about Daniel)", dClaim8?.facts?.injury?.value === "broke his arm" && !dClaim8.facts.how_it_happened, JSON.stringify(dClaim8?.facts));
+    check("G8b and nothing of Grace's moved: her facts are intact, her two illustrations live, her question still open, and no correction notice", gClaim8?.facts?.injury?.value === "broke her arm" && gClaim8.facts.how_it_happened?.value === "fell down" && live(gClaim8).length === 2 && g8.s2.pending?.subjectId === G && !/Updated: this is about/.test(g8.a2.v), JSON.stringify({ grace: gClaim8?.facts, live: live(gClaim8).length, pending: g8.s2.pending, v: g8.a2.v }));
+    check("G8c the refusal reaches the model, with its reason (so it can ask rather than guess)", /"how_it_happened"/.test(seenByModel) && /recorded as Tan Hui Min Grace.s report|recorded as .*Grace.*report/.test(seenByModel) && /does not say it about/.test(seenByModel), seenByModel.slice(0, 900));
+    // G9: the household SAYS it about him: accepted
+    const g9 = await play([t1g, lazy("")], async () => { const a1 = await turn("G9 turn 1", K4B_MSG1); const a2 = await turn("G9 'Daniel fell down too'", "Daniel broke his arm. He fell down too.", a1.conv); return { a2, s2: await stateOf(a2) }; });
+    const dClaim9 = g9.s2.claim?.subjectId === DAN ? g9.s2.claim : g9.s2.otherClaims?.[DAN];
+    check("G9 (control) when the household says it about him ('He fell down too.') the same record is accepted: it is their report about Daniel", dClaim9?.facts?.how_it_happened?.value === "fell down" && dClaim9.facts.injury?.value === "broke his arm" && !dClaim9.facts.how_it_happened.carriedFrom, JSON.stringify(dClaim9?.facts));
+    // G10: an earlier message said it about both
+    const both: ScriptTurn = { steps: [
+      () => [call("resolve_person", { mention: "Grace" })],
+      () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down on the stairs", words: "fell down on the stairs" }], subject_id: G })],
+      () => [call("final_answer", { subject_id: G, sentences: [{ kind: "suggestion", text: "You can tell me what injuries there were." }] })],
+    ] };
+    const then: ScriptTurn = lazy("");
+    then.steps[1] = () => [call("note_facts", { facts: [{ key: "injury", value: "broke his arm", words: "broke his arm" }, { key: "how_it_happened", value: "fell down on the stairs", words: "fell down on the stairs" }], subject_id: DAN })];
+    const g10 = await play([both, then], async () => { const a1 = await turn("G10 turn 1", "Grace and Daniel both fell down on the stairs."); const a2 = await turn("G10 turn 2", "Daniel broke his arm.", a1.conv); return { a2, s2: await stateOf(a2) }; });
+    const dClaim10 = g10.s2.claim?.subjectId === DAN ? g10.s2.claim : g10.s2.otherClaims?.[DAN];
+    check("G10 (control) words an EARLIER message said about both people ('Grace and Daniel both fell down on the stairs') are Daniel's report as well: accepted", dClaim10?.facts?.how_it_happened?.value === "fell down on the stairs" && dClaim10.facts.injury?.value === "broke his arm", JSON.stringify(dClaim10?.facts));
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

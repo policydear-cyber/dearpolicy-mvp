@@ -416,7 +416,15 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     (state.otherClaims ??= {})[from.subjectId] = from;
     const next: LoopClaim = state.otherClaims[to] ?? { subjectId: to, facts: {}, derived: [] };
     delete state.otherClaims[to];
-    for (const [k, f] of Object.entries(from.facts)) if ((f.source ?? "user_reported") === "user_reported" && !next.facts[k]) next.facts[k] = { ...structuredClone(f), carriedFrom: f.carriedFrom ?? from.subjectId! };
+    // fx-live-2 review (K4b): a correction of WHO an event happened to REASSIGNS the event (see docs/rag-migration/reliable-chat/PERSON-CORRECTION.md).
+    // What the household reported about it ("fell down", "broke ... arm") moves to the person now meant -- recorded as carried, and the person's own
+    // words about themselves win -- and is taken OFF the person corrected away from: the household said it did not happen to them, so a later
+    // question about them (or a new event of theirs) must not meet it again. Facts a document printed stay with their person.
+    for (const [k, f] of Object.entries(from.facts)) {
+      if ((f.source ?? "user_reported") !== "user_reported") continue;
+      if (!next.facts[k]) next.facts[k] = { ...structuredClone(f), carriedFrom: f.carriedFrom ?? from.subjectId! };
+      delete from.facts[k];
+    }
     state.claim = next;
   };
   /** fx-live-1 (K4b): the person the household corrected AWAY from, this turn. One correction is one move: a later call of the model
@@ -436,10 +444,29 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     const hold = speakerAside || supersededNow(subject) || (!correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject);
     if (hold) { (state.otherClaims ??= {})[subject] = parked; return parked; }
     if (correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject) state.pending = null;
-    if (state.claim?.subjectId) { personCorrection(subject); (state.otherClaims ??= {})[state.claim.subjectId] = state.claim; }
+    if (state.claim?.subjectId) {
+      personCorrection(subject);
+      // (fx-live-2 review) the event moves with the correction whichever tool names the corrected person first, not only resolve_person
+      if (correcting && state.claim.subjectId !== subject) { moveClaimTo(subject); return state.claim!; }
+      (state.otherClaims ??= {})[state.claim.subjectId] = state.claim;
+    }
     if (state.otherClaims) delete state.otherClaims[subject];
     state.claim = parked;
     return parked;
+  };
+  /** fx-live-2 review (K4b): the household's words that ANOTHER person's claim already holds as that person's report (null when none does). */
+  const heldForAnother = (subject: string, words: string): string | null => {
+    for (const c of [state.claim, ...Object.values(state.otherClaims ?? {})]) {
+      if (!c?.subjectId || c.subjectId === subject) continue;
+      for (const f of Object.values(c.facts)) if ((f.source ?? "user_reported") === "user_reported" && f.words && (quotedFrom(words, [String(f.words)]) || quotedFrom(String(f.words), [words]))) return c.subjectId;
+    }
+    return null;
+  };
+  /** Whether an earlier message of the household that says `words` also names `subject` (or is first person and the subject is the speaker). */
+  const saidAboutThem = (subject: string, words: string): boolean => {
+    const full = input.people.find((p) => p.id === subject)?.name ?? "";
+    const names = [...new Set([/\(([^)]+)\)\s*$/.exec(full)?.[1] ?? "", ...full.replace(/\([^)]*\)/g, " ").split(/[\s,]+/)].map((n) => n.trim()).filter((n) => n.length >= 3))];
+    return userTexts.some((t) => quotedFrom(words, [t]) && ((names.length > 0 && new RegExp(`\\b(?:${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "i").test(t)) || (subject === state.speakerId && /\b(?:I|my|me|myself)\b/.test(t))));
   };
   /** Moves the active subject -- except to the speaker while another member's claim is open or pending (a side
    * question about "me" never changes who the claim is about). */
@@ -860,6 +887,28 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             refused.push({ key, error: chk.error + ` (their words "${words}" were recorded as how_it_happened)` });
           } else { refused.push({ key, error: chk.error }); if (/is not a (?:calendar date|time of day)/.test(chk.error)) invalidNow.add(key); }
           continue;
+        }
+        // fx-live-2 review (K4b): the household has just said the event did NOT happen to this person (a correction away from them, this turn): the
+        // words the event moved with, now held by the person it was reassigned to, are not recorded for them again (a note the model wrote for the
+        // first person before it noticed the correction would bring the withdrawn event back).
+        if (chk.source === "user_reported" && supersededNow(subject) && state.claim?.subjectId && state.claim.subjectId !== subject) {
+          const w = String(f.words ?? "").trim(), to = state.claim.subjectId;
+          const heldNow = Object.values(state.claim.facts).flatMap((x) => [x.words, ...(x.previous ?? []).map((p) => p.words)]).filter((x): x is string => !!x);
+          if (heldNow.some((hw) => quotedFrom(w, [hw]) || quotedFrom(hw, [w]))) {
+            refused.push({ key, error: `the household has just said this did not happen to ${nameOf(subject)}: "${w}" is recorded for ${nameOf(to)}, the person the event was reassigned to` });
+            continue;
+          }
+        }
+        // fx-live-2 review (K4b): a report is carried to another person only by a CORRECTION of who the event happened to (moveClaimTo). In any other
+        // message, words that another person's claim already holds as THEIR report ("fell down", said about Grace) are not a report about this person:
+        // "Daniel broke his arm too" does not say how Daniel's arm broke. Refused unless this message says them, this person's claim already holds
+        // them, or an earlier message that says them also names this person (or is first person and this person is the speaker).
+        if (chk.source === "user_reported" && !PERSON_CORRECTION.test(input.message) && !quotedFrom(String(f.words ?? ""), [input.message])) {
+          const w = String(f.words ?? "").trim(), owner = heldForAnother(subject, w);
+          if (owner && !Object.values(claim.facts).some((x) => x.words && (quotedFrom(w, [String(x.words)]) || quotedFrom(String(x.words), [w]))) && !saidAboutThem(subject, w)) {
+            refused.push({ key, error: `"${w}" was recorded as ${nameOf(owner)}'s report, and this message does not say it about ${nameOf(subject)}: record only what the household said about ${nameOf(subject)} (quote this message), and ask if something else matters` });
+            continue;
+          }
         }
         const value = f.currency ? `${String(f.value)} ${f.currency.toUpperCase()}` : String(f.value);
         const words = docText != null ? (f.words?.trim() || state.evidence[docIds[0]].passage.text.slice(0, 160)) : String(f.words);
