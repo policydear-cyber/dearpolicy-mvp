@@ -2179,3 +2179,50 @@ This removes the range and adding word lists entirely, and a wrong total can no 
 
 **Still safe to merge only while switched off. Not ready to switch on.** R38-1 is fixed. R39-1 can still show a wrong
 claimable amount. Rather than patching R39-1 and R39-2 with more word lists, adopt the simpler rule above.
+
+---
+
+# Round 40: PR #71 (simple chat) at `9757784`, the "no money in prose" rule
+
+Method: local tsx probes of `lib/simple-chat/verify.ts` (statesMoney and verifyAnswer) against the real household snapshot,
+kept out of Git, plus 23 prose wordings. No paid model calls.
+
+## What holds
+
+- Amounts now come only from a currency-signed figure in the located quote, or a percentage of a sum printed in the same
+  table's heading on the same page. Desmond's wrist: S$1,250 (25% of S$5,000, Product Summary p13) as a calculation card;
+  the Benefit Summary p8 "20%" kept as a fact card, never multiplied; S$600,000 from his certificate p1 as its own card.
+  S$120,000 is never computed. The word lists from rounds 36 to 39 are gone, and the design no longer depends on this
+  household's layout.
+- Any prose sentence with a currency sign or code, "dollars", or a thousands separator is dropped (bottom line, card text,
+  conditions, next steps, question): "S$1,250", "SGD1250", "1250 SGD", "$1.25K", "S$ 1,250", "SGD 1.25k", "Total: 1,450".
+- Percentages, days and page numbers survive ("within 30 days", "Page 13 lists 25%").
+
+## Findings
+
+**R40-1 (Medium): a figure still reaches prose when written without a currency sign or separator.** These sentences are
+all kept by `statesMoney` (`verify.ts:154`): "She gets 1.25k", "She gets 1250", "About 120k if you use the sum insured",
+"20% of 600k is the most", "She is covered 600000", "The fracture pays 1 250 and the ambulance 200", "Roughly 1.4
+thousand in total", "one thousand two hundred and fifty dollars", "The ambulance fee is two hundred", "25% of five
+thousand". "About 120k" is exactly the multiplied sum-insured figure this design exists to stop. The model is told not
+to write amounts, so this only bites when it disobeys, but release-set C2 shows it does. The save and reopen boundary
+(`containsMoney` in `lib/chat/monetary-boundary.ts`) has the same gap. A generic fix, not tied to this household: also
+drop a prose sentence that has (a) a number followed by k, m, mn, million, thousand, grand or bn; (b) any of the words
+hundred, thousand, million, billion or grand; or (c) a number of 100 or more not directly followed by %, a time unit
+(day, week, month, year) and not directly after "page".
+
+**R40-2 (Low-Medium, usefulness): an amount card can lose what the amount is for.** When the model writes the figure in
+the card text ("Desmond can claim S$1,250 for the wrist fracture.", the natural wording), the whole sentence is dropped
+and the card reads only "As printed in MINDEF & MHA Group Insurance (Product Summary), page 13." next to S$1,250, with
+no benefit name (`verify.ts:251`). Fact cards already fall back to the quoted words; do the same for amount cards (for
+example "S$1,250 — “Arm, Elbow, Wrist or Ribs 25%”, Product Summary page 13"). Similarly a bottom line that names an
+amount falls back to "Here is what your documents say.", which loses the answer itself; consider asking the model again
+once, or keeping the sentence with the figure removed.
+
+**R40-3 (Low):** two statements quoting the same row produce two identical fact cards (seen with the 20% row).
+
+## Verdict on PR #71 at `9757784`
+
+**Safe to merge while switched off. Close to ready to switch on:** the structure is now right and no longer tuned to
+this household. Fix R40-1 (a small generic rule) before switching on; R40-2 is recommended so the answer stays useful;
+R40-3 is optional.
