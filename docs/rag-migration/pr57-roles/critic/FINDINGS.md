@@ -1131,3 +1131,49 @@ figure with its condition.
 **Still safe to merge as a dormant change; not yet safe to switch on.** No server path sends `statements[]`, so live answers do
 not change. R15-1, R15-3, R15-5 and R15-6 are fixed or much improved. R18-1 has to be fixed before the server fields go live,
 because it can put a wrong figure on a card. R18-2 to R18-4 are short UI fixes, and R15-4 is still the Developer's.
+
+---
+
+# Round 19: PR #65 merge check at `7ccc837`
+
+Scope: `git diff 91bccc4 7ccc837`, which covers the R18 fixes in `fbe8c0f` and the stalled-read copy in `7ccc837`. I also skimmed
+every live UI change since my last full review at `72568be`: chat sources, dashboard cost, Family, Usage, Records, Ledger and
+Schedule empty states, and the covers picker. Read only.
+
+## R18 re-check
+
+| Finding | Status |
+|---|---|
+| R18-1 clause extraction | **Fixed.** `conditionOf` is removed. The card shows the server's `conditions[]`, or, when there are none, the whole `fullText`. Nothing is cut in the browser. |
+| R18-2 substring coverage | **Fixed.** A prose sentence counts as covered only when it equals a statement's text, its `fullText`, or one whole sentence of either. |
+| R18-3 nameless cards | **Fixed.** An amount without `personName` is never a card. It shows as its full checked sentence with its qualifiers. |
+| R18-4 bottom-line guard | **Moved to the server contract.** Only the server's `bottomLine` is shown, and none is derived in the browser. Acceptable while the field doesn't exist. Carry it into the Developer's answer-fields contract. |
+
+## R19-1 (Low, contract note for the Developer's fields change)
+
+When `conditions[]` is present, the card no longer shows `fullText`. So the "If the … benefit applies to Grace's case" wording
+must also be one of the `conditions[]` items. Otherwise it appears only under the collapsed "Full answer". The same contract
+should also say:
+
+- a `bottomLine` that names an outcome carries its qualifier;
+- statement amounts go through `verifyAnswerFigures` and the monetary boundary on both the live and reopen paths (R15-4).
+
+## Live UI changes since `72568be`
+
+I found no problems in the live UI changes:
+
+- **Chat sources:** source rows add the document type, the household's own file name (from the household-scoped
+  `/api/policies`) and the date. Excerpts are now shown whole, so no end-of-passage qualifier is cut.
+- **Dashboard cost:** shows "Not known yet" instead of S$0.00 when there is no payment evidence.
+- **Family:** no "parent" is guessed by default.
+- **Coverage and Benefits:** a "couldn't be read" state with Try again replaces "still being read" forever.
+- **Previous chats:** the list opens on an empty chat.
+
+None of these touches amounts, people's links or saved answers.
+
+## Verdict on PR #65 at `7ccc837`
+
+**Ready to merge** from the Critic's side. The live UI changes have no blocker. The cards are dormant, because no server path
+sends `statements[]`, and they now hold up against R15 and R18 for when it does. Before the cards are switched on, the Developer's
+fields change must cover R15-4 and R19-1. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
+confirm. The merge is DC's call.
