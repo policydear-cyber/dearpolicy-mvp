@@ -72,7 +72,7 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
     for (const x of noted) for (const n of x.notes) ev.push(d.evidenceId(n.evidence));
     const footnotes = noted.length ? ` The page also prints ${noted.length > 1 ? "footnotes" : "a footnote"} for ${noted.length > 1 ? "these cases" : "one of them"}: ${noted.map((x) => `for “${x.label}”: ${x.notes.map((n) => quoted(n.marker, n.text)).join(" and ")}`).join("; ")}.` : "";
     for (const n of s.conditions ?? []) ev.push(d.evidenceId(n.evidence));
-    const under = s.conditions?.length ? ` Under the table it prints: ${s.conditions.map((n) => `“${noteText(n.text)}”`).join(" and ")}.` : "";
+    const under = s.conditions?.length ? ` Under the table it prints: ${s.conditions.map((n) => `“${noteText(n.text).replace(/[.!?]+$/, "")}”`).join(" and ")}.` : "";
     return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${footnotes}${under}${missing}`, evidence_ids: [...new Set(ev)], value_ids: vals };
   }
   const p = r.printed;
@@ -131,7 +131,8 @@ const rowNote = (all: { marker: string; text: string }[] | undefined) => {
   const notes = (all ?? []).filter((n) => n.marker), under = (all ?? []).filter((n) => !n.marker);
   // (PR #57 follow-up, QC Q1: an unmarked condition printed under the table is the table's benefit's own condition, said with its amount)
   return (notes.length ? `; the page prints ${notes.length > 1 ? "footnotes" : "a footnote"} for that row: ${notes.map((n) => quoted(n.marker, n.text)).join(" and ")}` : "")
-    + (under.length ? `; under the table it prints: ${under.map((n) => `“${noteText(n.text)}”`).join(" and ")}` : "");
+    // (without its own full stop: a saved calculation is ONE sentence, and a quoted "." would split it)
+    + (under.length ? `; under the table it prints: ${under.map((n) => `“${noteText(n.text).replace(/[.!?]+$/, "")}”`).join(" and ")}` : "");
 };
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */
 export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number }): string | null {

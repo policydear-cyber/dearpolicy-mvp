@@ -137,7 +137,8 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
     // (PR #54, rc-live-8: an amount printed with a bare "$" the document never explains is kept with its benefit, its
     // currency an explicit unknown -- the record is incomplete, never dropped and never given a currency)
     const unstated = b.currency?.status === "unstated";
-    out.push({ id: hid(accountId, memberId, b.key), householdId: accountId, memberId, memberName, policy: policyOf(d), benefit: b.benefit.label.replace(/^[•▪●◦*–-]\s*/, ""), kind, applicability: b.applicability, printed: b.printed, asOf: b.asOf, conditions: b.conditions,
+    // (PR #57 follow-up: a section letter printed before a benefit's name -- "J, " / "G. " -- is not part of the name)
+    out.push({ id: hid(accountId, memberId, b.key), householdId: accountId, memberId, memberName, policy: policyOf(d), benefit: b.benefit.label.replace(/^[•▪●◦*–-]\s*/, "").replace(/^[A-Z][.,]\s+(?=[A-Z])/, ""), kind, applicability: b.applicability, printed: b.printed, asOf: b.asOf, conditions: b.conditions,
       schedule: null, status: b.conflicts?.length ? "conflicting" : unstated ? "incomplete" : "resolved",
       unknowns: [...(b.conflicts?.length ? ["another document of this policy prints a different amount; which applies is not decided here"] : []), ...(unstated ? [UNSTATED_CURRENCY] : [])],
       source: { page: b.source.page, evidence: b.source.evidence }, personBenefit: b, definitions: [] });

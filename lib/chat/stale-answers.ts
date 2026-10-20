@@ -14,8 +14,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatAnswer } from "@/types";
-import { loadDocs, loadLinks } from "@/lib/rag2/store";
-import { scopeDocs } from "@/lib/rag2/loop/absence-scope";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 
 export const STALE_ANSWER_NOTICE = "This answer relied on a policy document that has since been deleted, so it no longer describes your cover. Ask again to get an answer from the documents you have now.";
 
@@ -57,13 +56,21 @@ export async function invalidateAnswersWithDeletedPolicies<T extends Partial<Cha
   const changed = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => (c?.documents ?? []).some((d) => d.fileHash != null && active.has(d.policyId) && (hashOf.get(d.policyId) ?? null) !== d.fileHash));
   // PR #57 follow-up (critic M4): "your documents do not describe X" over the person's or the whole library's documents was true of the
   // documents there were then. A document added to that scope since (an upload, or one newly linked to the person) may describe it.
+  // (read here, not through the reliable-chat loop's modules: the chat path must not depend on them when the loop is off -- the same
+  // readable-document rule as the loop store's queryDocs, and the same scope as its absence check's scopeDocs: the person's linked documents plus any
+  // document linked to nobody, or the whole library)
   const widening = answers.some((a) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => c?.scope === "library" || c?.scope === "subject"));
-  const docs = widening ? await loadDocs(accountId) : [];
-  const links = docs.length ? await loadLinks(accountId, docs.map((d) => d.id)) : [];
+  const readable = widening ? (await query<{ id: string; members: string[] | null }>(
+    `SELECT p.id::text AS id, array_remove(array_agg(pm.family_member_id::text), NULL) AS members
+       FROM policies p LEFT JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
+        AND EXISTS (SELECT 1 FROM family_members f WHERE f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")})
+      WHERE p.account_id=$1 AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} AND p.processing_status='ready'
+      GROUP BY p.id`, [accountId])).rows : [];
   const grown = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => {
     if (c?.scope !== "library" && c?.scope !== "subject") return false;
     const saved = new Set((c.documents ?? []).map((d) => d.policyId));
-    const now = scopeDocs({ docs, links, pages: [] }, { policyIds: null, subjectId: c.scope === "subject" ? c.subjectId ?? null : null }).docs;
+    const mine = c.scope === "subject" && c.subjectId ? readable.filter((d) => !(d.members ?? []).length || (d.members ?? []).includes(c.subjectId!)) : [];
+    const now = c.scope === "subject" && mine.length ? mine : readable;
     return now.some((d) => !saved.has(d.id));
   });
   return answers.map((a) => {
