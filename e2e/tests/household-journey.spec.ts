@@ -137,6 +137,12 @@ test.describe.serial("synthetic household journey", () => {
     for (const [pid, who] of [[ids.a, parent], [ids.b, child]] as const) {
       const p = all.find((x) => x.id === pid)!;
       const c = card(page, p);
+      // PR #77: the people chips sit behind the covers picker's "Choose" (or "Change") button; open it first.
+      // Was: the chip was clicked directly.
+      const opener = c.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+      // The card renders after the page loads; wait for its picker line before deciding it is already open.
+      await c.getByTestId("covers-picker").waitFor({ timeout: 10_000 }).catch(() => {});
+      if (await opener.isVisible()) await opener.click();
       await c.getByRole("button", { name: who, exact: true }).click();
       // The confirmation is shown with the library it changed (the library notice), not under the upload form.
       await expect(page.getByTestId("library-notice")).toContainText("Saved");

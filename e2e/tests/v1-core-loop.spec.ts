@@ -151,6 +151,8 @@ async function uploadAndWait(page: Page, f: Fixture, profileLabel: string | null
         // Reference document or unmatched name: assign through the UI, as a person would.
         // PR #77: open the one-line "Covers" picker first ("Choose" when nobody is linked yet). Was: the chips were shown open.
         const opener = cardLoc.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+        // The card renders after the page loads; wait for its picker line before deciding it is already open.
+        await cardLoc.getByTestId("covers-picker").waitFor({ timeout: 10_000 }).catch(() => {});
         if (await opener.isVisible().catch(() => false)) await opener.click();
         const declare = cardLoc.locator(".declare-owner button").filter({ hasText: new RegExp(`^${ownerName.split(" ")[0]}`, "i") });
         const matchSel = cardLoc.locator(".detected-row select").first();

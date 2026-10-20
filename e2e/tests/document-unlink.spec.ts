@@ -51,6 +51,8 @@ test.describe.serial("removing a person from a document", () => {
     await expect(card).toBeVisible({ timeout: 60_000 });
     // PR #77: the picker is one line for every document until opened; "Choose" when nobody is linked yet, "Change" otherwise. Was: { name: "Change" } only.
     const change = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+    // The card renders after the page loads; wait for its picker line before deciding it is already open.
+    await card.getByTestId("covers-picker").waitFor({ timeout: 10_000 }).catch(() => {});
     if (await change.isVisible().catch(() => false)) await change.click();
     return card.locator(".declare-owner button").filter({ hasText: who }).first();
   }
