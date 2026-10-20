@@ -6,7 +6,7 @@ This file consolidates `FINDINGS-C0.md`, `FINDINGS-C1.md` and `GP-BILL.md` (kept
 
 | worker | task | SHA | status | evidence | blocker |
 | --- | --- | --- | --- | --- | --- |
-| Policy Evidence Reviewer | evidence record per journey; compare answers | C2 `98ada99` (page text identical since C0) | C2 assessed (section 6) | this file | no rendered C2 text from a frozen-copy run; DC's real library not available; live runs needed (section 6) |
+| Policy Evidence Reviewer | evidence record per journey; compare answers | C3 `1766863` (page text identical since C0) | final check done (section 8) | this file | live runs needed (section 6); DC's real library not available |
 
 ## 1. Evidence sources and what is not available
 
@@ -172,3 +172,47 @@ the pages `death-journey.ts` adds). None of this is DC's actual library itself.
 
 Note (low): `actual-lib.ts` and `scripts/fixtures/extraction/*.json` keep the real insurer's name, address and registration in the source text and
 anonymise it at load time. That is public insurer information, not a private record, but it is not anonymised in Git.
+
+## 8. Final check on C3 `17668630fab90a94997f3c918d8a5b31139ec40e` (draft PR #61)
+
+C3 changes product code in `absence-scope.ts`, `loop.ts`, `statement-render.ts` and `event-relations.ts` only. The fixture pages are unchanged since C0.
+Evidence: Code trace (QC) over the pages, plus the UX agent's browser transcripts on C2 (`claude/pr57-ux-le1xlg`, ux/c2-98ada99; Scripted). No live model call.
+
+| journey | U on C3 | O on C3 | change from C2 |
+| --- | --- | --- | --- |
+| J1 fracture | none | the Voluntary-Scheme point (judgement). The Core/Voluntary condition **is shown** with the S$120,000/S$300,000 illustration in the browser on C2 (UX `SA2x`, `fr1x`: "under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”"; Scripted). Still **no executable check** | question checks reordered (a passage under another benefit never justifies a fracture question): no amount effect |
+| J2 correction | none. "Daniel broke his arm too." names no first person negated, so it does not move facts; "...not Grace. He also hurt his knee." is still a correction | none | Critic A1 |
+| J3 cancer | none | Living Care Plus; "policy definition" wording (accepted gaps) | none |
+| J4 dental | none | none material | a reply that ends without the absence now gets the server's "what was read" statement instead of "couldn't confirm" (improvement) |
+| J5 sickness | none | PS p37 (low); "listed but not described" not said, because the scope is partly stored (correct) | none |
+| J6 GP bill | none. Uses only the subject's own certificate rows; never quotes the scheme's policy list; "I could not confirm" after a refused check (exact) | the conditional accident benefits; model-dependent, live run | Critic A2/A3/F1-F3 |
+
+### Developer claim 1: the closed-fracture transcripts ran on actuallib, not booklet. **Confirmed.**
+
+UX `SA2x` (C2) prints "Group Insurance Product Summary (page 13)", "Group Personal Accident Benefit Summary (page 8)" and "Daniel's sum insured of
+S$600,000 (Group Personal Accident, printed as of 1 April 2024)". Those are actuallib's product names and Daniel's row (`actual-lib.ts`: PA S$600,000, 01/04/2024).
+The booklet household prints PA S$300,000 as of 01/04/2024, and its Simple table pays Arm 40% (S$2,000), not 25%. The UX run seeded only fracture, actuallib,
+deathjourney and livelib (its FINDINGS.md). Actuallib reproduces real pages that define neither fracture type, so the "no definition" sentence is true there
+(real-anonymised). The booklet pages (synthetic) define Simple as closed, so a closed fracture fits Simple only. That the app shows no Other Fracture amount there is
+the Developer's test result (`reliable-chat:applicability-test` 36/36). QC did not run it.
+
+### Developer claim 2 (livelib, synthetic): Repatriation S$2,000 and the travel S$100,000
+
+- **Repatriation: supported.** SUM p9 prints "Repatriation of Mortal Remains: S$2,000 per Insured Person, if death occurs outside Singapore as a result of an
+  Accident." C3's one-line-benefit rule renders it as S$2,000 "with the printed condition “per Insured Person, if death occurs outside Singapore as a result of
+  an Accident”". That is the right amount, currency (S$ printed on the summary; the wording p3 prints a bare "$2,000"), condition and benefit.
+- **Travel "Accidental Death: S$100,000" without its trip: misleading, and a contract failure.** The figure itself is printed, so it is not invented, but the
+  same schedule prints "Period of Insurance: 10/03/2025 to 17/03/2025" and "Destination: Indonesia" (insured person Adrian only). For a death in Japan, stating
+  S$100,000 without the period and destination drops the qualifiers that decide applicability. On the printed facts it does not fit a Japan death unless that death
+  happened in that week and the destination term is shown not to matter. DC's contract: "never remove a qualifier and leave a misleading amount". **Severity: high**,
+  because an amount appears applicable that its own document's terms make unlikely. The smallest acceptable form, from the pages: the S$100,000 with its period,
+  destination and insured person, said as not shown to apply to this event; or leave the line out. Also low: the Term Life "Terminal Illness Benefit" line in a
+  death answer is irrelevant to a death.
+
+### Evidence verdict on C3 (input to the coordinator's release decision)
+
+- **No wrong claimable amount** shown on any J1-J6 journey, by page evidence (code trace and scripted transcripts).
+- **One misleading amount is open:** livelib travel S$100,000 without its period and destination (synthetic household; affects any death answer in a library
+  that holds a dated trip schedule).
+- **Not settled without a live run:** J6, J5, J2, then J3/J1 (section 6). **Not settled without DC's real library:** everything. All evidence here is
+  anonymised or synthetic, and all of it is scripted or OpenAI-configured.
