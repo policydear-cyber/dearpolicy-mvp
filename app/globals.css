@@ -1071,6 +1071,18 @@ div.answer-point { display: grid; gap: 4px; }
 .answer-either-shared b { color: var(--ink); }
 .answer-either-or { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .answer-either-or::before, .answer-either-or::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); }
+/* Coverage and Benefits: the same either/or block for a row two documents price differently. */
+.alt-amounts { margin: 6px 0 4px; }
+.alt-option { display: grid; gap: 4px; padding: 2px 0; }
+.alt-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.alt-figure strong { font-size: var(--fs-lg); color: var(--ink); font-variant-numeric: tabular-nums; }
+.alt-figure span { color: var(--ink-2); font-size: var(--fs-sm); }
+.alt-source { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; font-size: var(--fs-xs); color: var(--muted); }
+.alt-source a { display: inline-flex; align-items: center; min-height: 24px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.alt-own { font-weight: 700; color: var(--ink-2); }
+.alt-conditions { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); }
+.alt-note { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--muted); }
+@media (pointer: coarse), (max-width: 620px) { .alt-source a { min-height: 44px; } }
 /* The two disclosures share one row while closed; an open one takes the full width. */
 .answer-more { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 18px; border-top: 1px solid var(--line); padding-top: 4px; }
 .answer-more > details { flex: 0 0 auto; }

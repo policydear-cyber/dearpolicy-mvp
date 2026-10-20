@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
+import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
  *
@@ -17,6 +18,8 @@ type Row={
   eventType:string;eventLabel:string;detail:string|null;cause:"accident"|"illness"|null;
   paysKind:string;amount:number|null;currency:string;conditions:string[];sourcePage:number|null;quote:string|null;
   origin:"schedule"|"wording"|"person";status:"proposed"|"confirmed"|"rejected";pays:string;hasFigure:boolean;
+  /** Two documents print different amounts for this row: drawn as one either/or block, never a total. */
+  alternatives?:AlternativeAmounts|null;
 };
 type Member={id:string;display_name:string;relationship:string};
 type Reading={pending:number;inProgress:boolean;documents?:ReadingDocument[]};
@@ -111,8 +114,9 @@ export default function CoveragePage(){
       <div className="section-heading"><h2>{key}</h2>{list[0].insurer?<small>{list[0].insurer}</small>:null}</div>
       <ul className="benefit-list">{list.map(row=><li key={row.id} className="benefit-item" data-testid="coverage-row">
         <div className="benefit-head"><strong>{row.eventLabel}</strong>{row.detail?<small>{row.detail}</small>:null}</div>
-        <p className={row.hasFigure?"pays-cell":"muted-cell"}>{row.hasFigure?row.pays:(row.pays||"No amount is stated in your documents for this.")}</p>
-        {row.cause?<small className="pays-basis">Only when caused by {row.cause==="accident"?"an accident":"an illness"}</small>:null}
+        {hasAlternatives(row.alternatives)?<AlternativeAmountsBlock alternatives={row.alternatives} rowId={row.id}/>
+          :<p className={row.hasFigure?"pays-cell":"muted-cell"}>{row.hasFigure?row.pays:(row.pays||"No amount is stated in your documents for this.")}</p>}
+        {row.cause&&!hasAlternatives(row.alternatives)?<small className="pays-basis">Only when caused by {row.cause==="accident"?"an accident":"an illness"}</small>:null}
         <details className="source-details"><summary>Source · {sourceLabel(row)}</summary>
           {row.quote?<blockquote>{row.quote}</blockquote>:<p className="muted">No passage recorded for this row.</p>}
           {row.conditions.length?<ul>{row.conditions.map((c,i)=><li key={i}>{c}</li>)}</ul>:null}

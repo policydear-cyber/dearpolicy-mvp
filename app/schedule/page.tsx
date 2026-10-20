@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
+import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Benefits: what the household's documents say each policy pays.
  *
@@ -22,6 +23,8 @@ type Benefit={
   needsConfirmation:boolean;attention:"confirm"|"unreadable"|null;
   calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
   documentName:string;insurer:string|null;owners:string[];
+  /** Two documents print different amounts for this benefit: drawn as one either/or block, never a total. */
+  alternatives?:AlternativeAmounts|null;
 };
 type Condition={id:string;policyId:string;documentName:string;cover:string|null;kind:string;description:string;effect:string;sourcePage:number|null;quote:string};
 type Member={id:string;display_name:string;relationship:string};
@@ -152,8 +155,10 @@ export default function BenefitsPage(){
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
               <div className="benefit-head"><strong>{benefit.benefitName}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>
-              <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
-              {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
+              {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
+                <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
+                {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
+              </>}
               {benefit.attention==="unreadable"&&CLARIFIABLE.has(benefit.formulaKind)&&<UnreadableAmount benefit={benefit} onSaved={async(message)=>{setStatus(message);await load();}} />}
               <details className="source-details">
                 <summary>Source{benefit.sourcePage?` · page ${benefit.sourcePage}`:""} · {benefit.documentName}</summary>
