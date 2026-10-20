@@ -2262,3 +2262,36 @@ of Git). No paid model calls.
 
 **Ready to switch on, apart from the one paid smoke test it still needs.** Safe to merge. R41-1 and R41-2 are optional
 tightening.
+
+---
+
+# Round 42: PR #71 (simple chat) at `2717c76`, re-check of round 41
+
+Method: local tsx probes of `statesMoney` and `verifyAnswer` with a synthetic certificate that prints "S$600,000",
+"S$1,250" and "Claims hotline: 6333 1234". No paid model calls.
+
+## Round 41 items
+
+- **R41-1: fixed.** Now dropped: "She gets 2000", "She gets 1999", "Several thousands", "pays hundreds". Still kept as
+  dates: "from 2026", "of 2023", "in October 2022". "Twelve fifty" and "One twenty k" still pass; accepted as Low.
+- **R41-2: works for real numbers.** "Call on 6333 1234 to claim" and "Call the hotline at 1234" are kept. A sentence that
+  also states money is still dropped ("Call 6333 1234 and expect 1250").
+
+## Findings
+
+**R42-1 (Low-Medium): the R41-2 exemption accepts a printed money figure as a phone or policy number.** Kept as next
+steps: "Call 1250 to claim the ambulance fee.", "Call 600000 about your sum insured.", "Quote policy no. 1250 for the
+ambulance.", "Claim no. 600000 applies." The cause is that `labelledNumbersRead` (`verify.ts`) joins every digit in each
+cited excerpt into one string and checks whether the number is inside it. So "1250" matches "S$1,250", and any substring
+across neighbouring numbers matches too. A reader is unlikely to take "Call 1250" as an amount, but it is a path for a
+figure around the money rule and the fix is small: compare whole numbers, not substrings, and never accept a number that
+the excerpt prints with a currency sign. Safer still: accept it only when the excerpt prints the same label (hotline,
+tel, phone, fax, policy/certificate/claim no.) directly before that number.
+
+**R42-2 (Low, usefulness):** "The 2026 schedule applies." is now dropped (a year before a noun, with no introducing word),
+and "See pp. 113 to 115." is dropped because the second page number has no "page" before it. Acceptable.
+
+## Verdict on PR #71 at `2717c76`
+
+**Safe to merge. Ready to switch on once R42-1 is fixed** (a few lines in `labelledNumbersRead`), apart from the one paid
+smoke test. Everything else from rounds 36 to 41 holds.
