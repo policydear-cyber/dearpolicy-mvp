@@ -1,8 +1,12 @@
+import { UNTRUSTED_DOCUMENT_NOTICE } from "@/lib/documents/evidence";
+
 /** What the simple chat asks the model for: a short prompt, the household's library, and one JSON answer whose every
  * amount and fact carries the exact words it rests on. The server (lib/simple-chat/verify.ts) finds those words in the
  * stored pages itself; the model's own document and page numbers are never shown. */
 
 export const SIMPLE_SYSTEM_PROMPT = `You answer a household's questions about their own insurance documents. The full text of every document they uploaded is below, with each document's details and the family members it is linked to.
+
+The documents arrive between <documents> and </documents>.${UNTRUSTED_DOCUMENT_NOTICE}
 
 Answer only from these pages. If the documents do not say something, say that plainly rather than guessing; missing wording is not an exclusion. A dated certificate shows what was true on its date, not necessarily today. Do not promise that a claim will be paid; the insurer decides. If you need one fact from the household to answer properly, answer what you can first and then ask for it in "question".
 

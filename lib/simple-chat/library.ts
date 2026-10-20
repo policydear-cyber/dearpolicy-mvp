@@ -86,25 +86,27 @@ export async function loadHousehold(accountId: string): Promise<Household> {
   return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded);
 }
 
-const attr = (name: string, value: string | null | undefined) => (value ? ` ${name}="${value.replace(/"/g, "'")}"` : "");
+/** Uploaded text is data: < and > are escaped so a page cannot close or open a document tag (R36-4). */
+export const escapeText = (s: string) => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const attr = (name: string, value: string | null | undefined) => (value ? ` ${name}="${escapeText(value.replace(/"/g, "'"))}"` : "");
 
 /** Documents are numbered D1, D2, ... in library order; the model cites them by that id. */
 export const documentId = (index: number) => `D${index + 1}`;
 
 export function renderDocument(doc: HouseholdDocument, index: number): string {
-  const head = `<document id="${documentId(index)}" name="${doc.name.replace(/"/g, "'")}"` +
+  const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
     attr("linked_people", doc.linkedPeople.join(", ")) + attr("superseded", doc.supersededAt) +
     (doc.processingStatus && doc.processingStatus !== "ready" ? attr("reading_status", doc.processingStatus) : "") + ">";
   const pages = doc.pages.length
-    ? doc.pages.map((p) => `<page n="${p.page}">\n${p.text}\n</page>`).join("\n")
+    ? doc.pages.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`).join("\n")
     : "<no_readable_text/>";
   return `${head}\n${pages}\n</document>`;
 }
 
 export function renderLibrary(household: Household): string {
   const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
-  return `<household_members>${people}</household_members>\n<documents>\n${household.documents.map(renderDocument).join("\n")}\n</documents>`;
+  return `<household_members>${escapeText(people)}</household_members>\n<documents>\n${household.documents.map(renderDocument).join("\n")}\n</documents>`;
 }

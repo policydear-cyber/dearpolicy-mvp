@@ -41,11 +41,13 @@ function squash(s: string): { text: string; at: number[] } {
 }
 const fragmentsOf = (quote: string) => quote.split(/\s*(?:\.{3}|…)\s*/).map((f) => squash(f).text).filter((f) => f.length >= 4);
 
-export type Found = { docIndex: number; page: number; excerpt: string };
+/** Where a quote was found: the document, the stored page, the stored words, and where on the page they start. */
+export type Found = { docIndex: number; page: number; excerpt: string; offset: number };
 
 /** Where the quote is printed: every fragment on one page, in order. The model's document is tried first, then the rest. */
 export function locateQuote(household: Household, quote: string, preferred: number | null): Found | null {
-  const frags = fragmentsOf(quote);
+  // The library is sent with < and > escaped (library.ts); a quote copied from it is read back unescaped.
+  const frags = fragmentsOf(quote.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"));
   if (!frags.length) return null;
   const order = household.documents.map((_, i) => i);
   if (preferred != null && preferred >= 0 && preferred < order.length) order.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : a - b));
@@ -61,7 +63,7 @@ export function locateQuote(household: Household, quote: string, preferred: numb
       }
       if (!ok) continue;
       const excerpt = page.text.slice(sq.at[start], sq.at[end - 1] + 1).replace(/[ \t]+/g, " ").trim();
-      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt };
+      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt, offset: sq.at[start] };
     }
   }
   return null;
@@ -72,6 +74,27 @@ const CENT = (n: number) => Math.round(n * 100);
 const sameValue = (a: number, b: number) => CENT(a) === CENT(b);
 /** Every number printed in a text (money or not), as values. */
 const numbersIn = (text: string) => [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => Number(m[0].replace(/,/g, ""))).filter(Number.isFinite);
+/** What follows a number that is a count, a rate or a percentage, never money (R36-1: "25%", "30 days"). */
+const NOT_MONEY_AFTER = /^\s*(?:%|per\s?cent|percent|days?|nights?|weeks?|months?|years?|yrs?|times|x\b|hours?|visits?|sessions?|children|child|persons?|cm|mm|kg|km|years? old)/i;
+/** Numbers printed without a currency sign that can be money: with thousands separators, or of 3+ digits, or followed by
+ * "dollars" / "SGD" -- never a percentage, a count, a year or a page number. */
+export function bareMoneyNumbers(text: string): number[] {
+  const out: number[] = [];
+  for (const m of (text ?? "").matchAll(/(?<![\w.$,])\d[\d,]*(?:\.\d+)?(?![\d,]*\d)/g)) {
+    const raw = m[0].replace(/,$/, ""), at = m.index ?? 0, after = text.slice(at + raw.length);
+    const before = text.slice(Math.max(0, at - 6), at);
+    if (/(?:S|US|HK|A|NZ|SG)?\$\s?$|(?:SGD|USD|RM)\s?$/i.test(before)) continue; // a money figure, read by moneyFiguresIn
+    if (NOT_MONEY_AFTER.test(after) || /page\s*$|no\.?\s*$/i.test(before)) continue;
+    const value = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(value)) continue;
+    const dollars = /^\s*(?:dollars?|SGD)\b/i.test(after);
+    if (!dollars && /^(?:19|20)\d\d$/.test(raw)) continue;
+    if (dollars || /,\d{3}/.test(raw) || raw.replace(/\D/g, "").length >= 3) out.push(value);
+  }
+  return out;
+}
+/** Money in a text: figures with a currency, and the bare numbers that can be money. */
+const moneyValuesIn = (text: string) => [...moneyFiguresIn(text).map((f) => f.value), ...bareMoneyNumbers(text)];
 
 type Currency = { sign: string; resolved: boolean };
 const SIGN: Record<string, string> = { SGD: "S$", USD: "US$", MYR: "RM", HKD: "HK$", AUD: "A$", EUR: "€", GBP: "£", JPY: "¥", "$": "$" };
@@ -88,14 +111,45 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 
 type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null };
 
+const MONEY_RAW = /(?:\b(?:SGD|USD|MYR)\s?|\b(?:S|SG|US|HK|A|NZ)\$\s?|RM\s?|(?<![A-Za-z$])\$\s?)\d[\d,]*(?:\.\d+)?/gi;
+const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
+
+/** The sum a percentage on this page is a percentage of (R36-2): the nearest "% of S$5,000" or "Benefit Limit: S$5,000"
+ * printed above (or in) the quoted row on the same page; or "sum insured" when the row's heading is "% of Sum Insured". */
+function rowBase(pageText: string, end: number): { value: number; raw: string } | "sum_insured" | null {
+  const above = pageText.slice(0, end);
+  let best: { at: number; value: number; raw: string } | null = null;
+  for (const re of [/%\s*of\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi, /\blimit\s*:?\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi])
+    for (const m of above.matchAll(re)) if (!best || (m.index ?? 0) > best.at) best = { at: m.index ?? 0, value: valueOf(m[1]), raw: m[1] };
+  const si = [...above.matchAll(/%\s*of\s*(?:the\s*)?sum\s*insured/gi)].at(-1);
+  if (si && (!best || (si.index ?? 0) > best.at)) return "sum_insured";
+  return best ? { value: best.value, raw: best.raw } : null;
+}
+/** Whether `value` is printed as this person's sum insured for the same plan (a line naming "sum insured" in a document of
+ * that plan that is linked to the person, or the quote's own document when it is linked to nobody). */
+function printedSumInsured(household: Household, doc: HouseholdDocument, person: string | null, value: number): boolean {
+  const plan = (doc.productName ?? "").trim().toLowerCase();
+  const docs = household.documents.filter((d) => d === doc || (plan && (d.productName ?? "").trim().toLowerCase() === plan));
+  return docs.some((d) => {
+    const forPerson = person ? d.linkedPeople.some((p) => baseName(p) === person) : d.linkedPeople.length <= 1;
+    return forPerson && d.pages.some((p) => p.text.split("\n").some((line) => /sum\s*insured/i.test(line) && moneyValuesIn(line).some((n) => sameValue(n, value))));
+  });
+}
+
 /** The amount a statement may show, or why it may not. */
-function checkAmount(st: ModelStatement, found: Found, doc: HouseholdDocument): { ok: true; amount: NonNullable<Checked["amount"]> } | { ok: false; why: string } {
+function checkAmount(st: ModelStatement, found: Found, household: Household, person: string | null): { ok: true; amount: NonNullable<Checked["amount"]> } | { ok: false; why: string } {
+  const doc = household.documents[found.docIndex];
   if (st.percentOf && st.percentOf.percent > 0) {
     const pct = st.percentOf.percent;
     if (!new RegExp(`(?<![\\d.])${String(pct).replace(".", "\\.")}\\s?(?:%|per\\s?cent)`, "i").test(found.excerpt)) return { ok: false, why: "the percentage is not in the quoted words" };
     const base = moneyFiguresIn(st.percentOf.baseAmount)[0]?.value ?? numbersIn(st.percentOf.baseAmount)[0];
-    if (base == null || !doc.pages.some((p) => numbersIn(p.text).some((n) => sameValue(n, base)))) return { ok: false, why: "the sum it is a percentage of is not printed in that document" };
-    const cur = currencyOf(st.percentOf.baseAmount, doc.pages.map((p) => p.text).join("\n"));
+    if (base == null) return { ok: false, why: "no sum given for the percentage" };
+    const page = doc.pages.find((p) => p.page === found.page)!;
+    const printed = rowBase(page.text, found.offset + found.excerpt.replace(/…$/, "").length);
+    if (printed === "sum_insured") {
+      if (!printedSumInsured(household, doc, person, base)) return { ok: false, why: "the sum is not printed as this person's sum insured for this plan" };
+    } else if (!printed || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
+    const cur = currencyOf(printed === "sum_insured" ? st.percentOf.baseAmount : printed.raw, printed === "sum_insured" ? doc.pages.map((p) => p.text).join("\n") : page.text);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
   }
@@ -106,7 +160,8 @@ function checkAmount(st: ModelStatement, found: Found, doc: HouseholdDocument): 
   if (figures.length > 1 || plain.length > 1) return { ok: false, why: "an amount must be one figure" };
   const value = figures[0]?.value ?? plain[0];
   if (value == null) return { ok: false, why: "no amount given" };
-  if (!numbersIn(found.excerpt).some((n) => sameValue(n, value)) && !moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value))) return { ok: false, why: "the amount is not in the quoted words" };
+  // Only money in the quote counts: a percentage, a day count, an age or a page number is never an amount (R36-1).
+  if (!moneyValuesIn(found.excerpt).some((n) => sameValue(n, value))) return { ok: false, why: "the amount is not printed as money in the quoted words" };
   const cur = currencyOf(raw, found.excerpt);
   return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
 }
@@ -124,7 +179,11 @@ export function matchMember(household: Household, person: string | null): string
 }
 
 // ------------------------------------------------------------------ sentences that add or stretch amounts
-const RANGE = /\d\s*(?:-|–|—|to|or up to)\s*(?:S\$|SGD|US\$|\$)?\s*\d|\bbetween\b[^.;]*\d[^.;]*\band\b[^.;]*\d|\bfrom\b[^.;]*\d[^.;]*\bto\b[^.;]*\d/i;
+const M = String.raw`(?:(?:SGD|USD|MYR)\s?|(?:S|SG|US|HK|A|NZ)?\$\s?|RM\s?)\d[\d,]*(?:\.\d+)?`, N = String.raw`\d[\d,]*(?:\.\d+)?`;
+/** A range with at least one money figure in it: "S$1,250 to S$2,000", "S$1,250-2,000", "1,250 to S$2,000", "between ... and ...". */
+const RANGE = new RegExp(`${M}\\s*(?:-|–|—|to|or up to)\\s*(?:${M}|${N})|${N}\\s*(?:-|–|—|to)\\s*${M}|\\bbetween\\b[^.;]*\\d[^.;]*\\band\\b[^.;]*\\d|\\bfrom\\b[^.;]*${M}[^.;]*\\bto\\b[^.;]*\\d`, "i");
+/** Words that add amounts together. */
+const ADDING = /\bplus\b|\bin total\b|\btotal(?:s|ling| of)?\b|\btogether\b|\baltogether\b|\bcombined\b|\badds? up\b|\bsum of\b|\bin all\b|\boverall\b/i;
 /** Whether `value` is the sum of two or more of the given amounts. */
 function isSumOf(value: number, amounts: number[]): boolean {
   const xs = amounts.slice(0, 14).map(CENT), target = CENT(value);
@@ -140,12 +199,16 @@ function isSumOf(value: number, amounts: number[]): boolean {
 /** A sentence is kept only if every money figure in it is one of `allowed`, none is a total of the answer's amounts,
  * and it gives no range between two figures. */
 export function sentenceProblem(sentence: string, allowed: number[], answerAmounts: number[]): string | null {
-  const figs = moneyFiguresIn(sentence);
-  if (!figs.length) return null;
-  if (figs.length >= 2 && RANGE.test(sentence)) return "a range between amounts";
+  const signed = moneyFiguresIn(sentence).map((f) => f.value);
+  const dollars = /\d\s*(?:dollars?|SGD)\b/i.test(sentence);
+  if (!signed.length && !dollars) return null;
+  // With money in the sentence, an unsigned number that can be money counts too (R36-3: "S$1,250 to 2,000").
+  const figs = [...signed, ...bareMoneyNumbers(sentence)];
+  if (RANGE.test(sentence)) return "a range between amounts";
+  if (figs.length >= 2 && ADDING.test(sentence)) return "amounts added together";
   for (const f of figs) {
-    if (allowed.some((a) => sameValue(a, f.value))) continue;
-    if (isSumOf(f.value, answerAmounts)) return "a total of separate amounts";
+    if (allowed.some((a) => sameValue(a, f))) continue;
+    if (isSumOf(f, answerAmounts)) return "a total of separate amounts";
     return "an amount no checked statement gives";
   }
   return null;
@@ -200,9 +263,13 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
-      const doc = household.documents[found.docIndex];
-      const r = checkAmount(st, found, doc);
-      if (!r.ok) { report.dropped.push({ kind: st.kind, why: r.why, text: st.text }); continue; }
+      const r = checkAmount(st, found, household, person);
+      if (!r.ok) {
+        report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
+        // A percentage whose sum could not be confirmed is kept as the printed percentage, without a worked-out amount.
+        if (st.percentOf) checked.push({ s: { ...st, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found, amount: null, person, note: null });
+        continue;
+      }
       checked.push({ s: st, found, amount: r.amount, person, note: null });
     } else if (st.kind === "fact") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
@@ -242,9 +309,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
     const doc = c.found ? household.documents[c.found.docIndex] : null;
     // A statement's own sentence may name its amount (and, for a worked-out percentage, the sum it is a percentage of).
     const base = c.amount?.illustration && c.s.percentOf ? moneyFiguresIn(c.s.percentOf.baseAmount).map((f) => f.value) : [];
-    const own = c.amount ? [c.amount.value, ...base] : c.found ? moneyFiguresIn(c.found.excerpt).map((f) => f.value) : amounts;
+    const own = c.amount ? [c.amount.value, ...base] : c.found ? moneyValuesIn(c.found.excerpt) : amounts;
     let text = keepSentences(c.s.text, own, amounts, report.sentencesLeftOut);
     if (!text && c.amount && doc) text = `${c.amount.text}, as printed in ${docLabel(household, doc)}.`;
+    if (!text && c.found && doc) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     if (!text) return;
     const conditions = c.s.conditions.map((x) => keepSentences(x, own, amounts, report.sentencesLeftOut)).filter(Boolean);
     let source: AnswerStatement["source"] = null;

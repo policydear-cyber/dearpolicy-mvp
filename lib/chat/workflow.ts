@@ -151,6 +151,8 @@ export type ChatRequest={
 };
 export type ChatContext={
   request:ChatRequest;family:ClaimPerson[];people:ClaimPerson[];
+  /** Set by the simple chat's prepare (lib/simple-chat/hook.ts): the turn runs on the path that prepared it, whatever the switch reads by then. */
+  chatPath?:"simple";
   conversation:Conversation;token:HistoryToken;ambiguity?:ReturnType<typeof resolveClaimPerson>;
   /** Product names of the household's ready documents. */
   holdings:string[];
@@ -1574,7 +1576,7 @@ function asksSideQuestion(text:string,state:ConversationState,holdings:string[])
   return true;
 }
 async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string;side?:boolean}):Promise<ChatResult>{
-  if(simpleChatEnabled())return (await import("@/lib/simple-chat/hook")).runSimpleChat(context,{check:options?.check,jobId:options?.jobId});
+  if(context.chatPath==="simple")return (await import("@/lib/simple-chat/hook")).runSimpleChat(context,{check:options?.check,jobId:options?.jobId});
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).runLoopChat(context,{save:saveTurn,check:options?.check,jobId:options?.jobId});
   const {conversation}=context;let {request}=context;
   if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);

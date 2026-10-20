@@ -37,7 +37,7 @@ export async function prepareSimpleChat(request: ChatRequest): Promise<ChatConte
   if (previous && request.conversationRevision != null && previous.revision !== request.conversationRevision) throw new ChatConflict("This chat changed. Reopen it before sending another message.");
   const conversation = previous ?? (await openConversation({ accountId: request.accountId, memberId: request.familyMemberId ?? null, title: request.question }));
   const token = await historyToken(request.accountId, conversation.family_member_id);
-  return { request: { ...request, submittedQuestion: request.submittedQuestion ?? request.question }, family, people: family, conversation, token, holdings: [] };
+  return { request: { ...request, submittedQuestion: request.submittedQuestion ?? request.question }, family, people: family, conversation, token, holdings: [], chatPath: "simple" };
 }
 
 /** The conversation so far, as the household saw it (this household's rows only). */
