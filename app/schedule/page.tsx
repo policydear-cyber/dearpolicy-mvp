@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
+import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
 
 /** Benefits: what the household's documents say each policy pays.
@@ -49,6 +50,8 @@ export default function BenefitsPage(){
    * with a "Try again" that reads them now, instead of "still being read"
    * forever. */
   const [readStalled,setReadStalled]=useState(false);
+  const [readingDocs,setReadingDocs]=useState<ReadingDocument[]>([]);
+  const stuck=stuckDocuments(readingDocs);
   const [retrying,setRetrying]=useState(false);
   const [status,setStatus]=useState("");
 
@@ -73,7 +76,7 @@ export default function BenefitsPage(){
     try{
       const p=await fetch("/api/benefits/index",{cache:"no-store"}).then(r=>r.json());
       const unread=Array.isArray(p.unread)&&p.unread.length>0;
-      setStillReading(unread);if(!unread)setReadStalled(false);
+      setStillReading(unread);setReadingDocs(Array.isArray(p.documents)?p.documents:[]);if(!unread)setReadStalled(false);
       return unread;
     }catch{setStillReading(false);return false;}
   }
@@ -121,7 +124,9 @@ export default function BenefitsPage(){
     </div></header>
 
     {error&&<div className="alert error" role="alert"><strong>Your benefits could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
-    {stillReading&&(readStalled&&!retrying
+    {stillReading&&(stuck.length&&!retrying
+      ?<div className="unread-documents stalled" role="status"><div><strong>{stuckTitle(stuck,"this page")}</strong><StuckDocuments stuck={stuck}/><span>{stuck.length===1?"Its":"Their"} benefits are missing below. You can still ask about {stuck.length===1?"it":"them"} in Ask DearPolicy.</span></div><button type="button" className="button secondary compact" onClick={()=>void retryReading()}>Try again</button></div>
+      :readStalled&&!retrying
       ?<div className="unread-documents stalled" role="status"><div><strong>Some documents couldn&rsquo;t be read for this page yet.</strong><span>Their benefits are missing below. You can still ask about them in Ask DearPolicy.</span></div><button type="button" className="button secondary compact" onClick={()=>void retryReading()}>Try again</button></div>
       :<div className="unread-documents" role="status"><div><strong>{retrying?"Reading your documents again…":"Some of your documents are still being read."}</strong><span>Their benefits will appear here when they are ready.</span></div></div>)}
 
@@ -138,7 +143,7 @@ export default function BenefitsPage(){
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading your benefits…</div>
-      :!benefits.length?<div className="empty-card">{stillReading?(readStalled&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
+      :!benefits.length?<div className="empty-card">{stillReading?((readStalled||stuck.length)&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
