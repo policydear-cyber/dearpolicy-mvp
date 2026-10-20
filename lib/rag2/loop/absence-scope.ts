@@ -284,7 +284,7 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
   // (what the certificate lists FOR THIS PERSON -- critic round 5 A2: the product headings with a row naming them under it, never a
   // spouse's -- and the date those rows are printed as of: one date, or G1 does not fire)
   // (critic round 6 R6-1: a row is this person's when it names them -- the display or preferred name, word-bounded, or every word of
-  // the display name in any order ("Lee Wei Ming, Daniel" for "Daniel Lee Wei Ming") -- and names no other member of the household)
+  // the display name in any order ("Tan, John" for "John Tan") -- and names no other member of the household)
   const word = (w: string) => new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}(?![\\p{L}])`, "iu");
   const names = (m: (typeof members)[number]) => [m.displayName, m.preferredName].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => flat(n));
   const namesMember = (l: string, m: (typeof members)[number]) => { const ws = flat(m.displayName).split(/[\s,]+/).filter((w) => w.length >= 2); return names(m).some((n) => word(n).test(l)) || (ws.length >= 2 && ws.every((w) => word(w).test(l))); };

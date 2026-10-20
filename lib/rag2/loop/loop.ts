@@ -1678,7 +1678,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
     if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
     if (Array.isArray(given) && given.some(isContactStep)) return null;
-    const asked = familiesOf(input.message);
+    // (live "what do i do now": a follow-up that names no event takes the event from this conversation's earlier messages)
+    const asked = familiesOf(input.message).size ? familiesOf(input.message) : familiesOf(userTexts.join(" "));
     if (!asked.size) return null;
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
     const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
@@ -2570,7 +2571,22 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     (trace.adjusted ??= []).push("the reply ended without the absence refused for a partly stored scope: the server's statement of what was read was added");
     return { kind: "final", composed: { ...c0, sentences: [...c0.sentences, ...c.sentences], absenceChecks: [...(c0.absenceChecks ?? []), ...(c.absenceChecks ?? [])], notes: c0.notes.filter((n) => n !== DROPPED_NOTE) } };
   };
-  let done = await requirementQuestion(conditionQuestion(withInventory(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null)))));
+  /** Live finding (20 Oct, "what do i do now", turn 7): a household that asks what to do next, when nothing the reply said could be kept,
+   * gets the next steps this conversation already gave -- the server's own rendered steps, newest first -- with the question still open,
+   * instead of "I couldn't confirm an answer to that". Labelled as from the earlier answer; nothing new is stated. Only for the benefits
+   * contract, and only when the reply has no sentence and no step of its own. */
+  const whatToDo = (r: LoopReply | null): LoopReply | null => {
+    if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
+    if (r.composed.sentences.length || r.composed.nextSteps.length) return r;
+    const earlier = [...state.turns].filter((t) => t.turn < state.turn).reverse().flatMap((t) => t.toolCalls.filter((c) => c.ok && (c.name === "final_answer" || c.name === "ask_user") && !c.args?.by).flatMap((c) => (Array.isArray(c.args?.next_steps) ? (c.args.next_steps as unknown[]) : [])));
+    const steps = [...new Set(earlier.filter((x): x is string => typeof x === "string" && !!x.trim() && !/^\s*contact:/i.test(x)))];
+    if (!steps.length) return r;
+    const open = state.pending?.kind === "fact" ? state.pending.question : null;
+    const notes = [`Here ${steps.length > 1 ? "are the next steps" : "is the next step"} from my earlier answer.`, ...(open ? [`One thing I asked is still open: “${open}”`] : [])];
+    (trace.adjusted ??= []).push(`the household asked what to do and the reply kept nothing: the next steps this conversation already gave were shown again (${steps.length})`);
+    return { ...r, composed: { ...r.composed, notes: [...notes, ...r.composed.notes.filter((n) => n !== DROPPED_NOTE)], nextSteps: steps } };
+  };
+  let done = await requirementQuestion(conditionQuestion(withInventory(whatToDo(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null))))));
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
