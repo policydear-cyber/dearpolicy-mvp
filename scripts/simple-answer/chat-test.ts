@@ -8,7 +8,7 @@ import { readHousehold, renderLibrary, type Household } from "../../lib/simple-c
 import { alternating, anthropicRequest, ledgerUsage, type SimpleModel } from "../../lib/simple-chat/model";
 import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-chat/prompt";
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
-import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, LEFT_OUT_SENTENCE, locateQuote, matchMember, readModelAnswer, sentenceProblem, verifyAnswer } from "../../lib/simple-chat/verify";
+import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
 import { runSimpleChat } from "../../lib/simple-chat/hook";
 import type { ChatContext } from "../../lib/chat/workflow";
 import { guardChatAnswer } from "../../lib/chat/output-guard";
@@ -112,19 +112,18 @@ async function main() {
     assert.equal(cards[0].kind, "calculation");
     const prose = [answer.summary, answer.bottomLine, ...answer.nextSteps].join(" ");
     assert.doesNotMatch(prose, /2,000|to S\$/);
-    assert.ok(report.sentencesLeftOut.includes("a range between amounts") && report.sentencesLeftOut.includes("a total of separate amounts"));
-    assert.ok(answer.statements!.some((s) => s.text === LEFT_OUT_SENTENCE));
+    // No sentence the model wrote keeps an amount: the range, the total and the next step's figure are all gone.
+    assert.ok(report.sentencesLeftOut.length >= 3);
+    assert.doesNotMatch(prose, /S\$/);
+    assert.ok(answer.statements!.filter((s) => !s.id.startsWith("not-total")).every((s) => !statesMoney(s.text)));
     assert.ok(answer.statements!.some((s) => /not a total/.test(s.text) && /S\$1,250, S\$500 and S\$250/.test(s.text)));
     assert.match(answer.bottomLine!, /separate; they are not added together/);
     assert.equal(answer.verifiedPolicyFactsOnly, true);
   });
 
-  await check("sentence check: range, total and unprinted figures are left out; listed alternatives are kept", () => {
-    assert.equal(sentenceProblem("You get S$1,250 to S$2,000.", [1250, 2000], [1250, 750]), "a range between amounts");
-    assert.equal(sentenceProblem("In all S$1,750.", [1250, 500], [1250, 500]), "a total of separate amounts");
-    assert.equal(sentenceProblem("It pays S$9,999.", [1250], [1250]), "an amount no checked statement gives");
-    assert.equal(sentenceProblem("It pays S$1,250 or S$120,000, depending on the plan.", [1250, 120000], [1250, 120000]), null);
-    assert.equal(sentenceProblem("No amount here.", [], []), null);
+  await check("the written answer carries no money: any sentence stating an amount is left out", () => {
+    for (const x of ["You get S$1,250 to S$2,000.", "In all S$1,750.", "It pays 1,250 dollars.", "Roughly 121,250 in all.", "It pays $90."]) assert.equal(statesMoney(x), true, x);
+    for (const x of ["It pays 20% of the sum insured for up to 30 days.", "See page 13 of the 2026 summary.", "No amount here."]) assert.equal(statesMoney(x), false, x);
   });
 
   await check("either/or only for one person's amounts on one row of one page", () => {
@@ -135,7 +134,7 @@ async function main() {
     const cards = answer.statements!.filter((s) => s.amount);
     assert.equal(cards.length, 2);
     assert.ok(cards.every((s) => s.group?.id === "g1" && s.group.note === ALTERNATIVES_NOTE));
-    assert.match(answer.bottomLine!, /S\$300 or S\$800/);
+    assert.ok(!statesMoney(answer.bottomLine!));
   });
 
   await check("an amount not printed in its quote, a range as one amount, or an unfound quote is left out and said so", () => {
@@ -253,20 +252,20 @@ async function main() {
     assert.ok(wrong.statements!.some((s) => s.kind === "fact" && s.source?.page === 13 && !/600,000|150,000/.test(s.text)));
     assert.ok(wrong.statements!.some((s) => s.text === LEFT_OUT_AMOUNT));
     assert.doesNotMatch(wrong.bottomLine!, /150,000/);
-    const right = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
+    // A percentage of the sum insured is never multiplied: it stays the printed percentage.
+    const si = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
       st({ kind: "amount", text: "Death pays 100% of the sum insured.", person: "Ah Kow", document: "D1", quote: "Death due to Accident\t100% of Sum Insured", percentOf: { percent: 100, baseAmount: "S$600,000" } }),
-      st({ kind: "amount", text: "Death pays 100% of the sum insured.", person: "Mei Mei", document: "D1", quote: "Death due to Accident\t100% of Sum Insured", percentOf: { percent: 100, baseAmount: "S$600,000" } }),
     ] }).answer;
-    // Ah Kow's sum insured is printed on his own plan; Mei Mei is not linked to it, so hers is not worked out.
-    assert.deepEqual(right.statements!.filter((s) => s.amount).map((s) => [s.amount!.text, s.personName]), [["S$600,000", "Lim Ah Kow"]]);
+    assert.equal(si.statements!.filter((s) => s.amount).length, 0);
+    assert.ok(si.statements!.some((s) => s.kind === "fact" && s.source?.page === 12));
+    assert.ok(!si.statements!.some((s) => s.text === LEFT_OUT_AMOUNT));
   });
 
-  await check("R36-3: unsigned second figures, unsigned totals and adding words are caught", () => {
-    const amounts = [1250, 120000, 750];
-    for (const s of ["You may get S$1,250-2,000 in total.", "You may get S$1,250 to 2,000.", "In total about 121,250 dollars.", "Together that is S$1,250 plus S$750.", "Between S$1,250 and S$2,000.", "It is up to S$121,250."])
-      assert.notEqual(sentenceProblem(s, amounts, amounts), null, s);
-    for (const s of ["The wrist pays S$1,250 for 30 days of cover.", "The ambulance cost is separate, S$750 per incident, from 1 Jan 2026.", "Wrist pays S$1,250 or S$120,000, depending on the plan."])
-      assert.equal(sentenceProblem(s, amounts, amounts), null, s);
+  await check("R36-3: unsigned second figures, unsigned totals and adding words never reach the answer", () => {
+    for (const x of ["You may get S$1,250-2,000 in total.", "You may get S$1,250 to 2,000.", "In total about 121,250 dollars.", "Together that is S$1,250 plus S$750.", "Between S$1,250 and S$2,000.", "It is up to S$121,250."]) {
+      const { answer } = verifyAnswer(HOUSE, { ...c2, bottomLine: x, nextSteps: [x] });
+      assert.ok(!statesMoney(answer.bottomLine!) && !answer.nextSteps.length, x);
+    }
   });
 
   await check("R36-4: document text is marked untrusted and cannot open or close a tag; quotes from it are still found", () => {
@@ -278,15 +277,14 @@ async function main() {
   });
 
   // Critic round 38 probes.
-  await check("R38-1: only the person's own coverage row for this kind of cover is a sum insured", () => {
-    const pct = (base: string, person = "Ah Kow") => verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
-      st({ kind: "amount", text: "Death pays 100% of the sum insured.", person, document: "D1", quote: "Death due to Accident\t100% of Sum Insured", percentOf: { percent: 100, baseAmount: base } }),
-    ] }).answer.statements!.filter((s) => s.amount).map((s) => s.amount!.text);
-    assert.deepEqual(pct("S$600,000"), ["S$600,000"]);
-    assert.deepEqual(pct("S$1,000,000"), []); // the life cover row, not accident
-    assert.deepEqual(pct("S$400,000"), []); // an "up to" line
-    assert.deepEqual(pct("S$10,000"), []); // a premium line
-    assert.deepEqual(pct("S$600,000", "Mei Mei"), []); // not her row
+  await check("R38-1 / round 39: a percentage of the sum insured and the person's printed sum insured are two cited facts, never multiplied", () => {
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "Death pays 100% of the sum insured.", person: "Ah Kow", document: "D1", quote: "Death due to Accident\t100% of Sum Insured", percentOf: { percent: 100, baseAmount: "S$400,000" } }),
+      st({ kind: "amount", text: "Ah Kow's personal accident sum insured.", person: "Ah Kow", document: "D2", quote: "Lim Ah Kow\tS$600,000\tAs of 01/01/2026", amount: "S$600,000" }),
+    ] });
+    const cards = answer.statements!.filter((s) => s.amount);
+    assert.deepEqual(cards.map((s) => [s.amount!.text, s.amount!.illustration, s.source!.policyName, s.source!.page]), [["S$600,000", false, "Test Extras", 1]]);
+    assert.ok(answer.statements!.some((s) => s.kind === "fact" && /100%/.test(s.text) && s.source?.page === 12));
   });
 
   await check("R38-2: a plan number or code is never an amount", () => {
@@ -296,10 +294,18 @@ async function main() {
     assert.equal(answer.statements!.filter((s) => s.amount).length, 0);
   });
 
-  await check("R38-3: unsigned ranges, 'at least ... as much as' and 'both pay' are caught", () => {
-    const amounts = [1250, 120000, 750];
-    for (const s of ["It is 1,250 to 120,000 dollars.", "At least S$1,250 and as much as S$120,000.", "Both pay, so S$1,250 and S$120,000."])
-      assert.notEqual(sentenceProblem(s, amounts, amounts), null, s);
+  await check("R38-3 / R39-2: no wording of a range, a total or both-paid keeps an amount in the prose", () => {
+    for (const x of ["It is 1,250 to 120,000 dollars.", "At least S$1,250 and as much as S$120,000.", "Both pay, so S$1,250 and S$120,000.", "You could receive S$1,250 alongside S$750.", "S$1,250, and on a separate claim S$750 more.", "Either S$1,250 or, if both apply, S$121,250."])
+      assert.equal(statesMoney(x), true, x);
+  });
+
+  await check("R39-1: a plan code under an (S$) column is never an amount", () => {
+    const house: Household = { ...HOUSE, documents: [...HOUSE.documents, { ...HOUSE.documents[1], policyId: "aaaaaaaa-0000-0000-0000-000000000003", name: "Table.pdf", productName: "Test Table", pages: [{ page: 4, text: "Benefit\t(S$)\nPlan A 500 Hospital cash\t100 per day" }] }] };
+    const { answer } = verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "Hospital cash.", person: "Ah Kow", document: "D3", quote: "Plan A 500 Hospital cash", amount: "S$500" }),
+      st({ kind: "amount", text: "Hospital cash a day.", person: "Ah Kow", document: "D3", quote: "Plan A 500 Hospital cash\t100 per day", amount: "S$100" }),
+    ] });
+    assert.equal(answer.statements!.filter((s) => s.amount).length, 0);
   });
 
   await check("ledger usage counts cache writes at twice the input price", () => {
@@ -331,12 +337,16 @@ async function main() {
         [["S$1,250", desmond, label, 13, null], ["S$500", desmond, label, 13, null], ["S$250", desmond, label, 13, null]]);
       assert.doesNotMatch([answer.summary, answer.bottomLine].join(" "), /2,000|to S\$/);
     });
-    await check("snapshot R38-1: the Benefit Summary's wrist 20% uses only Desmond's accident sum insured (S$600,000)", () => {
-      const base = (b: string) => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "Wrist pays 20%.", person: "Desmond", document: "D2", quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", percentOf: { percent: 20, baseAmount: b } }),
-      ] }).answer.statements!.filter((s) => s.amount).map((s) => [s.amount!.text, s.source!.page]);
-      assert.deepEqual(base("S$600,000"), [["S$120,000", 8]]);
-      for (const wrong of ["S$400,000", "S$10,000", "$50,000", "S$1,000,000", "S$350,000"]) assert.deepEqual(base(wrong), [], wrong);
+    await check("snapshot: Desmond's wrist 20% of sum insured and his S$600,000 sum insured are two cited facts, never multiplied", () => {
+      const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "A wrist fracture pays 20% of the sum insured.", person: "Desmond", document: "D2", quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", percentOf: { percent: 20, baseAmount: "S$600,000" } }),
+        st({ kind: "amount", text: "Desmond's group personal accident sum insured.", person: "Desmond", document: "D3", quote: "Tan Yi Chuen, Desmond S$600,000 As of 06/10/2022", amount: "S$600,000" }),
+      ] });
+      const cards = answer.statements!.filter((s) => s.amount);
+      assert.deepEqual(cards.map((s) => [s.amount!.text, s.amount!.illustration, s.source!.page]), [["S$600,000", false, 1]]);
+      assert.equal(real.documents.findIndex((d) => d.name === "Certificate of Insurance.pdf"), 2);
+      assert.ok(answer.statements!.some((s) => s.kind === "fact" && /20%/.test(s.text) && s.source?.page === 8));
+      assert.ok(!answer.statements!.some((s) => s.amount && /120,000|80,000|2,000|10,000/.test(s.amount.text)));
     });
     await check("snapshot R36-2: the wrist row's 25% is never applied to S$600,000", () => {
       const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [

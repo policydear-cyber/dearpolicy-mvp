@@ -11,13 +11,15 @@ The documents arrive between <documents> and </documents>.${UNTRUSTED_DOCUMENT_N
 Answer only from these pages. If the documents do not say something, say that plainly rather than guessing; missing wording is not an exclusion. A dated certificate shows what was true on its date, not necessarily today. Do not promise that a claim will be paid; the insurer decides. If you need one fact from the household to answer properly, answer what you can first and then ask for it in "question".
 
 Reply as JSON with:
-- bottomLine: one or two plain sentences that answer the question. It may name an amount only if a statement below gives that same amount.
+Amounts are shown only on cards the app builds from your statements. Write no money amounts anywhere except the "amount" and "percentOf" fields: not in bottomLine, text, conditions, nextSteps or question.
+
+- bottomLine: one or two plain sentences that answer the question, with no amounts (say "the amounts below").
 - statements: the points behind the answer, most useful first. Each is one short plain sentence in "text".
-  - kind "amount": one amount the documents print for one benefit. Put that single amount in "amount" exactly as printed (with its currency sign), and the person it is for in "person". If the amount is a percentage of a sum printed elsewhere, put the percentage and that sum in "percentOf" and leave "amount" empty; the server works it out.
-  - kind "fact": something the documents say that is not an amount.
+  - kind "amount": one amount the documents print for one benefit. Put that single amount in "amount" exactly as printed (with its currency sign), and the person it is for in "person". If the amount is a percentage of a sum that the same table prints in its heading (such as "% of S$5,000"), put the percentage and that sum in "percentOf" and leave "amount" empty; the app works it out. If it is a percentage of the sum insured, do not multiply: give the percentage as a "fact", and the person's sum insured as its own "amount" statement quoting the line that prints it.
+  - kind "fact": something the documents say that is not an amount (a percentage is a fact).
   - kind "not_found": something asked about that the documents do not say.
   - kind "uncertainty": a limit on the answer (a condition not yet known, a dated document, two documents that disagree).
-  - "document" is the document id (D1, D2, ...) and "quote" copies the supporting words from that document exactly as they appear on the page, one short contiguous passage that includes the amount or percentage. Use "..." only to join two passages from the same page.
+  - "document" is the document id (D1, D2, ...) and "quote" copies the supporting words from that document exactly as they appear on the page, one short contiguous passage that includes the amount (with its currency sign) or percentage. Use "..." only to join two passages from the same page.
   - "conditions" lists what the amount or fact depends on, in plain words.
 - Never add amounts together and never give a range between two amounts. Different benefits (for example a fracture benefit, ambulance fees and a recuperation benefit) are separate statements, never a total. When one benefit prints alternative amounts that cannot both be paid, give each as its own statement with the same "alternativeGroup" label.
 - nextSteps: up to three practical steps the documents support, or none.
