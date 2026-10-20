@@ -16,6 +16,8 @@ import { CERT, call } from "../../../../scripts/fixtures/reliable-chat/fracture-
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
 const DAN = FX.M.daniel.id;
 const MSG = "daniel tripped on the kerb and fell, his GP bill is $800, can he claim for this?";
+// (SHAPE=1: the answer's fields as well -- bottom line and statements)
+const shape = (a: any) => process.env.SHAPE ? `\n  BOTTOM LINE: ${a?.bottomLine ?? "(none)"}\n${(a?.statements ?? []).map((x: any) => `  [${x.kind}]${x.group ? ` {${x.group.kind}}` : ""} ${x.text.slice(0, 200)}${x.amount ? `\n      amount ${x.amount.text} for ${x.personName}; ${x.conditions.length} conditions: ${JSON.stringify(x.conditions).slice(0, 300)}` : ""}`).join("\n")}` : "";
 const visible = (a: any) => [a?.summary, ...(a?.details ?? []), ...(a?.questions ?? []).map((q: any) => q.text ?? ""), ...uniqueSteps(a?.nextSteps)].filter(Boolean).join("\n");
 
 const PS_P20 = ["SECTION 4: TRAVEL ASSISTANCE", "Emergency Outpatient Treatment Overseas", "We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to $1,000 per Accident."].join("\n");
@@ -56,7 +58,7 @@ async function main() {
     const a = await h.send(msg, {});
     const s = await h.savedAnswer(a.conversationId!);
     const tr = s.state.ragLoop.turns.at(-1);
-    console.log(`\n=== ${name}\n${visible(s.answer)}\n  outcome: ${tr.outcome}\n  incomplete: ${JSON.stringify(tr.incomplete ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => `${String(d.sentence).slice(0, 60)} -- ${d.reason}`))}\n  calls: ${JSON.stringify((tr.toolCalls ?? []).map((c: any) => `${c.name}${c.ok ? "" : " ERR " + String(c.error ?? "").slice(0, 300)}`))}`);
+    console.log(`\n=== ${name}\n${visible(s.answer)}${shape(s.answer)}\n  outcome: ${tr.outcome}\n  incomplete: ${JSON.stringify(tr.incomplete ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => `${String(d.sentence).slice(0, 60)} -- ${d.reason}`))}\n  calls: ${JSON.stringify((tr.toolCalls ?? []).map((c: any) => `${c.name}${c.ok ? "" : " ERR " + String(c.error ?? "").slice(0, 300)}`))}`);
   } finally { installLoopModel(null); }
   }
 }

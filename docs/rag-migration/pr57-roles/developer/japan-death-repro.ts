@@ -11,6 +11,8 @@ import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = process.env.CONTRACT ?? "benefits";
+// (SHAPE=1: the answer's fields as well -- bottom line and statements)
+const shape = (a: any) => process.env.SHAPE ? `\n  BOTTOM LINE: ${a?.bottomLine ?? "(none)"}\n${(a?.statements ?? []).map((x: any) => `  [${x.kind}]${x.group ? ` {${x.group.kind}}` : ""} ${x.text.slice(0, 200)}${x.amount ? `\n      amount ${x.amount.text} for ${x.personName}; ${x.conditions.length} conditions: ${JSON.stringify(x.conditions).slice(0, 300)}` : ""}`).join("\n")}` : "";
 const visible = (a: any) => [a?.summary, ...(a?.details ?? []), ...uniqueSteps(a?.nextSteps)].filter(Boolean).join("\n");
 async function main() {
   setEnv(LL as any);
@@ -23,7 +25,7 @@ async function main() {
     const a = await h.send(sc.messages[0], {});
     const s = await h.savedAnswer(a.conversationId!);
     const tr = s.state.ragLoop.turns.at(-1);
-    console.log(`=== ${process.env.DEARPOLICY_CHAT_CONTRACT}\n${visible(s.answer)}\n  outcome: ${tr.outcome}\n  adjusted: ${JSON.stringify(tr.adjusted ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => d.reason))}`);
+    console.log(`=== ${process.env.DEARPOLICY_CHAT_CONTRACT}\n${visible(s.answer)}${shape(s.answer)}\n  outcome: ${tr.outcome}\n  adjusted: ${JSON.stringify(tr.adjusted ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => d.reason))}`);
   } finally { installLoopModel(null); }
 }
 main().catch((e) => { console.error(e); process.exit(1); });

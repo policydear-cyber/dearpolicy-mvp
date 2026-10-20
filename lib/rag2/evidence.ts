@@ -163,6 +163,29 @@ const FOOT_MARK = /(?:[*†‡§¶]+|[¹²³⁴⁵⁶⁷⁸⁹]|\((?:\d{1,2}|[a-
 const hasFigure = (t: string) => /\d/.test(t);
 const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{3,}|\d+(?:[.,]\d+)*/g) ?? []).map((w) => /^\d/.test(w) ? w.replace(/,/g, "") : w.replace(/(?:es|s|e)$/, "")));
 
+/** Answer shape (UX tester: the Simple Fracture footnote was cited as "... thumb, finger and palm are not"): where a SHOWN excerpt's line
+ * runs on -- it ends mid-sentence (a letter or a comma, not a figure, percentage or stop) and the next line is not a table line and starts
+ * in lower case ("covered.") -- it continues through that one short line to the end of its sentence. Used for what is
+ * displayed (a footnote's context line, excerptOf), never to choose the supporting span. Returns the end offset. */
+export function sentenceEnd(lines: Line[], at: number): number {
+  let end = lines[at].start + lines[at].text.trimEnd().length;
+  // (Critic R23-4: one continuation line only, and only a short one that ends the sentence -- "covered" / "covered." -- never a
+  // further lower-case line of another block)
+  const said = lines[at].text.trimEnd(), next = lines[at + 1];
+  if (!next || !/[A-Za-z,]$/.test(said) || !next.text.trim() || isTableLine(next.text) || !/^\s*[a-z]/.test(next.text)) return end;
+  const words = next.text.trim().split(/\s+/);
+  if (words.length > 6 || (words.length > 1 && !/[.!?;:]$/.test(next.text.trim()))) return end;
+  return next.start + next.text.trimEnd().length;
+}
+/** The excerpt shown for a span: the span, run on to the end of its sentence within `text` (sentenceEnd). */
+export function excerptOf(span: string, text: string): string {
+  const at = text.indexOf(span);
+  if (at < 0 || !span.trim()) return span;
+  const lines = linesOf(text);
+  const i = lines.findIndex((l) => l.start <= at + span.length && l.end >= at + span.length);
+  if (i < 0 || lines[i].start + lines[i].text.trimEnd().length !== at + span.trimEnd().length) return span;
+  return text.slice(at, sentenceEnd(lines, i));
+}
 /** Candidate supporting units of a passage: each table line whole, each prose line cut into sentences. */
 function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
   const out: EvidenceSpan[] = [];
@@ -274,8 +297,8 @@ export function contextFor(support: EvidenceSpan, pages: Map<number, string>): E
   const mark = support.text.match(new RegExp("\\S(" + FOOT_MARK.source + ")(?=\\s|$)"));
   if (mark) {
     const m = mark[1];
-    const foot = lines.find((l) => l.start !== lines[at]?.start && l.text.trimStart().startsWith(m));
-    if (foot) out.push(span(foot, support.onPage, "footnote"));
+    const fi = lines.findIndex((l) => l.start !== lines[at]?.start && l.text.trimStart().startsWith(m));
+    if (fi >= 0) { const f = span(lines[fi], support.onPage, "footnote"), to = sentenceEnd(lines, fi); out.push({ ...f, end: to, text: text.slice(f.start, to) }); }
   }
   return out;
 }

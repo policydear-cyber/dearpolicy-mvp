@@ -39,6 +39,8 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: "policy_deleted" |
     details: [], claimItems: [], citations: [], nextSteps: [], missingFacts: [], questions: [],
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
+    // (answer shape, Critic R23-1: an out-of-date answer keeps no amount card and no bottom line -- every reason comes through here)
+    statements: [], bottomLine: null,
     invalidated: { reason },
   } as ChatAnswer;
 }
