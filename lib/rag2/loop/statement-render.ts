@@ -114,7 +114,11 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
       const list = conds.length > 1 ? `${conds.slice(0, -1).join(", ")} and ${conds.at(-1)}` : conds[0] ?? "";
       return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}.`, evidence_ids: ev, value_ids: [] };
     }
-    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}.`, evidence_ids: ev, value_ids: [] };
+    // (PR #57 follow-up, UX L2: a one-line benefit keeps the condition printed on its own line after the amount -- "S$2,000 per
+    // Insured Person, if death occurs outside Singapore as a result of an Accident" -- quoted, never dropped)
+    const own = pb?.benefit.source === "label_line" ? r.conditions.find((c) => c.startsWith(pb.benefit.label)) : undefined;
+    const rest = own?.slice(pb!.benefit.label.length).replace(/^\s*:\s*/, "").replace(/^(?:S\$|SGD\s?|US\$|\$)?\s?[\d,]+(?:\.\d+)?/, "").replace(/^[\s,;]+/, "").replace(/[.\s]+$/, "").trim();
+    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}${rest ? `, with the printed condition “${rest.replace(/[“”]/g, "\"")}”` : ""}.`, evidence_ids: ev, value_ids: [] };
   }
   if (p?.kind === "percent") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${p.percent}%${p.of ? ` of the ${p.of}` : ""}.`, evidence_ids: ev, value_ids: [] };
   if (p?.kind === "reference") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) defines ${pretty(r.benefit)} as the ${p.of}.`, evidence_ids: ev, value_ids: [] };
@@ -189,6 +193,7 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
  * the model must fix (an id this turn did not produce), or [] when every statement could be written. */
 export async function renderStatements(args: Record<string, unknown>, list: Record<string, unknown>[] | undefined, d: Deps): Promise<string[]> {
   const problems: string[] = [];
+  const omitted: number[] = [];
   for (const [i, s] of (list ?? []).entries()) {
     if (!s || typeof s !== "object") continue;
     const kind = typeof s.kind === "string" ? s.kind : null;
@@ -217,10 +222,13 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
         // PR #57 follow-up (DC's GP-bill answer): the same absence refused again for what the documents print -- the model could not say
         // those lines -- is replaced by the server quoting them, cited (never an absence, never a verdict).
         // (a repeat: an earlier call of this turn was already refused with exactly this problem)
-        if (r.printed?.length && (d.priorErrors?.() ?? []).some((e) => e.includes(r.problem))) {
-          const q = quotePrinted(r.printed, d.evidenceId, subject);
+        if (r.printed && list && (d.priorErrors?.() ?? []).some((e) => e.includes(r.problem))) {
+          const q = r.printed.length ? quotePrinted(r.printed, d.evidenceId, subject) : null;
           // (a new statement in its place: the model's own not_found statement is left as it was sent)
-          if (q && list) { const n = { kind: "fact", ...q, ...(subject ? { subject_id: subject } : {}) }; RENDERED.add(n); QUOTED.add(n); list[i] = n; continue; }
+          if (q) { const n = { kind: "fact", ...q, ...(subject ? { subject_id: subject } : {}) }; RENDERED.add(n); QUOTED.add(n); list[i] = n; continue; }
+          // (critic round 5 F1: nothing quotable -- only a scheme's bare list of its policies -- so the statement is left out, and the rest of
+          // the reply, or the server's fallback for a reported bill, answers)
+          omitted.push(i); continue;
         }
         problems.push(`statement ${i + 1}: ${r.problem}`); continue;
       }
@@ -233,10 +241,13 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       s.evidence_ids = [];
     }
   }
+  if (list) for (const i of omitted.reverse()) list.splice(i, 1);
   // PR #57 follow-up: an absence refused earlier this turn only because part of its scope was not stored is answered with what WAS read,
   // written by the server (absence-scope.ts), when the reply that follows states no absence of its own -- never the "couldn't confirm" note.
   const pa = d.ctx.partialAbsence;
-  if (list && pa && !pa.used && !problems.length && !list.some((s) => s && typeof s === "object" && s.kind === "not_found")) {
+  // (critic round 5 F3: only in a reply about the same person the refused absence was about)
+  const replySubject = typeof args.subject_id === "string" && args.subject_id ? args.subject_id : d.state.subjectId ?? null;
+  if (list && pa && !pa.used && !problems.length && (pa.subjectId ?? null) === replySubject && !list.some((s) => s && typeof s === "object" && s.kind === "not_found")) {
     const n = { kind: "not_found", text: pa.text, evidence_ids: [], subject_id: pa.subjectId } as Record<string, unknown>;
     RENDERED.add(n); ABSENCE_OF.set(n, pa.check); list.push(n); pa.used = true;
   }
