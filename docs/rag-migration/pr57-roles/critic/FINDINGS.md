@@ -637,3 +637,61 @@ old path. I found no regression.
 **Not ready to merge.** R10-1 is the blocker: as it stands, the PR can turn a scheme's panel GP wording for a policy Daniel does not
 hold into an apparent answer to his GP bill. Fix R10-2 in the same change; it is small. No paid run was made; this is a scripted
 reconstruction only.
+
+---
+
+# Round 11: PR #64 head `094da7b` (re-review after R10 fixes)
+
+Method: ran `decideNotFound` from `094da7b` (store stubbed; no DB, no model, no spend) with round 10's pages: fixture certificate,
+BS page 1 (OPMC roster), overseas clause P20, and a panel GP page under "SECTION 6: CLINICAL BENEFITS (OUTPATIENT MEDICARE POLICY)".
+Added a "Singapore or overseas" line, a spouse with OPMC on the shared certificate, and Daniel himself with OPMC. Ran the new
+`bill_place` detector (`loop.ts:2141-2143`, copied verbatim) on seven messages.
+
+## R10 items
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R10-1 panel GP of an unlisted policy | fixed when Daniel does not hold OPMC | case A: quote, then "Daniel's certificate lists ... (as of 6 October 2022) ... OPMC, which that certificate does not list" and "sits under 'SECTION 6 ... (OUTPATIENT MEDICARE POLICY)', which Daniel's certificate does not list. Only the insurer ... can confirm"; **but see R11-1** |
+| R10-2 overseas ranking | fixed for "unknown" and "home" | case B: the overseas clause is never the answer, only said apart with "applies only if the treatment was abroad"; case C: "Singapore or overseas" is quoted; **but see R11-2** |
+| R10-3 unlinked / whose | fixed by the same note | any quoted line not from the person's confirmed certificate gets "does not say whose cover that line is" and the insurer line |
+| R10-4 heading quoted | fixed | "Panel GP Benefit" is no longer quoted |
+
+## New findings
+
+**R11-1. High: the new note can tell the person he does not hold the cover he does hold.** `whoseLines` decides "not listed" by a
+literal phrase search of the whole certificate text (`absence-scope.ts:313`, `listed`).
+- The scheme name is searched as "Outpatient Medicare Policy" and the section as "CLINICAL BENEFITS (OUTPATIENT MEDICARE". A
+  certificate heading "GROUP OUTPATIENT MEDICARE(POLICY NO ...)" or "GROUP OPMC(POLICY NO ...)" matches neither.
+- Case E (Daniel's own rows include Group Outpatient Medicare): the answer says "Daniel's certificate lists ... Group Outpatient
+  Medicare ..." and then "names the scheme's Outpatient Medicare Policy (OPMC), which that certificate does not list" and "sits under
+  ... (OUTPATIENT MEDICARE POLICY), which Daniel's certificate does not list".
+- Case E2 ("GROUP OPMC"): the second claim is still made.
+
+That is a false statement about his own cover, sitting beside the panel GP benefit that applies to him. It can stop a valid claim:
+the hides-a-benefit class. Also, `listed` reads the whole certificate, not his rows, so a spouse's matching heading would suppress the
+sentence for him (an A2 cousin, not reproduced). Fix: compare against `cert.products` (his rows only) with the same normalisation
+G1's must-not-fire checks use (name without "Policy"/"Group", or the abbreviation). Read a policy name from the section heading
+only from an explicit "(... POLICY)" or "... POLICY" phrase. When unsure, say only that the document does not say whose cover it is;
+never "does not list".
+
+**R11-2. Medium-High: the "abroad" detector fires on ordinary Singapore messages, and then the overseas clause is quoted first
+with no caveat.** `away` matches any "in <Capitalised word>": "saw a GP in Tampines", "GP in Raffles Place" and "fell in Grace's
+room" all read as abroad. It also reads every earlier user turn (`userTexts`), so a Japan death two turns ago makes today's GP bill
+"abroad". With `bill_place = "abroad"`, `billLines` quotes abroad-only lines first and drops the "applies only if abroad" sentence.
+That is the live symptom again. Fix: "abroad" only on explicit words (overseas, abroad, on holiday, travelling, a trip) in the
+current message, and default to "unknown", which is already safe. Even for "abroad", keep the "outside Singapore" line's own wording
+quoted, which it is.
+
+**R11-3. Low-Medium: the whose-cover facts are a trailing note, not a statement next to the quote.** They go into `notes`
+(`loop.ts:2156`), appended after all sentences. They are not evidence-checked, and if the composer drops the quote they remain
+alone ("does not say whose cover that line is" with no line). Ask the Test engineer for one render check that the note sits
+directly under the quote and that returned = saved = reopened. Better: emit it as a server statement right after the quote.
+
+**R11-4. Low (wording):** "The only line found is in the Scheme X Group Insurance (page 2) prints a benefit for treatment outside
+Singapore" is ungrammatical (`loop.ts:2158`). Also "Outpatient Medicare Policy Policy" (R6-4) now appears here too.
+
+## Verdict on PR #64 at `094da7b`
+
+**Not ready to merge.** R11-1 is the blocker: in a household whose certificate does list the outpatient policy, the answer says it
+does not. R11-2 should be fixed with it; both are small and local. R10-1 to R10-4 are fixed for the cases they were raised on.
+No paid run; scripted reproductions only.
