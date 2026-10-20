@@ -57,6 +57,8 @@ function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.proces
 const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
+const isPdf = (file: File) => file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+const fileSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 /** What a household calls a document: its product, else its file name, never blank. */
 function documentName(policy: Pick<Policy, "product_name" | "original_filename">) {
   return policy.product_name?.trim() || policy.original_filename?.trim() || "Untitled document";
@@ -98,6 +100,9 @@ export default function PoliciesPage() {
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const statusBox = useRef<HTMLDivElement | null>(null);
+  // A refused upload is said where the person can see it, not below the fold.
+  useEffect(() => { if (statusIsError && status) statusBox.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [status, statusIsError]);
   // Confirmations of actions taken on the library itself (delete, who a
   // document covers, unlocking), shown where the person is looking.
   const [libraryNotice, setLibraryNotice] = useState("");
@@ -228,6 +233,12 @@ export default function PoliciesPage() {
     }
     previousActiveCount.current = activeCount;
   }, [activeCount, policies]);
+
+  /** From a card that couldn't be read: back to the upload box, with the file picker open. */
+  function chooseAnother() {
+    fileInput.current?.closest(".upload-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    fileInput.current?.click();
+  }
 
   async function upload(e: FormEvent) {
     e.preventDefault();
@@ -377,14 +388,24 @@ export default function PoliciesPage() {
 
 
     <section className="upload-panel">
+      {/* On a phone the file comes first, as one large target; who it is for is optional, and a password is asked
+          only once a PDF is chosen. What happened shows right under the button, where the thumb just was. */}
       <form onSubmit={upload} className="upload-form">
-        <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks the names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
-        <div className="field"><label htmlFor="up-file">Insurance document <span>(a PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
-        <div className="field"><label htmlFor="up-password">PDF password <span>(if protected)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
+        <div className="field upload-pick">
+          <input id="up-file" ref={fileInput} type="file" className="upload-file-input" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => { const next = e.target.files?.[0] ?? null; setFile(next); if (!next || !isPdf(next)) setPdfPassword(""); }}/>
+          <label htmlFor="up-file" className={`upload-drop${file ? " chosen" : ""}`} data-testid="upload-drop">
+            <span className="upload-drop-title">Insurance document</span>
+            {file
+              ? <><span className="upload-drop-file">{file.name}</span><span className="upload-drop-hint">{fileSize(file.size)} · choose another</span></>
+              : <><span className="upload-drop-cta">Choose a file or take a photo</span><span className="upload-drop-hint">A PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL}</span></>}
+          </label>
+        </div>
+        <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
+        {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
+        {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
       </form>
-      <div className="note">The password is used only for this processing job and is not stored. Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
-      {status && <div className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
+      <div className="note">Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
     </section>
 
     <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
@@ -454,7 +475,7 @@ export default function PoliciesPage() {
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
             ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
             : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span>{policy.page_count
-              ? <small>If you have a clearer copy or the original file, delete this one and upload that instead.</small>
+              ? <><small>If you have a clearer copy or the original file, upload that, then delete this one.</small><div className="row-error-actions"><button type="button" className="mini-button" onClick={chooseAnother}>Upload a clearer copy</button></div></>
               : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
 
           {/* Its numbers and the actions on it come last. */}

@@ -1032,6 +1032,19 @@ table { font-variant-numeric: tabular-nums; }
 .summary-unknown { font-size: var(--fs-lg, 1.25rem); color: var(--ink-2); }
 .upload-status.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
 .upload-status.error strong { font-weight: 700; }
+/* The file picker as one large target: the native control stays in the form for keyboards and screen readers, and
+   the label is what a thumb taps. */
+.upload-pick { grid-column: 1 / -1; position: relative; }
+.upload-file-input { position: absolute; inset: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.upload-drop { display: grid; gap: 2px; min-height: 88px; align-content: center; padding: 14px 16px; border: 2px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface-2); cursor: pointer; }
+.upload-drop.chosen { border-style: solid; border-color: var(--brand); }
+.upload-file-input:focus-visible + .upload-drop { outline: 3px solid var(--focus, var(--brand)); outline-offset: 2px; }
+.upload-drop .upload-drop-title { font-size: var(--fs-xs); font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
+.upload-drop .upload-drop-cta { font-size: var(--fs-md); font-weight: 650; color: var(--brand); }
+.upload-drop .upload-drop-file { font-size: var(--fs-md); font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.upload-drop .upload-drop-hint { font-size: var(--fs-sm); color: var(--ink-2); }
+.upload-form .upload-status { grid-column: 1 / -1; margin-top: 0; }
+.field-note { display: block; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
 .unread-documents.stalled { border-color: var(--critical-line); background: var(--critical-tint); }
 @media (max-width: 620px) { .trust-strip { display: none; } }
 .field-hint { font-size: var(--fs-xs); color: var(--muted); margin: 4px 0 0; min-height: 0; }
