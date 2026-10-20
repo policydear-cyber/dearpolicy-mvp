@@ -421,3 +421,44 @@ Low items, none blocking:
 - Fracture matches the expected statements apart from the known accident condition.
 - Not ready as the shown answer yet. A misleading travel bottom line and the travel card in a death answer (both synthetic), plus answer-wide either_or, would mislead once the page shows only cards and the bottom line. Bottom lines are also missing on GP bill, death and sickness.
 - E2 to E5 need the Developer's repro run on fracture-household GP, livelib death and travel, and actuallib hip to confirm.
+
+## 16. PR #70 re-check on head `c685b92` (Critic R23 and section 15 fixes)
+
+| worker | task | SHA | status | evidence | blocker |
+| --- | --- | --- | --- | --- | --- |
+| Policy Evidence Reviewer | re-check the seven section 15 items against `EXPECTED-STATEMENTS.md` and the release-set confirmations | `c685b92` | done | the Developer's `answer-shape-output.txt` at c685b92 (Scripted, fracture household: FR1, K2, K4B, K6A, K6B); code trace for death, travel and GP bill (no SHAPE=1 output for them is committed) | no `node_modules` here; no model call |
+
+| item | result | evidence |
+| --- | --- | --- |
+| Wrist either/or with both bases | **Pass** for one injury. S$1,250 = 25% of the S$5,000 limit and S$120,000 = 20% of Grace's (after the correction, Daniel's) S$600,000, as of 6 Oct 2022. Grouped either/or, and the bottom line says "alternatives, not a total". Matches the real pages' headings (PS p13 "(% of S$5,000)", BS p8 "(% of Sum Insured)") | output FR1, K4B |
+| Fracture accident condition | **Pass.** Both cards carry "Only if it results from bodily injury as a result of an Accident", read from the table's own lead-in, plus "an illustration ... not a payment or an insurer's decision". The `#` note stays only on S$1,250, and Core/Voluntary and the Other Fracture note only on S$120,000 | output FR1 |
+| Sick-stay S$250 not a card | **Pass.** The terms paragraph is a plain `fact` with "printed with a bare $", and no amount card | output K2 |
+| Ended trip S$100,000 not a card | **Pass on the card**: any card whose condition prints "dd/mm/yyyy to dd/mm/yyyy" ending before today becomes plain text. **Low gap:** the prose kept is C5's "whether that trip fits this event is for the insurer to confirm". It does not say that the printed period ended (17/03/2025) before the death (5 Oct 2026), or that the printed destination is Indonesia, not Japan. E3 asks for the reason it does not fit | trace, `answer-statements.ts` `ended` |
+| Sick-stay verdict bottom line | **Pass.** "The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me its accident condition is not met ...; any claim decision is the insurer's." Low: "its" does not name the Accidental Hospital Recuperation Benefit when read alone | output K2 |
+| Dates no longer figures | **Pass.** The bottom line check now counts only money amounts and percentages. K6A now gets an outcome bottom line instead of "If you go ahead, start here" | diff `monetary-boundary.ts`; output K6A |
+| Death-abroad outcome line | **Fail (by trace).** For one or more amount cards, the bottom line is "Your documents print N amount(s) that may apply ...", and N counts **cards only**. Term Life S$1,000,000 is plain text (the Developer), the PA Accidental Death 100% of S$600,000 is plain text (indicative estimates are not carded), and the travel amount is now plain text. That leaves Repatriation S$2,000 as the only card, so the line would read "Your documents print **one** amount that may apply". That understates three documented death benefits and points the reader at S$2,000. E3 expects "three death benefits may apply, separately, never added" | trace, `bottomLine()` |
+| GP-bill bottom line | **Likely pass, not shown.** With no cards and no "not met" verdict, the bottom line is the not-found statement plus "only the insurer can confirm". That matches E2a in substance. It is the whole paragraph, so it may be long (K6B's bottom line repeats its four-line not-found paragraph). Needs the SHAPE=1 output of `gp-bill-live-repro.ts` | trace |
+
+**Term Life S$1,000,000 as plain text in the death answer: acceptable in itself.** The full sentence keeps the person, amount, "as of 6 October 2022" and the source, so nothing is lost. It is acceptable only if the outcome line does not count cards (the fail above): either count the plain-text amounts the answer states, or make Term Life a card like the other certificate rows.
+
+**Still open from section 15 (cross-journey 1): either/or is grouped per person, not per pair.**
+- The group id is `alt:${c.subjectId}`.
+- The relation block re-renders every calculation on either of the two documents.
+- So "Daniel broke his hip and his arm" puts all four illustrations (S$3,750, S$450,000, S$1,250, S$120,000) in one group, and the bottom line reads "either S$3,750, S$450,000, S$1,250 or S$120,000".
+- The two injuries are separate events. Only each row's pair is either/or.
+- The new unit check covers a third, unrelated calculation, not two pairs. Group by person and row label.
+
+**Verdict on c685b92: not a pass.**
+
+Fails:
+1. The death outcome line counts cards only, so it understates the benefits.
+2. Either/or is grouped per person, not per row pair.
+
+Low:
+- The ended-trip prose does not say why the trip does not fit.
+- The GP-bill bottom line is unverified; it needs the SHAPE=1 output.
+- The sick-stay bottom line's "its" does not name the benefit.
+
+Passes: the wrist pair and its bases, the accident condition, the S$250 and the ended trip as plain text, the sick-stay verdict line, and dates.
+
+Not in PR #70: the live app's Benefits page S$1,000 and the Coverage page S$1,000,000 bases (see the release-set confirmations in the project folder). These are page-level figures that PR #70 does not touch.
