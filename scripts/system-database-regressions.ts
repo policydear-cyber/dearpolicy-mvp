@@ -1282,8 +1282,9 @@ async function main(){
       await db.query("UPDATE chat_conversations SET state=state||$2::jsonb WHERE id=$1",[c.id,JSON.stringify({ragLoop:{v:1,turn:4,claim:{subjectId:daniel,facts:{},derived:[],calcs:{
         "calc-tibia":{calcId:"calc-tibia",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:3,withdrawn:{cause:"fact",key:"injury",reason:"injury was corrected",turn:4}},
         "calc-hip":{calcId:"calc-hip",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:4,withdrawn:null}}}}})]);
-      const reopen=async()=>(await (await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})})).json()).messages
-        .filter((m:{role:string})=>m.role==="assistant").map((m:{answer_json:ChatAnswer})=>m.answer_json);
+      const reopened=async()=>(await (await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})})).json()).messages
+        .filter((m:{role:string})=>m.role==="assistant") as {content:string;answer_json:ChatAnswer}[];
+      const reopen=async()=>(await reopened()).map(m=>m.answer_json);
       const save=(ids:string[])=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:cert,assignments:ids.map(familyMemberId=>({familyMemberId,planTier:null}))})}));
 
@@ -1297,6 +1298,13 @@ async function main(){
       assert.match(tibia.summary,/replaced by the corrected answer below/);
       assert.equal(tibia.calculations?.length??0,0,"and its withdrawn figure is not shown");
       assert.equal(hip.invalidated,undefined,"The corrected answer stays");
+      // F69-1: the page shows the message's own text, so an out-of-date answer's text is its notice, not the old sentence.
+      const texts=(await reopened()).map(m=>m.content);
+      assert.equal(texts[0],graces.summary);
+      assert.doesNotMatch(texts[0],/hospital cash per day/);
+      assert.equal(texts[2],tibia.summary);
+      assert.doesNotMatch(texts[2],/tibia/);
+      assert.equal(texts[1],"Daniel's plan pays hospital cash per day.","A current answer keeps its own text");
 
       // Ticking Grace again makes her answer current again.
       assert.equal((await save([daniel,grace])).status,200);

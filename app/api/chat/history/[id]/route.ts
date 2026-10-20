@@ -23,7 +23,9 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
     // An answer that relied on a since-deleted policy, or on a person since removed from it, is never re-served as
     // current cover; one worked out from something this chat corrected later points to the corrected answer.
     const current=await invalidateAnswersWithDeletedPolicies(accountId,sanitized.map(m=>m.answer_json as Partial<ChatAnswer>|null),{conversationState:conversation.state});
-    const messages=sanitized.map((m,i)=>({...m,answer_json:current[i]}));
+    // The page shows a message's stored text, so an out-of-date answer's text is its notice too: never the old sentence
+    // (with its figure) above the notice.
+    const messages=sanitized.map((m,i)=>{const a=current[i] as Partial<ChatAnswer>|null;return {...m,...(a?.invalidated&&typeof a.summary==="string"?{content:a.summary}:{}),answer_json:a};});
     const jobs=await query<{id:string;request_json:{question?:string}}>(
       "SELECT id,request_json FROM chat_analysis_jobs WHERE account_id=$1 AND conversation_id=$2 AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",[accountId,id]);
     return NextResponse.json({conversation,messages,nextCursor:hasMore?messages[0]?.id:null,
