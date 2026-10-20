@@ -1132,3 +1132,21 @@ div.answer-point { display: grid; gap: 4px; }
 .answer-card-text { font-weight: 500; }
 .answer-card.printed { background: var(--surface-2); }
 .answer-card.printed .answer-card-amount strong { font-size: 1.05rem; color: var(--ink-2); }
+
+/* Claim page: what is still needed, what happens next, and an upload box sized for a thumb. */
+.claim-needed { margin-top: 12px; }
+.claim-needed > strong { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.claim-needed > strong .muted { font-size: var(--fs-sm); font-weight: 500; }
+.claim-needed ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.claim-needed li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.claim-needed li.sent { background: var(--surface-2); }
+.claim-needed-mark { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.claim-needed li.sent .claim-needed-mark { border-color: var(--good-line); color: var(--good-text); }
+.claim-needed-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.claim-needed-text small { color: var(--muted); font-size: var(--fs-xs); }
+.claim-next { margin-top: 16px; }
+.claim-next ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.claim-next li { line-height: 1.45; }
+.claim-upload-form input[type=file] { min-height: 52px; width: 100%; }
+.claim-upload-form input[type=file]::file-selector-button { min-height: 36px; padding: 6px 14px; margin-right: 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.bill-review-confirm { min-height: 44px; }
