@@ -115,9 +115,10 @@ async function main() {
     // No sentence the model wrote keeps an amount: the range, the total and the next step's figure are all gone.
     assert.ok(report.sentencesLeftOut.length >= 3);
     assert.doesNotMatch(prose, /S\$/);
-    assert.ok(answer.statements!.filter((s) => !s.id.startsWith("not-total")).every((s) => !statesMoney(s.text)));
+    // Card text is the model's own words without money, or the quoted printed words the server copies.
+    assert.ok(answer.statements!.filter((s) => !s.id.startsWith("not-total")).every((s) => !statesMoney(s.text) || /prints: “/.test(s.text)));
     assert.ok(answer.statements!.some((s) => /not a total/.test(s.text) && /S\$1,250, S\$500 and S\$250/.test(s.text)));
-    assert.match(answer.bottomLine!, /separate; they are not added together/);
+    assert.match(answer.bottomLine!, /separate and not added together/);
     assert.equal(answer.verifiedPolicyFactsOnly, true);
   });
 
@@ -306,6 +307,35 @@ async function main() {
       st({ kind: "amount", text: "Hospital cash a day.", person: "Ah Kow", document: "D3", quote: "Plan A 500 Hospital cash\t100 per day", amount: "S$100" }),
     ] });
     assert.equal(answer.statements!.filter((s) => s.amount).length, 0);
+  });
+
+  // Critic round 40 probes.
+  await check("R40-1: unsigned, abbreviated and spelled-out amounts are money; percentages, days, pages and dates are not", () => {
+    for (const x of ["1.25k", "It pays 1250.", "About 120k if you use the sum insured.", "20% of 600k.", "You are covered 600000.", "It is 1 250.", "1.4 thousand", "two hundred", "one thousand two hundred and fifty dollars", "25% of five thousand", "Up to 3 grand.", "1.2mn"])
+      assert.equal(statesMoney(x), true, x);
+    for (const x of ["It pays 25% of the limit.", "Hospital stays of up to 120 days.", "See page 130 of the policy.", "Cover started on 06/10/2022.", "It applies from 1 January 2026.", "Wait 180 days after the accident.", "A 100% benefit applies.", "It changed in October 2026."])
+      assert.equal(statesMoney(x), false, x);
+  });
+
+  await check("R40-2: a card whose text names an amount keeps the quoted words; the bottom line keeps its money-free sentences or is built from the first card", () => {
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "Ah Kow can claim for the wrist. It pays S$1,250.", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "Recuperation pays S$250.", person: "Ah Kow", document: "D2", quote: "Accidental Hospital Recuperation Benefit\tS$250", amount: "S$250" }),
+    ] });
+    assert.equal(answer.bottomLine, "Ah Kow can claim for the wrist.");
+    assert.match(answer.statements![0].text, /prints: “Accidental Hospital Recuperation Benefit S\$250”/);
+    const built = verifyAnswer(HOUSE, { bottomLine: "It pays S$250.", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "The accidental hospital recuperation benefit.", person: "Ah Kow", document: "D2", quote: "Accidental Hospital Recuperation Benefit\tS$250", amount: "S$250" }),
+    ] }).answer;
+    assert.equal(built.bottomLine, "Your documents list this benefit for Lim Ah Kow. The accidental hospital recuperation benefit. The amount is shown below.");
+    assert.ok(!statesMoney(built.bottomLine!));
+  });
+
+  await check("R40-3: two statements quoting the same row give one card", () => {
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
+      st({ kind: "fact", text: "Hip fractures pay a share of the limit.", document: "D1", quote: "Hip\t75%" }),
+      st({ kind: "fact", text: "A hip fracture is covered.", document: "D1", quote: "Hip 75%" }),
+    ] });
+    assert.equal(answer.statements!.filter((s) => s.kind === "fact").length, 1);
   });
 
   await check("ledger usage counts cache writes at twice the input price", () => {

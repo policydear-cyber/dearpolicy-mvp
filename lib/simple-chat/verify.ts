@@ -151,8 +151,32 @@ export function matchMember(household: Household, person: string | null): string
 /** Whether a sentence states money: a figure with a currency, a number with "dollars", or a number with thousands
  * separators. Amounts are shown only on the server's cards, so no sentence the model wrote may carry one -- which is
  * what keeps it from adding amounts or giving a range, whatever words it uses. */
+const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`;
+/** Dates are not amounts: they are taken out before a sentence is read for money. */
+const DATES = new RegExp(String.raw`\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+${MONTH}\s+\d{4}\b|\b${MONTH}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b|\b${MONTH}\s+\d{4}\b`, "gi");
+/** What may follow a number of 100 or more without it being money: a percentage or a length of time. */
+const RATE_OR_TIME = /^\s*(?:%|per\s?cent|percent|(?:calendar\s+)?(?:days?|nights?|weeks?|months?|years?|hours?|minutes?)\b)/i;
+/** Whether a sentence states money, in any form (Critic round 40): a figure with a currency; "dollars"; a number with k, m,
+ * mn, million, thousand, grand or bn after it; the words hundred, thousand, million, billion or grand; or any number of 100
+ * or more that is not a percentage, a length of time, a page number, a year or part of a date. Amounts are shown only on the
+ * server's cards, so no sentence the model wrote may carry one -- which is what keeps it from adding amounts or giving a
+ * range, whatever words it uses. */
 export function statesMoney(sentence: string): boolean {
-  return moneyFiguresIn(sentence).length > 0 || /\d[\d,]*(?:\.\d+)?\s*(?:dollars?|cents?|SGD|USD)\b/i.test(sentence) || /(?<![\d.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)/.test(sentence);
+  if (moneyFiguresIn(sentence).length) return true;
+  const t = (sentence ?? "").replace(DATES, " ");
+  if (/\b(?:dollars?|cents?|SGD|USD)\b/i.test(t) && /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand)\b/i.test(t)) return true;
+  if (/\d(?:[\d,.]*\d)?\s*(?:k|m|mn|mil|million|thousand|grand|bn|billion)\b/i.test(t)) return true;
+  if (/\b(?:hundred|thousand|million|billion|grand)\b/i.test(t)) return true;
+  for (const m of t.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    const value = Number(m[0].replace(/,/g, "").replace(/\.$/, ""));
+    if (!(value >= 100)) continue;
+    // A plain year (1900-2099, no separator) is a date, not money.
+    if (/^(?:19|20)\d\d$/.test(m[0])) continue;
+    const at = m.index ?? 0;
+    if (RATE_OR_TIME.test(t.slice(at + m[0].length)) || /\bpages?\s*$/i.test(t.slice(Math.max(0, at - 8), at))) continue;
+    return true;
+  }
+  return false;
 }
 function withoutMoney(text: string, dropped: string[]): string {
   return sentencesOf(text ?? "").filter((s) => { const money = statesMoney(s); if (money) dropped.push(s); return !money; }).join(" ").trim();
@@ -245,10 +269,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
   }
   const citations: ChatCitation[] = [];
   const statements: AnswerStatement[] = [];
+  // One card per quoted row: a second statement quoting the same words on the same page (without an amount) adds nothing.
+  const seenRows = new Set<string>();
   checked.forEach((c, i) => {
+    if (c.found && !c.amount) {
+      const key = `${c.found.docIndex}:${c.found.page}:${squash(c.found.excerpt).text}`;
+      if (seenRows.has(key)) return;
+      seenRows.add(key);
+    }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
     let text = withoutMoney(c.s.text, report.sentencesLeftOut);
-    if (!text && doc && c.found) text = c.amount ? `As printed in ${docLabel(household, doc)}, page ${c.found.page}.` : `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
+    // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
+    if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     if (!text) return;
     const conditions = c.s.conditions.map((x) => withoutMoney(x, report.sentencesLeftOut)).filter(Boolean);
     let source: AnswerStatement["source"] = null;
@@ -278,7 +310,15 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
   const nextSteps = model.nextSteps.map((x) => withoutMoney(x, report.sentencesLeftOut)).filter(Boolean);
   const question = model.question ? withoutMoney(model.question, report.sentencesLeftOut) : "";
   const shownAmounts = statements.filter((s) => s.amount).length;
-  if (!bottomLine) bottomLine = shownAmounts > 1 ? "Here is what your documents print. Each amount below is separate; they are not added together." : statements.length ? "Here is what your documents say." : NO_ANSWER;
+  if (!bottomLine) {
+    // Built here, without another model call, from the first amount card: whose it is and what the model said it is for.
+    const first = statements.find((x) => x.amount);
+    const forWhom = first?.personName ? ` for ${first.personName}` : "";
+    const said = first && !first.text.includes("prints: “") ? ` ${first.text.replace(/\s+$/, "")}` : "";
+    bottomLine = first
+      ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below; they are separate and not added together." : "The amount is shown below."}`
+      : statements.length ? "Here is what your documents say." : NO_ANSWER;
+  }
   const questions: ChatQuestion[] = question ? [{ id: "simple_question", text: question, type: "text", why: "This helps me answer from the right part of your documents." }] : [];
   const answer: StructuredAnswer = {
     mode: "answer", summary: bottomLine, details: [], claimItems: [], nextSteps, confidence: citations.length ? "partial_match" : "insufficient_evidence",
