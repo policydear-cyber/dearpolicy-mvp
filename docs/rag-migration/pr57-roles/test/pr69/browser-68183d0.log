@@ -1,0 +1,21 @@
+
+Running 2 tests using 1 worker
+
+--- SR1 replaced answer as displayed:
+DearPolicy
+
+This earlier answer was replaced by the corrected answer below, because something it was worked out from was corrected later in this chat.
+
+Replaced.
+This answer was replaced by the corrected answer below.
+  ✓  1 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:64:7 › reopened answers that no longer stand › SR1: tibia -> hip correction, reloaded: the tibia answer is replaced and shows no figure (6.4s)
+--- SR2 out-of-date answer as displayed:
+DearPolicy
+
+This answer was about someone who has since been removed from the document it relied on, so it no longer describes their cover. Ask again to get an answer from the documents you have now.
+
+Out of date.
+Someone this answer was about has since been removed from the document it relied on.
+  ✓  2 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:88:7 › reopened answers that no longer stand › SR2: Grace removed from the document her answer used, chat reopened: the 'removed' note, no figure; ticked again, it comes back (7.7s)
+
+  2 passed (15.2s)

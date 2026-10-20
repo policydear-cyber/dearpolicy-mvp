@@ -1261,6 +1261,57 @@ async function main(){
       assert.deepEqual(await links(cert),[grace,scheme].sort());
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,foreignCert]]);
     });
+    await test("A reopened chat marks answers about a person since removed from the document, and answers a later correction replaced",async()=>{
+      // Critic R16-2: removing someone from a document left their saved answers about it looking current. UX finding 4:
+      // after "it was his hip", the earlier tibia answer stayed above, unmarked, with its withdrawn figures.
+      const cert=uuid(701900);
+      const [daniel,grace]=[people[0].id,people[1].id];
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Marked Answers Plan','MARK-1','Group Insurance','certificate',true,80,'ready','mark.pdf','mark.pdf','scan_clean')",[cert,account,daniel]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$4,'ai_name_match',0.95),($1,$3,$4,'ai_name_match',0.95)",[cert,daniel,grace,account]);
+      const binding=(subjectId:string)=>({policyId:cert,subjectId,benefit:"Hospital cash",documentHash:null,pageStart:1,pageEnd:1,passage:"Hospital cash per day",sentence:"Hospital cash is paid per day.",value:0,currency:"SGD"});
+      const calc=(id:string,subjectId:string)=>({id,sentence:"",calculator:"lump_sum",kind:"conditional_illustration",subjectId,policyId:cert,benefit:"Fracture",documentHash:null,operands:[],steps:[],result:{value:0,currency:"SGD"},currency:"SGD",rounding:{mode:"half_up",precision:2,source:"default"},conditions:[],evidenceRequirements:[]});
+      const answer=(summary:string,extra:Record<string,unknown>)=>({mode:"answer",summary,details:[],claimItems:[],nextSteps:[],missingFacts:[],questions:[],
+        citations:[{chunkId:"c1",policyId:cert,policyName:"Marked Answers Plan",insurer:"Example Insurer",pageStart:1,pageEnd:1,quote:"Hospital cash per day"}],...extra});
+      const c=await openConversation({accountId:account,memberId:null,title:"Marked answers"});
+      const say=async(text:string,a:unknown)=>db.query("INSERT INTO chat_messages(account_id,conversation_id,role,content,answer_json) VALUES($1,$2,'user',$3,NULL),($1,$2,'assistant',$4,$5::jsonb)",[account,c.id,text,(a as {summary:string}).summary,JSON.stringify(a)]);
+      await say("What does Grace's plan pay in hospital?",answer("Grace's plan pays hospital cash per day.",{figureBindings:[binding(grace)],resolvedFamilyMemberId:grace}));
+      await say("And Daniel's?",answer("Daniel's plan pays hospital cash per day.",{figureBindings:[binding(daniel)],resolvedFamilyMemberId:daniel}));
+      await say("He broke his tibia",answer("The fracture benefit for a tibia applies.",{calculations:[calc("calc-tibia",daniel)],resolvedFamilyMemberId:daniel}));
+      await say("Sorry, it was his hip",answer("Updated: the injury is now hip. The fracture benefit for a hip applies.",{calculations:[calc("calc-hip",daniel)],resolvedFamilyMemberId:daniel}));
+      // What the loop saved after the correction: the tibia calculation withdrawn, the hip one current.
+      await db.query("UPDATE chat_conversations SET state=state||$2::jsonb WHERE id=$1",[c.id,JSON.stringify({ragLoop:{v:1,turn:4,claim:{subjectId:daniel,facts:{},derived:[],calcs:{
+        "calc-tibia":{calcId:"calc-tibia",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:3,withdrawn:{cause:"fact",key:"injury",reason:"injury was corrected",turn:4}},
+        "calc-hip":{calcId:"calc-hip",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:4,withdrawn:null}}}}})]);
+      const reopened=async()=>(await (await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})})).json()).messages
+        .filter((m:{role:string})=>m.role==="assistant") as {content:string;answer_json:ChatAnswer}[];
+      const reopen=async()=>(await reopened()).map(m=>m.answer_json);
+      const save=(ids:string[])=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId:cert,assignments:ids.map(familyMemberId=>({familyMemberId,planTier:null}))})}));
+
+      assert.equal((await save([daniel])).status,200,"The household removes Grace from the document");
+      const [graces,daniels,tibia,hip]=await reopen();
+      assert.equal(graces.invalidated?.reason,"person_unlinked","Grace's answer about the document is marked out of date");
+      assert.match(graces.summary,/removed from the document/);
+      assert.deepEqual([graces.citations.length,graces.figureBindings?.length??0],[0,0],"and shows nothing it read from it");
+      assert.equal(daniels.invalidated,undefined,"Daniel's answer about the same document stays");
+      assert.equal(tibia.invalidated?.reason,"superseded","The tibia answer the correction replaced is marked");
+      assert.match(tibia.summary,/replaced by the corrected answer below/);
+      assert.equal(tibia.calculations?.length??0,0,"and its withdrawn figure is not shown");
+      assert.equal(hip.invalidated,undefined,"The corrected answer stays");
+      // F69-1: the page shows the message's own text, so an out-of-date answer's text is its notice, not the old sentence.
+      const texts=(await reopened()).map(m=>m.content);
+      assert.equal(texts[0],graces.summary);
+      assert.doesNotMatch(texts[0],/hospital cash per day/);
+      assert.equal(texts[2],tibia.summary);
+      assert.doesNotMatch(texts[2],/tibia/);
+      assert.equal(texts[1],"Daniel's plan pays hospital cash per day.","A current answer keeps its own text");
+
+      // Ticking Grace again makes her answer current again.
+      assert.equal((await save([daniel,grace])).status,200);
+      assert.equal((await reopen())[0].invalidated,undefined);
+      await db.query("DELETE FROM chat_conversations WHERE id=$1",[c.id]);
+      await db.query("DELETE FROM policies WHERE id=$1",[cert]);
+    });
     await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
       const [daniel,grace]=[people[0].id,people[1].id];
       const [schedule,summary,graceSchedule]=[uuid(701800),uuid(701801),uuid(701802)];
