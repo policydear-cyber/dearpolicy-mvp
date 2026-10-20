@@ -204,7 +204,8 @@ export const PRODUCT_DEFAULTS:{pattern:RegExp;exclude?:RegExp;events:{event:Even
 export const THIRD_PARTY_LIABILITY=/\b(?:liable|liability|liabilities)\b|third[- ]part(?:y|ies)\b|\bto other (?:people|persons)\b/i;
 /** Liability to other people in a printed quote. Narrower than THIRD_PARTY_LIABILITY: a quote's "the Company shall not
  * be liable for death caused by war" is an exclusion of the person's own cover, not liability cover. */
-export const THIRD_PARTY_SENSE=/third[- ]part(?:y|ies)\b|\bto other (?:people|persons)\b|\b(?:personal|legal|public) liabilit\w*|\bliab\w* (?:to|for)\b[^.]{0,60}\b(?:others?|third)\b/i;
+// A bare "third party" is not enough: "assault by a third party" is the person's own personal accident cover.
+export const THIRD_PARTY_SENSE=/\b(?:personal|legal|public|third[- ]party) liabilit\w*|\bliab\w*\b[^.]{0,60}\b(?:to|towards|for) (?:a |any )?(?:third[- ]part(?:y|ies)|other (?:people|persons)|others)\b/i;
 /** A row printing two or more amounts side by side ("S$500,000 S$750,000 S$1,000,000") is one row of a table with a column
  * per plan, and "Not covered" in a row means some plan's column pays nothing. Either way one figure cannot be told to be
  * the person's without knowing their plan, so no figure is taken from the row. */

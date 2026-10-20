@@ -1521,6 +1521,11 @@ export function runSystemRegressions(){
     assert.equal(rowSupported(labelled,thirdPartyPage),false,"the quote's third-party liability is not the person's own death cover");
     assert.equal(rowSupported({...death,quote:"Accidental Death 100% of Sum Insured. We are not liable to pay for death caused by war."},
       "Accidental Death 100% of Sum Insured. We are not liable to pay for death caused by war."),true,"\"not liable to pay\" is still an exclusion");
+    // Critic R33-1: a third party named as the cause of the person's own accident is not liability cover.
+    const assault="Accidental Death 100% of Sum Insured, including death from assault by a third party.";
+    assert.equal(rowSupported({...death,quote:assault},assault),true,"assault by a third party is the person's own cover");
+    const injuryTo="Accidental Death If you become legally liable for accidental death or bodily injury to other people S$500,000";
+    assert.equal(rowSupported({...labelled,quote:injuryTo},injuryTo),false,"liable ... to other people is still liability cover");
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under
