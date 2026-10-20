@@ -18,7 +18,7 @@ Footnote determination (item 6), from the stored page 13 text: `^` is printed on
 
 ## How it was checked
 
-* Each failure was reproduced first by replaying the model's recorded fx-live-1 tool calls (`scripts/fixtures/reliable-chat/fx-live-1-model-calls.json`, played by `recorded-model.ts`) through the real chat route on the frozen candidate e04cb61 plus the new tests (`scripts/reliable-chat-fx-repairs-test.ts`; `ONLY=<group>`). On that candidate 32 of 69 checks fail (the originals: absence dropped, cause re-asked, contradictory notices, footnote missing, the reopening shortcut, the heuristic); 7 are pure footnote-parser controls that cannot run before the parser exists; 30 pass because they are controls or behaviour that was already right (e.g. Daniel's figures were already bound correctly; the no-repair paths already failed closed). After the repair 69/69 pass.
+* Each failure was reproduced first by replaying the model's recorded fx-live-1 tool calls (`scripts/fixtures/reliable-chat/fx-live-1-model-calls.json`, played by `recorded-model.ts`) through the real chat route on the frozen candidate e04cb61 plus the new tests (`scripts/reliable-chat-fx-repairs-test.ts`; `--only=<group>`). On that candidate 32 of 69 checks fail (the originals: absence dropped, cause re-asked, contradictory notices, footnote missing, the reopening shortcut, the heuristic); 7 are pure footnote-parser controls that cannot run before the parser exists; 30 pass because they are controls or behaviour that was already right (e.g. Daniel's figures were already bound correctly; the no-repair paths already failed closed). After the repair 69/69 pass (86/86 after the review round below).
 * The original answers and grades are untouched (`docs/rag-migration/live/RUN-fx-live-1-…`). This is a recorded-tool-calls replay: request hashes are NOT compared, and the continuation steps after a repair message are what a model that follows the message would send (labelled "continuation" in the test). It shows what the pipeline does with the model's recorded statements; it does not show model choices after a prompt or tool-result change.
 * Returned = saved = reopened is asserted on every conversation in the test.
 * Browser (`npm run e2e:reliable-chat-fracture`, `e2e/tests/reliable-chat-fx-repairs.spec.ts` and the FR1 spec): the real chat page and `/api/chat` on the `next build` output, over the anonymised fracture library, with the same recorded model calls (`scripts/fixtures/reliable-chat/fx-repairs-scenarios.ts`; scripted model, so plumbing evidence, not a model result). For the dental, cancer, sick-hospital-stay and person-correction conversations and the footnote check it asserts the answer the browser RECEIVED from the finished job = the row the server SAVED = the text DISPLAYED, and, after a reload, that the reopened answer reads exactly as displayed.
@@ -30,3 +30,44 @@ Footnote determination (item 6), from the stored page 13 text: `^` is printed on
 * The library was not verified, the owner's actual library was not touched, and no live model was called.
 * `.github/workflows/ci.yml` does not parse as YAML on main or on this branch (line 214: a step name with `: ` in an unquoted value; found while wiring these suites). It was not changed here, so the new suites and browser specs are run with their npm scripts, not by that workflow, until it is repaired separately.
 * One assertion of the structured-answers suite was extended to accept the footnote clause at the end of a calculation sentence; the prompt-version literal and the artificial per-turn token limit of the conv-test were updated (v19; 14,000 → 15,500). One browser assertion (SA7 of reliable-chat-actuallib.spec.ts, `not.toMatch(/Cheekbone[^\n]*#/)`) guarded the report's "#" inside the Cheekbone row; it passed before only because the footnote was left out, and it reaches across the whole line now that the footnote clause is said, so it is bounded to the Cheekbone entry and the attribution to the Leg (`^`) and Arm (`#`) rows is asserted positively. Nothing else was relaxed.
+
+## Review round of fx-live-2 (20 Oct 2026): what changed after the live confirmation
+
+Tested commit: `bc124ba87b5b1b10b8040d1b950fa79df84335fe` (parent `15c71b2`). The live-tested SHA of the 23 paid calls stays `c4edd48`; its product code is identical to `51a355a`. This round used no model, no spend and no change to main, production or any configuration. Against `c4edd48` it changes two product files (`lib/rag2/loop/loop.ts`, `lib/rag2/loop/statement-render.ts`), two test files and adds the reviewed graders and the run record.
+
+| # | question | result | where |
+|---|---|---|---|
+| 1 | K4b: was carrying "fell down" from Grace to Daniel a defect? | **No: a valid event reassignment.** "Actually it was Daniel who broke his arm, not Grace." corrects who experienced the same event. Two real state defects were found next to it and fixed: Grace's parked claim kept the reassigned event (a later Grace scenario mixed with it), and `note_facts` accepted a copy of Grace's "fell down" for Daniel in a message that was not a correction ("Daniel broke his arm too."). Facts, the open question and the calculations now belong to the right person: a correction moves the household's reports, withdraws the first person's calculations (cause `person`), re-asks the open question for the new person; a different person's scenario carries nothing | `PERSON-CORRECTION.md`; `loop.ts`; group G (G1 to G10) and D7 of `reliable-chat-fx-repairs-test.ts`; browser FX-K4B |
+| 2 | Environment contract | the four debug reads this branch had added (`DEBUGB`, `DEBUGC`, `DEBUGD`, `ONLY`) are removed (`--only=A,G` is an argument now). `npm run security:env-contract-test` fails on this branch with exactly the 34 undocumented names it fails on at main (same names; the reference counts of two of them, `DEARPOLICY_CHAT_CONTRACT` 22 to 25 files and `SHOW` 14 to 16, grew because the new tests read names that were already undocumented). Zero added failures | `scripts/reliable-chat-fx-repairs-test.ts` |
+| 3 | Original grades | unchanged and not turned into a pass: the registered criteria and the v1 grader are byte-identical to the versions that graded the run and still return the original 4 + 3 failures on the saved answers. A reviewed disposition for each is published beside them (3 grader shortcomings: a negation, a window, a verb; 1 composer drop reported as **SAFEGUARD, not PASS**; v1 `K2.3` stays an open usefulness gap) with new grader controls for negation and multi-sentence limitations | `DISPOSITION.md`, `criteria-reviewed.md`, `answers.json` in the run record; `fx-live-2-criteria-v2.ts` and its 35 controls |
+| 4 | Sources under the dental answer | an absence answer cites no passage: the last page read of each checked document (an amount row, a footnote, a claim condition) said nothing about dental. The scope evidence is the saved `absenceChecks` (id, name, hash and revision of each checked document, and the terms searched) and a deleted or replaced document still withdraws the answer. Asserted on the answer as returned, as saved, as shown and as reopened (A8 to A10; browser FX-K6B asserts zero `Sources` entries on the page and after a reload, and FR1 asserts an answer that states figures still lists its pages) | `statement-render.ts` |
+
+### What this changes for the model
+
+* **Model inputs and prompts: none.** The prompt version, the tool list and the evidence given to the model are unchanged.
+* **Tool behaviour: yes, in two narrow places** (`note_facts` now refuses, with a reason the model sees, (a) a household report held for another person when it is copied to this person in a message that is not a correction, and (b) a note for the person just corrected away from that repeats words reassigned to the person meant), and the correction path in `claimFor` now moves the event instead of copying it (server state only). No live model call has exercised these three; the recorded K4b model calls are replayed against the new code. A real model's choices after seeing the new refusal are not shown, and a replay cannot show them.
+* **Post-model composition only: the Sources change.** It acts on the statements after the model has finished.
+
+### Checks executed on the frozen tree of `bc124ba` (scripted model only)
+
+Frozen copy: every code, test and config tree is identical to the commit by git tree hash; it differs only in `DEMO-TRANSCRIPT.md`, an older base of the other docs (run-record files of earlier PRs that no check reads) and the regenerated `tsconfig.tsbuildinfo`. Apart from the tsc cache, the tree did not change during the runs (tree hash compared before and after).
+
+| check | result |
+|---|---|
+| typecheck (`tsc --noEmit`), `next build` | clean, success |
+| fracture replay (offline, scripted) | 32/32 |
+| plumbing (record, replay, compare; no model) | 18/18 |
+| 51 npm test suites | all exit 0; the counts equal the previous frozen candidate for 50; `reliable-chat:fx-repairs-test` 69 to 86 (no failures) |
+| grader controls | v1 42/42, registered fx-live-2 criteria 55/55, reviewed criteria 35/35; the reviewed CLI regenerates `criteria-reviewed.md` byte for byte |
+| environment contract | 34 undocumented names on this branch and on main, the same names |
+| browser, fracture library | 6/6: FR1, FX-K6B, K6A, K2, K4B, footnote |
+| browser, existing specs | actual-library 8/8, tan 3/3, death journey 3/3, booklet 6 passed and 3 skipped (they need `BOOKLET_CDA=recorded`) |
+| baseline failures (red on main too, same output) | `v11:customer-screens-test` (10 passed, the chat-screen assertion is stale against a deliberate page change), `rag2:s52-replay` (11/12: 3 statements added, 2 expected), `security:env-contract-test` (the 34 names) |
+
+On the previous candidate the new group A8, D7, G3, G6, G8 and G8c checks fail as intended; on this one 86 of 86 pass.
+
+### Limits of this round
+
+* One household, scripted model: plumbing evidence, not a model result. No consistency evidence, no claim of 99% or 100% accuracy.
+* The owner's actual library was not touched or verified.
+* PR #56's Preview 500 is unrelated and still open; the YAML repair is the separate PR #58.
