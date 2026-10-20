@@ -205,7 +205,13 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
     const shown = all.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
     // (what the server quotes if the model cannot say it: the medical-expense wording first, then any other printed line -- never a line of a
     // scheme's bare list of its policies, which names a policy without saying who has it: critic round 5 F1)
-    const chosen = all.filter((h) => !inPolicyList(pagesOf, h)).filter((h, i, a) => a.findIndex((x) => x.policyId === h.policyId && x.page === h.page && x.line === h.line) === i).slice(0, 2);
+    // (live GP re-ask after PR #61: a line limited to treatment abroad -- "emergency outpatient treatment received outside Singapore" --
+    // goes after every other line (a bare capitals heading just before it), so a GP bill at home is answered with the panel GP line, not the overseas clause; a line already
+    // inside another chosen line of the same page, such as its own heading, is not quoted twice)
+    const kept = all.filter((h) => !inPolicyList(pagesOf, h)).filter((h, i, a) => a.findIndex((x) => x.policyId === h.policyId && x.page === h.page && x.line === h.line) === i);
+    const rank = (h: ScopeHit) => ABROAD.test(h.line) ? 2 : /[a-z]/.test(h.line) ? 0 : 1; // (an all-capitals section heading says nothing on its own)
+    const ranked = [...kept].sort((a, b) => rank(a) - rank(b));
+    const chosen = ranked.filter((h) => !ranked.some((x) => x !== h && x.policyId === h.policyId && x.page === h.page && x.line.length > h.line.length && flat(x.line).includes(flat(h.line).replace(/\.\.\.$/, "")))).slice(0, 2);
     const printed = chosen.map((h) => { const pageText = (pagesOf.get(h.policyId) ?? []).find((p) => p.page === h.page)?.text ?? ""; const full = h.full ? h.line : pageText.split(/\n+/).map((l) => l.trim()).find((l) => l.startsWith(h.line.replace(/\.\.\.$/, ""))) ?? h.line;
       return { policyId: h.policyId, name: h.name, page: h.page, line: full, pageText, fileHash: scope.docs.find((d) => d.id === h.policyId)?.fileHash ?? null }; });
     return { ok: false, printed, problem: `not_found refused: the documents checked DO print ${all.length > 1 ? "words for" : "a word for"} this (${[...new Set(all.map((h) => h.term))].join(", ")}): ${shown}. Say what those lines print (cite them) or narrow the claim to documents and terms that are truly absent; never say a document does not describe what it prints` };
@@ -239,6 +245,8 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   return { ok: true, check, text: `${scheme ? scheme.text(ctx.who) + " " : ""}${renderAbsence(check, ctx.who)}` };
 }
 
+/** A line that limits what it pays to treatment abroad. */
+const ABROAD = /\b(?:outside (?:of )?Singapore|overseas|abroad)\b/i;
 /** Words a document would print for paying a doctor's or medical bill (C2's veto, critic round 4 condition 5). */
 const MEDICAL_BILL_TERMS = ["medical expenses", "medical expense", "medical reimbursement", "medical bills", "medical treatment", "medical fees", "outpatient", "clinic", "general practitioner", "consultation"];
 /** A topic about a doctor's or medical bill (the terms the model or the server searched for). */
@@ -284,7 +292,7 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
   // (what the certificate lists FOR THIS PERSON -- critic round 5 A2: the product headings with a row naming them under it, never a
   // spouse's -- and the date those rows are printed as of: one date, or G1 does not fire)
   // (critic round 6 R6-1: a row is this person's when it names them -- the display or preferred name, word-bounded, or every word of
-  // the display name in any order ("Lee Wei Ming, Daniel" for "Daniel Lee Wei Ming") -- and names no other member of the household)
+  // the display name in any order ("Tan, John" for "John Tan") -- and names no other member of the household)
   const word = (w: string) => new RegExp(`(?<![\\p{L}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")}(?![\\p{L}])`, "iu");
   const names = (m: (typeof members)[number]) => [m.displayName, m.preferredName].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => flat(n));
   const namesMember = (l: string, m: (typeof members)[number]) => { const ws = flat(m.displayName).split(/[\s,]+/).filter((w) => w.length >= 2); return names(m).some((n) => word(n).test(l)) || (ws.length >= 2 && ws.every((w) => word(w).test(l))); };

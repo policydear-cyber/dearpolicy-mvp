@@ -100,3 +100,20 @@ whether the model states them. The quoted "$" amount inside a printed line is an
 
 Results on C3 (scripted, no spend): GP group AC 12/12, GUARD 16/16; full acceptance AC 20/26 (same 6 open: R1, R2, R3, R7, R9, N5b),
 GUARD 41/41.
+
+## Live re-ask after PR #61 (main `ca6af69`, ~08:24): why the fix did not show
+
+Reconstructed in `gp-bill-live-repro.ts` (anonymised fixture plus two invented Product Summary pages: an overseas emergency
+outpatient clause on page 20, a panel GP benefit on page 25; no production data read). It reproduces all three live symptoms.
+
+- **"You told me tripped on the kerb."**: `sayBack` (compose.ts) ran words with no subject of their own straight after "You told
+  me". Predates PR #61. Now quoted: “You told me: “tripped on the kerb”.”
+- **The overseas clause**: the G2 path did run. Its absence check was refused (the library prints "outpatient"), and the server quoted
+  the first two printed lines in page order: the overseas clause and its own heading. Nothing ranked a line limited to treatment abroad
+  after the others. Now: lines limited to treatment outside Singapore / overseas / abroad go last, bare all-capitals headings just before
+  them, and a line already inside another chosen line of the same page is not quoted twice.
+- **No panel GP benefit**: "GP" (two letters) is dropped by the term filter, so a panel GP line was never searched for by name, and the
+  overseas lines filled both quote slots. G2 now also searches "panel gp", "gp clinic" and "gp consultation".
+
+Reconstruction after the fix: the answer quotes the panel GP line (page 25), not the overseas clause. Not done by the server: asking
+whether a panel GP was seen (depends on the model).

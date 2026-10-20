@@ -2137,7 +2137,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         let said = false, refused = false;
         if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic|physician)\b/i.test(words)) {
           // (critic round 5 A3: the doctor's own words are searched too; a page that reimburses medical treatment refuses the absence)
-          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician"], subject_id: subject };
+          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject };
           const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: input.people.find((p) => p.id === subject)?.name ?? null, names: input.people.flatMap((p) => [p.name]) });
           const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
           refused = !nf.ok && !nf.partial;
