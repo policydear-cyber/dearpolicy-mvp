@@ -199,9 +199,23 @@ export const PRODUCT_DEFAULTS:{pattern:RegExp;exclude?:RegExp;events:{event:Even
   {pattern:/\b(?:home|household|contents)\b/i,events:[{event:"home_damage",pays:"stated",note:"home contents cover reimburses loss or damage up to the plan's limit"}]},
 ];
 
+/** Liability to other people ("if you are liable for accidental death, injury or damage to other people") pays a third
+ * party's claim against the insured. It is never a death or injury benefit for the insured person, whatever words it uses. */
+export const THIRD_PARTY_LIABILITY=/\b(?:liable|liability|liabilities)\b|third[- ]part(?:y|ies)\b|\bto other (?:people|persons)\b/i;
+/** A row printing two or more amounts side by side ("S$500,000 S$750,000 S$1,000,000") is one row of a table with a column
+ * per plan, and "Not covered" in a row means some plan's column pays nothing. Either way one figure cannot be told to be
+ * the person's without knowing their plan, so no figure is taken from the row. */
+export function rowFiguresDependOnPlan(text:string|null|undefined){
+  const t=String(text??"");
+  const money=String.raw`(?:[A-Z]{0,3}\$|[A-Z]{3}\s?)\s?\d[\d,]*(?:\.\d+)?`;
+  // ("Not covered" next to an amount is a column; "fractures of the thumb are not covered" in a footnote is not.)
+  return new RegExp(`${money}\\s+${money}|\\bnot covered\\s+${money}|${money}\\s+not covered\\b`,"i").test(t);
+}
+
 /** Maps a benefit-table row's own name to an event. */
 export function eventForBenefitName(name:string):{event:EventType;detail:string|null}{
   const n=name.toLowerCase();
+  if(THIRD_PARTY_LIABILITY.test(n))return {event:"other",detail:name};
   const accident=/\baccident/.test(n);
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};

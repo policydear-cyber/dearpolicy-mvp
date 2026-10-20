@@ -16,7 +16,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalText } from "@/lib/chat/facts";
-import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { EVENTS,THIRD_PARTY_LIABILITY,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { ensureLedgerSchema } from "@/lib/ledger/store";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
@@ -107,7 +107,12 @@ function rowSupported(row:ExtractedRow,pageText:string){
   const part=printedPart(row.quote,pageText);
   if(!part)return false;
   if(!rowFigureSupported(part,row.paysKind,row.amount??null))return false;
-  return eventSupported(row.eventType,[...[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)),part].join(" "));
+  // One plan column's figure is not the person's figure, and "Not covered" pays nothing.
+  if(row.amount!=null&&rowFiguresDependOnPlan(part))return false;
+  const words=[...[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)),part].join(" ");
+  // Liability to other people is never the insured person's own death or injury benefit.
+  if(THIRD_PARTY_LIABILITY.test(words)&&row.eventType!=="other")return false;
+  return eventSupported(row.eventType,words);
 }
 function numbersOnPage(row:ExtractedRow,text:string){
   const flat=text.replace(/[,\s]/g,"");

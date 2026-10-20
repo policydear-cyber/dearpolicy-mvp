@@ -1167,6 +1167,23 @@ export function runSystemRegressions(){
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
   });
+  test("A group scheme's rows find their own cover even when every cover carries the scheme's name",()=>{
+    // Live release set (20 Oct): the scheme's product summary and certificate name every cover after the scheme, so an
+    // accidental-death or fracture row "matched" the first cover by name -- the S$1,000,000 term life -- not the
+    // S$600,000 personal accident cover it pays under.
+    const named=(id:string,category:string,amount:number)=>coverage({id,category,amount,productName:"Example Group Scheme"});
+    const scheme:PolicyContract={...contract,coverages:[named("gtl","Group Term Life",1_000_000),named("gpa","Group Personal Accident",600_000),named("lc","Group Living Care",350_000)]};
+    const row=(benefitName:string,quote:string,requires?:CatalogBenefit["requires"]):CatalogBenefit=>({
+      id:benefitName,policyId:"summary",productName:"Example Group Scheme",benefitName,traits:benefitTraits(benefitName,quote),
+      requires,formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:5,quote,conditions:[],requirements:[],needsReview:false});
+    assert.equal(coverageForBenefit(scheme,row("Accidental Death","100% of the Sum Insured where death results from an accident.",["death","accident"]))?.id,"gpa");
+    assert.equal(coverageForBenefit(scheme,row("Loss of sight in one eye","50% of the Sum Insured.",["accident"]))?.id,"gpa");
+    assert.equal(coverageForBenefit(scheme,row("Death","On death we pay 100% of the Sum Insured."))?.id,"gtl");
+    assert.equal(coverageForBenefit(scheme,row("Critical Illness","100% of the Sum Insured on diagnosis of a Critical Illness."))?.id,"lc");
+    // Nothing tells the covers apart: no figure is worked out from any of them.
+    assert.equal(coverageForBenefit(scheme,row("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+  });
   test("The policy's own limits on adding injuries up are followed",()=>{
     // Two sentences from the household's own wording: a schedule amount is not
     // paid for a disability that also qualifies for Total and Permanent
