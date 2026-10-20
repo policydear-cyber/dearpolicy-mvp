@@ -123,7 +123,7 @@ async function main() {
     "INSERT INTO household_members(household_id, user_id, role) VALUES ($1,$2,'owner'), ($1,$3,'member'), ($4,$5,'owner')",
     [householdA, ownerA, memberA, householdB, ownerB],
   );
-  await db.query("INSERT INTO storage.buckets(id, name, public) VALUES ('policy-files','policy-files',true), ('claim-evidence-files','claim-evidence-files',true), ('some-other-bucket','some-other-bucket',false)");
+  await db.query("INSERT INTO storage.buckets(id, name, public) VALUES ('policy-files','policy-files',true), ('claim-evidence-files','claim-evidence-files',true), ('household-exports','household-exports',true), ('some-other-bucket','some-other-bucket',false)");
 
   // Supabase grants EXECUTE on every new public function to anon and
   // authenticated through default privileges (not through PUBLIC). Reproduce
@@ -139,12 +139,12 @@ async function main() {
   assert.equal(helperExec.rows[0].authenticated, true, "authenticated must keep EXECUTE on the storage helper (the storage.objects policies call it)");
 
   const afterMigration = await db.query<{ id: string; public: boolean }>(
-    "SELECT id, public FROM storage.buckets WHERE id IN ('policy-files','claim-evidence-files') ORDER BY id",
+    "SELECT id, public FROM storage.buckets WHERE id IN ('policy-files','claim-evidence-files','household-exports') ORDER BY id",
   );
   assert.deepEqual(
-    afterMigration.rows.map((r) => r.public),
-    [false, false],
-    "sql/storage-rls.sql's safety-net UPDATE must force both app buckets back to public=false even if they were seeded/toggled public",
+    afterMigration.rows.map((r) => [r.id, r.public]),
+    [["claim-evidence-files", false], ["household-exports", false], ["policy-files", false]],
+    "sql/storage-rls.sql's safety-net UPDATE must force every app bucket back to public=false even if it was seeded/toggled public -- the household export bucket holds a whole household's data in one file",
   );
 
   await db.query("INSERT INTO storage.objects(bucket_id, name) VALUES ($1, $2)", ["policy-files", `${householdA}/fam1/pol1/policy.pdf`]);

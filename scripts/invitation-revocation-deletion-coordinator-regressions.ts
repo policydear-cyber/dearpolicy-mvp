@@ -183,6 +183,31 @@ async function runDatabaseTests() {
       assert.equal(row.rows[0].revoked_at, null, "a refused revocation must never leave the invitation revoked");
     });
 
+    await testAsync("another household's owner cannot record, probe or pre-empt a revocation of this household's invitation", async () => {
+      // Isolation audit (20 Oct): the deletion request was written into the invitation's household BEFORE ownership was
+      // checked, so a stranger's call left a pending row there, a repeat answered "ok" (proving the id exists), and the
+      // owner's later revocation with the same default key answered "ok" without revoking anything.
+      const householdId = await seedHousehold(pool);
+      const ownerId = await seedMember(pool, householdId, "owner");
+      const { id: invitationId } = await seedInvitation(pool, householdId, ownerId);
+      const otherHousehold = await seedHousehold(pool, "Other household");
+      const strangerId = await seedMember(pool, otherHousehold, "owner");
+      const key = `delete:${invitationId}`;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await assert.rejects(() => requestInvitationRevocation({ callerUserId: strangerId, invitationId, idempotencyKey: key }), DeletionValidationError,
+          "a caller from another household is told only that the invitation was not found, every time");
+      }
+      const requests = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM deletion_requests WHERE resource_type='invitation' AND resource_id=$1`, [invitationId]);
+      assert.equal(requests.rows[0].n, "0", "nothing is recorded in this household for another household's call");
+
+      const outcome = await requestInvitationRevocation({ callerUserId: ownerId, invitationId, idempotencyKey: key });
+      assert.equal(outcome.status, "completed");
+      const row = await pool.query<{ revoked_at: string | null }>(`SELECT revoked_at::text FROM household_invitations WHERE id=$1`, [invitationId]);
+      assert.notEqual(row.rows[0].revoked_at, null, "the owner's own revocation with the default key really revokes it");
+    });
+
     await testAsync("requestInvitationRevocation is idempotent: a retry does not re-attempt revokeInvitation or duplicate the audit row", async () => {
       const householdId = await seedHousehold(pool);
       const ownerId = await seedMember(pool, householdId, "owner");

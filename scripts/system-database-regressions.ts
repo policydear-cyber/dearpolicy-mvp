@@ -14,6 +14,7 @@ import { GET as getSavedChat } from "@/app/api/chat/history/[id]/route";
 import { GET as getJob } from "@/app/api/chat/jobs/[id]/route";
 import { GET as getBenefits,PATCH as patchBenefit,DELETE as deleteBenefit } from "@/app/api/benefits/route";
 import { GET as getLedger,PATCH as patchLedger,POST as postLedger } from "@/app/api/ledger/route";
+import { addLedgerRow } from "@/lib/ledger/store";
 import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
 import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
@@ -1760,6 +1761,23 @@ async function main(){
       const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
+      // Isolation audit (20 Oct): a row cannot be added for another household's person (the foreign key alone accepted any
+      // household's id, and answered differently for an id that exists).
+      const strangers=await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({familyMemberId:foreignPerson,planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD"})}));
+      assert.equal(strangers.status,404);
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE family_member_id=$1 AND account_id<>$2",[foreignPerson,foreign])).rows.length,0,"Nothing is written against another household's person");
+      // A person or document this household removed (soft-deleted) cannot be given a row either.
+      const removedPerson=uuid(702500),removedDoc=uuid(702501);
+      await db.query("INSERT INTO family_members(id,account_id,display_name,relationship,lifecycle_state) VALUES($1,$2,'Removed Person','child','soft_deleted')",[removedPerson,account]);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state) VALUES($1,$2,$3,'Example Insurer','Removed Plan','Hospital','personal_schedule',true,60,'ready','rm.pdf','rm.pdf','scan_clean','soft_deleted')",[removedDoc,account,people[0].id]);
+      const add=(body:object)=>postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD",...body})}));
+      assert.equal((await add({familyMemberId:removedPerson})).status,404,"a removed person");
+      assert.equal(await addLedgerRow(account,{familyMemberId:people[0].id,policyId:removedDoc,planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD"}),null,"a removed document");
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE family_member_id=$1 OR policy_id=$2",[removedPerson,removedDoc])).rows.length,0);
+      await db.query("DELETE FROM policies WHERE id=$1",[removedDoc]);
+      await db.query("DELETE FROM family_members WHERE id=$1",[removedPerson]);
     });
     await test("Coverage works a percentage out from the cover it pays under, and takes no plan column's figure or liability row as the person's",async()=>{
       // Live release set (20 Oct): the Coverage page showed an accident-scale row (sight in one eye) as a percentage of the

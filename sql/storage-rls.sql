@@ -139,4 +139,6 @@ CREATE POLICY household_storage_buckets_select ON storage.buckets
 -- Safety net, not a substitute for creating the buckets private from the
 -- start (see this file's own doc comment above) -- a no-op if the bucket
 -- row doesn't exist yet.
-UPDATE storage.buckets SET public = false WHERE id IN ('policy-files', 'claim-evidence-files') AND public IS DISTINCT FROM false;
+-- household-exports is included: one export object holds a whole household's
+-- data, and it has no storage.objects policy at all (service role only).
+UPDATE storage.buckets SET public = false WHERE id IN ('policy-files', 'claim-evidence-files', 'household-exports') AND public IS DISTINCT FROM false;

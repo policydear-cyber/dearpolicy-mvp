@@ -131,7 +131,7 @@ export async function invalidateAnswersWithDeletedPolicies<T extends Partial<Cha
   // source) or they are its upload profile -- the same people the chat itself treats as covered.
   const pairs = [...new Map(answers.flatMap((a) => personDocumentPairs(a)).filter((p) => active.has(p.policyId)).map((p) => [`${p.subjectId}|${p.policyId}`, p])).values()];
   const covered = new Set(pairs.length ? (await query<{ k: string }>(
-    `SELECT p.family_member_id::text||'|'||p.id::text AS k FROM policies p WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.family_member_id IS NOT NULL
+    `SELECT p.family_member_id::text||'|'||p.id::text AS k FROM policies p WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.family_member_id IS NOT NULL AND ${activePredicate("p")}
      UNION SELECT pm.family_member_id::text||'|'||pm.policy_id::text FROM policy_members pm WHERE pm.account_id=$1 AND pm.policy_id=ANY($2::uuid[])`,
     [accountId, [...new Set(pairs.map((p) => p.policyId))]])).rows.map((r) => r.k) : []);
   const unlinked = (a: Partial<ChatAnswer> | null | undefined) => personDocumentPairs(a).some((p) => active.has(p.policyId) && !covered.has(`${p.subjectId}|${p.policyId}`));

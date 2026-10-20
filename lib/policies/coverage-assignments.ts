@@ -3,6 +3,7 @@ import { withServiceTransaction } from "@/lib/db/authz-client";
 import { exclusionsReady } from "@/lib/policies/member-exclusions";
 import { findFamilyMatch, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 /** Links the "who does this cover" picker does not show as covered. */
 export const NOT_SHOWN_AS_COVERED = ["scheme_reference_match"];
@@ -80,7 +81,7 @@ export async function saveDocumentCoverage(args: {
 export async function rebuildForAddedPeople(args: { accountId: string; policyId: string; added: string[]; extraction: PolicyExtraction | null }): Promise<void> {
   if (!args.added.length) return;
   const family = (await query<{ id: string; display_name: string; preferred_name: string | null }>(
-    `SELECT id::text AS id,display_name,preferred_name FROM family_members WHERE account_id=$1`, [args.accountId])).rows;
+    `SELECT id::text AS id,display_name,preferred_name FROM family_members WHERE account_id=$1 AND ${activePredicate()}`, [args.accountId])).rows;
   for (const person of args.extraction?.insuredPeople ?? []) {
     const match = findFamilyMatch(person.name, family);
     if (!match || !args.added.includes(match.id)) continue;
