@@ -833,6 +833,22 @@ table { font-variant-numeric: tabular-nums; }
 .benefit-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .benefit-head small { color: var(--muted); }
 .benefit-item p { margin: 0; }
+/* Coverage: person, then kind of cover. The glance (kinds found, main kinds not found) comes before any row. */
+.coverage-person .section-heading { margin-bottom: 6px; }
+.coverage-glance { display: grid; gap: 8px; margin-bottom: 14px; }
+.coverage-kinds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.coverage-kinds a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--brand-tint); color: var(--brand-ink); font-size: var(--fs-sm); font-weight: 600; text-decoration: none; }
+.coverage-gaps { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.coverage-gaps b { color: var(--ink); }
+.coverage-kind { scroll-margin-top: 16px; }
+.coverage-kind + .coverage-kind { margin-top: 16px; }
+.coverage-kind h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.coverage-top { display: grid; gap: 2px; }
+.coverage-top .benefit-head { justify-content: flex-start; }
+.coverage-row .pays-cell { font-size: var(--fs-lg); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.coverage-conditions { font-size: var(--fs-sm); color: var(--ink-2); }
+.coverage-plan { font-size: var(--fs-xs); color: var(--muted); }
+@media (pointer: coarse), (max-width: 620px) { .coverage-kinds a { min-height: 44px; } }
 .source-details > summary { cursor: pointer; font-size: var(--fs-xs, .8rem); color: var(--brand-ink); font-weight: 600; min-height: 24px; line-height: 1.6; }
 .source-details blockquote { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid var(--line-strong); background: var(--surface-2); font-size: var(--fs-sm, .9rem); overflow-wrap: anywhere; }
 .source-details ul { margin: 6px 0 0; padding-left: 18px; }
