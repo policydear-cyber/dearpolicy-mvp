@@ -142,12 +142,21 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
   const illustrations = statements.some((s) => s.amount?.illustration);
   const amounts = statements.some((s) => s.amount);
   const fullProse = prose.map(render).filter((t) => t.trim());
-  const one = (s: AnswerStatement) => asCard(s)
-    ? <AmountCard key={s.id} openSource={openSource} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />
-    : <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
-        <p>{render(s.amount ? s.fullText ?? s.text : s.text)}</p>
-        <Qualifiers s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
-      </div>;
+  // A point's sentence that the bottom line already says in bold is not said again underneath it.
+  const pointText = (s: AnswerStatement) => {
+    const full = render(s.amount ? s.fullText ?? s.text : s.text);
+    const kept = sentences(full).filter((x) => !alreadyShown.has(norm(x)));
+    return kept.length === sentences(full).length ? full : kept.join(" ");
+  };
+  const one = (s: AnswerStatement) => {
+    if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
+    const text = pointText(s);
+    if (!text && !s.basis && !s.conditions?.length) return null;
+    return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
+      {text ? <p>{text}</p> : null}
+      <Qualifiers s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
+    </div>;
+  };
   // Either/or amounts are drawn as one block, joined by "or" and their note, at the place of the first of them: two
   // amounts for one person never sit side by side as if they added up.
   const blocks: React.ReactNode[] = [];
