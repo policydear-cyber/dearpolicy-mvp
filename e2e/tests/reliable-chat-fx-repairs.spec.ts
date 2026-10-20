@@ -73,12 +73,17 @@ async function reopened(page: Page, last: Turn) {
 }
 const noResidue = (shown: string) => expect(shown).not.toMatch(/benefit_id|result_id|evidence_id|\bb[0-9a-f]{10}\b|\bk[0-9a-f]{10}\b/);
 
-test("FX-K6B dental: 'the documents do not describe a dental benefit' (checked scope named), never 'no dental cover', not a generic 'could not confirm'", async ({ page, request }) => {
+// Expectation change (PR #57 follow-up, Test engineer, EXPECTATION-CHANGES.md): the fixture's Product Summary is 4 of 37 pages and its Benefit
+// Summary of unknown length, so an absence may not be said over them (read-in-full rule; Critic M2/M5, rulings 553c1e8; the scripted
+// fx-repairs A11-A13 and acceptance M5). The answer says what was read and that the rest could not be checked. Original first three expectations:
+//   toMatch(/do not describe a benefit for dental treatment/); toMatch(/not the same as saying there is no such cover/); toMatch(/Scheme X Group Insurance/)
+test("FX-K6B dental (partly stored library): what was read is named, the rest could not be checked, no absence, never 'no dental cover', not a generic 'could not confirm'", async ({ page, request }) => {
   const [u] = await open(page, request, "FX-K6B");
   const t = await send(page, request, u);
-  expect(t.shown).toMatch(/do not describe a benefit for dental treatment/);
-  expect(t.shown).toMatch(/not the same as saying there is no such cover/);
+  expect(t.shown).not.toMatch(/do not describe a benefit for dental treatment/);
   expect(t.shown).toMatch(/Scheme X Group Insurance/);
+  expect(t.shown).toMatch(/pages? [\d,\s-]+/);
+  expect(t.shown).toMatch(/could not be checked/);
   expect(t.shown).not.toMatch(/couldn.t confirm|can.t confirm/i);
   expect(t.shown).not.toMatch(/\b(?:you|she|Grace) (?:has|have|had) no dental (?:cover|coverage)/i);
   expect(t.shown).not.toMatch(/not covered|excluded/i);
@@ -109,7 +114,10 @@ test("FX-K6A cancer: the dated Living Care sum insured stays with 'the certifica
   await reopened(page, t);
 });
 
-test("FX-K2 sick hospital stay: the reported cause is used, the accident/injury requirement is explained, no repeated question, no bare 250", async ({ page, request }) => {
+// Expectation change (PR #57 follow-up; Policy QC ruling 1, qc/FINDINGS-C1.md; same change as reliable-chat:fx-repairs-test C3, EXPECTATION-CHANGES.md).
+// Original: expect(t.shown).not.toMatch(/\$\s?250|\b250\b/) -- "no 250 anywhere" hides a documented benefit. Now the 250 may appear only as the
+// benefit's printed terms with all its conditions and currency basis, never as an amount for this stay.
+test("FX-K2 sick hospital stay: the reported cause is used, the accident/injury requirement is explained, no repeated question, the 250 only as printed terms", async ({ page, request }) => {
   const [u] = await open(page, request, "FX-K2");
   const t = await send(page, request, u);
   expect(t.saved.questions ?? []).toHaveLength(0);
@@ -118,7 +126,12 @@ test("FX-K2 sick hospital stay: the reported cause is used, the accident/injury 
   expect(t.shown).toMatch(/“she was sick”\) is an illness, not an accident/);
   expect(t.shown).toMatch(/condition is not met/);
   expect(t.shown).not.toMatch(/was (?:it|this|the (?:hospital stay|hospitali[sz]ation)) (?:caused by )?an accident/i);
-  expect(t.shown).not.toMatch(/\$\s?250|\b250\b/);
+  for (const x of t.shown.split(/\n|(?<=[.;])\s+(?=[A-Z])/).filter((l) => /\b250\b/.test(l))) {
+    expect(x).toMatch(/within 30 days/); expect(x).toMatch(/bodily injury as a result of an Accident/); expect(x).toMatch(/at least 24 hours/);
+    expect(x).toMatch(/same injury/); expect(x).toMatch(/Core Scheme or Voluntary Scheme/);
+    if (/S\$\s?250/.test(x)) expect(x).toMatch(/Product Summary/); else expect(x).toMatch(/bare “\$” sign/);
+    expect(x).not.toMatch(/(?:this|her) stay|(?:Grace|she) (?:can|will|would|could) (?:get|receive|claim)|payable for (?:this|her)/i);
+  }
   expect(t.state?.ragLoop?.turns?.at(-1)?.pending ?? null).toBeFalsy();
   noResidue(t.shown);
   await reopened(page, t);

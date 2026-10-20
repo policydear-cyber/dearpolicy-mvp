@@ -1,0 +1,40 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+FAIL [AC] GP.a1 (variant A) the answer does not end in "couldn't confirm" or the model-error reply
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [AC] GP.a2 (variant A) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant A) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant A) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a1 (variant B) the answer does not end in "couldn't confirm" or the model-error reply
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [AC] GP.a2 (variant B) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant B) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant B) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a1 (variant C) the answer does not end in "couldn't confirm" or the model-error reply
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     I couldn’t confirm an answer to that from your documents.
+     I haven't yet looked up what your documents pay for the bill you mentioned (“his GP bill is $800”), so that is still open.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] GP.a2 (variant C) it does not say the documents were not looked up after the search ran
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     I couldn’t confirm an answer to that from your documents.
+     I haven't yet looked up what your documents pay for the bill you mentioned (“his GP bill is $800”), so that is still open.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] GP.a3 (variant C) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant C) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a4 (variant A, QC ground truth) the answer says the uploaded documents show no GP or outpatient benefit, names Outpatient Medicare (OPMC) as on the scheme but not on his certificate (with its date), and suggests asking the insurer
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.a5 (variant A, QC ground truth) the certificate's listed policies are named (Group Term Life, Group Personal Accident, Group Living Care)
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.b1 (medical-expense control) the answer surfaces the accident benefit that reimburses medical expenses by a registered medical practitioner
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [GUARD] GP.b2 (medical-expense control) no absence is stated, and no amount is given for the $800
+PASS [GUARD] GP.c1 certificate not read in full: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c2 the certificate lists 'OPMC' (abbreviation only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c3 the certificate lists 'Outpatient Medicare' (full name only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c4 a hit inside a benefit's own wording, outside the scheme's policy list: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause
+PASS [GUARD] GP.r every GP answer: returned = saved = reopened
+
+AC 2 passed, 7 failed | GUARD 13 passed, 0 failed | INFO 0 same, 0 differ

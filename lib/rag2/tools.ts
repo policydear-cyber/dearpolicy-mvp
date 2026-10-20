@@ -58,6 +58,8 @@ export type ToolContext = {
   timing?: { resolveMs: number; resolveCount: number };
   /** Reliable chat: per `${memberId}|${benefitId}`, the reported parts an evaluation found none of the listed cases covers. */
   unlisted?: Map<string, string[]>;
+  /** PR #57 follow-up: an absence refused this turn only because part of its scope was not stored -- the server's own statement of what was read. */
+  partialAbsence?: { text: string; check: import("./loop/absence-scope").AbsenceCheck; subjectId: string | null; used: boolean };
 };
 export type ToolResult = { ok: true; data: unknown; evidence: EvidenceRef[] } | { ok: false; error: string; evidence: EvidenceRef[] };
 export type ToolDef = { name: string; description: string; parameters: JsonSchema; handler: (ctx: ToolContext, args: Record<string, unknown>) => Promise<ToolResult> };

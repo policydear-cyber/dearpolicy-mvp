@@ -14,6 +14,7 @@ import * as TAN_HH from "../../scripts/fixtures/reliable-chat/tan";
 import * as BOOKLET_HH from "../../scripts/fixtures/reliable-chat/booklet";
 import * as ACTUAL_HH from "../../scripts/fixtures/reliable-chat/actual-lib";
 import * as FRACTURE_HH from "../../scripts/fixtures/reliable-chat/fracture-conversation";
+import { GP_HH } from "../../scripts/fixtures/reliable-chat/gp-bill";
 import * as DEATH_HH from "../../scripts/fixtures/reliable-chat/death-journey";
 import * as DEATHVALUES_HH from "../../scripts/fixtures/reliable-chat/death-journey-actual-values";
 
@@ -26,7 +27,7 @@ const LIVELIB = process.argv.includes("livelib") ? { ...LIVELIB_HH, DOCS: LIVELI
 // `--household pr50` seeds the PR #50 live-failure household (file names from PR50_NAMES).
 // `--household tan` seeds the reliable-chat second household (scripts/fixtures/reliable-chat/tan.ts).
 // `--household booklet` seeds the actual-library repair household (scripts/fixtures/reliable-chat/booklet.ts).
-const HH = process.argv.includes("deathvalues") ? DEATHVALUES_HH : process.argv.includes("deathjourney") ? DEATH_HH : process.argv.includes("fracture") ? FRACTURE_HH : process.argv.includes("actuallib") ? ACTUAL_HH : process.argv.includes("tan") ? TAN_HH : process.argv.includes("booklet") ? BOOKLET_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
+const HH = process.argv.includes("deathvalues") ? DEATHVALUES_HH : process.argv.includes("deathjourney") ? DEATH_HH : process.argv.includes("gpbill") ? GP_HH : process.argv.includes("fracture") ? FRACTURE_HH : process.argv.includes("actuallib") ? ACTUAL_HH : process.argv.includes("tan") ? TAN_HH : process.argv.includes("booklet") ? BOOKLET_HH : process.argv.includes("pr50") ? PR50_HH : LIVELIB ? LIVELIB : CELLS ? { ...BINDING_HH, DOCS: BINDING_HH.DOCS.map((d) => (d.key === "CERT" ? { ...d, hash: "sha256:binding-cert-cells", pages: BINDING_HH.certLayout("cells") } : d)) } : process.argv.includes("binding") ? BINDING_HH : REPORT_HH;
 const { ACCOUNT, DOCS, M, OTHER_ACCOUNT } = HH as typeof REPORT_HH;
 
 const ACCOUNTS = [ACCOUNT, OTHER_ACCOUNT];
@@ -52,6 +53,9 @@ async function main() {
       [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null, (d as { lifecycle?: string }).lifecycle ?? "active"]);
     for (const m of d.members) await pool.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await pool.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);
+    // PR #57 follow-up (Test engineer): the PDF's page count, as the PGlite harness writes it (scripts/fixtures/rag2-loop/harness.ts); an
+    // absence is only said over documents stored in full, so a browser seed without it would make every document read as partial.
+    if ((d as { pageCount?: number | null }).pageCount != null) await pool.query("UPDATE policies SET page_count=$2 WHERE id=$1", [d.id, (d as { pageCount?: number | null }).pageCount]);
   }
   console.log("seeded the report-layout households");
   await pool.end();

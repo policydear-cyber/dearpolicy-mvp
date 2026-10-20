@@ -311,9 +311,14 @@ export const BS_P1 = anon([
 
 const both = [{ id: M.daniel.id }, { id: M.grace.id }];
 const scheme = { insurer: "Aldermoor Life Ltd", policyType: "Group insurance", groupPolicyNumber: "G007500" };
+// pageCount (policies.page_count) is the document's own length, never the number of pages this fixture copies:
+//   CERT 1 -- page 1 prints "Page 1 of 1"; the one page is stored, so the certificate is complete.
+//   PRODUCT_SUMMARY 37 -- stored page 37 prints "Page 36 of 36" (stored index = printed number + 1: an unnumbered cover), so the PDF has
+//     37 pages; the fixture copies 4 of them and stays incomplete.
+//   BENEFIT_SUMMARY unknown (null) -- no stored page prints a page total; the fixture copies 6 pages and stays incomplete.
 export const DOCS: FxDoc[] = [
-  { key: "CERT", id: id(101), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance Scheme", policyNumber: "3037850", role: "certificate", personal: true, hash: "sha256:fx-cert", effective: "2022-10-06", documentDate: null, filename: "Certificate of Insurance.pdf", pages: { 1: CERT_P1 } },
-  { key: "PRODUCT_SUMMARY", id: id(102), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "product_summary", personal: false, hash: "sha256:fx-product-summary", filename: "Product Summary.pdf", pages: { 8: PS_P8, 12: PS_P12, 13: PS_P13, 37: PS_P37 } },
+  { key: "CERT", pageCount: 1, id: id(101), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance Scheme", policyNumber: "3037850", role: "certificate", personal: true, hash: "sha256:fx-cert", effective: "2022-10-06", documentDate: null, filename: "Certificate of Insurance.pdf", pages: { 1: CERT_P1 } },
+  { key: "PRODUCT_SUMMARY", pageCount: 37, id: id(102), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "product_summary", personal: false, hash: "sha256:fx-product-summary", filename: "Product Summary.pdf", pages: { 8: PS_P8, 12: PS_P12, 13: PS_P13, 37: PS_P37 } },
   { key: "BENEFIT_SUMMARY", id: id(103), owner: M.daniel.id, members: both, ...scheme, product: "Scheme X Group Insurance", policyNumber: "3037850", role: "certificate", personal: false, hash: "sha256:fx-benefit-summary", filename: "Benefit Summary.pdf", pages: { 1: BS_P1, 3: BS_P3, 5: BS_P5, 7: BS_P7, 8: BS_P8, 9: BS_P9 } },
 ];
 export const doc = (key: string) => DOCS.find((d) => d.key === key)!;

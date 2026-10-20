@@ -382,7 +382,10 @@ export async function readWhateverIsStillUnread(args:{accountId:string;policyIds
         conditions+=await catalogueConditions({accountId:args.accountId,policyId:document.id,
           productName:document.product_name,pages});
       }
-    }catch{unread++;/* A document that cannot be read is reported, never assumed empty. */}
+    }catch(error){
+      unread++;/* A document that cannot be read is reported, never assumed empty. */
+      if(document.needs_benefits){const { BENEFIT_READ_FAILURE_KEY,noteReadFailure }=await import("./read-failures");await noteReadFailure(args.accountId,document.id,BENEFIT_READ_FAILURE_KEY,error);}
+    }
   }
   return {benefits,conditions,unread};
 }

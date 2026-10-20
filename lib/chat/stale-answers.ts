@@ -14,6 +14,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatAnswer } from "@/types";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 
 export const STALE_ANSWER_NOTICE = "This answer relied on a policy document that has since been deleted, so it no longer describes your cover. Ask again to get an answer from the documents you have now.";
 
@@ -29,14 +30,16 @@ export function referencedPolicyIds(answer: Partial<ChatAnswer> | null | undefin
   return [...ids];
 }
 
-export function invalidatedAnswer(answer: ChatAnswer): ChatAnswer {
+export const ADDED_DOCUMENTS_NOTICE = "This answer said something was not found in your documents, and documents have been added since, so it may no longer be right. Ask again to get an answer from the documents you have now.";
+
+export function invalidatedAnswer(answer: ChatAnswer, reason: "policy_deleted" | "documents_added" = "policy_deleted"): ChatAnswer {
   return {
     ...answer,
-    summary: STALE_ANSWER_NOTICE,
+    summary: reason === "documents_added" ? ADDED_DOCUMENTS_NOTICE : STALE_ANSWER_NOTICE,
     details: [], claimItems: [], citations: [], nextSteps: [], missingFacts: [], questions: [],
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
-    invalidated: { reason: "policy_deleted" },
+    invalidated: { reason },
   } as ChatAnswer;
 }
 
@@ -51,8 +54,28 @@ export async function invalidateAnswersWithDeletedPolicies<T extends Partial<Cha
   const hashOf = new Map(rows.map((r) => [r.id, r.file_hash]));
   // A "not found" statement was true of the document VERSION it read: a document replaced since (its file changed) no longer supports it.
   const changed = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => (c?.documents ?? []).some((d) => d.fileHash != null && active.has(d.policyId) && (hashOf.get(d.policyId) ?? null) !== d.fileHash));
+  // PR #57 follow-up (critic M4): "your documents do not describe X" over the person's or the whole library's documents was true of the
+  // documents there were then. A document added to that scope since (an upload, or one newly linked to the person) may describe it.
+  // (read here, not through the reliable-chat loop's modules: the chat path must not depend on them when the loop is off -- the same
+  // readable-document rule as the loop store's queryDocs, and the same scope as its absence check's scopeDocs: the person's linked documents plus any
+  // document linked to nobody, or the whole library)
+  const widening = answers.some((a) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => c?.scope === "library" || c?.scope === "subject"));
+  const readable = widening ? (await query<{ id: string; members: string[] | null }>(
+    `SELECT p.id::text AS id, array_remove(array_agg(pm.family_member_id::text), NULL) AS members
+       FROM policies p LEFT JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
+        AND EXISTS (SELECT 1 FROM family_members f WHERE f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")})
+      WHERE p.account_id=$1 AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} AND p.processing_status='ready'
+      GROUP BY p.id`, [accountId])).rows : [];
+  const grown = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => {
+    if (c?.scope !== "library" && c?.scope !== "subject") return false;
+    const saved = new Set((c.documents ?? []).map((d) => d.policyId));
+    const mine = c.scope === "subject" && c.subjectId ? readable.filter((d) => !(d.members ?? []).length || (d.members ?? []).includes(c.subjectId!)) : [];
+    const now = c.scope === "subject" && mine.length ? mine : readable;
+    return now.some((d) => !saved.has(d.id));
+  });
   return answers.map((a) => {
     const ids = referencedPolicyIds(a);
-    return (ids.length && ids.some((id) => !active.has(id))) || changed(a) ? (invalidatedAnswer(a as ChatAnswer) as unknown as T) : a;
+    if ((ids.length && ids.some((id) => !active.has(id))) || changed(a)) return invalidatedAnswer(a as ChatAnswer) as unknown as T;
+    return grown(a) ? (invalidatedAnswer(a as ChatAnswer, "documents_added") as unknown as T) : a;
   });
 }

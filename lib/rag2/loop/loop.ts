@@ -36,10 +36,10 @@ import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept,
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage, unprintedAsk } from "./questions";
 import { internalIdsIn } from "./statements";
-import { SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
+import { checkNotFound, SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
 import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
-import { RENDERED, renderStatements } from "./statement-render";
+import { ABSENCE_OF, quotePrinted, QUOTED, RENDERED, renderStatements } from "./statement-render";
 import type { BenefitRecord } from "../benefit-records";
 import { ACCIDENT_COND, NATURAL_CAT, accidentCondition, causeApplicability, amountMayBePresented, type BenefitApplicability } from "../benefit-applicability";
 import { applicabilityOf, CAUSE_ATTRIBUTE, reportedValue, valuesIn } from "../applicability";
@@ -101,8 +101,27 @@ export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
   run_budget: "I couldn’t look that up: the model-use budget set for this test run is used up, so no model was called.",
   model_error: "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
 };
-/** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up"). */
-const PERSON_CORRECTION = { test: (m: string) => /\b(?:mixed (?:them|it|those|the two) up|mix-?up|i meant|i mean\b|meant to say|not (?:him|her)\b|wrong (?:child|person|kid|son|daughter)|correction|actually it was|it was (?:\w+ ){0,3}not\b|rather than)\b/i.test(m) || /\bnot [A-Z][a-z]+\b/.test(m) };
+/** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up").
+ * PR #57 follow-up (critic H1): a correction MOVES the event and takes it off the first person, so the cue must be explicit about the
+ * people: a mix-up phrase, or the person corrected AWAY from named as negated or contrasted ("not Grace", "it wasn't Grace", "rather than
+ * Grace", "instead of Grace") in a message that also names the person meant, or "I meant <person meant>" answering a question about the
+ * first person. "Daniel broke his arm too. It was not serious." / "I mean, he fell off his bike." / "It was Daniel's bike." / "Grace wasn't
+ * with him." name nobody corrected away from and are not corrections. */
+/** PR #57 follow-up (critic H2): words that describe an injury, whatever caused it ("fell ill" reads as an injury here: unresolved, the safe side). */
+const INJURY_WORDS = /\binjur\w*|\bfractur\w*|\bbr(?:oke|oken|eak)\b|\bhit(?:s|ting)?\b|\bf[ae]ll(?:s|ing|en)?\b|\bslip(?:s|ped|ping)?\b|\btrip(?:s|ped|ping)?\b|\bcut\b|\bburn(?:s|t|ed)?\b|\bsprain\w*|\bwound\w*|\bbruis\w*|\bconcuss\w*|\bdislocat\w*/i;
+const MIX_UP = /\b(?:mixed (?:them|it|those|the two) up|mix-?up|wrong (?:child|person|kid|son|daughter|one))\b/i;
+const nameAlt = (names: string[]) => names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+export function isPersonCorrection(message: string, fromNames: string[], toNames: string[], pendingAboutFrom: boolean): boolean {
+  if (MIX_UP.test(message)) return true;
+  if (!fromNames.length || !toNames.length) return false;
+  // (critic round 5 A1: no "too / also" block -- "...not Grace. He also hurt his knee." is a correction; "Daniel broke his arm too, but it
+  // wasn't Grace's fault" is not, because a possessive does not name Grace as the person)
+  const to = new RegExp(`\\b(?:${nameAlt(toNames)})\\b`, "i");
+  if (!to.test(message)) return false;
+  const away = new RegExp(`(?:\\bnot|n['’]t|\\bnever|\\brather than|\\binstead of)\\s+(?:(?:was|were|it|him|her|for|about|to|with)\\s+){0,2}(?:${nameAlt(fromNames)})\\b(?!['’])`, "i"); // (a possessive -- "Grace's fault" -- does not name Grace as the person)
+  if (away.test(message)) return true;
+  return pendingAboutFrom && new RegExp(`\\b(?:i meant|i mean|meant to say|it was|it's|it is)\\s+(?:${nameAlt(toNames)})\\b(?!['’])`, "i").test(message);
+}
 
 /** V1.2: the household corrects a recorded fact -- they say so, or a count / amount / date / yes-no changes. A further
  * free-text detail with no such cue ("Transverse fracture." after "broke his leg") is an added detail. */
@@ -356,6 +375,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const candidateLabels = new Map<string, string>();
 
   const nameOf = (id: string | null | undefined) => input.people.find((p) => p.id === id)?.name ?? "another person";
+  /** The names a message may use for a household member ("Tan Hui Min Grace (Grace)" -> Grace, Tan, Hui, Min). */
+  const namesFor = (id: string | null | undefined): string[] => {
+    const full = input.people.find((p) => p.id === id)?.name ?? "";
+    return [...new Set([/\(([^)]+)\)\s*$/.exec(full)?.[1] ?? "", ...full.replace(/\([^)]*\)/g, " ").split(/[\s,]+/)].map((n) => n.trim()).filter((n) => n.length >= 3))];
+  };
+  /** PR #57 follow-up (critic H1): whether THIS message corrects who the active claim is about, to `to` (see isPersonCorrection). */
+  const correctsTo = (to: string): boolean => {
+    const from = state.claim?.subjectId;
+    if (!from || from === to) return false;
+    // (a family name both people share names neither of them)
+    const a = namesFor(from), b = namesFor(to), shared = (n: string, xs: string[]) => xs.some((x) => x.toLowerCase() === n.toLowerCase());
+    return isPersonCorrection(input.message, a.filter((n) => !shared(n, b)), b.filter((n) => !shared(n, a)), state.pending?.kind === "fact" && state.pending.subjectId === from);
+  };
+  /** Whether a person correction moved a claim this turn (to `to`, when given). */
+  const movedThisTurn = (to?: string) => (state.claimMoves ?? []).some((m) => m.turn === state.turn && (to == null || m.to === to));
   /** Agent F (D16): a withdrawn estimate is taken out of the history the model is shown (this turn and later ones). */
   const scrubWithdrawn = (sentences: string[]) => {
     const swap = (t: string) => sentences.reduce((acc, w) => (w && acc.includes(w) ? acc.split(w).join("(an earlier estimate, since withdrawn)") : acc), t);
@@ -395,7 +429,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
    * out for the first person are withdrawn, and the reply says which one and why. */
   const personCorrection = (to: string) => {
     const from = state.claim;
-    if (!from?.subjectId || from.subjectId === to || !PERSON_CORRECTION.test(input.message)) return;
+    if (!from?.subjectId || from.subjectId === to || !correctsTo(to)) return;
     const withdrawn = from.derived.map((d) => d.sentence);
     const about = [...new Set(from.derived.flatMap((d) => d.factKeys))];
     from.derived = [];
@@ -420,16 +454,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     // What the household reported about it ("fell down", "broke ... arm") moves to the person now meant -- recorded as carried, and the person's own
     // words about themselves win -- and is taken OFF the person corrected away from: the household said it did not happen to them, so a later
     // question about them (or a new event of theirs) must not meet it again. Facts a document printed stay with their person.
+    // (PR #57 follow-up, critic H1: taken off, never lost -- each is kept in the first person's `reassigned`, and a correction back to them
+    // restores what was moved away from them and not since reported again)
     for (const [k, f] of Object.entries(from.facts)) {
       if ((f.source ?? "user_reported") !== "user_reported") continue;
       if (!next.facts[k]) next.facts[k] = { ...structuredClone(f), carriedFrom: f.carriedFrom ?? from.subjectId! };
+      (from.reassigned ??= []).push({ key: k, fact: structuredClone(f), to, turn: state.turn });
       delete from.facts[k];
     }
+    for (const r of next.reassigned ?? []) if (r.to === from.subjectId && !next.facts[r.key]) next.facts[r.key] = r.fact;
+    if (next.reassigned) next.reassigned = next.reassigned.filter((r) => r.to !== from.subjectId);
     state.claim = next;
   };
   /** fx-live-1 (K4b): the person the household corrected AWAY from, this turn. One correction is one move: a later call of the model
    * about that person (a note_facts it wrote for them before it noticed the correction) never moves the claim back. */
-  const supersededNow = (id: string) => PERSON_CORRECTION.test(input.message) && (state.claimMoves ?? []).some((m) => m.turn === state.turn && m.from === id);
+  const supersededNow = (id: string) => (state.claimMoves ?? []).some((m) => m.turn === state.turn && m.from === id);
   /** The claim kept for `subject` (created if new). The active claim moves to it unless a question about another
    * member's claim is pending -- a side remark about someone else never displaces that claim. */
   const claimFor = (subject: string): LoopClaim => {
@@ -437,10 +476,10 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     const parked = state.otherClaims?.[subject] ?? { subjectId: subject, facts: {}, derived: [] };
     // Agent F (D9): a fact about the speaker ("I'm on the private hospital plan") never displaces another member's
     // open claim -- it is kept beside it.
-    const speakerAside = subject === state.speakerId && !!state.claim?.subjectId && state.claim.subjectId !== subject && Object.keys(state.claim.facts).length > 0 && !PERSON_CORRECTION.test(input.message);
+    const speakerAside = subject === state.speakerId && !!state.claim?.subjectId && state.claim.subjectId !== subject && Object.keys(state.claim.facts).length > 0 && !correctsTo(subject);
     // V1.1: the household correcting WHO it is about ("it was Cai, not Bea") moves the claim, and the question asked
     // about the first person is withdrawn with it (it was asked because of that person's documents).
-    const correcting = PERSON_CORRECTION.test(input.message);
+    const correcting = correctsTo(subject);
     const hold = speakerAside || supersededNow(subject) || (!correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject);
     if (hold) { (state.otherClaims ??= {})[subject] = parked; return parked; }
     if (correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject) state.pending = null;
@@ -474,7 +513,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (supersededNow(id)) return;
     const otherClaimOpen = (state.claim?.subjectId && state.claim.subjectId !== id) || (state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== id);
     if (viaSelf && otherClaimOpen) return;
-    if (state.claim?.subjectId && state.claim.subjectId !== id) { personCorrection(id); if (PERSON_CORRECTION.test(input.message)) moveClaimTo(id); }
+    if (state.claim?.subjectId && state.claim.subjectId !== id) { const c = correctsTo(id); personCorrection(id); if (c) moveClaimTo(id); }
     state.subjectId = id;
     state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5);
   };
@@ -903,7 +942,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         // message, words that another person's claim already holds as THEIR report ("fell down", said about Grace) are not a report about this person:
         // "Daniel broke his arm too" does not say how Daniel's arm broke. Refused unless this message says them, this person's claim already holds
         // them, or an earlier message that says them also names this person (or is first person and this person is the speaker).
-        if (chk.source === "user_reported" && !PERSON_CORRECTION.test(input.message) && !quotedFrom(String(f.words ?? ""), [input.message])) {
+        if (chk.source === "user_reported" && !movedThisTurn(subject) && !quotedFrom(String(f.words ?? ""), [input.message])) {
           const w = String(f.words ?? "").trim(), owner = heldForAnother(subject, w);
           if (owner && !Object.values(claim.facts).some((x) => x.words && (quotedFrom(w, [String(x.words)]) || quotedFrom(String(x.words), [w]))) && !saidAboutThem(subject, w)) {
             refused.push({ key, error: `"${w}" was recorded as ${nameOf(owner)}'s report, and this message does not say it about ${nameOf(subject)}: record only what the household said about ${nameOf(subject)} (quote this message), and ask if something else matters` });
@@ -1140,23 +1179,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         if (first) return { result: { ok: false, error: `that calculation still needs ${first[0].key} first (${first[0].why}): ask for that, one question at a time (fact_key ${first[0].key}, citing ${first[0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       }
       if (ownList && ownList.length && !CAUSE_KEYS.has(key) && !sameFact(ownList[0].key, key)) return { result: { ok: false, error: `that calculation still needs ${ownList![0].key} first (${ownList![0].why}): ask for that, one question at a time (fact_key ${ownList![0].key}, citing ${ownList![0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
-      // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
-      if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
-      // Production fracture conversation (19 Oct 2026): a question asking for a REQUIREMENT ("confirmed by X-ray and certified by a
-      // registered medical practitioner") is justified only by cited wording that prints it. Sharing one word with the clause
-      // ("fracture") is not enough. When the answer already stands on its statements, the unsupported question is not asked:
-      // what the documents print is the answer (the household can still be asked something the wording turns on).
-      if (!calcItem && !req) {
-        const unprinted = unprintedAsk(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name));
-        if (unprinted) {
-          if (Array.isArray(a.statements) && (a.statements as unknown[]).length) {
-            const fin = action({ id: call.id, name: "final_answer", arguments: { sentences: a.statements, subject_id: a.subject_id ?? null, ...(Array.isArray(a.next_steps) ? { next_steps: a.next_steps } : serverAskSteps ? { next_steps: serverAskSteps } : {}) } });
-            if (fin.terminal) { (trace.adjusted ??= []).push(`ask_user (${key}): not asked -- the cited wording (${because.join(", ")}) does not print what it asks (${unprinted.join(", ")}); answered with its statements instead`); return fin; }
-          }
-          noteFailure("ask_user");
-          return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not print what this question asks (${unprinted.join(", ")}): state what the documents print as statements and end with final_answer; ask the household only for a detail the cited wording turns on` } };
-        }
-      }
+      // (PR #57 follow-up, UX FX-K4B on C2: before the checks below, so a passage printed under another benefit -- a mobility aid's
+      // "certified by a Registered Medical Practitioner" -- never justifies a fracture question)
       // Death-journey release: the cited "why" is the sentence of the benefit's OWN section. A passage printed under another
       // benefit's heading (Total and Permanent Dismemberment for a fracture question) is not cited for this benefit, and where
       // a passage spans two sections only the section naming the event's benefit is read.
@@ -1172,6 +1196,23 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           (trace.adjusted ??= []).push(`ask_user: the cited passage(s) ${foreign.join(", ")} are printed under another benefit's section and were not cited for this question`);
           if (!keep.length) return { result: { ok: false, error: `the cited evidence (${foreign.join(", ")}) is printed under a different benefit's section, not the benefit this question is about: cite the passage printed under that benefit's own heading, or do not ask` } };
           because = keep;
+        }
+      }
+      // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
+      if (!calcItem && !req && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
+      // Production fracture conversation (19 Oct 2026): a question asking for a REQUIREMENT ("confirmed by X-ray and certified by a
+      // registered medical practitioner") is justified only by cited wording that prints it. Sharing one word with the clause
+      // ("fracture") is not enough. When the answer already stands on its statements, the unsupported question is not asked:
+      // what the documents print is the answer (the household can still be asked something the wording turns on).
+      if (!calcItem && !req) {
+        const unprinted = unprintedAsk(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name));
+        if (unprinted) {
+          if (Array.isArray(a.statements) && (a.statements as unknown[]).length) {
+            const fin = action({ id: call.id, name: "final_answer", arguments: { sentences: a.statements, subject_id: a.subject_id ?? null, ...(Array.isArray(a.next_steps) ? { next_steps: a.next_steps } : serverAskSteps ? { next_steps: serverAskSteps } : {}) } });
+            if (fin.terminal) { (trace.adjusted ??= []).push(`ask_user (${key}): not asked -- the cited wording (${because.join(", ")}) does not print what it asks (${unprinted.join(", ")}); answered with its statements instead`); return fin; }
+          }
+          noteFailure("ask_user");
+          return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not print what this question asks (${unprinted.join(", ")}): state what the documents print as statements and end with final_answer; ask the household only for a detail the cited wording turns on` } };
         }
       }
       const caseLabels = req?.isCase && req.options.length ? req.options.map((o) => req!.optionLabels?.get(o) ?? o) : null;
@@ -1637,7 +1678,9 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
     if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
     if (Array.isArray(given) && given.some(isContactStep)) return null;
-    const asked = familiesOf(input.message);
+    // (live "what do i do now": a follow-up that names no event takes the event from this conversation's earlier messages)
+    // (Critic R14-3: the latest one that names an event -- never a mix of every event the conversation has been about)
+    const asked = [...userTexts].reverse().map((t) => familiesOf(t)).find((f) => f.size) ?? familiesOf("");
     if (!asked.size) return null;
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
     const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
@@ -1752,7 +1795,12 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     // a cause named only by the question's scenario is not used here)
     const rep = reportedValue(CAUSE_ATTRIBUTE, householdReports(subj, (state.claim?.subjectId === subj ? state.claim : state.otherClaims?.[subj])?.facts ?? {}));
     if ((rep.value !== "accident" && rep.value !== "illness") || !rep.words) return null;
-    const c = { cause: rep.value as "accident" | "illness", words: rep.words };
+    // PR #57 follow-up (critic H2): CAUSE_ATTRIBUTE was written for deaths. For an injury benefit, "illness" is read only when nothing the
+    // household reported about this person describes an injury; "she felt sick and fainted, hitting her head" says both, so the cause is
+    // left unresolved and no verdict is given (the benefit keeps its terms, its printed accident condition quoted).
+    const reports = householdReports(subj, (state.claim?.subjectId === subj ? state.claim : state.otherClaims?.[subj])?.facts ?? {});
+    const injured = rep.value === "illness" && reports.some((r) => INJURY_WORDS.test(r.words));
+    const c = { cause: injured ? "unresolved" as const : rep.value as "accident" | "illness", words: rep.words };
     const recs = (await recordsFor(ctx, subj).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>)).filter((r) => r.status !== "unsupported");
     const label = (r: { benefit: string }) => r.benefit.replace(/\s*\(.*$/, "").replace(/^[A-Z][.,]\s+/, "").trim();
     // (the household's own words for how it happened: the fact recorded for it when there is one, else the sentence that reported it)
@@ -1772,11 +1820,36 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       seen.add(r.id);
       const wording = clauseOf(acc.wording);
       const via = (acc.via as typeof r | undefined) ?? r;
+      // (critic H2: the server never decides the condition is met or not; the insurer does)
       const text = c.cause === "illness"
-        ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an illness, not an accident, so on what you have told me this benefit's condition is not met and no amount is given for it.`
+        ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an illness, not an accident, so on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's.`
+        : c.cause === "unresolved"
+        ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). What you reported describes both an illness and an injury, so whether that condition is met is for the insurer to decide.`
         : `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an accident, which is what that condition requires.`;
       out.push({ kind: "fact", subject_id: subj, text, evidence_ids: [evidenceIdOf(state, via.source.evidence, "statement")] });
-      if (c.cause === "illness") replaced.add(x);
+      // (PR #57 follow-up, DC's instructions: a documented benefit is never hidden. Its printed terms stay beside the condition.)
+    }
+    // PR #57 follow-up (v1 K2.3, coordinator decision under DC's contract that a documented benefit is never hidden): on the illness path,
+    // the other cover the person's own certificate LISTS with no cause condition (not a death benefit) is named once. Whether its terms are described is decided by the server's own absence check (./absence-scope.ts, document_silent over
+    // the person's other documents); when that check refuses, the listing alone is said. An amount is only ever "listed as of <date>".
+    if (c.cause === "illness" && out.length) {
+      const docIds = [...new Set(recs.filter((r) => r.memberId === subj).map((r) => r.policy.id))];
+      const GENERIC = /\b(?:group|benefits?|cover|plan|insurance)\b/gi;
+      const keyOf = (r: (typeof recs)[number]) => label(r).replace(GENERIC, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      const listedOnly = recs.filter((r) => r.memberId === subj && r.policy.personalProof && r.kind === "printed_amount" && !seen.has(r.id) && !deathBenefit(r.benefit) && !accidentCondition(r, recs) && keyOf(r).length >= 4);
+      const names = [...new Set(listedOnly.map((r) => label(r)))];
+      if (names.length) {
+        const list = names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names.at(-1) : names[0];
+        const dates = [...new Set(listedOnly.map((r) => r.asOf).filter((x): x is string => !!x))];
+        const asOf = dates.length === 1 ? ` (listed as of ${new Date(dates[0] + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })})` : "";
+        const ev = [...new Set(listedOnly.map((r) => evidenceIdOf(state, r.source.evidence, "statement")))];
+        out.push({ kind: "fact", subject_id: subj, evidence_ids: ev, text: `${listedOnly[0].memberName}'s certificate also lists ${list}${asOf}.` });
+        const others = docIds.filter((id) => !listedOnly.some((r) => r.policy.id === id));
+        const absence = { kind: "not_found", claim: "document_silent", subject_id: subj, topic: `what ${names.join(" or ")} ${names.length > 1 ? "cover" : "covers"}`, terms: listedOnly.map(keyOf), scope_policy_ids: others };
+        const members = input.people.map((p) => p.name);
+        const pre = others.length ? await checkNotFound(input.accountId, absence, { subjectId: subj, who: listedOnly[0].memberName, names: members }).catch(() => null) : null;
+        if (pre?.ok) out.push(absence);
+      }
     }
     if (!out.length) return null;
     (trace.adjusted ??= []).push(`stated how the reported cause (“${said}”) fits the printed accident condition of ${[...seen].map((id) => label(ctx.benefitRecords!.get(id)!)).join(", ")}${replaced.size ? "; its terms and amount are left out for a cause it does not fit" : ""}`);
@@ -1850,7 +1923,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (!dc || !dc.extra.length) return null;
     const cnStop = await causeNote(subject, dc.extra.map((x) => String(x.benefit ?? ""))).catch(() => null);
     const args: Record<string, unknown> = { subject_id: subject, sentences: [...dc.extra, ...(cnStop ?? [])], next_steps: dc.steps };
-    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
     if (problems.length) return null;
     const composed = composeFinal({ sentences: args.sentences as Record<string, unknown>[], nextSteps: args.next_steps, subjectId: subject }, composeCtx());
     if (!composed.sentences.length) return null;
@@ -2044,6 +2117,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       }
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
+    let serverSaid = false;
+    const underQuote: { text: string; note: string }[] = [];
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
     for (const m of missing) {
       const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
@@ -2057,10 +2132,43 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         if (line) { found = { id, line: line.length > 260 ? line.slice(0, line.indexOf(".", 120) + 1 || 260) : line, product: policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "your policy" }; break; }
       }
       if (found) sentences.push({ text: `For the stay you mentioned, the ${found.product} says: “${found.line.replace(/[.\s]+$/, "")}”.`, evidence_ids: [found.id], subject_id: subject });
+      // PR #57 follow-up (G2, DC's GP-bill answer): "not yet looked up" is untrue when this turn searched for what pays such a bill; then
+      // the note says what was found: the pages read do not print one (the household's own words quoted as they wrote them).
+      else if (kind === "bill" && trace.toolCalls.some((t) => t.name === "search_passages" && t.ok && /\b(?:medical|expenses?|bills?|outpatient|GP|clinic|reimburs\w*|doctor|consultation)\b/i.test(String(t.args?.query ?? "")))) {
+        // A doctor's bill (GP, clinic, outpatient): the server checks the person's documents for it itself, as a not_found statement
+        // would be (absence-scope.ts, with G1): the absence, what was read of a partly stored scope, or the lines that do print it.
+        let said = false, refused = false;
+        if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic|physician)\b/i.test(words)) {
+          // (critic round 5 A3: the doctor's own words are searched too; a page that reimburses medical treatment refuses the absence)
+          // (PR #64, Critic R10-2: where the household placed the bill decides whether a line that pays only abroad is quoted)
+          // (Critic R11-2: explicit words in this message only; anything else is "not said", which never quotes an abroad-only line as the answer)
+          const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b/i.test(input.message);
+          const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(input.message);
+          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject, bill_place: away && !home ? "abroad" : home && !away ? "home" : "unknown" };
+          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: short || null, names: input.people.flatMap((p) => [p.name]) });
+          const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
+          refused = !nf.ok && !nf.partial;
+          if (server) { const { check, ...st } = server; RENDERED.add(st); ABSENCE_OF.set(st, check); sentences.push(st); said = true; }
+          else if (!nf.ok && (nf.printed?.length || nf.abroad)) {
+            // (PR #64: a line that pays only abroad, said apart when the household did not place the bill abroad; then the quote; then -- only
+            // if the quote survives composing (Critic R11-3) -- whose cover that line is not shown to be, directly under it)
+            const idOf = (ref: Parameters<typeof evidenceIdOf>[1], via?: string) => evidenceIdOf(state, ref, via ?? "statement");
+            const q = nf.printed?.length ? quotePrinted(nf.printed, idOf, subject) : null;
+            const a = nf.abroad ? quotePrinted([nf.abroad], idOf, subject) : null;
+            if (a && nf.abroad) { const line = a.text.replace(/^.*? prints: /, ""); const st = { kind: "fact", text: q ? `The ${nf.abroad.name} (page ${nf.abroad.page}) prints a benefit only for treatment outside Singapore, which applies only if the treatment was abroad: ${line}` : `The only line found for this is in the ${nf.abroad.name} (page ${nf.abroad.page}), and it pays only for treatment outside Singapore, so it applies only if the treatment was abroad: ${line}`, evidence_ids: a.evidence_ids, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; }
+            if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; if (nf.before || nf.after) underQuote.push({ text: st.text, note: [nf.before, nf.after].filter(Boolean).join(" ") }); }
+          }
+        }
+        // (critic round 5 F2: "do not print" only when no check refused -- a refusal means the documents print something for it, or were not read)
+        if (!said) notes.push(refused ? `I could not confirm from your documents what pays for the bill you mentioned${words ? ` (“${words}”)` : ""}.` : `The pages I read do not print a benefit for the bill you mentioned${words ? ` (“${words}”)` : ""}.`);
+        else serverSaid = true;
+      }
       else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
     }
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
-    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n)) } : (composed ?? c0);
+    // (the note goes first among the notes, so it reads directly under the server's quote -- and only when that quote was kept)
+    notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => u.note));
+    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], ...(c0.absenceChecks || composed.absenceChecks ? { absenceChecks: [...(c0.absenceChecks ?? []), ...(composed.absenceChecks ?? [])] } : {}), notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n) && !(serverSaid && n === DROPPED_NOTE)) } : (composed ?? c0);
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.
     if (r.kind === "ask") return { ...r, composed: merged, trailing: [...(r.trailing ?? []), ...notes] };
@@ -2149,7 +2257,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             serverAskSteps = null;
             if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
-          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
           if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
@@ -2169,7 +2277,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const extra = retainedTerms(sentences, r.terminal.composed.dropped, String(call.arguments.subject_id ?? state.subjectId ?? ""));
           if (extra.length) {
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...extra] } };
-            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p2.length) {
               await bindCitedFigures(again);
               const r2 = action(again);
@@ -2188,7 +2296,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (dc2?.extra.length && !dc2.rows.includes("(no death benefit established)")) {
             const nextSteps = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : dc2.steps;
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...dc2.extra], next_steps: nextSteps } };
-            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p3.length) {
               await bindCitedFigures(again);
               const r3 = action(again);
@@ -2208,7 +2316,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const steps5 = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : ((await deathCompletion(subj3, sentences, [], true).catch(() => null))?.steps ?? []);
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences.filter((x) => !(x?.kind === "fact" && cn.some((n) => n.text === String(x.text ?? "")))), ...cn], next_steps: steps5 } };
-            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p5.length) {
               await bindCitedFigures(again);
               const prevNotes = r.terminal.composed.notes ?? [];
@@ -2223,7 +2331,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (note) {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, note] } };
-            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p4.length) {
               await bindCitedFigures(again);
               const r4 = action(again);
@@ -2463,14 +2571,44 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     (trace.adjusted ??= []).push(`the reply ended without the question requirement ${req.id} (${req.benefit}) leaves open: asked it from the server`);
     return { kind: "ask", pending: { kind: "fact", question: req.question, factKey: req.factKey, subjectId: req.subjectId, why, evidenceIds: because, ...(req.options.length ? { options: req.options.map((o) => req.optionLabels?.get(o) ?? o) } : {}), ...(req.isCase ? { caseOf: req.benefitId } : {}), requirementId: req.id, benefitId: req.benefitId, turn: state.turn }, preface: null, composed: r.composed };
   };
-  let done = await requirementQuestion(conditionQuestion(withInventory(await groundedFallback((reply ?? beforeRepair) as LoopReply | null))));
+  /** PR #57 follow-up (UX FX-K6B on C2): a reply that ends without the absence the server refused this turn only because part of its scope
+   * was not stored -- the model gave up, or its sentence was dropped -- gets the server's "what was read" statement, never a bare
+   * "couldn't confirm". Only for the same person, and only when the reply states no absence of its own. */
+  const withPartialAbsence = (r: LoopReply | null): LoopReply | null => {
+    const pa = ctx.partialAbsence;
+    if (!r || r.kind !== "final" || !pa || pa.used) return r;
+    const subject = r.composed.subjectId ?? state.subjectId ?? null;
+    if ((pa.subjectId ?? null) !== subject || r.composed.absenceChecks?.length) return r;
+    const st: Record<string, unknown> = { kind: "not_found", text: pa.text, evidence_ids: [], ...(subject ? { subject_id: subject } : {}) };
+    RENDERED.add(st); ABSENCE_OF.set(st, pa.check); pa.used = true;
+    const c = composeFinal({ sentences: [st], subjectId: subject }, composeCtx());
+    if (!c.sentences.length) return r;
+    const c0 = r.composed;
+    (trace.adjusted ??= []).push("the reply ended without the absence refused for a partly stored scope: the server's statement of what was read was added");
+    return { kind: "final", composed: { ...c0, sentences: [...c0.sentences, ...c.sentences], absenceChecks: [...(c0.absenceChecks ?? []), ...(c.absenceChecks ?? [])], notes: c0.notes.filter((n) => n !== DROPPED_NOTE) } };
+  };
+  /** Live finding (20 Oct, "what do i do now", turn 7): a household that asks what to do next, when nothing the reply said could be kept,
+   * gets the next steps the previous answer SHOWED (as composed and checked then: TraceTurn.shown), instead of "I couldn't confirm an
+   * answer to that". Only the immediately previous answer, only for the same person, and never when this turn corrected or withdrew it
+   * (Critic R14-1, R14-2). An open question is not repeated here: the answer ends with it as its question card (R14-4). */
+  const whatToDo = (r: LoopReply | null): LoopReply | null => {
+    if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
+    if (r.composed.sentences.length || r.composed.nextSteps.length || corrections.length || invalidated.length) return r;
+    // Critic R17-1/R17-3: only the answer shown just before this message (an ask card or a withdrawn answer in between shows nothing old).
+    const prev = state.turns.filter((t) => t.turn < state.turn).at(-1)?.shown;
+    const subject = r.composed.subjectId ?? state.subjectId;
+    if (!prev || !prev.nextSteps.length || !subject || prev.subjectId !== subject) return r;
+    (trace.adjusted ??= []).push(`the household asked what to do and the reply kept nothing: the previous answer's next steps were shown again (${prev.nextSteps.length})`);
+    return { ...r, composed: { ...r.composed, notes: [`Here ${prev.nextSteps.length > 1 ? "are the next steps" : "is the next step"} from my last answer.`, ...r.composed.notes.filter((n) => n !== DROPPED_NOTE)], nextSteps: prev.nextSteps } };
+  };
+  let done = await requirementQuestion(conditionQuestion(withInventory(whatToDo(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null))))));
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
   if (!done && BUDGET_STOPS.has(stop?.kind ?? "turn_calls") && [...requirements.values()].some((x) => x.resolvedBy === "household")) {
     const r = [...requirements.values()].filter((x) => x.resolvedBy === "household").at(-1)!;
     const st: Record<string, unknown>[] = [{ kind: "benefit_terms", benefit_id: r.benefitId, subject_id: r.subjectId, text: "-" }];
-    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null });
+    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
     const composed = !problems.length ? composeFinal({ sentences: st, subjectId: r.subjectId }, composeCtx()) : null;
     const because = r.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
     if (because.length) {

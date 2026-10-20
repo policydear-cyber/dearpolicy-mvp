@@ -1,0 +1,9 @@
+FAIL F4 nothing outside lib/rag2 and its own suite imports lib/rag2 (flag off = existing chat path untouched)
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+     + [
+     +   'lib/chat/stale-answers.ts'
+     + ]
+     - []
+     

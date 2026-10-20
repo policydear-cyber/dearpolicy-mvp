@@ -366,7 +366,11 @@ export function storedRenderContext(a: Partial<ChatAnswer>): boolean | null {
     const text = flat(t);
     for (const m of text.matchAll(new RegExp(MONEY_PATTERN.source, "gi"))) {
       const v = asAmount(m[0]);
-      if (v == null || !records.some((r) => text.includes(r.sentence) && r.amounts.has(v))) return null;
+      // (PR #57 follow-up, critic L1: the figure must lie INSIDE a record's own sentence -- a second sentence repeating it as "you can claim
+      // S$2,500" is not that record's statement)
+      const at = m.index ?? -1;
+      const inside = (r: { sentence: string }) => { for (let i = text.indexOf(r.sentence); i >= 0; i = text.indexOf(r.sentence, i + 1)) if (at >= i && at + m[0].length <= i + r.sentence.length) return true; return false; };
+      if (v == null || !records.some((r) => r.sentence && r.amounts.has(v) && inside(r))) return null;
     }
   }
   return false;
