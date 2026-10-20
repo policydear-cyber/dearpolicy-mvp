@@ -695,3 +695,38 @@ Singapore" is ungrammatical (`loop.ts:2158`). Also "Outpatient Medicare Policy P
 **Not ready to merge.** R11-1 is the blocker: in a household whose certificate does list the outpatient policy, the answer says it
 does not. R11-2 should be fixed with it; both are small and local. R10-1 to R10-4 are fixed for the cases they were raised on.
 No paid run; scripted reproductions only.
+
+---
+
+# Round 12: PR #64 head `7f4dbd3`
+
+Method: the same `decideNotFound` reproductions as rounds 10-11, from `7f4dbd3` (store stubbed; no DB, no model, no spend), plus the
+new `bill_place` detector copied verbatim (`loop.ts:2143-2144`).
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R11-1 false "does not list" | fixed | E ("GROUP OUTPATIENT MEDICARE" on Daniel's rows) and E2 ("GROUP OPMC"): no "does not list" anywhere; the section is named and the insurer line kept. A: still says OPMC is not on his certificate (true). D (spouse holds OPMC on the shared certificate): judged on Daniel's rows only, so "does not list" stays (true) |
+| R11-2 abroad detector | fixed | "GP in Tampines", "GP in Raffles Place", "fell in Grace's room" and a trip in an earlier turn all give `unknown`; only "on holiday" etc. in the current message gives `abroad` |
+| R11-3 note placement | fixed in substance | the note is added only when the quote survives composing, and first among this step's notes (`loop.ts:2168`) |
+| R11-4 wording | fixed | "The only line found for this is in the ..."; no "Policy Policy" (G1 and the new note) |
+| R10-1 to R10-4 | still fixed | A, B, C as round 11 |
+
+The new "does not list" rule only speaks when none of the person's own products shares a distinctive word with the policy name or
+its abbreviation. G1's must-not-fire gains the same check. Both err toward silence, which is the safe side.
+
+## Residual (Low, not blocking)
+
+- **R12-1:** `merged.notes` puts the earlier reply's notes before this step's, so when the model's own reply carried notes, the
+  whose-cover note is not strictly directly under the quote (`loop.ts:2169`). Worth one render check by the Test engineer
+  (returned = saved = reopened, and the order).
+- **R12-2:** with an unknown place, the "only for treatment outside Singapore" sentence is now pushed before the home quote, so it
+  reads first. It carries its own caveat, so this is order only.
+- **R12-3:** the note is matched to the kept quote by its first 60 characters. Composing never edits a quote today (no S$ rewrite
+  of a quoted bare "$"), but if that changes, the note would silently drop.
+
+## Verdict on PR #64 at `7f4dbd3`
+
+**Ready to merge from the Critic's side.** No blocker remains. Nothing reproduced states a wrong claimable amount, quotes an
+overseas-only line as the answer for a bill at home, presents another policy's wording as his cover, or says he lacks cover his
+certificate lists. The evidence is scripted reconstruction only (no live run; OpenAI configuration). The model-dependent parts are
+unshown, and so is whether DC's real scheme prints its panel GP under a "... POLICY" heading.
