@@ -1937,3 +1937,31 @@ missing, or say "may include").
 
 **Ready to merge** (after #76). R34-1 and R34-2 are optional wording follow-ups. R32-3 still holds: before #76 merges, "Not in my family"
 shows an error rather than the device fallback.
+
+# Round 35: PR #78 at `d8738d0` (R33-1, narrow THIRD_PARTY_SENSE)
+
+Read `git diff bf228cf d8738d0` (one regex in `lib/ledger/events.ts:208`, two new cases). I ran the new regex in node on 14 wordings.
+
+| Wording | Result |
+|---|---|
+| Legal liability for accidental death or bodily injury to third parties S$500,000 | dropped ✓ |
+| If you are liable for accidental death, injury or damage to other people | dropped ✓ |
+| Third Party Liability S$1,000,000 / Liabilities to third parties / Liability to third parties for death | dropped ✓ |
+| If your legal liability for death of others | dropped ✓ |
+| Accidental Death …, including death from assault by a third party | kept ✓ (R33-1) |
+| … shall not be liable for death caused by war / not liable to pay for death caused by war | kept ✓ |
+| not liable for any claim recoverable from a third party / a third party is responsible | kept ✓ |
+| Compensation for death caused by a third party vehicle | kept ✓ |
+| We will not be liable for death caused **to others** by the insured | dropped (see R35-1) |
+
+The #74 liability guard still holds: the name test (`THIRD_PARTY_LIABILITY`) is unchanged, and every liability-cover phrasing above
+is still dropped through the quote.
+
+## R35-1 (Low, accept): a negated "not liable … to others" exclusion inside a personal accident quote still drops the row
+
+"We will not be liable for death caused to others by the insured" matches `liab… to others`. The old regex dropped it too, and the
+wording is rare in a benefit row. Optional: skip a match preceded by "not (be )?" / "never". No change needed for this PR.
+
+## Verdict on PR #78 at `d8738d0`
+
+**Ready to merge.** R33-1 is fixed, the liability guard holds, and R35-1 is accepted.
