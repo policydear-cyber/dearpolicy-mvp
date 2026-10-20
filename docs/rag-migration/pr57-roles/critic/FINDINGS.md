@@ -775,3 +775,56 @@ qualifier-less amount as the answer. If the content holds several statements, th
 **No blocker from the Critic.** It is presentation only: no change to answer text, citations, isolation or saved answers. R13-1 is
 an existing accepted risk (C1-3) made more reachable. R13-2 and R13-3 are small polish. The mobile e2e spec needs the Test
 engineer's update (Claims and Household are now under More), as the PR says.
+
+---
+
+# Round 14: PR #66 ("what do i do now"), head `23af18248495ccf79e9ff60678964b8a0f5f9ed2`, base main `ca6af69`
+
+Read-only review of `loop.ts` `whatToDo` (`:2578-2589`) and the `contactStepFor` change (`:1682`). Nothing run.
+
+**R14-1. High: the repeated steps are the model's raw `next_steps` arguments, not the steps the household was shown.** The PR says
+it repeats "the server's own rendered steps". The code reads `t.toolCalls[...].args.next_steps` from earlier turns (`:2581`), and
+`args` is `call.arguments` as the model sent it (`record(call.name, call.arguments, ...)`, `:2245`, `:2331`). Composition filters
+steps *after* that point (`compose.ts:1417-1440`):
+- it drops a step that states a figure ("a next step may not state a figure");
+- it drops a step that names the wrong insurer;
+- it drops a "must / required / need to submit" requirement no document prints;
+- it drops a step that promises cover or money (`unsafeNextStep`);
+- it labels unsupported paperwork.
+
+`whatToDo` puts the raw strings straight into `composed.nextSteps`, past all of those. So "what do i do now" can show:
+- "Claim S$2,500 under Simple Fracture" (an amount without its conditions);
+- "You must submit the claim form with receipts" (the exact general advice the composer removed in the live turn 7);
+- a step naming another household member's insurer.
+
+The answer is then saved and reopened that way. Fix: repeat the steps the earlier answers actually showed (their saved, composed
+`nextSteps`), or run the repeated strings through the same step filters before showing them.
+
+**R14-2. High: no person or scenario boundary.** `earlier` takes every turn before this one (`:2581`), whatever its subject. Some
+steps were given for Grace before "it was Daniel, not Grace". Some came from a superseded scenario, or from an answer later
+withdrawn by a correction. All are repeated, newest first, deduplicated, under "the next step from my earlier answer". This breaks
+the contract that a correction must not contaminate another person's later scenario. Fix:
+- take steps only from turns whose answer subject is the current subject;
+- take them only since the latest correction, reassignment or new scenario for that person;
+- never from an answer the conversation withdrew.
+
+If that cannot be told, show only the open question.
+
+**R14-3. Medium: `contactStepFor` takes the event from all earlier user messages** (`:1682`). After a death question then a fracture
+question, `familiesOf(userTexts.join(" "))` holds both. The first certificate record matching either family supplies the insurer
+contact step, so the step can belong to the previous scenario's benefit. Fix: use the latest message that names an event, not the
+union.
+
+**R14-4. Low: the open question.** It is read from the current `state.pending`, so it is this conversation's live question; a fact
+already supplied would have closed it, and none is re-asked. But `requirementQuestion` / `conditionQuestion` run *after* `whatToDo`
+and can turn the reply into an ask card for the same question. The note "One thing I asked is still open: ..." then sits above the
+same question card: a duplicate. Check that order with one scripted render.
+
+**Returned = saved = reopened.** It goes through the normal composed path, so it is consistent. Under R14-1 and R14-2, though, it
+is consistently wrong.
+
+## Verdict on PR #66 at `23af182`
+
+**Not ready to merge.** R14-1 and R14-2 are blockers: the fallback can surface amounts and requirements the composer had removed,
+and steps for the wrong person or an earlier scenario. Both fixes are local to `whatToDo`. Without them the safe fallback is to show
+only the open question, plus the server's own insurer contact step for the current event.
