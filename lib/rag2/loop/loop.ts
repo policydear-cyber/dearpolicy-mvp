@@ -2088,7 +2088,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
     trace.steps++; trace.modelId = out.modelId || trace.modelId;
-    messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls });
+    messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls, ...(out.providerContent ? { providerContent: out.providerContent } : {}) });
     if (!out.toolCalls.length) { messages.push({ role: "user", content: "Use the tools. End the turn only with ask_user or final_answer." }); continue; }
     for (const call of out.toolCalls) {
       if (reply) { messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: "the turn already ended" }) }); continue; }

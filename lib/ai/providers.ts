@@ -53,7 +53,7 @@ export function apiKeyFor(provider:Provider){
  * be right, and needs nothing installed on the computer. Explicit per-job
  * settings still win over the preset. */
 const PRESETS:Record<string,Record<"reading"|"judgement"|"narration",string>>={
-  anthropic:{reading:"anthropic:claude-haiku-4-5",judgement:"anthropic:claude-sonnet-5",narration:"anthropic:claude-haiku-4-5"},
+  anthropic:{reading:"anthropic:claude-haiku-5-5",judgement:"anthropic:claude-sonnet-5-5",narration:"anthropic:claude-haiku-5-5"},
   gemini:{reading:"gemini:flash-lite",judgement:"gemini:flash",narration:"gemini:flash-lite"},
   openai:{reading:"openai:gpt-5-mini",judgement:"openai:gpt-5-mini",narration:"openai:gpt-5-mini"},
 };
@@ -113,6 +113,10 @@ export type Price={input:number;output:number;cachedInput?:number};
 const PRICES:Record<string,Price>={
   "anthropic:claude-haiku-4-5":{input:1,output:5,cachedInput:0.1},
   "anthropic:claude-sonnet-5":{input:2,output:10,cachedInput:0.2},
+  "anthropic:claude-sonnet-5-5":{input:2,output:10,cachedInput:0.2},
+  // Haiku 5.5 has two rate cards by prompt length: these are the rates for prompts of 100K tokens or fewer (every
+  // DearPolicy request); a longer prompt is billed at $0.50 / $2.50, which this table would under-count.
+  "anthropic:claude-haiku-5-5":{input:0.10,output:0.50,cachedInput:0.01},
   "anthropic:claude-opus-5":{input:5,output:25,cachedInput:0.5},
   "gemini:gemini-2.5-flash-lite":{input:0.10,output:0.40},
   "gemini:gemini-2.5-flash":{input:0.30,output:2.50},
@@ -141,7 +145,14 @@ export type ModelCapability={
    * page with no text layer can be transcribed by the configured reading model itself (openAiDocumentText). */
   documentInput?:{set:Record<string,unknown>;maxFileBytes:number;source:string};
   contextTokens?:number;maxOutputTokens?:number;
+  /** Anthropic Messages API request rules. `omit` names request fields the model rejects (non-default temperature);
+   * `set` is merged into the body; `toolChoice:"auto"` replaces forced tool use, which the model rejects; `beta` is sent
+   * as the anthropic-beta header. `messagesWithTools` is the conversation loop's request (lib/rag2/loop/hosted-model.ts);
+   * `messagesStructured` is one JSON reply without tools (anthropicMessages, anthropicDocumentText). */
+  messagesWithTools?:AnthropicRequestRules;
+  messagesStructured?:AnthropicRequestRules;
 };
+export type AnthropicRequestRules={set:Record<string,unknown>;omit:string[];toolChoice?:"auto";beta?:string;source:string};
 const CAPABILITIES:Record<string,ModelCapability>={
   "openai:gpt-6-luna":{
     chatCompletionsWithTools:{set:{reasoning_effort:"none"},
@@ -156,7 +167,41 @@ const CAPABILITIES:Record<string,ModelCapability>={
       source:"https://developers.openai.com/api/docs/models/gpt-6-luna: input Text, Image; https://developers.openai.com/api/docs/guides/pdf-files: on models with vision capabilities the API extracts both text and page images; Chat Completions accepts only PDF files as file content parts ({type:'file', file:{filename, file_data:'data:application/pdf;base64,...'}}); each file must be under 50 MB; Chat Completions file inputs don't support detail"},
     contextTokens:1_050_000,maxOutputTokens:128_000,
   },
+  // The conversation loop resends its own tool calls within a turn, and narrows the tool list once retrieval closes. On
+  // this model a replayed thinking block after a change to the tools or earlier messages is a 400 on accounts created
+  // since 2026-08-31, unless the request asks for such blocks to be dropped -- which only adaptive thinking allows. So the
+  // loop runs adaptive thinking at low effort with drop_block; the one-shot JSON calls have nothing to replay and run with
+  // thinking off (between_tools, the lowest setting), as their output budgets were sized for the JSON alone.
+  "anthropic:claude-sonnet-5-5":{
+    messagesWithTools:{set:{thinking:{type:"adaptive",block_binding:{prefix_mismatch_behavior:"drop_block"}},output_config:{effort:"low"}},omit:["temperature"],toolChoice:"auto",
+      beta:"thinking-binding-controls-2026-08-01",
+      source:"Claude API migration guide, Claude Sonnet 5.5 (checked 2026-10-20): non-default temperature is a 400; tool_choice any/tool is a 400; thinking disabled is a 400 (between_tools is the lowest setting); thinking.block_binding.prefix_mismatch_behavior drop_block needs the thinking-binding-controls-2026-08-01 beta and adaptive thinking"},
+    messagesStructured:{set:{thinking:{type:"between_tools"},output_config:{effort:"medium"}},omit:["temperature"],
+      source:"Claude API migration guide, Claude Sonnet 5.5 (checked 2026-10-20): between_tools is accepted at effort high or below and takes no other thinking field"},
+    contextTokens:1_000_000,maxOutputTokens:128_000,
+  },
+  "anthropic:claude-haiku-5-5":{
+    messagesWithTools:{set:{},omit:["temperature"],
+      source:"Claude API migration guide, Claude Haiku 5.5 (checked 2026-10-20): any temperature other than 1 is a 400; forced tool_choice is accepted"},
+    messagesStructured:{set:{thinking:{type:"disabled"}},omit:["temperature"],
+      source:"Claude API migration guide, Claude Haiku 5.5 (checked 2026-10-20): thinking is on by default and counts toward max_tokens; disabled is accepted at the default effort (medium)"},
+    contextTokens:1_000_000,maxOutputTokens:128_000,
+  },
 };
+/** A Messages API body with a model's request rules applied (exported for the request-shape regression). */
+export function applyAnthropicRules(body:Record<string,unknown>,rules:AnthropicRequestRules|undefined):Record<string,unknown>{
+  if(!rules)return body;
+  const out:Record<string,unknown>={...body};
+  for(const k of rules.omit)delete out[k];
+  if(rules.toolChoice&&"tool_choice" in out)out.tool_choice={type:rules.toolChoice};
+  return {...out,...rules.set};
+}
+function anthropicHeaders(key:string,rules:AnthropicRequestRules|undefined):Record<string,string>{
+  return {"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01",...(rules?.beta?{"anthropic-beta":rules.beta}:{})};
+}
+export function anthropicHeadersFor(key:string,choice:ModelChoice,kind:"messagesWithTools"|"messagesStructured"){return anthropicHeaders(key,capabilityFor(choice)?.[kind]);}
+/** A refusal is a 200 with no usable content: an error, not an empty answer. */
+function refusedError(stopReason:string|null|undefined){return stopReason==="refusal"?new Error("The model declined this request (refusal)"):null;}
 export function capabilityFor(choice:ModelChoice):ModelCapability|null{
   return CAPABILITIES[choice.provider+":"+choice.model]??CAPABILITIES[choice.provider+":"+choice.model.replace(/-\d{8}$/,"")]??null;
 }
@@ -354,16 +399,18 @@ export async function anthropicMessages(choice:ModelChoice,args:{system:string;u
   const timeoutMs=args.timeoutMs??120_000;
   // The system prompt is stable per job and is the part worth caching; the
   // schema rides with it so the cache covers both.
-  const body=JSON.stringify({
+  const rules=capabilityFor(choice)?.messagesStructured;
+  const body=JSON.stringify(applyAnthropicRules({
     model:choice.model,max_tokens:args.maxOutputTokens??1024,temperature:args.temperature??0,
     system:[{type:"text",text:args.system+"\n\nReply with a single JSON object and nothing else. It must match this JSON Schema exactly:\n"+JSON.stringify(args.jsonSchema),
       cache_control:{type:"ephemeral"}}],
     messages:[{role:"user",content:args.user}],
-  });
+  },rules));
   const response=await withRetries((signal)=>fetch((process.env.ANTHROPIC_BASE_URL??"https://api.anthropic.com").replace(/\/$/,"")+"/v1/messages",{method:"POST",signal,
-      headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body}),timeoutMs,args.attempts);
+      headers:anthropicHeaders(key,rules),body}),timeoutMs,args.attempts);
   if(!response.ok)throw failedResponse(response.status,await response.text());
   const payload=AnthropicShape.parse(await response.json());
+  const refused=refusedError(payload.stop_reason);if(refused)throw refused;
   const text=payload.content.filter(block=>block.type==="text").map(block=>block.text??"").join("");
   // The model may wrap the object in a code fence; the object is what counts.
   const content=text.replace(/^\s*```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"");
@@ -571,7 +618,8 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   const key = apiKeyFor("anthropic");
   if (!key) throw new Error("No API key configured for anthropic");
   const timeoutMs = args.timeoutMs ?? 120_000;
-  const body = JSON.stringify({
+  const rules = capabilityFor(choice)?.messagesStructured;
+  const body = JSON.stringify(applyAnthropicRules({
     model: choice.model,
     max_tokens: args.maxOutputTokens ?? 4096,
     temperature: 0,
@@ -583,12 +631,13 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
         { type: "text", text: args.user },
       ],
     }],
-  });
+  }, rules));
   const response = await withRetries((signal) => fetch((process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "") + "/v1/messages", {
-    method: "POST", signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body,
+    method: "POST", signal, headers: anthropicHeaders(key, rules), body,
   }), timeoutMs);
   if (!response.ok) throw failedResponse(response.status, await response.text());
   const payload = AnthropicShape.parse(await response.json());
+  const refused = refusedError(payload.stop_reason); if (refused) throw refused;
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
   return { text, truncated: payload.stop_reason === "max_tokens", usage: anthropicUsageOf(payload.usage),
     resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: payload.stop_reason ?? null, region: null, resolvedProvider: "anthropic" }, servedBy: choice };

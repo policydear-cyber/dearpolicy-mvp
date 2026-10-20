@@ -8,7 +8,7 @@
  * Under the deterministic model stand-in (DEARPOLICY_DETERMINISTIC_MODEL) no network call is made: a test must install
  * the scripted model instead (scripted-model.ts).
  */
-import { apiKeyFor, capabilityFor, deterministicStandInRequested, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
+import { anthropicHeadersFor, apiKeyFor, applyAnthropicRules, capabilityFor, deterministicStandInRequested, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
 import type { LoopMessage, LoopModel, ModelTurnInput, ModelTurnOutput, ToolCall } from "./types";
 
 type Fetch = typeof fetch;
@@ -54,7 +54,9 @@ export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string
   const toolCalls: ToolCall[] = (msg.tool_calls ?? []).map((c: any, i: number) => ({ id: String(c.id ?? `call_${i}`), name: String(c.function?.name ?? ""), arguments: parseArgs(c.function?.arguments) }));
   return { toolCalls, text: typeof msg.content === "string" ? msg.content : null, usage: openAiUsage(payload?.usage), model: payload?.model ?? null, requestId: typeof payload?.id === "string" ? payload.id : null };
 }
-/** Anthropic Messages request body (exported for the adapter test). */
+/** Anthropic Messages request body (exported for the adapter test), with the model's request rules applied
+ * (lib/ai/providers.ts capabilityFor -- e.g. claude-sonnet-5-5: no temperature, tool_choice auto, adaptive thinking).
+ * An assistant step the provider returned is replayed exactly as it came back (its thinking blocks included). */
 export function anthropicRequest(model: string, input: ModelTurnInput) {
   const system = input.messages.filter((m) => m.role === "system").map((m) => (m as { content: string }).content).join("\n\n");
   const out: { role: "user" | "assistant"; content: any[] }[] = [];
@@ -62,14 +64,18 @@ export function anthropicRequest(model: string, input: ModelTurnInput) {
   for (const m of input.messages as LoopMessage[]) {
     if (m.role === "system") continue;
     if (m.role === "user") push("user", { type: "text", text: m.content });
+    else if (m.role === "assistant" && m.providerContent?.length) for (const block of m.providerContent) push("assistant", block);
     else if (m.role === "assistant") { if (m.content) push("assistant", { type: "text", text: m.content }); for (const c of m.toolCalls ?? []) push("assistant", { type: "tool_use", id: c.id, name: c.name, input: c.arguments }); }
     else push("user", { type: "tool_result", tool_use_id: m.toolCallId, content: m.content });
   }
-  return { model, max_tokens: input.maxOutputTokens, temperature: 0, system, tool_choice: { type: "any" }, messages: out, tools: input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) };
+  return applyAnthropicRules({ model, max_tokens: input.maxOutputTokens, temperature: 0, system, tool_choice: { type: "any" }, messages: out, tools: input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) },
+    capabilityFor({ provider: "anthropic", model })?.messagesWithTools);
 }
-export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null; requestId: string | null } {
+export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null; requestId: string | null; providerContent: unknown[] } {
+  // A refusal is a 200 with no tool call: an error for the turn, not a prompt to "use the tools" and pay again.
+  if (payload?.stop_reason === "refusal") throw new Error("model declined the request (refusal)");
   const blocks: any[] = payload?.content ?? [];
-  return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: anthropicUsage(payload?.usage), model: payload?.model ?? null, requestId: typeof payload?.id === "string" ? payload.id : null };
+  return { providerContent: blocks, toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: anthropicUsage(payload?.usage), model: payload?.model ?? null, requestId: typeof payload?.id === "string" ? payload.id : null };
 }
 
 /** Optional request settings a model may reject (Agent H); remembered per provider:model. */
@@ -85,6 +91,7 @@ function applyLearned(body: Record<string, unknown>, learned: Set<string> | unde
 /** The request settings the loop sends for a model, after anything that model is known to reject (for run records). */
 export function loopRequestSettings(provider: string, model: string, maxOutputTokens: number): Record<string, unknown> {
   const body: Record<string, unknown> = { temperature: 0, max_completion_tokens: maxOutputTokens, tool_choice: "required", parallel_tool_calls: true, ...(capabilityFor({ provider: provider as Provider, model })?.chatCompletionsWithTools?.set ?? {}) };
+  if (provider === "anthropic") { const settings = anthropicRequest(model, { messages: [], tools: [], maxOutputTokens }); for (const k of ["model", "system", "messages", "tools"]) delete settings[k]; return settings; }
   if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
   applyLearned(body, LEARNED.get(`${provider}:${model}`));
   return body;
@@ -110,9 +117,9 @@ export class HostedLoopModel implements LoopModel {
     if (input.signal?.aborted) controller.abort(); else input.signal?.addEventListener("abort", onAbort, { once: true });
     const failed = async (res: Response) => { const body = await res.text().catch(() => ""); if (isQuotaExhaustedBody(res.status, body)) throw new ProviderQuotaExhausted(res.status); throw new Error(`model service returned an error (${res.status})`); };
     try {
-      let res: Response, read: ReturnType<typeof openAiReply>;
+      let res: Response, read: ReturnType<typeof openAiReply> & { providerContent?: unknown[] };
       if (provider === "anthropic") {
-        res = await this.http("https://api.anthropic.com/v1/messages", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify(anthropicRequest(model, input)) });
+        res = await this.http("https://api.anthropic.com/v1/messages", { method: "POST", signal: controller.signal, headers: anthropicHeadersFor(key, { provider, model }, "messagesWithTools"), body: JSON.stringify(anthropicRequest(model, input)) });
         if (!res.ok) await failed(res);
         read = anthropicReply(await res.json());
       } else {
@@ -137,7 +144,7 @@ export class HostedLoopModel implements LoopModel {
         if (!res.ok) await failed(res);
         read = openAiReply(await res.json());
       }
-      return { toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, resolvedModel: read.model ?? null, providerRequestId: read.requestId ?? null, latencyMs: Date.now() - t0 };
+      return { ...(read.providerContent ? { providerContent: read.providerContent } : {}), toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, resolvedModel: read.model ?? null, providerRequestId: read.requestId ?? null, latencyMs: Date.now() - t0 };
     } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", onAbort); }
   }
 }
