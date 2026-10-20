@@ -1524,3 +1524,68 @@ as a separate fix, not a blocker for this PR on its own.
 **Not ready to merge.** R24-1 and R24-2 are closed. R25-1 is new in this push and is a blocker: the trip verdict can turn a
 covered event into "does not fit" as the bottom line. Removing the verdict, which brings back the previous neutral wording, is
 enough to merge.
+
+---
+
+# Round 26: PR #73 (server prefetches `resolve_person`) at `c67c02e`
+
+Scope: `git diff b7e18f8 c67c02e -- lib/`, which covers `loop.ts` (the prefetch) and `scripted-model.ts` (test only). This was
+read against how `resolve_person` results are handled (loop.ts, around :2417, `setSubject`). The repro is a scratch script that
+runs the PR's own `namesFor`, `said` and `named` expressions, copied verbatim, on sample messages. No model calls.
+
+## What holds
+
+- **No other household's people.** Candidates are `input.people`, the household's own members, and the call goes through the
+  same `resolve_person` tool, so no other household's person can be picked.
+- **Same checks as a model call.** The prefetched call runs through the same handler, result recording and evidence path. It is
+  not metered or counted as a step, and `trace.adjusted` records it.
+- **Ambiguous names.** Two members sharing a name means two matches, so there is no prefetch.
+- **Open questions, taps and claims.** It is skipped while a question is open, after a person was tapped, and once a claim
+  exists, so person corrections stay with the existing logic.
+
+## R26-1 (High, blocker): name matching is looser than the model and picks the wrong person
+
+`namesFor` returns every name token of 3 or more letters, so "Tan Hui Min Grace (Grace)" gives Grace, Tan, Hui and Min. `said`
+matches each one **case-insensitively** anywhere in the message. A single match triggers `resolve_person`, and an `ok` result
+calls `setSubject` (loop.ts ~:2423). So the conversation is bound to that person before the model reads the message. Script
+output:
+
+| Message | Prefetch |
+|---|---|
+| "What is the **grace** period for my premium?" | Grace (mention "grace"). "Grace period" is an insurance term. |
+| "**Will** my policy cover dental?" | Will (a member named Will) |
+| "I waited 30 **min** at the clinic, can I claim?" | Grace, through her given name "Min" |
+| "Sarah, **Grace**'s colleague, broke her arm at work" | Grace, though the event is Sarah's, and Sarah is not a member |
+| "Grace broke her arm" | Grace, correct |
+
+Before this change, the model decided whether a word was a name, whether the event was about a non-member ("Sarah"), and whom
+to resolve ("I"). Now the server binds the subject first, and the model starts from that result. A model that does not re-resolve
+answers about the wrong person's policies. That is the wrong-person failure the contract treats as worst. The offline proof
+covers only three clean turns (FR1 t1, K6A, K6B) with unambiguous capitalised names, so it cannot show this.
+
+Fix, all of these:
+
+- Match only the member's display or preferred name, case-sensitively with its capital letter, and never single tokens such as
+  surnames or middle names.
+- Skip tokens that are common words or insurance terms (grace, will, may, hope, joy, mark, min, …).
+- Skip when the message also names someone who is not a household member, or a possessive pattern ("X's colleague / friend /
+  boss").
+- Or, safer: pass the prefetched result to the model as a hint and let the model's own `resolve_person` call `setSubject`. That
+  keeps most of the saving where the model agrees, and none of the risk.
+
+## R26-2 (Low): it isn't limited to the first message about an event
+
+The condition is "no open question, no tap, no claim", not "first message about an event". Informational follow-ups ("and for
+Daniel?") get a prefetch too. That is fine for clean names, but it widens R26-1's exposure to every non-claim turn.
+
+## Second person mentioned later
+
+On a later turn with no claim, R26-1 applies again. With a claim, the prefetch is skipped and the existing correction logic
+decides. So the risk is confined to turns without a claim, which are exactly the informational questions where words like
+"grace period" come up.
+
+## Verdict on PR #73 at `c67c02e`
+
+**Not ready to merge.** R26-1 can bind a conversation to the wrong person on ordinary messages, with no model step to catch it,
+and the PR can't be confirmed live before merge. Either tighten the matching as above, with tests for the four rows in the table,
+or keep the result as a hint that doesn't set the subject. Until then, set `DEARPOLICY_PREFETCH_PERSON=0` as the default.
