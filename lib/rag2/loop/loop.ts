@@ -249,6 +249,8 @@ const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
 const PREFETCH_ID = "server_resolve_person_1";
 /** Names that are also ordinary words, months or insurance terms: never taken as a person on their own. */
 const COMMON_WORD_NAMES = new Set(["will", "may", "june", "april", "august", "march", "bill", "mark", "sum", "max", "joy", "hope", "faith", "grace", "rose", "dawn", "summer", "sunny", "ivy", "pearl", "jade", "min", "cover", "claim", "policy", "benefit", "premium", "rich", "frank", "art", "gene", "pat", "sue", "chase", "lane", "early", "young", "lee"]);
+/** Words a household's sentence may start with that name nobody. */
+const SENTENCE_STARTS = new Set(["what", "how", "does", "do", "did", "can", "could", "would", "should", "is", "are", "was", "were", "am", "my", "our", "his", "her", "their", "the", "a", "an", "if", "when", "while", "hypothetically", "please", "yesterday", "today", "tonight", "last", "this", "that", "these", "those", "also", "hi", "hello", "hey", "so", "and", "but", "or", "who", "which", "where", "why", "he", "she", "they", "we", "it", "after", "before", "on", "in", "at", "during", "actually", "sorry", "thanks", "thank", "earlier", "recently", "unfortunately", "sadly", "just", "then", "now", "there", "here", "about", "regarding", "for", "since", "because", "any", "all", "both", "each", "every", "no", "not", "yes", "ok", "okay", "i'm", "i've", "i'd"]);
 /** Speed (Critic R26-1): the member a message plainly names, for the server's resolve_person lookup -- or null. Only a member's whole
  * preferred name ("Tan Hui Min Grace (Grace)" -> "Grace"; no parenthesis -> the whole display name), as written with a capital, once; never
  * a name that is also an ordinary word or insurance term, a possessive ("Grace's"), a name followed by an insurance word ("Grace period"),
@@ -263,8 +265,11 @@ export function prefetchMention(message: string, people: { id: string; name: str
   if (new RegExp(`${esc(n)}\\s*['’]s?\\b|${esc(n)}['’]`, "u").test(message)) return null;
   if (new RegExp(`${esc(n)}\\s+(?:period|days?|cover|policy|plan|premium|benefit|limit|amount|sum|scheme)\\b`, "iu").test(message)) return null;
   // (any other capitalised word inside a sentence: another person, a place, a product -- the model reads the message itself)
-  const words = message.replace(new RegExp(esc(n), "gu"), " ").split(/(?<=[.!?])\s+/).flatMap((sentence) => sentence.trim().split(/\s+/).slice(1));
-  if (words.some((w) => /^\p{Lu}\p{Ll}/u.test(w.replace(/^[^\p{L}]+/u, "")) && !/^I(?:['’]|$)/.test(w))) return null;
+  // (... and a capitalised word starting a sentence, unless it is a word sentences start with: "Sarah fell and Daniel took her" is about
+  // Sarah -- Critic on 6e8a09d)
+  const sentences = message.replace(new RegExp(esc(n), "gu"), " ").split(/(?<=[.!?])\s+/).map((x) => x.trim().split(/\s+/).map((w) => w.replace(/^[^\p{L}]+|[^\p{L}'’]+$/gu, "")).filter(Boolean));
+  const capital = (w: string) => /^\p{Lu}\p{Ll}/u.test(w) && !/^I(?:['’]|$)/.test(w);
+  if (sentences.some((ws) => ws.slice(1).some(capital) || (ws[0] && capital(ws[0]) && !SENTENCE_STARTS.has(ws[0].toLowerCase())))) return null;
   return n;
 }
 /** Round 7 (A3): told once to a turn running short of budget or whose tools keep failing. */
@@ -2206,8 +2211,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   // names): on the conversation's first message, when it plainly names one member (prefetchMention), the server makes that resolve_person
   // call itself before the first model call, and the model reads its result as context. It decides nothing: who the question is about is
   // set only when the model's own next calls use that person (or it calls resolve_person itself) -- Critic R26-1.
-  // Off by default (DEARPOLICY_PREFETCH_PERSON=1 turns it on) until it has been reviewed.
-  const prefetch = process.env.DEARPOLICY_PREFETCH_PERSON === "1";
+  // On for hosted models (DEARPOLICY_PREFETCH_PERSON=0 turns it off); "1" also turns it on for the scripted model (the offline proof).
+  const prefetch = process.env.DEARPOLICY_PREFETCH_PERSON === "1" || (input.model.kind === "hosted" && process.env.DEARPOLICY_PREFETCH_PERSON !== "0");
   const preMention = prefetch && !state.history.length && !pendingBefore && !input.personChoiceId && !state.claim ? prefetchMention(input.message, input.people) : null;
   let preCalls: ToolCall[] | null = preMention ? [{ id: PREFETCH_ID, name: "resolve_person", arguments: { mention: preMention } }] : null;
   /** The person the server's lookup found, until the model's own calls take it up (then it becomes who the question is about). */

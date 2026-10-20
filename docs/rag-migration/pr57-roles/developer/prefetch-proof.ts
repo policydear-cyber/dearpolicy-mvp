@@ -73,10 +73,10 @@ async function main() {
   console.log(`\n${same} identical, ${differ} different; the server's call was used on ${used} turn(s)`);
   // Critic R26-1: messages whose words are not the person the question is about -- the server must not take them as a name.
   const people = [{ id: "g", name: "Tan Hui Min Grace (Grace)" }, { id: "w", name: "Will Tan (Will)" }, { id: "m", name: "Lim Min (Min)" }, { id: "d", name: "Lee Wei Ming, Daniel (Daniel)" }, { id: "a", name: "Wong Jia Hui, Adrian (Adrian)" }];
-  const never = ["What is the grace period for my premium?", "Will my policy cover dental?", "I waited 30 min at the clinic", "Sarah, Grace's colleague, broke her arm", "Grace period: when does it end?", "Daniel's GP bill is $800, can he claim?", "Hypothetically, Adrian died in a car accident in Japan.", "Daniel and Grace were both hurt.", "Min broke her wrist"];
+  const never = ["What is the grace period for my premium?", "Will my policy cover dental?", "I waited 30 min at the clinic", "Sarah, Grace's colleague, broke her arm", "Grace period: when does it end?", "Daniel's GP bill is $800, can he claim?", "Hypothetically, Adrian died in a car accident in Japan.", "Daniel and Grace were both hurt.", "Min broke her wrist", "Sarah fell and Daniel took her to hospital", "Sarah, Daniel's colleague, fell."];
   let bad = 0;
   for (const m of never) { const got = prefetchMention(m, people); console.log(`${got ? "FAIL" : "PASS"} no person taken from ${JSON.stringify(m)}${got ? ` (took ${got})` : ""}`); if (got) bad++; }
-  for (const [m, want] of [["Daniel tripped on the stairs and broke his arm.", "Daniel"], ["Adrian broke his leg yesterday.", "Adrian"]] as const) { const got = prefetchMention(m, people); console.log(`${got === want ? "PASS" : "FAIL"} ${JSON.stringify(m)} -> ${got}`); if (got !== want) bad++; }
+  for (const [m, want] of [["Daniel tripped on the stairs and broke his arm.", "Daniel"], ["Adrian broke his leg yesterday.", "Adrian"], ["Yesterday Daniel fell down the stairs and broke his arm.", "Daniel"], ["What does Adrian's policy pay?", null]] as const) { const got = prefetchMention(m, people); console.log(`${got === want ? "PASS" : "FAIL"} ${JSON.stringify(m)} -> ${got}`); if (got !== want) bad++; }
   process.exit(differ || bad ? 1 : 0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
