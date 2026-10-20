@@ -48,11 +48,17 @@ const norm = (s: string) => s.replace(/[*_`#>]/g, "").replace(/[“”"‘’']/
 const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
 
 /** What a card or point says, beyond its short text: its own basis, conditions and any limit the source notes. */
+/** Each line is shown once: a basis the card's sentence already states, or a note that repeats one of its conditions,
+ * is not drawn twice. A point's source note (background, not a limit on an amount) stays in "Where this comes from". */
 function Qualifiers({ s }: { s: AnswerStatement }) {
+  const said = norm(s.text);
+  const conditions = (s.conditions ?? []).map(norm);
+  const basis = s.basis && !said.includes(norm(s.basis)) ? s.basis : null;
+  const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
-    {s.basis ? <p className="answer-card-basis">{s.basis}</p> : null}
+    {basis ? <p className="answer-card-basis">{basis}</p> : null}
     {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul> : null}
-    {s.source?.note ? <p className="answer-card-note" data-testid="answer-card-note">{s.source.note}</p> : null}
+    {note ? <p className="answer-card-note" data-testid="answer-card-note">{note}</p> : null}
   </>;
 }
 
@@ -60,14 +66,16 @@ function Qualifiers({ s }: { s: AnswerStatement }) {
  * comes from as a chip. Nothing that limits the amount moves off its card. */
 function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: string) => void }) {
   const a = s.amount!;
-  return <div className="answer-card" data-testid="answer-card">
+  // A benefit's printed terms are not worked out for this event: drawn quieter and labelled so, never as a figure for the case.
+  const printed = s.kind === "benefit_terms";
+  return <div className={`answer-card${printed ? " printed" : ""}`} data-testid="answer-card">
     {s.personName ? <p className="answer-card-person" data-testid="answer-card-person">For {s.personName}</p> : null}
     <div className="answer-card-amount">
       <strong>{a.text}</strong>
-      <small>{a.illustration ? "illustration" : "printed amount"}{a.currencyResolved ? "" : " · currency not stated"}</small>
+      <small>{printed ? "as printed in the policy, not worked out for this case" : a.illustration ? "illustration" : "printed amount"}{a.currencyResolved ? "" : " · currency not stated"}</small>
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
-    {!s.conditions?.length && s.fullText ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}
+    {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}
     <p className="answer-card-text">{s.text}</p>
     <Qualifiers s={s} />
     <div className="answer-chips">
@@ -146,8 +154,11 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
     const members = g ? statements.filter((m) => m.group?.kind === "either_or" && m.group.id === g.id) : [];
     if (!g || members.length < 2) { blocks.push(one(s)); drawn.add(s.id); continue; }
     members.forEach((m) => drawn.add(m.id));
+    // The answer's own statement that these are alternatives heads the block (and is not drawn again); without one, the group's note does.
+    const head = statements.find((u) => u.kind === "uncertainty" && !members.includes(u) && !blocks.some((b) => (b as { key?: string } | null)?.key === "g-" + u.id) && /\balternatives?\b|\bnot a total\b|\beither\b/i.test(u.text));
+    if (head) { drawn.add(head.id); const at = blocks.findIndex((b) => (b as { key?: string } | null)?.key === head.id); if (at >= 0) blocks.splice(at, 1); }
     blocks.push(<div key={"g-" + g.id} className="answer-either" data-testid="answer-either" role="group" aria-label="Alternative amounts, not a total">
-      <p className="answer-either-note"><b>Either / or</b> {render(g.note)}</p>
+      <p className="answer-either-note"><b>Either / or</b> {render(head ? head.text : g.note)}</p>
       {members.map((m, i) => <Fragment key={m.id}>{i ? <div className="answer-either-or" aria-hidden="true"><span>or</span></div> : null}{one(m)}</Fragment>)}
     </div>);
   }
@@ -155,10 +166,12 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
     {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
     {blocks}
-    <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
     {/* What the prose says that no statement covers stays in view, in its own words. */}
     {remaining.length ? <div className="answer-remaining" data-testid="answer-remaining"><b>Also in this answer</b>{remaining.map((s, i) => <p key={i}>{s}</p>)}</div> : null}
-    {fullProse.length ? <details className="answer-full" data-testid="answer-full"><summary>Full answer</summary>{fullProse.map((t, i) => <p key={i}>{t}</p>)}</details> : null}
+    <div className="answer-more">
+      <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
+      {fullProse.length ? <details className="answer-full" data-testid="answer-full"><summary>Full answer</summary>{fullProse.map((t, i) => <p key={i}>{t}</p>)}</details> : null}
+    </div>
     {amounts ? <p className="answer-cards-foot">{illustrations ? "Illustrations" : "Amounts"} from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
   </div>;
 }

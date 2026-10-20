@@ -1050,3 +1050,12 @@ div.answer-point { display: grid; gap: 4px; }
 .answer-either-note b { color: var(--ink); margin-right: 4px; }
 .answer-either-or { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .answer-either-or::before, .answer-either-or::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); }
+/* The two disclosures share one row while closed; an open one takes the full width. */
+.answer-more { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 18px; border-top: 1px solid var(--line); padding-top: 4px; }
+.answer-more > details { flex: 0 0 auto; }
+.answer-more > details[open] { flex: 1 1 100%; }
+.answer-more .answer-where { border-top: 0; padding-top: 0; }
+.answer-more summary { min-height: 44px; display: flex; align-items: center; }
+.answer-card-text { font-weight: 500; }
+.answer-card.printed { background: var(--surface-2); }
+.answer-card.printed .answer-card-amount strong { font-size: 1.05rem; color: var(--ink-2); }
