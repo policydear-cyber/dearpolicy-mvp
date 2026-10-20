@@ -65,3 +65,9 @@ C1 checklist (the project's answer contract, relayed by the coordinator 2026-10-
 product, document role, version and date, row, conditions, footnotes, amount, currency and base; missing information is never stated as
 an exclusion; an answer that unnecessarily hides a documented benefit fails like an unsupported amount. Under that contract Q1 (the
 omitted BS p8 condition) and Q2 (the Living Care / Living Care Plus listing left out of K2) count as failures to re-check, not only usefulness gaps.
+
+Two further contract points that apply to these pages (full contract relayed verbatim at 05:30Z):
+- Currency: BS prints bare "$" ($500 ambulance, $250 recuperation, $10,000 mobility aid, $5,000 per child); PS p13 prints "S$" for the
+  same benefits. A BS "$" figure stated as S$ is supported only through the PS row, which must then be cited. No C0 answer states these figures.
+- Shared policy number: CERT p1 prints 3037850 for Term Life, Personal Accident, Living Care and Living Care Plus; it must not merge
+  those products. C0 answers keep them separate.
