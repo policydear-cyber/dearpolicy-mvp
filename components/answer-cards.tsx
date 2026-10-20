@@ -28,9 +28,10 @@ export type StructuredAnswer = ChatAnswer & { bottomLine?: string | null; statem
 export const hasStatements = (answer: ChatAnswer | undefined): answer is StructuredAnswer =>
   !!answer && Array.isArray((answer as StructuredAnswer).statements) && (answer as StructuredAnswer).statements!.length > 0;
 
-/** Whether the chat shows this answer as cards. A claim assessment keeps its own layout. */
+/** Whether the chat shows this answer as cards. A claim assessment keeps its own layout, and an answer that is out of
+ * date (invalidated or withdrawn) never shows its statements or bottom line: only its prose under the out-of-date note. */
 export const showsCards = (answer: ChatAnswer | undefined): answer is StructuredAnswer =>
-  hasStatements(answer) && answer.mode !== "claim_assessment";
+  hasStatements(answer) && answer.mode !== "claim_assessment" && !answer.invalidated;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LONG_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
