@@ -2,8 +2,8 @@
 
 DC asked (2026-10-20 07:10Z) for the UX to be judged critically, to the standard expected by a paying customer. This file
 re-rates the same evidence (main, C2, C3 and C4 runs in this folder) without softening a finding because the journey
-technically completes. No new runs. A separate tester will use the live app with DC's account. The checks only that
-tester can do are listed at the end.
+technically completes. No new runs. Nothing here has been checked on the live app. The checks that need it are listed
+at the end as unverified.
 
 ## Would a paying customer accept this today? No.
 
@@ -18,7 +18,7 @@ first screen tells a household with a linked certificate that nothing is covered
 | 1 | Sources are plain text: not clickable, no quote, duplicated (10 entries, 4 identical), and the summary and the certificate share a name | major | **critical** | The home page promises "the page each answer comes from". Large amounts can't be checked, so trust depends on believing the app. |
 | 2 | Answers are dense legal paragraphs. The main figure is buried, "conditional illustration… not a payment or an insurer's decision" repeats after every figure, and there's jargon ("sum insured", "calculation base", "bare '$' sign") | major | **critical** | A paying user wants "what could we get, and what do I do" in the first two lines. The fracture answers take 10–20 lines to read. |
 | 3 | Closed hip: S$3,750 or S$450,000 side by side, with no "the insurer decides which document applies" note (C4; the Developer is adding it in C5) | major | **major** | Supported figures, but a 100x gap needs one plain sentence on top saying which is the safe expectation. |
-| 4 | Portfolio: "Confirmed protection 0" and "Not found" in all 15 categories, plus a to-do "Upload personal proof", while a Personal proof certificate is Ready and linked | major if real | **critical if it reproduces live** | It's the first screen. It tells a paying household they have no cover. May be a synthetic-seed artifact, so it's the live tester's first check. |
+| 4 | Portfolio: "Confirmed protection 0" and "Not found" in all 15 categories, plus a to-do "Upload personal proof", while a Personal proof certificate is Ready and linked | major if real | **critical if it reproduces live** | It's the first screen. It tells a paying household they have no cover. May be a synthetic-seed artifact; not yet verified live, and the first live check. |
 | 5 | Superseded answer stays on screen unmarked after a correction | major | **major** | A user scrolling back reads withdrawn figures. |
 | 6 | Unreadable upload card has no filename (title "·"), a generic reason, and is labelled "Reference" | major | **major** | The user can't tell which file failed or how to fix it, though the system stored a helpful reason. |
 | 7 | No per-person document view. The family page says "5 linked documents" (not clickable) while the library shows 4 | major | **major** | Basic household navigation, and a count mismatch reads as a bug. |
@@ -55,7 +55,7 @@ first screen tells a household with a linked certificate that nothing is covered
 4. Show the filename and the stored reason on an unreadable upload.
 5. Make Enter send, and keep "Ask DearPolicy" visible in the mobile tab bar.
 
-## For the live tester on DC's account (things I couldn't verify)
+## Unverified: needs a live check
 
 - Does the portfolio show "0 confirmed / Not found" for people with a linked certificate (finding 4)?
 - Real upload: progress display, processing time and the failure message for a blurred photo.
