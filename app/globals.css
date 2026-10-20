@@ -848,6 +848,10 @@ table { font-variant-numeric: tabular-nums; }
 
 /* Round 5: chat length counter */
 .chat-length { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); padding: 0 10px; }
+.chat-wait-hint { grid-column: 1 / -1; color: var(--ink-2); font-size: var(--fs-xs); padding: 0 10px; }
+/* The sending bubble scrolls into view above the sticky message box (and the phone tab bar), not behind them. */
+.chat-end { scroll-margin-bottom: 130px; }
+@media (max-width: 900px) { .chat-end { scroll-margin-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 140px); } }
 .chat-length.near-limit { color: var(--warn-text); }
 
 /* Round 5: library confirmations, locked PDFs, who a document covers */
@@ -963,6 +967,15 @@ table { font-variant-numeric: tabular-nums; }
 .source-doc .source-open { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin-top: 2px; color: var(--brand-ink); font-weight: 600; }
 .chat-page .source-doc > summary::before { content: none; }
 .thinking-note { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.5; }
+/* Answer steps, drawn only when the server reports them: done, current, still to come. */
+.answer-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--muted); }
+.answer-steps li { display: flex; align-items: center; gap: 8px; }
+.answer-steps li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: 0 0 auto; }
+.answer-steps li.done { color: var(--ink-2); }
+.answer-steps li.done::before { background: var(--brand-ink); border-color: var(--brand-ink); }
+.answer-steps li.current { color: var(--ink); font-weight: 600; }
+.answer-steps li.current::before { border-color: var(--brand-ink); box-shadow: 0 0 0 3px var(--brand-tint); }
+.answer-wait-clock { font-variant-numeric: tabular-nums; }
 .chat-composer textarea { overflow-y: auto; }
 .chat-length { display: none; }
 .chat-length.visible { display: block; }
