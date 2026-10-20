@@ -250,3 +250,27 @@ looked up" after a search (C2). The travel S$100,000 shown without its trip (C3)
 - **A real model on C1 to C4:** all candidate evidence is scripted or a code trace. The last live run (fx-live-2) used the OpenAI configuration on `c4edd48`;
   nothing covers the Claude model switch (PR #59). Journeys needing a live run: GP bill, sickness stay, person correction, then cancer (fresh wording) and fracture repetition.
 - **Consistency:** every live conversation ran once.
+
+## 10. Closed hip fracture in actuallib (UX on C4, relayed 07:09Z)
+
+Pages (actuallib, real-anonymised: `actual-lib.ts` PA_P8 = group-pa-benefit-summary.json p8, PS_P13 = group-product-summary.json p13; the certificate's
+S$600,000 is the report-verified PA sum, but its date 01/04/2024 is the fixture's own):
+- PA Benefit Summary p8, "E. Simple Fracture or Other Fracture due to Accident": "If an Insured Person sustains bodily injury as a result of an Accident, which
+  results in a Simple Fracture **or** Other Fracture of the nature mentioned in the table below, we will pay..."; "(% of Sum Insured)"; row "Hip 75%",
+  **unlabelled**. Only the Jaw/Pelvis/Leg/Ankle/Knee and Arm/Elbow/Wrist/Ribs rows carry "(Other Fracture)". The condition under the table reads "This Benefit
+  can only be claimed either under the Core Scheme or Voluntary Scheme."
+- Product Summary p13, "Simple Fracture due to Accident", Benefit Limit S$5,000, "(% of S$5,000)": row "Hip 75%".
+
+**Verdict: S$450,000 for a closed hip is supported as an illustration of PA p8's own terms, and which document applies is undetermined.**
+- The hip row on p8 is not limited to Other Fracture. The benefit covers "a Simple Fracture or Other Fracture" of the listed nature, so a hip fracture of
+  either kind, closed included, is within its wording whatever the undefined terms mean. 75% × S$600,000 = S$450,000 is printed arithmetic. It is not an
+  "insurer decides the fracture type" case, unlike the labelled rows.
+- What is undetermined is the **relationship between the two documents**: p13 gives 75% × S$5,000 = **S$3,750** for the same hip row under a Simple Fracture
+  table. Neither page says which governs, and the gap is 120x. That is the same open relationship as J1, and the highest-risk amount pair in the library.
+
+**What the answer should say beside S$450,000** (from the pages, no new claim): that the Benefit Summary's hip row applies to "a Simple Fracture or Other
+Fracture", so the household's closed fracture is within its wording; that it is 75% of Daniel's S$600,000 as printed on his certificate (dated); its printed
+condition "can only be claimed either under the Core Scheme or Voluntary Scheme"; that the Product Summary's Simple Fracture table gives S$3,750 for the same
+hip row; that the documents do not say which applies; that the two are never added; and that the insurer decides which applies and any claim. It must not
+attach the "do not define which fractures count as Other Fracture" note to this row (that would be another row's condition), and it must not drop S$450,000,
+because that would hide a documented benefit.
