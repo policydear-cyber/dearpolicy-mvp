@@ -66,9 +66,13 @@ test("RC1: benefit -> terms -> question -> server evaluation -> correction, then
   // P1: reopen -- the saved conversation shows the same three answers, the latest being the corrected one
   await page.reload();
   await page.getByText(u1, { exact: false }).first().waitFor({ timeout: 60_000 }).catch(() => undefined);
-  const reopened = norm(await page.locator("body").innerText());
+  // Was a single read of the page right after the first question appeared; on PR #65 the answers can finish
+  // rendering a moment later, so the same check now waits for them (30 s):
+  //   const reopened = norm(await page.locator("body").innerText()); expect(reopened).toContain("S$20,000");
+  const reopenedText = async () => norm(await page.locator("body").innerText());
+  await expect.poll(reopenedText, { timeout: 30_000 }).toContain("S$20,000");
+  const reopened = await reopenedText();
   console.log(`--- P1 reopened page contains V3: ${reopened.includes("S$20,000")}`);
-  expect(reopened).toContain("S$20,000");
   expect(reopened).toMatch(/no longer applies/);
 });
 

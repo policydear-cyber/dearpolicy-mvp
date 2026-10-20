@@ -254,7 +254,7 @@ function pickAnswer(question: string, options: string[]): string {
 const historyLog: unknown[] = [];
 async function reopenLatest(page: Page, titleHint: RegExp | null) {
   await page.goto("/chat");
-  await page.locator("details.chat-history > summary").click();
+  await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
   const buttons = page.locator(".history-open");
   await expect(buttons.first()).toBeVisible({ timeout: 30_000 });
   const target = titleHint ? buttons.filter({ hasText: titleHint }).first() : buttons.first();
@@ -383,7 +383,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
     const beforeReopen = (await lastAnswer(page).innerText()).trim();
     const beforeQuestion = await currentQuestion(page);
     const beforeCount = await answersLoc(page).count();
-    await page.locator("details.chat-history > summary").click();
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
     const currentTitle = (await page.locator(".history-open[aria-current=true]").first().innerText().catch(() => "")).trim();
     soft(currentTitle, "reopen: no history entry is marked as the current chat before reload");
     const lastCharmaineTurn = [...transcript].reverse().find((x) => !/marcus/i.test(x.user))!;

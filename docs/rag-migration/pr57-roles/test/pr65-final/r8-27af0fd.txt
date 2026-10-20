@@ -1,0 +1,11 @@
+  ✓   21 [chromium] › e2e/tests/r8-chat-render.spec.ts:123:11 › chat render · phone › 57-review-partial: ah ma Siew Lan passed away on 2026-09-12 at home (3.4s)
+  ✓   31 [chromium] › e2e/tests/r8-chat-render.spec.ts:146:9 › chat render · phone › states: pending answer, failed answer, two-tab conflict, deleted document, restored pending job (8.0s)
+  ✓   52 [chromium] › e2e/tests/r8-chat-render.spec.ts:123:11 › chat render · desktop › 57-review-partial: ah ma Siew Lan passed away on 2026-09-12 at home (3.3s)
+  ✓   62 [chromium] › e2e/tests/r8-chat-render.spec.ts:146:9 › chat render · desktop › states: pending answer, failed answer, two-tab conflict, deleted document, restored pending job (7.7s)
+  ✓   83 [chromium] › e2e/tests/r8-chat-render.spec.ts:123:11 › chat render · phone-dark › 57-review-partial: ah ma Siew Lan passed away on 2026-09-12 at home (3.3s)
+  ✓   93 [chromium] › e2e/tests/r8-chat-render.spec.ts:146:9 › chat render · phone-dark › states: pending answer, failed answer, two-tab conflict, deleted document, restored pending job (7.9s)
+  ✘   99 [chromium] › e2e/tests/r8-chat-render.spec.ts:247:11 › claim screens · desktop › /claims/cl-hosp (1.0s)
+    e2e-results/r8-pw/r8-chat-render-claim-screens-·-desktop-claims-cl-hosp-chromium/test-failed-1.png
+  1 failed
+  101 passed (5.5m)
+playwright exit 1

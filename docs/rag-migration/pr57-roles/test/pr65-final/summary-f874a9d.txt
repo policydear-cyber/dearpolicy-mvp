@@ -1,0 +1,21 @@
+auth: 1 failed 9 did not run 12 passed  playwright exit 1
+v11: 7 passed  playwright exit 0
+browser-e2e: 40 failed 4 skipped 11 did not run 17 passed  playwright exit 1
+v1-phaseB: 1 skipped 1 passed  playwright exit 0
+v1-phaseA: 1 skipped 1 passed  playwright exit 0
+r8-render: 1 failed 101 passed  playwright exit 1
+reliable-chat: 3 passed 0 failed exit 0
+reliable-chat-booklet: 6 passed 0 failed exit 0
+reliable-chat-actuallib: 8 passed 0 failed exit 0
+reliable-chat-fracture: 6 passed 0 failed exit 0
+reliable-chat-deathjourney: 3 passed 0 failed exit 0
+reliable-chat-dj-live-3: 2 passed 0 failed exit 0
+reliable-chat-gp-bill: 5 passed 0 failed exit 0
+rag2-binding: 2 passed 0 failed exit 0
+rag2-livelib: 1 passed 1 failed exit 1
+rag2-pr50: 3 passed 0 failed exit 0
+rag2-s50-replay: 0 passed 1 failed exit 1
+rag2-s52-replay: 0 passed 1 failed exit 1
+rag2-report: 6 passed 0 failed exit 0
+customer-screens: 0 failing lines, exit 1
+ALL DONE

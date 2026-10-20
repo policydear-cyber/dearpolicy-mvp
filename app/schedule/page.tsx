@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
+import { StuckDocuments,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { customerError } from "@/components/customer-text";
 
 /** Benefits: what the household's documents say each policy pays.
@@ -45,6 +46,13 @@ export default function BenefitsPage(){
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState(false);
   const [stillReading,setStillReading]=useState(false);
+  /** Unread documents that did not get read after a while of waiting: shown
+   * with a "Try again" that reads them now, instead of "still being read"
+   * forever. */
+  const [readStalled,setReadStalled]=useState(false);
+  const [readingDocs,setReadingDocs]=useState<ReadingDocument[]>([]);
+  const stuck=stuckDocuments(readingDocs);
+  const [retrying,setRetrying]=useState(false);
   const [status,setStatus]=useState("");
 
   async function load(member=memberId){
@@ -61,9 +69,41 @@ export default function BenefitsPage(){
   useEffect(()=>{
     void load("");
     void fetch("/api/family").then(r=>r.json()).then(p=>setFamily(p.family??[])).catch(()=>setFamily([]));
-    // Only whether anything is still being read -- never which reader or how many.
-    void fetch("/api/benefits/index").then(r=>r.json()).then(p=>setStillReading(Array.isArray(p.unread)&&p.unread.length>0)).catch(()=>setStillReading(false));
+    void checkUnread();
   },[]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only whether anything is still being read -- never which reader or how many.
+  async function checkUnread():Promise<boolean>{
+    try{
+      const p=await fetch("/api/benefits/index",{cache:"no-store"}).then(r=>r.json());
+      const unread=Array.isArray(p.unread)&&p.unread.length>0;
+      setStillReading(unread);setReadingDocs(Array.isArray(p.documents)?p.documents:[]);if(!unread)setReadStalled(false);
+      return unread;
+    }catch{setStillReading(false);return false;}
+  }
+  // While something is unread, check again every few seconds; after about a
+  // minute with no change, stop waiting and offer "Try again".
+  useEffect(()=>{
+    if(!stillReading||readStalled||retrying)return;
+    let checks=0;
+    const id=setInterval(()=>{void checkUnread().then(unread=>{if(!unread){clearInterval(id);void load();}else if(++checks>=10){clearInterval(id);setReadStalled(true);}});},6000);
+    return ()=>clearInterval(id);
+  },[stillReading,readStalled,retrying]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function retryReading(){
+    setRetrying(true);setReadStalled(false);
+    try{
+      // One document per request; stop when nothing is left or a read makes no progress.
+      let last=Infinity;
+      for(let i=0;i<20;i++){
+        const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"});
+        const p=await response.json().catch(()=>({}));
+        if(!response.ok||p.done||typeof p.remaining!=="number"||p.remaining>=last)break;
+        last=p.remaining;
+      }
+    }catch{/* reported below by what is still unread */}
+    const unread=await checkUnread();
+    await load();
+    setReadStalled(unread);setRetrying(false);
+  }
 
   const visible=useMemo(()=>{
     const needle=search.trim().toLowerCase();
@@ -84,7 +124,11 @@ export default function BenefitsPage(){
     </div></header>
 
     {error&&<div className="alert error" role="alert"><strong>Your benefits could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
-    {stillReading&&<div className="unread-documents"><div><strong>Some of your documents are still being read.</strong><span>Their benefits will appear here when they are ready. There is nothing you need to do.</span></div></div>}
+    {stillReading&&(stuck.length&&!retrying
+      ?<div className="unread-documents stalled" role="status"><div><strong>{stuckTitle(stuck,"this page")}</strong><StuckDocuments stuck={stuck}/><span>{stuck.length===1?"Its":"Their"} benefits are missing below. You can still ask about {stuck.length===1?"it":"them"} in Ask DearPolicy.</span></div><button type="button" className="button secondary compact" onClick={()=>void retryReading()}>Try again</button></div>
+      :readStalled&&!retrying
+      ?<div className="unread-documents stalled" role="status"><div><strong>Some documents couldn&rsquo;t be read for this page yet.</strong><span>Their benefits are missing below. You can still ask about them in Ask DearPolicy.</span></div><button type="button" className="button secondary compact" onClick={()=>void retryReading()}>Try again</button></div>
+      :<div className="unread-documents" role="status"><div><strong>{retrying?"Reading your documents again…":"Some of your documents are still being read."}</strong><span>Their benefits will appear here when they are ready.</span></div></div>)}
 
     <section className="schedule-controls">
       <div className="field"><label htmlFor="schedule-person">Person</label>
@@ -99,7 +143,7 @@ export default function BenefitsPage(){
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading your benefits…</div>
-      :!benefits.length?<div className="empty-card">{stillReading?"Your documents are still being read. You can already ask a question in Ask DearPolicy.":<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
+      :!benefits.length?<div className="empty-card">{stillReading?((readStalled||stuck.length)&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>

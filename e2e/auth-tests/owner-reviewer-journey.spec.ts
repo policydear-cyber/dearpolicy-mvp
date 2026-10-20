@@ -238,7 +238,9 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await expect(card(owner, flagged)).toContainText("Rejected by malware scan");
     await expect(card(owner, delayed)).toContainText(/Waiting for malware scan|On hold/);
     await expect(card(owner, failedScan)).not.toContainText("Ready");
-    await expect(card(owner, unreadable)).toContainText("Analysis stopped");
+    // Expectation change (Test engineer, PR #65 round): was toContainText("Analysis stopped"). Households see "This document
+    // could not be read" (data-testid document-unreadable); "Analysis stopped" is the operator page's wording. Fails the same on main ca6af69.
+    await expect(card(owner, unreadable).getByTestId("document-unreadable")).toContainText("This document could not be read");
     await expect(owner.locator("main")).not.toContainText(/VirusTotal analysis|malicious=|syn-malicious-|InternalError|synthetic provider failure|Error: /);
     const raw = JSON.stringify(await policies(owner));
     expect(raw, "household-readable policy rows carry only classified failure text").not.toMatch(/InternalError|synthetic provider failure|at \S+ \(|Error: /);
@@ -246,11 +248,19 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const diagnostics = await db((c) => c.query<{ n: number }>(`SELECT count(*)::int AS n FROM processing_failure_diagnostics WHERE account_id=$1`, [ids.household]));
     test.info().annotations.push({ type: "server-only diagnostics rows", description: String(diagnostics.rows[0].n) });
 
-    // Retry: Re-analyse the unreadable document. The request is accepted and
-    // the document is queued again; it is never marked ready.
-    await card(owner, unreadable).getByRole("button", { name: "Re-analyse" }).click();
-    await expect(owner.locator(".upload-panel .upload-status")).toContainText("for re-analysis");
-    await expect(owner.locator(".upload-panel .upload-status")).not.toContainText(/Re-analysis failed/);
+    // Retry: the household card offers "Try reading it again" only when no page was read; otherwise it says to
+    // upload a clearer copy. Either way the document is never marked ready.
+    // Expectation change (Test engineer, PR #65 round): was a click on a "Re-analyse" button, then "for re-analysis" in
+    // .upload-status. Households have had no Re-analyse button since before main ca6af69 (it is the operator page's);
+    // this step fails the same on main.
+    const unreadableCard = card(owner, unreadable);
+    const retry = unreadableCard.getByRole("button", { name: "Try reading it again" });
+    if (await retry.count()) {
+      await retry.click();
+      await expect(owner.getByTestId("library-notice")).toContainText("again");
+    } else {
+      await expect(unreadableCard.getByTestId("document-unreadable")).toContainText(/clearer copy/);
+    }
     for (let i = 0; i < 10; i++) {
       expect((await policies(owner)).find((p) => p.id === unreadable.id)!.processing_status, "an unreadable document is never marked ready").not.toBe("ready");
       await owner.waitForTimeout(2000);

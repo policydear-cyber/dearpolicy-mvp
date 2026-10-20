@@ -1,0 +1,3 @@
+  ✘  1 [chromium] › e2e/tests/rag2-s50-replay.spec.ts:29:5 › R50 replay of s50-live-2: what the browser displays is the saved answer, turn by turn -- amounts, no injury note, no other person's endorsement, no assumed reader, no repeated date question (5.5s)
+    Error: expect(received).toMatch(expected)
+    > 50 |   expect(out[1].shown).toMatch(/Group Personal Accident sum insured as S\$600,000/);

@@ -10,6 +10,8 @@ import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
 import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
+import { SourceList } from "@/components/source-list";
+import { AnswerCards,showsCards } from "@/components/answer-cards";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -92,6 +94,17 @@ function ChatContent(){
   const jobId=useRef<string|null>(null);
   const end=useRef<HTMLDivElement|null>(null);
   const latest=useRef<HTMLDivElement|null>(null);
+  const composer=useRef<HTMLTextAreaElement|null>(null);
+  /** Document id -> file name, so each source row says which file it is. */
+  const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
+  useEffect(()=>{
+    let live=true;
+    fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(data=>{
+      if(!live||!data?.policies)return;
+      setDocumentFiles(Object.fromEntries((data.policies as {id:string;original_filename?:string|null}[]).filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
+    }).catch(()=>undefined);
+    return()=>{live=false;};
+  },[]);
   // Reading a real policy takes real time on a local GPU, so the indicator has
   // to keep moving and show what stage it is at rather than looking frozen.
   useEffect(()=>{
@@ -271,10 +284,21 @@ function ChatContent(){
   // at the bottom stays in view.
   useEffect(()=>{
     const behavior:ScrollBehavior=typeof window!=="undefined"&&window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
+    if(!busy&&!messages.length)return;
     if(!busy&&messages[messages.length-1]?.role==="assistant"&&latest.current){latest.current.scrollIntoView({behavior,block:"start"});return;}
     end.current?.scrollIntoView({behavior,block:"end"});
   },[messages,busy]);
   async function ask(event:FormEvent){event.preventDefault();await sendText(question);}
+  /** Enter sends and Shift+Enter starts a new line, on a keyboard. On a
+   * touch screen Enter stays a new line: the Send button is right there. */
+  function sendOnEnter(event:React.KeyboardEvent<HTMLTextAreaElement>){
+    if(event.key!=="Enter"||event.shiftKey||event.nativeEvent.isComposing)return;
+    if(typeof window!=="undefined"&&window.matchMedia?.("(pointer: coarse)").matches)return;
+    event.preventDefault();void sendText(question);
+  }
+  // The box grows with what is typed (up to a limit), so a phone keeps most
+  // of the screen for the answer.
+  useEffect(()=>{const box=composer.current;if(!box)return;box.style.height="auto";box.style.height=Math.min(box.scrollHeight,240)+"px";},[question]);
   const active=family.find(m=>m.id===memberId);
 
   return <div className="page chat-page">
@@ -282,7 +306,7 @@ function ChatContent(){
       <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.</p></div>
       <div className="chat-head-actions"><div className="auto-context"><strong>Automatic family context</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name, relationship, “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
-    <details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
+    <details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
@@ -300,8 +324,13 @@ function ChatContent(){
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
-          {message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
-          {message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
+          {/* An answer that arrives with checked statements is shown as cards (bottom line, one card per amount, sources one tap
+              away); the same text otherwise, as before. A claim assessment keeps its own layout. */}
+          {(()=>{const cards=message.role==="assistant"&&showsCards(message.answer);return <>
+          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>}/>:null}
+          {cards?null:message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
+          {!cards&&message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
+          </>;})()}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated" data-reason={message.answer.invalidated.reason}><strong>{message.answer.invalidated.reason==="superseded"?"Replaced.":"Out of date."}</strong> {({policy_deleted:"A policy document this answer relied on has been deleted, so it no longer describes your cover.",documents_added:"Documents have been added since this answer, so it may no longer be right.",person_unlinked:"Someone this answer was about has since been removed from the document it relied on.",superseded:"This answer was replaced by the corrected answer below."} as Record<string,string>)[message.answer.invalidated.reason]??"This answer no longer describes your cover."}</div>:null}
           {/* dj-live-3: while a question is open, the supported practical steps are shown ahead of it (never collapsed behind it). */}
           {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
@@ -378,12 +407,12 @@ function ChatContent(){
           {/* Round 13: on a claim answer, what applies to every card is said once, under its own heading. */}
           {message.answer?.mode==="claim_assessment"&&message.answer.details.length&&message.answer.claimItems.some(item=>item.status!=="not_applicable")
             ?<div className="claim-before" data-testid="claim-before"><strong>Before you claim</strong>{message.answer.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}</div>
-            :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
+            :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:message.role==="assistant"&&showsCards(message.answer)?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
           {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
           {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&!message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
-          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Your uploaded document"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}
+          {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
@@ -400,11 +429,12 @@ function ChatContent(){
             <span style={progressDetail?{width:Math.max(4,Math.round((progressDetail.completed/Math.max(1,progressDetail.total))*100))+"%"}:undefined}/>
           </div>
           <small>Checking your policies · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
+          {elapsed>=12?<p className="thinking-note">Still working. DearPolicy is reading the pages that matter for this, which can take up to a minute when several documents apply.</p>:null}
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>
-    <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
-      <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
+    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask about a policy or tell me what happened…" rows={2}/>
+      <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")+(question.length>=MAX_QUESTION_LENGTH*0.8?" visible":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
     <p className="chat-disclaimer">Personal records confirm ownership. Matching policy wording supports benefit assessments.</p>
   </div>;

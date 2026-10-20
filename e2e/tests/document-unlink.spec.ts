@@ -54,7 +54,13 @@ test.describe.serial("removing a person from a document", () => {
     return card.locator(".declare-owner button").filter({ hasText: who }).first();
   }
 
-  test.beforeAll(async ({ browser }) => { page = await (await browser.newContext()).newPage(); await page.goto("/"); });
+  // household-journey.spec.ts runs earlier in the same suite and ends by permanently deleting household A; start a fresh
+  // one if so (idempotent: an existing household is kept). Was: open "/" only, which left "No household" after that journey.
+  test.beforeAll(async ({ browser }) => {
+    page = await (await browser.newContext()).newPage(); await page.goto("/");
+    const started = await api(page, "/api/household/start", { method: "POST", body: { name: name("Unlink-Household") } });
+    expect(started.status, JSON.stringify(started.body)).toBe(200);
+  });
   test.afterAll(async () => {
     if (doc) await api(page, `/api/policies/${doc.id}`, { method: "DELETE" });
     for (const id of Object.values(ids)) await api(page, `/api/family/${id}`, { method: "DELETE" });

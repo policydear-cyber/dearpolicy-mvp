@@ -1,0 +1,118 @@
+  ✓   1 [chromium] › e2e/tests/claim-journey.spec.ts:100:7 › synthetic claim journey › 2-5. "How much can I claim?" starts fact-finding with no estimate; a policy-stated limit is labelled and never totalled (3.2s)
+  ✓   2 [chromium] › e2e/tests/claim-journey.spec.ts:136:7 › synthetic claim journey › 9. reopening the saved answer re-serves it through the boundary (885ms)
+  ✓   3 [chromium] › e2e/tests/claim-journey.spec.ts:152:7 › synthetic claim journey › 13. another household cannot read this answer (1.9s)
+  ✓   4 [chromium] › e2e/tests/claim-journey.spec.ts:160:7 › synthetic claim journey › 1. a factual policy question is answered from the policy's own cited page (2.3s)
+  ✓   5 [chromium] › e2e/tests/claim-journey.spec.ts:187:7 › synthetic claim journey › 6. every claim category enters fact-finding through the UI, with no amount (11.3s)
+  ✓   6 [chromium] › e2e/tests/claim-journey.spec.ts:220:7 › synthetic claim journey › 7-12, 14. evidence -> scan -> reading -> reviewer UI -> indicative estimate: cited, per currency, never for an unstated currency, a negative decision or a flagged file (18.8s)
+  ✓   7 [chromium] › e2e/tests/claim-journey.spec.ts:329:7 › synthetic claim journey › 15. deleting the policy an answer relied on invalidates the saved answer and removes it from the estimate (2.4s)
+  ✓   8 [chromium] › e2e/tests/household-journey.spec.ts:60:7 › synthetic household journey › 1-2. the app opens for the synthetic household owner (712ms)
+  ✓   9 [chromium] › e2e/tests/household-journey.spec.ts:72:7 › synthetic household journey › 3-4. add two synthetic family members through the Family page (803ms)
+  ✓  10 [chromium] › e2e/tests/household-journey.spec.ts:88:7 › synthetic household journey › 5-6. upload synthetic PDFs; each is scanned by the VirusTotal adapter and reaches ready, rejected or on-hold (6.1s)
+  ✓  11 [chromium] › e2e/tests/household-journey.spec.ts:135:7 › synthetic household journey › 7. link each ready policy to the intended family member through the UI (651ms)
+  ✓  12 [chromium] › e2e/tests/household-journey.spec.ts:153:7 › synthetic household journey › 19. another household cannot discover or act on this household's data (3.3s)
+  ✓  13 [chromium] › e2e/tests/household-journey.spec.ts:175:7 › synthetic household journey › 20. household export through the Household page's download button contains only this household's synthetic data (2.0s)
+  ✓  14 [chromium] › e2e/tests/household-journey.spec.ts:197:7 › synthetic household journey › 21-22. delete a policy, a family member and the household; deleted data disappears (2.6s)
+  ✘  15 [chromium] › e2e/tests/rag2-binding.spec.ts:29:5 › B1 death after a reported accident: Darren's own Term Life and PA amounts with their dates, the condition, ONE question (the accident date); no person's name as a product; no unrelated insurer; no invented requirement (341ms)
+  -  16 [chromium] › e2e/tests/rag2-binding.spec.ts:43:5 › B2 switching from Michelle (her endorsement amends the certificate amount from its effective date) back to Darren (his own PA amount)
+  ✘  17 [chromium] › e2e/tests/rag2-livelib.spec.ts:28:5 › L1 inventory: the unreadable upload's status line is composed, saved verbatim and displayed -- even with a file name that looks like an amount (274ms)
+  ✘  18 [chromium] › e2e/tests/rag2-livelib.spec.ts:42:5 › L2 next steps: the full saved list is displayed in order, each step once -- not only the first (347ms)
+  ✘  19 [chromium] › e2e/tests/rag2-pr50.spec.ts:37:7 › P50D: every saved line is displayed, displayed amounts are saved, and the repaired behaviour reaches the page (330ms)
+  -  20 [chromium] › e2e/tests/rag2-pr50.spec.ts:37:7 › P50C: every saved line is displayed, displayed amounts are saved, and the repaired behaviour reaches the page
+  -  21 [chromium] › e2e/tests/rag2-pr50.spec.ts:37:7 › P50A: every saved line is displayed, displayed amounts are saved, and the repaired behaviour reaches the page
+  ✘  22 [chromium] › e2e/tests/rag2-s50-replay.spec.ts:29:5 › R50 replay of s50-live-2: what the browser displays is the saved answer, turn by turn -- amounts, no injury note, no other person's endorsement, no assumed reader, no repeated date question (287ms)
+  ✘  23 [chromium] › e2e/tests/rag2-s52-replay.spec.ts:34:7 › R52A replay of s52-live-1: every saved line is displayed, and nothing substantive is displayed that is not saved (297ms)
+  -  24 [chromium] › e2e/tests/rag2-s52-replay.spec.ts:34:7 › R52B replay of s52-live-1: every saved line is displayed, and nothing substantive is displayed that is not saved
+  -  25 [chromium] › e2e/tests/rag2-s52-replay.spec.ts:34:7 › R52C replay of s52-live-1: every saved line is displayed, and nothing substantive is displayed that is not saved
+  -  26 [chromium] › e2e/tests/rag2-s52-replay.spec.ts:34:7 › R52D replay of s52-live-1: every saved line is displayed, and nothing substantive is displayed that is not saved
+  ✘  27 [chromium] › e2e/tests/rag2-stress-report.spec.ts:43:5 › R1 household document inventory: per person, insurer and role; pet documents linked to nobody; the unreadable scan; no figures (317ms)
+  -  28 [chromium] › e2e/tests/rag2-stress-report.spec.ts:52:5 › R2 direct Personal Accident amount, then the household's wrong amount is corrected
+  -  29 [chromium] › e2e/tests/rag2-stress-report.spec.ts:65:5 › R3 percentage of a fixed benefit limit (S$2,500) versus percentage of the Sum Insured (S$225,000), each saved with its own base
+  -  30 [chromium] › e2e/tests/rag2-stress-report.spec.ts:83:5 › R4 an invalid date is asked about, then the valid correction decides the 11th-day waiting period with no amount
+  -  31 [chromium] › e2e/tests/rag2-stress-report.spec.ts:98:5 › R5 the subject switches between two people and back, each figure bound to that person
+  -  32 [chromium] › e2e/tests/rag2-stress-report.spec.ts:111:5 › R6 the Term Life figure stated as Personal Accident, repair unavailable: the figure is not shown, the certificate and its products are, and the answer is not a generic refusal
+  ✘  33 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:39:5 › SA2: a correction tibia -> hip: the S$3,750 conditional illustration is complete, saved and displayed, and survives a reload (309ms)
+  ✘  34 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:59:5 › SA3: an uncertain hip / tibia asks one question, the clarification is calculated for the current case, nothing re-asked (337ms)
+  ✘  35 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:74:5 › SA4: Simple versus Other: separate bases, no total, relationship unestablished (302ms)
+  ✘  36 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:86:5 › SA5: the death allowance: kept, complete conditions, currency unstated, contact step (300ms)
+  ✘  37 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:97:5 › SA6: a person switch uses Grace's own certificate row and date (302ms)
+  ✘  38 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:110:5 › SA7: the model identified the ambiguity but never asked -- the server asks the one question, and the clarification settles it (reload-safe) (384ms)
+  ✘  39 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:135:5 › SA8: the first report sat under two keys; the correction still settles the case (no case_conflict, no question), reload-safe (308ms)
+  ✘  40 [chromium] › e2e/tests/reliable-chat-actuallib.spec.ts:151:5 › SA9: the model evaluated only one fracture table; the application still gives both schedules, then both conditional alternatives (never a total), reload-safe (333ms)
+  ✘  41 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:44:5 › BK1: an uncertain case asks one useful question (no amount), then the clarified case is calculated and the question cleared (289ms)
+  ✘  42 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:65:5 › BK2: Other Fracture uses the Personal Accident sum insured the booklet's section names (S$225,000), never Term Life (307ms)
+  ✘  43 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:76:5 › BK3: the Compassionate Death Allowance Benefit is kept; its bare-$ amount is never S$; no cut clause (396ms)
+  ✘  44 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:89:40 › RL1a: after "hip", the conditional S$3,750 and no Other Fracture question (recorded calls) (305ms)
+  ✘  45 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:89:40 › RL1b: after "hip", the conditional S$3,750 and no Other Fracture question (recorded calls) (283ms)
+  ✘  46 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:105:5 › RL3: no false enrolment caveat -- the certificate's dated listing, the allowance kept (recorded calls) (281ms)
+  -  47 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:120:5 › RC8: the booklet's allowance by name, its own conditions and honest currency, the summary separate, the next step (displayed = saved)
+  -  48 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:144:5 › FL5A: the saved FL5a answer, without the unprinted "but not both" (displayed = saved)
+  -  49 [chromium] › e2e/tests/reliable-chat-booklet.spec.ts:156:5 › FL5B: the saved FL5b answer, the dated listing and this-event eligibility said apart (displayed = saved)
+  ✘  50 [chromium] › e2e/tests/reliable-chat-deathjourney.spec.ts:39:5 › DJ1: the broad death question completes inside the turn limit with every documented death benefit, the gap named and the next step; displayed = saved, survives a reload (282ms)
+  ✘  51 [chromium] › e2e/tests/reliable-chat-deathjourney.spec.ts:60:5 › DJ2: the comparison replay over adjacent dismemberment wording: both fracture schedules complete, no dismemberment evaluated or borrowed (341ms)
+  ✘  52 [chromium] › e2e/tests/reliable-chat-deathjourney.spec.ts:76:5 › DJ3: tibia -> hip over adjacent wording still withdraws the earlier illustration and shows S$3,750 (337ms)
+  ✘  53 [chromium] › e2e/tests/reliable-chat-dj-live-3.spec.ts:18:5 › DI3: the recorded dj-live-3 turn on the repaired code -- dated Term Life kept, no accident-only amount, the insurer-contact step, no unneeded question; displayed = saved = reopened (306ms)
+  ✘  54 [chromium] › e2e/tests/reliable-chat-dj-live-3.spec.ts:52:5 › DIQ (open-question layout): a useful date question is asked and the supported contact step is visible ALONGSIDE it, in the same visible answer, matching the saved and reopened answer (314ms)
+  ✘  55 [chromium] › e2e/tests/reliable-chat-fracture.spec.ts:40:5 › FR1: Grace fell and broke her arm -- both documented alternatives with their bases first, no X-ray question, contact step on the reply, saved = displayed = reloaded (320ms)
+  ✘  56 [chromium] › e2e/tests/reliable-chat-fx-repairs.spec.ts:80:5 › FX-K6B dental (partly stored library): what was read is named, the rest could not be checked, no absence, never 'no dental cover', not a generic 'could not confirm' (276ms)
+  ✘  57 [chromium] › e2e/tests/reliable-chat-fx-repairs.spec.ts:104:5 › FX-K6A cancer: the dated Living Care sum insured stays with 'the certificate does not state what it pays for cancer' (342ms)
+  ✘  58 [chromium] › e2e/tests/reliable-chat-fx-repairs.spec.ts:120:5 › FX-K2 sick hospital stay: the reported cause is used, the accident/injury requirement is explained, no repeated question, the 250 only as printed terms (306ms)
+  ✘  59 [chromium] › e2e/tests/reliable-chat-fx-repairs.spec.ts:140:5 › FX-K4B correction to Daniel: exactly one correction notice, Daniel's facts and documents, nothing contradictory (311ms)
+  ✘  60 [chromium] › e2e/tests/reliable-chat-fx-repairs.spec.ts:165:5 › FR1 footnote: the '#' footnote is said with the Arm row of the Product Summary only, and the '^' footnote (toe, foot) is not attached to an arm fracture (335ms)
+  ✘  61 [chromium] › e2e/tests/reliable-chat-gp-bill.spec.ts:81:7 › GP-UNSAID: the panel GP quote with the whose-cover note directly under it; returned = saved = displayed = reopened (328ms)
+  ✘  62 [chromium] › e2e/tests/reliable-chat-gp-bill.spec.ts:81:7 › GP-HOME: the panel GP quote with the whose-cover note directly under it; returned = saved = displayed = reopened (337ms)
+  ✘  63 [chromium] › e2e/tests/reliable-chat-gp-bill.spec.ts:81:7 › GP-ABROAD: the panel GP quote with the whose-cover note directly under it; returned = saved = displayed = reopened (292ms)
+  ✘  64 [chromium] › e2e/tests/reliable-chat-gp-bill.spec.ts:81:7 › GP-TAMPINES: the panel GP quote with the whose-cover note directly under it; returned = saved = displayed = reopened (321ms)
+  ✘  65 [chromium] › e2e/tests/reliable-chat-gp-bill.spec.ts:81:7 › GP-EXTRA: the panel GP quote with the whose-cover note directly under it; returned = saved = displayed = reopened (312ms)
+  ✘  66 [chromium] › e2e/tests/reliable-chat.spec.ts:41:5 › RC1: benefit -> terms -> question -> server evaluation -> correction, then reopened (337ms)
+  ✘  67 [chromium] › e2e/tests/reliable-chat.spec.ts:79:5 › RC2: a part no listed case covers is said with the listed cases and a contact step; no question reaches the page (290ms)
+  ✘  68 [chromium] › e2e/tests/reliable-chat.spec.ts:92:5 › RC3: conflicting bones save no estimate; a correction gives the shin calculation without repeating the question (305ms)
+  ✓  69 [chromium] › e2e/tests/document-unlink.spec.ts:69:7 › removing a person from a document › set up: two people and a ready document covering both (3.6s)
+  ✓  70 [chromium] › e2e/tests/document-unlink.spec.ts:107:7 › removing a person from a document › control: before the change, the second person's answer uses the document (222ms)
+  ✓  71 [chromium] › e2e/tests/document-unlink.spec.ts:112:7 › removing a person from a document › untick the second person, reload: they stay unlinked and their answers stop using the document (1.5s)
+  -  72 [chromium] › e2e/tests/injury-chat.spec.ts:42:5 › broken arm: fracture kept, permanent loss never shown, one question at a time
+    e2e-results/rag2-binding-B1-death-afte-7cff2-rer-no-invented-requirement-chromium/test-failed-1.png
+    e2e-results/rag2-binding-B1-death-afte-7cff2-rer-no-invented-requirement-chromium/test-failed-2.png
+    e2e-results/rag2-binding-B1-death-afte-7cff2-rer-no-invented-requirement-chromium/test-failed-3.png
+    e2e-results/rag2-livelib-L1-inventory--5cc8a-e-that-looks-like-an-amount-chromium/test-failed-1.png
+    e2e-results/rag2-livelib-L2-next-steps-db073--once----not-only-the-first-chromium/test-failed-1.png
+    e2e-results/rag2-pr50-P50D-every-saved-00611--behaviour-reaches-the-page-chromium/test-failed-1.png
+    e2e-results/rag2-s50-replay-R50-replay-88106-r-no-repeated-date-question-chromium/test-failed-1.png
+    e2e-results/rag2-s52-replay-R52A-repla-c49b9-displayed-that-is-not-saved-chromium/test-failed-1.png
+    e2e-results/rag2-stress-report-R1-hous-f17d5--unreadable-scan-no-figures-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-fe812-layed-and-survives-a-reload-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-52b5e-rrent-case-nothing-re-asked-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-7d016--relationship-unestablished-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-5c7d3-rency-unstated-contact-step-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-d4fe1-wn-certificate-row-and-date-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-0efdf-ion-settles-it-reload-safe--chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-48110-ict-no-question-reload-safe-chromium/test-failed-1.png
+    e2e-results/reliable-chat-actuallib-SA-145d3-s-never-a-total-reload-safe-chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-BK1--1502a-ed-and-the-question-cleared-chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-BK2--90e60-s-S-225-000-never-Term-Life-chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-BK3--f7f8b-nt-is-never-S-no-cut-clause-chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-RL1a-01084-re-question-recorded-calls--chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-RL1b-2f5a3-re-question-recorded-calls--chromium/test-failed-1.png
+    e2e-results/reliable-chat-booklet-RL3--0f72f-owance-kept-recorded-calls--chromium/test-failed-1.png
+    e2e-results/reliable-chat-deathjourney-c1798-yed-saved-survives-a-reload-chromium/test-failed-1.png
+    e2e-results/reliable-chat-deathjourney-1dd5a-rment-evaluated-or-borrowed-chromium/test-failed-1.png
+    e2e-results/reliable-chat-deathjourney-8b298-ustration-and-shows-S-3-750-chromium/test-failed-1.png
+    e2e-results/reliable-chat-dj-live-3-DI-10289-on-displayed-saved-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-dj-live-3-DI-75b8c-e-saved-and-reopened-answer-chromium/test-failed-1.png
+    e2e-results/reliable-chat-fracture-FR1-8babd-ly-saved-displayed-reloaded-chromium/test-failed-1.png
+    e2e-results/reliable-chat-fx-repairs-F-35b2b--generic-could-not-confirm--chromium/test-failed-1.png
+    e2e-results/reliable-chat-fx-repairs-F-261ce-te-what-it-pays-for-cancer--chromium/test-failed-1.png
+    e2e-results/reliable-chat-fx-repairs-F-8bdf6-e-250-only-as-printed-terms-chromium/test-failed-1.png
+    e2e-results/reliable-chat-fx-repairs-F-9128e-ments-nothing-contradictory-chromium/test-failed-1.png
+    e2e-results/reliable-chat-fx-repairs-F-7e4e1-attached-to-an-arm-fracture-chromium/test-failed-1.png
+    e2e-results/reliable-chat-gp-bill-GP-U-99189-ed-saved-displayed-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-gp-bill-GP-H-f9da6-ed-saved-displayed-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-gp-bill-GP-A-6d487-ed-saved-displayed-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-gp-bill-GP-T-6fc28-ed-saved-displayed-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-gp-bill-GP-E-72d7c-ed-saved-displayed-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-RC1-benefit--d9de6----correction-then-reopened-chromium/test-failed-1.png
+    e2e-results/reliable-chat-RC2-a-part-n-33cc7-o-question-reaches-the-page-chromium/test-failed-1.png
+    e2e-results/reliable-chat-RC3-conflict-9b8b7-hout-repeating-the-question-chromium/test-failed-1.png
+  40 failed
+  11 did not run
+  17 passed (2.0m)
+playwright exit 1
