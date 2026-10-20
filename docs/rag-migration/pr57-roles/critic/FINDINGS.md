@@ -267,3 +267,39 @@ Ruling:
 - **Sickness wording:** matches QC's ruling, and is reachable only with no injury word. Accepted.
 - **Living Care sentence:** names the listed cover with no amount, says "listed as of <date>", and adds the server-checked `document_silent` absence only when `checkNotFound` passes; otherwise the listing alone is said. That meets all four conditions I set. Accepted.
 - **C1-3 (re-analysis in place):** not addressed yet. It must be fixed or listed with the corrected reason in C2.
+
+---
+
+# Round 4: DC's live GP-bill failure, the Developer's G1 and G2 (`720f5f5`, `developer/GP-BILL.md`)
+
+Read: GP-BILL.md and the fixture's Benefit Summary page 1 (it names OPMC in the scheme's policy list, and says "A Benefit is only applicable to you if the Policy containing the Benefit is specifically stated in Part 1 of this Certificate"). Code reading only.
+
+task | SHA | status | evidence | blocker
+--- | --- | --- | --- | ---
+Review G1 / G2 | 720f5f5 | done | this section | none
+
+## G2 (fallback wording): accept
+
+"I haven't yet looked up ..." is untrue after a search, and DC saw it. Two conditions:
+- **What counts as a search.** It must be a search that ran this turn for the bill's topic, not any tool call.
+- **What the new line says.** It must not contradict a benefit the same answer states. Write "The pages I read do not print a benefit for the bill you mentioned", and keep the household's "$800" as they wrote it (bare "$", currency not established).
+
+## G1: accept the direction, with five conditions
+
+Without G1, the household gets "I couldn't confirm an answer", which is the failure DC reported. With G1 as written, three of DC's contract rules are at risk. Each condition below maps to one.
+
+1. **No exclusion or non-cover claim** ("Missing information is not an exclusion"; "a dated certificate proves what it printed on that date"). The sentence may say: the certificate, *as of its printed date*, lists policies A, B, C and D; the scheme document also names the Outpatient Medicare Policy, which that certificate does not list; and whether Desmond has that cover now is for the insurer or scheme administrator to confirm. It must not say "not covered", "does not apply" or "is not insured". It must not combine the Part 1 applicability clause with the absence of the listing into a conclusion. Quoting that clause next to "not listed" *is* the conclusion, whatever the wording, so leave it out of G1's sentence.
+2. **Reference wording is not proof either way.** The Benefit Summary naming OPMC proves only that the scheme has such a policy. It is not evidence that Desmond has it, nor that he lacks it. The server's sentence should cite the scheme page only for "the scheme names it", and the certificate only for "the certificate lists".
+3. **"The certificate does not list it" must be shown, not assumed.** It needs every page of the certificate stored (the read-in-full rule), and a match on the policy's full name *and* its printed abbreviation ("OPMC") against everything the certificate lists. If the certificate is partial or any name matches loosely, G1 does not fire, and the existing refusal path (C2's "what was read") answers instead.
+4. **The trigger must be structural, not a phrase.** "Every hit is in a line that names a group policy the certificate does not list" should mean the hit lies inside the scheme document's own list of its policies (the span that defines the abbreviations). It must not mean any line that happens to contain a policy-like name. Any hit anywhere else (a benefit's own wording, a schedule row) refuses exactly as today.
+5. **Do not hide a documented accident benefit** (DC: "an answer that unnecessarily hides a documented benefit is a failure"). This is the most important one for DC's real library. Desmond *tripped and fell*: an accident. Personal accident wordings often reimburse medical expenses after an accident, printed with words like "medical expenses", "registered medical practitioner", "treatment" or "reimburse", not "GP", "outpatient" or "clinic". The model's terms in the reconstruction (outpatient / GP / clinic / general practitioner) would miss such a benefit, and G1 would then say no listed policy describes it. Before G1 may say the listed policies' pages do not describe the bill, the server must check the person's accident benefits for a medical-expense reimbursement using the existing benefit records (`person_benefits` / `evaluate_benefit`). If one exists, state its terms (no amount without a resolved currency and the case) and do not say an absence. In the fixture this changes nothing (it prints none), so add a fixture variant that prints an accidental medical expense benefit as the control.
+
+## On the evidence
+
+The reconstruction (scripted model, anonymised household) shows that variant C reproduces the live text line for line. It cannot show which variant the live model actually took. Reading that one conversation's saved trace in production, read-only, would settle it. That needs DC's permission, and I recommend asking for it. Whether DC's real certificate lists an outpatient or medical-expense benefit is unknown, and condition 5 exists because of that.
+
+Tests (Test engineer):
+- G1 positive: certificate in full, OPMC only in the scheme roster. The answer names the listed policies and "the certificate does not list OPMC (as of date)", with no "not covered" and no Part 1 clause.
+- G1 negative: the certificate partial, OPMC matched by abbreviation, and a hit inside a benefit's own wording.
+- The accident-medical-expense control (condition 5).
+- G2: the wording when a search ran versus when none ran.
