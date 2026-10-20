@@ -538,16 +538,18 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   function setTier(memberId: string, tier: string) {
     void save(current().map((a) => a.familyMemberId === memberId ? { ...a, planTier: tier || null } : a));
   }
-  const [open, setOpen] = useState(covered.length === 0);
+  const [open, setOpen] = useState(false);
   useEffect(() => { if (!saved) return; const t = setTimeout(() => setSaved(false), 2500); return () => clearTimeout(t); }, [saved]);
   const summary = covered.map((p) => p.planTier ? `${p.name} (${p.planTier})` : p.name).join(", ");
   const planMissing = tiers.length > 0 && covered.some((p) => !p.planTier);
-  // Collapsed to one line once someone is linked; opened by "Change", or
-  // open from the start when nobody is linked yet (that is the next step).
-  if (!open) return <div className="covers-summary" data-testid="covers-picker">
-    <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
+  // Always one line until "Change" opens it: a library of reference documents would otherwise be a wall of empty choices.
+  // With nobody linked yet, the line says so and what choosing does.
+  if (!open) return <div className={`covers-summary${covered.length ? "" : " empty"}`} data-testid="covers-picker">
+    {covered.length
+      ? <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
+      : <span><b>Covers</b> nobody yet<small className="covers-plan-missing"> · choose who it covers so answers can use it</small></span>}
     {saved && <span className="covers-saved" role="status">Saved</span>}
-    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>Change</button>
+    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{covered.length ? "Change" : "Choose"}</button>
   </div>;
   return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
     <strong>Who does this document cover?</strong>
@@ -570,7 +572,7 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
     <p className="covers-note">Amounts in it stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
     {error && <small role="alert" className="row-error">{error}</small>}
     {referenceLinks.length > 0 && <small>Also available as matching wording for {referenceLinks.join(", ")}.</small>}
-    <div className="covers-actions">{covered.length > 0 && <button type="button" className="mini-button" onClick={() => setOpen(false)} disabled={busy}>Done</button>}{busy ? <span className="covers-saved" role="status">Saving…</span> : saved && !error ? <span className="covers-saved" role="status">Saved</span> : null}</div>
+    <div className="covers-actions"><button type="button" className="mini-button" onClick={() => setOpen(false)} disabled={busy}>Done</button>{busy ? <span className="covers-saved" role="status">Saving…</span> : saved && !error ? <span className="covers-saved" role="status">Saved</span> : null}</div>
   </div></div>;
 }
 

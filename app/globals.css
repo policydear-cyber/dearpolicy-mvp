@@ -1041,6 +1041,7 @@ table { font-variant-numeric: tabular-nums; }
    check chips (not primary buttons), and "Saved" beside the control. */
 .covers-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-sm); }
 .covers-summary > span:first-child { flex: 1 1 12rem; min-width: 0; }
+.covers-summary.empty { border-style: dashed; }
 .covers-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .chip-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 8px; border-radius: 999px; border: 1px solid var(--input-line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .chip-toggle .chip-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--input-line); display: grid; place-items: center; font-size: 13px; line-height: 1; }
