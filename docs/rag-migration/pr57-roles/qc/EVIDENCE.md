@@ -306,3 +306,43 @@ verdict wording (C2), "I haven't yet looked up" after a search (C2), and the tra
   Living Care Plus, Outpatient Medicare, Disability Income or the Core Scheme, or defines Accident, Simple Fracture or Other Fracture.
 - A real model on C1 to C5. The only live evidence is fx-live-2 (OpenAI, `c4edd48`, one run per conversation); nothing covers the Claude switch (PR #59).
   Live runs needed, in order: GP bill, sickness stay, person correction, then cancer (fresh wording) and fracture repetition.
+
+## 12. PR #64 (draft, Developer): GP-bill quoting, head `235d2623c45dc4ba4ebff56fdd461d362cad3bd7` (base main `ca6af69`)
+
+Product change (Code trace, QC): `absence-scope.ts` ranks quoted lines (lines limited to "outside Singapore / overseas / abroad" last, all-capitals headings just
+before them, and a line contained in another chosen line dropped); `loop.ts` G2 also searches "panel gp", "gp clinic", "gp consultation"; `compose.ts` quotes
+subjectless household words ("You told me: “tripped on the kerb”."). No QC test run, no model call.
+
+**Evidence sources.** The anonymised fracture fixture (real-anonymised) prints **no** GP, panel, clinic or overseas-treatment line, so on it PR #64 changes nothing:
+G1 still states Daniel's four listed products (as of 06/10/2022) and that the Benefit Summary (page 1) names an Outpatient Medicare Policy his certificate does not list.
+The two pages the PR is about are **invented** (`gp-bill-live-repro.ts`, synthetic, a hypothesis that DC's real library prints both):
+- PS p20: "SECTION 4: TRAVEL ASSISTANCE" / "Emergency Outpatient Treatment Overseas" / "We will reimburse the reasonable medical expenses for emergency outpatient
+  treatment received outside Singapore following an Accident, up to $1,000 per Accident."
+- PS p25: "SECTION 6: CLINICAL BENEFITS" / "Panel GP Benefit" / "Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP
+  consultation: up to $30 per visit."
+
+**What those pages support quoting for a home GP bill (Daniel, $800, after a fall):**
+- p25 is the relevant line: a panel GP consultation in Singapore at no charge, and a non-panel GP consultation **up to $30 per visit**. The "$" is bare, so the currency is
+  unresolved. It is a per-visit cap, so it is not an amount for the $800 bill, and nothing is computed. Whether the visit was panel or non-panel is not reported.
+  No accident condition is printed.
+- p20 does not fit a bill at home ("received outside Singapore"), so leaving it out for a home bill is correct.
+- **Not supported by any page: that Daniel holds the Panel GP Benefit.** p25 names no product or policy. Daniel's certificate lists Term Life, Personal Accident,
+  Living Care and Living Care Plus, and BS p1 says a benefit applies only if its policy is in Part 1 and names an Outpatient Medicare Policy that is not on his
+  certificate. A Product Summary line is reference wording, not proof of Daniel's cover.
+
+**What PR #64 does (code trace on the invented pages):** the chosen quotes become "Panel GP Benefit" and the p25 consultation line (rank 0), with the overseas
+lines last and cut. The household's words are quoted. **This is correct for what it quotes.**
+
+**Still omitted or at risk:**
+1. **Applicability context lost (medium-high).** When any medical-expense wording is found, G1 is skipped (`!medicalHits.length`), so the answer no longer says what
+   Daniel's certificate lists or that Outpatient Medicare is not on it. The quote "The Product Summary (page 25) prints: “Panel GP Benefit” and “Consultation at a
+   panel GP clinic ... up to $30 per visit”" then reads as if it were Daniel's benefit. From the pages, it should say beside the quote that the page names no
+   policy, list what his certificate lists (dated), and say that the insurer confirms whether the Panel GP Benefit applies to him.
+2. **Overseas ranking ignores where the bill was (medium).** A line is ranked last for being limited to treatment abroad even when the household reports a GP bill
+   abroad ("GP bill in Bangkok"). With two other hits it is then cut, hiding the one supported line. The ranking should depend on the reported place, not on the line alone.
+3. Panel or non-panel: the question that decides between "no charge" and "up to $30" is not asked (model-dependent, as the PR says).
+4. As before: the conditional accident benefits (ambulance to hospital, a 24-hour stay, a fracture) are model-dependent and not added by the server.
+
+**Unsupported shown:** none in the quoted text itself. The risk is item 1: the quote's placement implies cover that no page establishes.
+**Not available:** DC's real library (whether it prints these two pages, which policy the panel GP benefit belongs to, and whether Daniel/Desmond's certificate
+lists it), and the live answer's trace.
