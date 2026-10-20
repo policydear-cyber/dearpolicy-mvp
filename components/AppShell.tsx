@@ -143,6 +143,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const moreItems = tabbed ? items.filter((item) => !item.tab) : [];
   const moreActive = moreItems.some((item) => isActive(item.href));
   const [moreOpen, setMoreOpen] = useState(false);
+  // Each tab names its page ("Documents · DearPolicy"), so several open tabs
+  // and the browser history can be told apart. React places <title> in the head.
+  const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
+    ?? (pathname === "/" && items.length ? items[0] : null);
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password" };
+  const pageName = ownTitles[pathname] ?? titled?.label;
+  const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";
   useEffect(() => { setMoreOpen(false); }, [pathname]);
   useEffect(() => {
     if (!moreOpen) return;
@@ -152,6 +159,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [moreOpen]);
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
+      <title>{pageTitle}</title>
       <aside className="sidebar">
         <Link className="brand" href="/" aria-label="DearPolicy home">
           <img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
