@@ -6,7 +6,7 @@ This file consolidates `FINDINGS-C0.md`, `FINDINGS-C1.md` and `GP-BILL.md` (kept
 
 | worker | task | SHA | status | evidence | blocker |
 | --- | --- | --- | --- | --- | --- |
-| Policy Evidence Reviewer | evidence record per journey; compare answers | C3 `1766863` (page text identical since C0) | final check done (section 8) | this file | live runs needed (section 6); DC's real library not available |
+| Policy Evidence Reviewer | evidence record per journey; compare answers | C4 `fbeed4a` (page text identical since C0) | final summary (section 9) | this file | live runs needed (section 6); DC's real library not available |
 
 ## 1. Evidence sources and what is not available
 
@@ -216,3 +216,37 @@ the Developer's test result (`reliable-chat:applicability-test` 36/36). QC did n
   that holds a dated trip schedule).
 - **Not settled without a live run:** J6, J5, J2, then J3/J1 (section 6). **Not settled without DC's real library:** everything. All evidence here is
   anonymised or synthetic, and all of it is scripted or OpenAI-configured.
+
+## 9. Final source check on C4 `fbeed4af76800a62c866def07b6d6bd1587c5749`, and the final evidence summary
+
+C4 changes product code in `absence-scope.ts`, `loop.ts` and `statement-render.ts`. Evidence: Code trace (QC) over the pages; no QC test runs, no model calls.
+
+| changed answer | household (source) | verdict from the pages |
+| --- | --- | --- |
+| Closed fracture beside the Other Fracture figure: "(the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, or whether a closed fracture is one, so the insurer decides whether it applies)" | actuallib (real-anonymised) | **Supported.** No stored page defines Simple or Other Fracture, the household's "closed" is named, and nothing is decided for the insurer. The amount (50%/75%/20% of S$600,000, 1 April 2024) is unchanged and printed |
+| Death abroad without the travel S$100,000 | livelib (synthetic) | **For the Japan question nothing supported is lost**: the PA Accidental Death 100% of S$600,000, Repatriation S$2,000 with its condition, and Term Life S$1,000,000 come from pages that print no period or destination, so the new rule leaves them alone. **But the rule hides the travel benefit too often (new finding, high):** (a) "ended" compares the trip's end with *today*, not with the date of the death, so a death that happened during the trip and is asked about afterwards (the normal case for a claim) loses it; (b) "elsewhere" is true whenever the message does not repeat the printed destination word, so "died in Bali" or a message naming no place at all also loses it. That hides a documented benefit for the right person and period, which DC's contract counts as a failure. From the pages, the safe form is the figure with its printed period, destination and insured person, said as applying only to a death in that trip; or suppress it only when the reported date or place contradicts the printed ones |
+| Partial-copy wording (dental, cancer): "I checked Grace's documents for dental treatment: the certificate in full, and the Product Summary (pages 8, 12-13, 37 of 37) and the Benefit Summary (pages 1, 3, 5, 7-9). Those pages do not mention dental treatment. The other pages ... are not in the copy that was uploaded / may not all be in the copy that was uploaded, so I can't say either way whether there is such cover." | fracture (real-anonymised) | **Supported** and not an exclusion. Low: the reason is joined for all partial documents, so with the Benefit Summary's unknown count the sentence says "may not all be in the copy" also for the Product Summary, whose 33 missing pages are certain. The page numbers are stored indexes (PS prints one lower) |
+| GP answer with an app-style name ("Daniel Lee Wei Ming" against the row "Lee Wei Ming, Daniel") | fracture (real-anonymised) | **Supported.** Every word of the display name (or the preferred name, word-bounded) on a row that names no other member picks Daniel's four rows (Term Life, Personal Accident, Living Care, Living Care Plus, all "As of 06/10/2022"), which do not include Outpatient Medicare. The BS p1 list of policies is never quoted or read as medical-expense wording. A shared surname within one household makes the rule step back (G1 stays silent): safe |
+
+### Final evidence summary (for the release report)
+
+**Unsupported claims (none open by page evidence):** no wrong claimable amount was found on C0 to C4 across fracture, correction, cancer, dental,
+sickness and GP bill. Fixed during the round: C1's "the insurer decides whether the condition is met" for a pure sickness report (C2), and "I haven't yet
+looked up" after a search (C2). The travel S$100,000 shown without its trip (C3) is removed in C4 for the Japan case.
+
+**Supported information omitted (open):**
+1. **High:** C4's trip rule hides a single-trip schedule's death benefit for any death asked about after the trip ended, or described without the printed
+   destination word (livelib, synthetic; would affect any real library with a dated trip schedule).
+2. GP bill: the conditional accident benefits (ambulance to hospital up to S$500 per incident; hospital stay of at least 24 hours S$250; fracture) and
+   "Living Care / Living Care Plus are listed but not described". These depend on the model; a live run is needed.
+3. Sickness stay: PS p37 "only payable upon an accident occurring" (low); "listed but not described" is not said because the scope is partly stored (correct).
+4. Fracture: the Voluntary-Scheme context (judgement, low). The Core/Voluntary condition is shown (scripted browser evidence) but **no executable check pins it**.
+5. Cancer: Living Care Plus S$300,000 is also listed; "policy definition" wording (accepted gaps).
+
+**Evidence not available:**
+- **DC's actual library** and the saved production conversations (including DC's GP-bill trace, whose read was blocked). Everything here is anonymised copies or synthetic test data.
+- **Unstored pages:** Product Summary 33 of 37 pages; Benefit Summary pages 2, 4, 6, section I and 10 onward (total unknown). No page describes Living Care,
+  Living Care Plus, Outpatient Medicare, Disability Income or the Core Scheme, or defines Accident, Simple Fracture or Other Fracture (fracture and actuallib households).
+- **A real model on C1 to C4:** all candidate evidence is scripted or a code trace. The last live run (fx-live-2) used the OpenAI configuration on `c4edd48`;
+  nothing covers the Claude model switch (PR #59). Journeys needing a live run: GP bill, sickness stay, person correction, then cancer (fresh wording) and fracture repetition.
+- **Consistency:** every live conversation ran once.
