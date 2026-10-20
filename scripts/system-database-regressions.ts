@@ -1675,7 +1675,7 @@ async function main(){
         const answer=data.answer as ChatAnswer;
         assert.equal(answer.claimItems[0]?.amountText,null,"The benefit is found without a pre-review payout");
         assert.ok(anthropicCalls>=2,"Interpretation, relevance and narration went to Claude");
-        assert.ok(modelsUsed.has("claude-sonnet-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
+        assert.ok(modelsUsed.has("claude-sonnet-5-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
         assert.ok(cached,"The system prompt is marked for prompt caching");
         const { usageThisMonth }=await import("@/lib/ai/ledger");
         const usage=await usageThisMonth(account);

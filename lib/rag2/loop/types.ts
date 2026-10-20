@@ -12,7 +12,10 @@ export type ToolCall = { id: string; name: string; arguments: Record<string, unk
 export type LoopMessage =
   | { role: "system"; content: string }
   | { role: "user"; content: string }
-  | { role: "assistant"; content: string | null; toolCalls?: ToolCall[] }
+  | { role: "assistant"; content: string | null; toolCalls?: ToolCall[];
+      /** The provider's own content blocks for this step (Anthropic: thinking, text and tool_use), replayed unchanged on
+       * the next call of the same turn. Never persisted between turns. */
+      providerContent?: unknown[] }
   | { role: "tool"; toolCallId: string; name: string; content: string };
 export type LoopToolSpec = { name: string; description: string; parameters: JsonSchema };
 export type ModelUsage = { input: number; output: number };
@@ -23,7 +26,9 @@ export type ModelTurnOutput = { toolCalls: ToolCall[]; text: string | null; usag
   /** The model id the provider itself reported for this call (null when it reported none). */
   resolvedModel?: string | null;
   /** The provider's own id for this call (OpenAI / Anthropic response `id`), recorded as model_executions.provider_request_id. */
-  providerRequestId?: string | null };
+  providerRequestId?: string | null;
+  /** The provider's content blocks as returned (Anthropic), to replay unchanged on the next call of the turn. */
+  providerContent?: unknown[] };
 /** A model that takes the conversation so far and the tool list, and replies with tool calls (and optional text,
  * which is never shown: the visible answer is composed only from final_answer / ask_user). */
 export interface LoopModel { readonly id: string; readonly kind: "hosted" | "scripted";
