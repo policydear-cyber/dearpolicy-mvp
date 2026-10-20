@@ -1,0 +1,8 @@
+  ✘  6 [chromium] › e2e/tests/r8-chat-render.spec.ts:247:11 › claim screens · desktop › /claims/cl-hosp (1.3s)
+  ✘  9 [chromium] › e2e/tests/r8-chat-render.spec.ts:247:11 › claim screens · phone-dark › /claims/cl-hosp (203ms)
+    +     "tap-target: input \"\" 640x23",
+    e2e-results/r8-pw/r8-chat-render-claim-screens-·-desktop-claims-cl-hosp-chromium/test-failed-1.png
+    e2e-results/r8-pw/r8-chat-render-claim-screens-·-phone-dark-claims-cl-hosp-chromium/test-failed-1.png
+  2 failed
+  7 passed (12.6s)
+playwright exit 1

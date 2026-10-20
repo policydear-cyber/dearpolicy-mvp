@@ -78,6 +78,9 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.reload();
     await tabTo(page, (f) => f.id === "fm-new-name", "the new person's name field");
     await page.keyboard.type(person);
+    // PR #65: no relationship is pre-chosen, and Add person stays disabled until one is.
+    await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
+    await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.");

@@ -8,6 +8,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { summarisePremiums } from "@/lib/policies/premium-summary";
+import { notDismissedClause } from "@/lib/policies/name-dismissals";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -106,7 +107,7 @@ export async function GET(request:NextRequest){
   const premiumItems=premiumSummary.items;
   const annual=premiumSummary.annual,monthly=premiumSummary.monthly;
 
-  const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true`,[accountId]);
+  const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true${await notDismissedClause("pd")}`,[accountId]);
   const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND ${activePredicate("p")} AND pm.family_member_id=$2`,[accountId,active.id]);
   const q=quality.rows[0]??{needs_review:0,reference_docs:0,personal_docs:0};
   // Documents nobody has claimed are invisible everywhere else: they are not

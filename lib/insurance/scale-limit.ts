@@ -32,6 +32,16 @@ export type ImpliedScale={limit:number;currency:string;support:number;pages:Set<
  * stayed waiting for a person to confirm what both of their documents already
  * said. Bracketed text is still dropped, because "(Other Fracture)" is how one
  * document annotates what the other states plainly. */
+/** A row whose table heading prints its base ("Compensation Schedule (% of Sum Insured)") states what its percentage is
+ * of: the heading is printed on the page, not a guess. The catalog builder records it as read from the heading
+ * (lib/policies/benefit-rows.ts), with this note, and asks a person to confirm it like any heading-read rule, but no
+ * limit worked out from ANOTHER document replaces the base its own page prints. The reviewer's reading of the
+ * household's two fracture tables (20 Oct): 20% "(% of Sum Insured)" and 25% "(% of S$5,000)" are two different
+ * terms, alternatives the insurer decides between, not one scale stated twice. */
+export const SUM_INSURED_HEADING_NOTE=/% of the sum insured, from the heading of the schedule this row sits in/i;
+export function statesItsOwnBase(benefit:CatalogBenefit){
+  return benefit.formulaKind==="sum_insured"&&benefit.conditions.some(c=>SUM_INSURED_HEADING_NOTE.test(c));
+}
 function scaleKey(name:string){return (name??"").toLowerCase().replace(/\(.*?\)/g,"").replace(/[^a-z0-9]/g,"");}
 function pageKey(benefit:CatalogBenefit){return benefit.policyId+"#"+(benefit.sourcePage??0);}
 
@@ -46,7 +56,7 @@ export function impliedScaleLimit(benefits:CatalogBenefit[]):ImpliedScale|null{
   const candidates:Candidate[]=[];
   for(const [key,rows] of byKey){
     const amounts=rows.filter(row=>row.formulaKind==="fixed"&&(row.formulaValue??0)>0);
-    const shares=rows.filter(row=>row.formulaKind==="sum_insured"&&row.basisInferred
+    const shares=rows.filter(row=>row.formulaKind==="sum_insured"&&row.basisInferred&&!statesItsOwnBase(row)
       &&(row.formulaValue??0)>0&&(row.formulaValue??0)<=1);
     for(const amount of amounts)for(const share of shares){
       const limit=Math.round((amount.formulaValue as number)/(share.formulaValue as number));
@@ -129,7 +139,7 @@ export function applyImpliedScaleLimit(benefits:CatalogBenefit[]):CatalogBenefit
     +"Your own documents give "+scale.support+" of these rows both ways — as a percentage in one and as an amount in another — and they agree on that limit. "
     +"The percentage is not of the plan's sum insured.";
   return benefits.map(benefit=>{
-    if(benefit.formulaKind!=="sum_insured"||!benefit.basisInferred)return benefit;
+    if(benefit.formulaKind!=="sum_insured"||!benefit.basisInferred||statesItsOwnBase(benefit))return benefit;
     const share=benefit.formulaValue;
     if(share==null||!(share>0)||share>1)return benefit;
     if(!scale.pages.has(pageKey(benefit)))return benefit;
@@ -234,7 +244,7 @@ function holdUnresolvedPercentagesAlongsideAScale(benefits:CatalogBenefit[]):Cat
     +"the page it came from does not say what the percentage is of, and reading it against the plan's sum insured "
     +"would price it far above what the same schedule pays elsewhere.";
   return benefits.map(benefit=>{
-    if(benefit.formulaKind!=="sum_insured"||!benefit.basisInferred||benefit.reviewedAt)return benefit;
+    if(benefit.formulaKind!=="sum_insured"||!benefit.basisInferred||benefit.reviewedAt||statesItsOwnBase(benefit))return benefit;
     if(!documents.has(benefit.policyId))return benefit;
     const family=scheduleFamily(benefit.benefitName);
     if(!family||!families.has(family))return benefit;

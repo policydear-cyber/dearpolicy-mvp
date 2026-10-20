@@ -915,3 +915,149 @@ table { font-variant-numeric: tabular-nums; }
   .chat-page details > summary::-webkit-details-marker { display: none; }
   .chat-page details > summary::marker { content: ""; }
 }
+
+/* Phone navigation: five tabs (Portfolio, Documents, Ask, Coverage, More).
+   The rest of the household's pages open from "More", so Ask DearPolicy is
+   never pushed off the edge of the bar. Wide screens keep the full sidebar. */
+.nav-more-toggle, .nav-label-short, .nav-more-sheet, .nav-more-backdrop { display: none; }
+@media (max-width: 900px) {
+  .nav.nav-tabbed { overflow: visible; mask-image: none; -webkit-mask-image: none; position: relative; z-index: 49; background: var(--surface); }
+  .nav.nav-tabbed .nav-more-item { display: none; }
+  .nav.nav-tabbed .nav-item { flex: 1 1 0; min-width: 0; order: var(--tab, 5); }
+  .nav-more-toggle { display: grid; background: transparent; font-family: inherit; cursor: pointer; }
+  .nav.nav-tabbed .nav-label-full { display: none; }
+  .nav.nav-tabbed .nav-label-short { display: inline; }
+  .nav-ask .nav-icon { width: 34px; height: 26px; border-radius: 13px; background: var(--brand); color: #fff; }
+  .nav-ask .nav-icon svg { width: 18px; height: 18px; }
+  .nav-ask { color: var(--ink); font-weight: 650; }
+  .nav-more-backdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(20, 12, 8, .28); }
+  .nav-more-sheet { display: grid; position: fixed; z-index: 49; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); padding: 8px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-float); }
+  .nav-more-link { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px; border-radius: var(--r-md); color: var(--ink); font-size: var(--fs-md); font-weight: 500; }
+  .nav-more-link.active { background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; }
+  .nav-more-link .nav-icon { color: var(--brand-ink); }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .nav-more-sheet { animation: dp-sheet-in .16s var(--ease, ease-out); }
+}
+@keyframes dp-sheet-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Chat answers: the first paragraph is the answer's bottom line; sources are
+   one row per document, each opening to the words it was cited for. */
+.message.assistant .answer-lead { font-weight: 600; color: var(--ink); }
+.source-list { display: grid; gap: 6px; margin-top: 8px; }
+.citation.source-doc { display: block; }
+.citation.source-doc:not(details), .source-doc > summary { display: flex; justify-content: space-between; gap: 14px; }
+.citations .source-doc > summary { cursor: pointer; list-style: none; text-transform: none; letter-spacing: normal; font-size: var(--fs-xs); font-weight: 600; color: var(--ink); min-height: 0; }
+.source-doc b { white-space: nowrap; color: var(--brand-ink); }
+.source-doc > summary::-webkit-details-marker { display: none; }
+.source-doc .source-name { display: grid; gap: 2px; min-width: 0; }
+.source-doc .source-name small { font-size: var(--fs-xs); color: var(--muted); font-weight: 400; }
+.source-doc blockquote { margin: 8px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--brand-tint-2); color: var(--ink-2); font-style: italic; line-height: 1.5; }
+.source-doc .source-date { display: block; margin-top: 6px; color: var(--muted); }
+.source-doc .source-open { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin-top: 2px; color: var(--brand-ink); font-weight: 600; }
+.chat-page .source-doc > summary::before { content: none; }
+.thinking-note { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.5; }
+.chat-composer textarea { overflow-y: auto; }
+.chat-length { display: none; }
+.chat-length.visible { display: block; }
+@media (max-width: 620px) {
+  .chat-composer { grid-template-columns: 1fr auto; padding: 6px; gap: 6px; }
+  .chat-composer .button { width: auto; min-height: 44px; padding: 0 16px; }
+  .chat-composer textarea { min-height: 44px; padding: 10px; }
+}
+.document-card.focused { box-shadow: 0 0 0 3px var(--brand); transition: box-shadow var(--t-state) var(--ease); }
+.row-error-actions { margin-top: 8px; display: flex; gap: 8px; }
+.summary-unknown { font-size: var(--fs-lg, 1.25rem); color: var(--ink-2); }
+.upload-status.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
+.upload-status.error strong { font-weight: 700; }
+.unread-documents.stalled { border-color: var(--critical-line); background: var(--critical-tint); }
+@media (max-width: 620px) { .trust-strip { display: none; } }
+.field-hint { font-size: var(--fs-xs); color: var(--muted); margin: 4px 0 0; min-height: 0; }
+.field-hint:empty { display: none; }
+.field-hint.invalid { color: var(--critical); }
+/* "Who does this document cover?": one line once answered, people as
+   check chips (not primary buttons), and "Saved" beside the control. */
+.covers-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-sm); }
+.covers-summary > span:first-child { flex: 1 1 12rem; min-width: 0; }
+.covers-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.chip-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 8px; border-radius: 999px; border: 1px solid var(--input-line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.chip-toggle .chip-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--input-line); display: grid; place-items: center; font-size: 13px; line-height: 1; }
+.chip-toggle.on { border-color: var(--brand); background: var(--brand-tint); }
+.chip-toggle.on .chip-check { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip-toggle small { color: var(--muted); }
+.chip-toggle:focus-visible { outline: none; box-shadow: var(--focus); }
+.covers-note { font-size: var(--fs-xs); color: var(--muted); margin: 6px 0 0; }
+.covers-saved { font-size: var(--fs-xs); color: var(--good-text); font-weight: 600; }
+@media (pointer: coarse), (max-width: 760px) { .chip-toggle { min-height: 44px; } }
+.covers-plan-missing { color: var(--warn-text); }
+.password-field { display: flex; gap: 8px; align-items: stretch; }
+.password-field input { flex: 1 1 auto; min-width: 0; }
+.not-found { max-width: 560px; padding-top: 72px; }
+.not-found-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* Short answers (answers that arrive with checked statements). */
+.answer-cards { display: grid; gap: 10px; }
+.answer-bottom-line { font-size: var(--fs-lg, 1.1rem); font-weight: 650; line-height: 1.4; color: var(--ink); margin: 0; }
+.answer-point { margin: 0; }
+.answer-point.caution { background: var(--warn-tint); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); }
+.answer-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 4px; }
+.answer-card-amount { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.answer-card-amount strong { font-size: 1.35rem; font-weight: 750; color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+.answer-card-amount small { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
+.message-body .answer-card p { margin: 0; }
+.answer-card-text { font-weight: 600; color: var(--ink); }
+.answer-card-basis { font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-card-conditions { margin: 2px 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.answer-chip { font-size: var(--fs-xs); border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 3px 10px; color: var(--brand-ink); font-weight: 600; }
+.answer-chip.muted { color: var(--ink-2); font-weight: 500; }
+.answer-where { border-top: 1px solid var(--line); padding-top: 8px; }
+.answer-where summary { cursor: pointer; color: var(--brand-ink); font-weight: 650; }
+.answer-where-item { border-left: 3px solid var(--brand-tint-2); padding: 2px 0 2px 10px; margin-top: 10px; font-size: var(--fs-sm); color: var(--ink-2); }
+.message-body .answer-where-item p { margin: 0 0 4px; }
+.answer-where-item blockquote { margin: 4px 0 0; font-style: italic; }
+.answer-cards-foot { font-size: var(--fs-xs); color: var(--muted); margin: 0; }
+.answer-where-all { margin-top: 12px; font-size: var(--fs-sm); }
+/* Round 15: whose amount, the condition it depends on and any limit stay on the card. */
+.answer-card-person { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+.answer-card-condition { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
+.answer-card-note { font-size: var(--fs-sm); background: var(--warn-tint); border-radius: var(--r-sm); padding: 6px 8px; color: var(--ink); margin-top: 2px !important; }
+div.answer-point { display: grid; gap: 4px; }
+.message-body div.answer-point p { margin: 0; }
+.answer-full summary { cursor: pointer; color: var(--brand-ink); font-weight: 600; font-size: var(--fs-sm); }
+.message-body .answer-full p { font-size: var(--fs-sm); color: var(--ink-2); margin: 6px 0 0; }
+.answer-remaining { border-left: 3px solid var(--line-strong); padding-left: 10px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-remaining b { display: block; color: var(--ink); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.message-body .answer-remaining p { margin: 4px 0 0; }
+/* Which document could not be read, why, and when it is tried again. */
+.stuck-docs { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 6px; }
+.stuck-docs li { display: grid; gap: 1px; font-size: var(--fs-sm); color: var(--ink-2); }
+.stuck-docs a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.stuck-retry { color: var(--muted); }
+/* Phone tap size: inline links and the Documents filter pills reach 44px where fingers are the pointer. */
+@media (pointer: coarse), (max-width: 620px) {
+  .text-link { min-height: 44px; }
+  .filter-pills button, .schedule-filters button { min-height: 44px; }
+}
+/* A card's document chip opens its source detail: the chip stays small, its tap area is 44px. */
+.answer-chip-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0; margin: -10px 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.answer-chip-button .answer-chip { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+.answer-chip-button:hover .answer-chip { border-color: var(--brand); }
+.answer-where-item:focus { outline: none; box-shadow: var(--focus); border-radius: var(--r-sm); }
+/* Either/or amounts: one block, joined by "or", never read as a total. */
+.answer-either { border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 10px; display: grid; gap: 0; background: var(--surface-2); }
+.answer-either-note { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-either-note b { color: var(--ink); margin-right: 4px; }
+.answer-either-shared { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-either-shared b { color: var(--ink); }
+.answer-either-or { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.answer-either-or::before, .answer-either-or::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); }
+/* The two disclosures share one row while closed; an open one takes the full width. */
+.answer-more { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 18px; border-top: 1px solid var(--line); padding-top: 4px; }
+.answer-more > details { flex: 0 0 auto; }
+.answer-more > details[open] { flex: 1 1 100%; }
+.answer-more .answer-where { border-top: 0; padding-top: 0; }
+.answer-more summary { min-height: 44px; display: flex; align-items: center; }
+.answer-card-text { font-weight: 500; }
+.answer-card.printed { background: var(--surface-2); }
+.answer-card.printed .answer-card-amount strong { font-size: 1.05rem; color: var(--ink-2); }

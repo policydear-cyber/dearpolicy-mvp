@@ -1,0 +1,13 @@
+  ok  household screens carry no system work (grep of every page)
+  ok  household screens never render a raw server error or a raw processing error
+  ok  household navigation: no Usage & Cost, no operator or reviewer links; no service status panel
+  ok  operator area exists and is gated by the staff authorization boundary
+  ok  claims list and claim detail render status and requested documents only from claimDisplayStatus()
+  ok  Benefits and Coverage pages: what documents establish, source collapsed, no repair tasks
+  FAIL chat: one direct answer, collapsed sources, plain uncertainty, one next step, no internals
+  'const ANSWER_FAILED="DearPolicy could not finish this answer. Your message is saved.";\n' +
+  ok  Plan usage page: allowance only, no infrastructure
+  ok  sign-in: form values read at submit, button disabled only while busy, one navigation
+  ok  customerMessage/customerAnswerText: the endowment defect fixture never reaches a household
+  ok  'not found in the uploaded documents' never becomes 'not covered' on household screens
+V1.1 customer-screen regressions: 10 passed, some FAILED.

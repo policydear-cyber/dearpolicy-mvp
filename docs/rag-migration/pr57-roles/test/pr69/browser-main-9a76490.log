@@ -1,0 +1,39 @@
+
+Running 2 tests using 1 worker
+
+  ✘  1 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:64:7 › reopened answers that no longer stand › SR1: tibia -> hip correction, reloaded: the tibia answer is replaced and shows no figure (1.1m)
+  -  2 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:85:7 › reopened answers that no longer stand › SR2: Grace removed from the document her answer used, chat reopened: the 'removed' note, no figure; ticked again, it comes back
+
+
+  1) [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:64:7 › reopened answers that no longer stand › SR1: tibia -> hip correction, reloaded: the tibia answer is replaced and shows no figure 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator: locator('.message.user').filter({ hasText: 'Daniel fractured his tibia in an acciden' }).first().locator('xpath=following-sibling::*[contains(concat(\' \', normalize-space(@class), \' \'), \' assistant \')][1]').getByTestId('answer-invalidated')
+    Expected string: "superseded"
+    Received: <element(s) not found>
+    Timeout: 60000ms
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 60000ms
+      - waiting for locator('.message.user').filter({ hasText: 'Daniel fractured his tibia in an acciden' }).first().locator('xpath=following-sibling::*[contains(concat(\' \', normalize-space(@class), \' \'), \' assistant \')][1]').getByTestId('answer-invalidated')
+
+
+      74 |     await reopen(page, u1);
+      75 |     const old = answerAfter(page, u1);
+    > 76 |     await expect(old.getByTestId("answer-invalidated")).toHaveAttribute("data-reason", "superseded", { timeout: 60_000 });
+         |                                                         ^
+      77 |     await expect(old.getByTestId("answer-invalidated")).toContainText("Replaced. This answer was replaced by the corrected answer below.");
+      78 |     console.log(`--- SR1 replaced answer as displayed:\n${await old.innerText()}`);
+      79 |     expect.soft(await old.innerText(), "the replaced answer shows no figure").not.toMatch(FIGURE);
+        at /home/user/mainac/e2e/tests/reliable-chat-stale-answers.spec.ts:76:57
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/reliable-chat-stale-answers/reliable-chat-stale-answer-8f0f8-eplaced-and-shows-no-figure-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: e2e-results/reliable-chat-stale-answers/reliable-chat-stale-answer-8f0f8-eplaced-and-shows-no-figure-chromium/error-context.md
+
+  1 failed
+    [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:64:7 › reopened answers that no longer stand › SR1: tibia -> hip correction, reloaded: the tibia answer is replaced and shows no figure 
+  1 did not run

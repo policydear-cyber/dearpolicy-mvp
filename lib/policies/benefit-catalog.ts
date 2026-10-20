@@ -1116,7 +1116,9 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
   const byProduct=contract.coverages.filter(coverage=>identity(coverage)===wanted);
   if(byProduct.length===1)return byProduct[0];
   if(!wanted&&contract.coverages.length===1)return contract.coverages[0];
-  if(byProduct.length>1)return byProduct[0];
+  // A group scheme names every cover (life, accident, critical illness) after the scheme: the first of them is not the
+  // cover a row pays under. Narrow by what the row pays on, and leave it unresolved when that cannot tell them apart.
+  if(byProduct.length>1)return coverForEvent({...contract,coverages:byProduct},benefit);
   // A section heading is rarely the product's exact name: "Total and Permanent
   // Dismemberment due to Accident" belongs to the personal accident plan.
   // One name containing the other, or the plan's own category in the heading,
@@ -1130,6 +1132,9 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
     });
     if(byCategory.length===1)return byCategory[0];
   }
+  return coverForEvent(contract,benefit);
+}
+function coverForEvent(contract:PolicyContract,benefit:CatalogBenefit):OwnedCoverage|null{
   // Last resort: join by what the benefit is written to pay ON.
   //
   // A group booklet covers several plans under one product name, so its "Death"
@@ -1151,7 +1156,7 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
   // accident cover for the same reason "due to an accident" does.
   const namesAnInjury=namesASpecificInjury(benefit.benefitName)||triggers.includes("accidental_injury");
   const wantedCategory=accidentOnly?/accident/
-    :triggers.includes("critical_illness")?/critical/
+    :triggers.includes("critical_illness")?/critical|living care|dread disease/
     :triggers.includes("total_permanent_disability")?/permanent|disab/
     :triggers.includes("death")?/death|life/
     :namesAnInjury?/accident|injur|dismember/

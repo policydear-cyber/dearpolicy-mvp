@@ -3,7 +3,7 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "DearPolicy",
+  // The page title is set per page by components/AppShell.tsx.
   description: "Your family's insurance, understood and ready when you need it.",
 };
 

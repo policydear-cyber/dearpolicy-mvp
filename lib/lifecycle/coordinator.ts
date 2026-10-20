@@ -1304,16 +1304,23 @@ export async function requestInvitationRevocation(args: {
   // app/api/household/invitations/[id]/route.ts's own comment on why
   // that is deliberate: a caller who owns two households can revoke
   // either one's invitations regardless of which is "active"). Reading
-  // household_id here (service-level, plain pool -- an infrastructure-
-  // table-style lookup, not an authorization decision; revokeInvitation()'s
-  // RLS-scoped UPDATE below is what actually decides whether this caller
-  // may revoke it) keeps the deletion_requests/deletion_audit_log
+  // household_id here (service-level, plain pool; revokeInvitation()'s
+  // RLS-scoped UPDATE below still decides the revocation itself) keeps the deletion_requests/deletion_audit_log
   // bookkeeping correctly scoped to the invitation's REAL household even
   // when it differs from the caller's active one.
-  const invitationRow = await pool.query<{ household_id: string }>(
-    `SELECT household_id FROM household_invitations WHERE id=$1`,
-    [args.invitationId],
+  // Only an owner of the invitation's own household gets past this point:
+  // the deletion_requests row below is written into that household, and a
+  // repeat of it answers "ok", so it is never created (or reported) for
+  // anyone else. A caller outside that household is told only "not found",
+  // the same as for an id that does not exist; a member who is not an owner
+  // gets the NotFoundError revokeInvitation() itself would give.
+  const invitationRow = await pool.query<{ household_id: string; role: string | null }>(
+    `SELECT i.household_id, hm.role FROM household_invitations i
+       JOIN household_members hm ON hm.household_id=i.household_id AND hm.user_id=$2
+      WHERE i.id=$1`,
+    [args.invitationId, args.callerUserId],
   );
+  if (invitationRow.rows[0] && invitationRow.rows[0].role !== "owner") throw new NotFoundError("Invitation not found");
   const accountId = invitationRow.rows[0]?.household_id;
   if (!accountId) {
     throw new DeletionValidationError("Invitation not found");

@@ -11,7 +11,7 @@ const FILES = [
   "sql/schema.sql", "sql/benefit-catalog.sql", "sql/claim-evidence.sql", "sql/claim-composition.sql",
   "sql/critical-illness.sql", "sql/disability.sql", "sql/cover-conditions.sql", "sql/model-usage.sql",
   "sql/chat-upgrade.sql", "sql/coverage-ledger.sql", "sql/background-jobs.sql", "sql/rate-limit.sql",
-  "sql/lifecycle.sql", "sql/claim-reviewers.sql", "sql/model-provenance.sql", "sql/household-rls.sql", "sql/policy-member-exclusions.sql",
+  "sql/lifecycle.sql", "sql/claim-reviewers.sql", "sql/model-provenance.sql", "sql/household-rls.sql", "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql",
   "sql/processing-failure-diagnostics.sql",
   "sql/storage-purge.sql",
   "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql",

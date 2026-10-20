@@ -246,6 +246,32 @@ function whyLine(e: EvidenceRef, about: string, scoped?: { text: string; rowOk: 
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
 
 const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
+const PREFETCH_ID = "server_resolve_person_1";
+/** Names that are also ordinary words, months or insurance terms: never taken as a person on their own. */
+const COMMON_WORD_NAMES = new Set(["will", "may", "june", "april", "august", "march", "bill", "mark", "sum", "max", "joy", "hope", "faith", "grace", "rose", "dawn", "summer", "sunny", "ivy", "pearl", "jade", "min", "cover", "claim", "policy", "benefit", "premium", "rich", "frank", "art", "gene", "pat", "sue", "chase", "lane", "early", "young", "lee"]);
+/** Words a household's sentence may start with that name nobody. */
+const SENTENCE_STARTS = new Set(["what", "how", "does", "do", "did", "can", "could", "would", "should", "is", "are", "was", "were", "am", "my", "our", "his", "her", "their", "the", "a", "an", "if", "when", "while", "hypothetically", "please", "yesterday", "today", "tonight", "last", "this", "that", "these", "those", "also", "hi", "hello", "hey", "so", "and", "but", "or", "who", "which", "where", "why", "he", "she", "they", "we", "it", "after", "before", "on", "in", "at", "during", "actually", "sorry", "thanks", "thank", "earlier", "recently", "unfortunately", "sadly", "just", "then", "now", "there", "here", "about", "regarding", "for", "since", "because", "any", "all", "both", "each", "every", "no", "not", "yes", "ok", "okay", "i'm", "i've", "i'd"]);
+/** Speed (Critic R26-1): the member a message plainly names, for the server's resolve_person lookup -- or null. Only a member's whole
+ * preferred name ("Tan Hui Min Grace (Grace)" -> "Grace"; no parenthesis -> the whole display name), as written with a capital, once; never
+ * a name that is also an ordinary word or insurance term, a possessive ("Grace's"), a name followed by an insurance word ("Grace period"),
+ * two members, or a message with any other capitalised word inside a sentence (another person or place it may be about). */
+export function prefetchMention(message: string, people: { id: string; name: string }[]): string | null {
+  const preferred = (name: string) => (/\(([^)]+)\)\s*$/.exec(name)?.[1] ?? name).trim();
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const hits = people.map((p) => preferred(p.name)).filter((n) => n.length >= 2 && new RegExp(`(?<![\\p{L}\\p{N}])${esc(n)}(?![\\p{L}\\p{N}])`, "u").test(message));
+  if (hits.length !== 1) return null;
+  const n = hits[0];
+  if (!/^\p{Lu}/u.test(n) || COMMON_WORD_NAMES.has(n.toLowerCase())) return null;
+  if (new RegExp(`${esc(n)}\\s*['’]s?\\b|${esc(n)}['’]`, "u").test(message)) return null;
+  if (new RegExp(`${esc(n)}\\s+(?:period|days?|cover|policy|plan|premium|benefit|limit|amount|sum|scheme)\\b`, "iu").test(message)) return null;
+  // (any other capitalised word inside a sentence: another person, a place, a product -- the model reads the message itself)
+  // (... and a capitalised word starting a sentence, unless it is a word sentences start with: "Sarah fell and Daniel took her" is about
+  // Sarah -- Critic on 6e8a09d)
+  const sentences = message.replace(new RegExp(esc(n), "gu"), " ").split(/(?<=[.!?])\s+/).map((x) => x.trim().split(/\s+/).map((w) => w.replace(/^[^\p{L}]+|[^\p{L}'’]+$/gu, "")).filter(Boolean));
+  const capital = (w: string) => /^\p{Lu}\p{Ll}/u.test(w) && !/^I(?:['’]|$)/.test(w);
+  if (sentences.some((ws) => ws.slice(1).some(capital) || (ws[0] && capital(ws[0]) && !SENTENCE_STARTS.has(ws[0].toLowerCase())))) return null;
+  return n;
+}
 /** Round 7 (A3): told once to a turn running short of budget or whose tools keep failing. */
 /** Round 8 (A3): the household's reply typed into a question card: the chat page sends "<question>: <answer>" (the
  * question without its question mark). Null when the message is not that reply to the pending fact question. */
@@ -2181,6 +2207,17 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (merged) merged.notes = [...merged.notes, ...notes];
     return merged ? { kind: "final", composed: merged } : r;
   };
+  // Speed (Developer, 20 Oct 2026: 99% of a turn is model calls, one after another; the first one nearly always only asks who the message
+  // names): on the conversation's first message, when it plainly names one member (prefetchMention), the server makes that resolve_person
+  // call itself before the first model call, and the model reads its result as context. It decides nothing: who the question is about is
+  // set only when the model's own next calls use that person (or it calls resolve_person itself) -- Critic R26-1.
+  // On for hosted models (DEARPOLICY_PREFETCH_PERSON=0 turns it off); "1" also turns it on for the scripted model (the offline proof).
+  const prefetch = process.env.DEARPOLICY_PREFETCH_PERSON === "1" || (input.model.kind === "hosted" && process.env.DEARPOLICY_PREFETCH_PERSON !== "0");
+  const preMention = prefetch && !state.history.length && !pendingBefore && !input.personChoiceId && !state.claim ? prefetchMention(input.message, input.people) : null;
+  let preCalls: ToolCall[] | null = preMention ? [{ id: PREFETCH_ID, name: "resolve_person", arguments: { mention: preMention } }] : null;
+  /** The person the server's lookup found, until the model's own calls take it up (then it becomes who the question is about). */
+  let prefetched: string | null = null;
+  if (preCalls) (trace.adjusted ??= []).push(`resolve_person (${preMention}): made by the server before the first model call`);
   for (let step = 0; !reply; step++) {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
@@ -2192,12 +2229,20 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     newToolRound();
     // Once retrieval is closed the model is offered only what can still finish the turn (the answer, the question, the server-side
     // evaluation): the lookups it was refused are not re-described to it on every call.
-    const m = await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
+    const synthetic = preCalls;
+    preCalls = null;
+    const m = synthetic ? { ok: true as const, out: { toolCalls: synthetic, text: null, usage: { input: 0, output: 0 }, modelId: "", latencyMs: 0 } } : await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
-    trace.steps++; trace.modelId = out.modelId || trace.modelId;
+    if (!synthetic) trace.steps++;
+    trace.modelId = out.modelId || trace.modelId;
     messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls });
     if (!out.toolCalls.length) { messages.push({ role: "user", content: "Use the tools. End the turn only with ask_user or final_answer." }); continue; }
+    // (the server's lookup becomes who the question is about only when the model's own calls use that person, and it did not ask itself)
+    if (prefetched && !synthetic) {
+      const id = prefetched; prefetched = null;
+      if (!out.toolCalls.some((c) => c.name === "resolve_person") && out.toolCalls.some((c) => c.arguments.subject_id === id)) { setSubject(id, false); unsettled = new Set(); lastMention = preMention ?? lastMention; }
+    }
     for (const call of out.toolCalls) {
       if (reply) { messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: "the turn already ended" }) }); continue; }
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
@@ -2399,8 +2444,14 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       afterEvaluate(call, res, shown, ids);
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "household_documents") inventoryNow = res.data as Inventory;
-      if (call.name === "resolve_person") lastMention = String(call.arguments.mention ?? "");
-      if (res.ok && call.name === "resolve_person") {
+      if (call.id === PREFETCH_ID) {
+        // (context only: who the question is about is the model's call -- see `prefetched` above)
+        const r = res.ok ? res.data as { status: string; person?: { id: string } } : null;
+        if (r?.status === "ok" && r.person) prefetched = r.person.id;
+        if (res.ok) (res.data as Record<string, unknown>).note = "The server looked up the name in the household's message. Use this person only if the question is about them; otherwise call resolve_person.";
+      }
+      if (call.name === "resolve_person" && call.id !== PREFETCH_ID) lastMention = String(call.arguments.mention ?? "");
+      if (res.ok && call.name === "resolve_person" && call.id !== PREFETCH_ID) {
         const r = res.data as { status: string; person?: { id: string }; via?: string; options?: { id: string; relationLabel?: string }[] };
         const selfMention = SELF_MENTION.test(String(call.arguments.mention ?? "").trim());
         if (r.status === "ok" && r.person) {

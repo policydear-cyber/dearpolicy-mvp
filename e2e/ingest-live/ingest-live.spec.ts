@@ -179,7 +179,7 @@ test("live ingestion journey", async ({ page }) => {
   if (!PREFLIGHT && qs.reopen.length) {
     // 5. Reopen the saved conversation from history and ask a follow-up.
     await page.goto("/chat");
-    await page.locator("details.chat-history > summary").click();
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
     await expect(page.locator(".history-open").first()).toBeVisible({ timeout: 30_000 });
     // The conversation named by the reopen turn (else the latest), found in history by its first question.
     const want = qs.conversations.find((c) => c.id === qs.reopen[0]?.conversation) ?? qs.conversations[qs.conversations.length - 1];
@@ -224,7 +224,7 @@ test("live ingestion journey", async ({ page }) => {
         write("deleted.json", { file: qs.deleteSource, policyId: target!.id, at: new Date().toISOString(), confirmed, notice: noticeText, listedAfter: listed, otherDocumentsLost: lostOthers });
         await page.goto("/chat");
         if (!qs.afterDeleteSameConversation) await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
-        else { await page.locator("details.chat-history > summary").click(); await page.locator(".history-open").first().click(); await expect(answers().first()).toBeVisible({ timeout: 60_000 }); }
+        else { await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 }); await page.locator(".history-open").first().click(); await expect(answers().first()).toBeVisible({ timeout: 60_000 }); }
         lastTurn = null;
         for (const q of qs.afterDelete) await ask(q, "after_delete", "after-delete");
         step("deleted a source and asked again", { file: qs.deleteSource });

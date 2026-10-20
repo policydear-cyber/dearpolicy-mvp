@@ -14,13 +14,17 @@ import { GET as getSavedChat } from "@/app/api/chat/history/[id]/route";
 import { GET as getJob } from "@/app/api/chat/jobs/[id]/route";
 import { GET as getBenefits,PATCH as patchBenefit,DELETE as deleteBenefit } from "@/app/api/benefits/route";
 import { GET as getLedger,PATCH as patchLedger,POST as postLedger } from "@/app/api/ledger/route";
+import { addLedgerRow } from "@/lib/ledger/store";
 import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
 import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
 import { GET as listPolicies } from "@/app/api/policies/route";
+import { nameKey,nameKeySql,notDismissedCondition,recountedReview } from "@/lib/policies/name-dismissals";
+import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
 import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { seedLedger } from "@/lib/ledger/store";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
@@ -54,6 +58,7 @@ async function main(){
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
   // Remembered removals ("who does this cover"), after is_household_member().
   await db.exec(await readFile(path.resolve("sql/policy-member-exclusions.sql"),"utf8"));
+  await db.exec(await readFile(path.resolve("sql/detected-name-dismissals.sql"),"utf8"));
   // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
   // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
   // so that column exists here too.
@@ -1261,6 +1266,142 @@ async function main(){
       assert.deepEqual(await links(cert),[grace,scheme].sort());
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,foreignCert]]);
     });
+    await test("A reopened chat marks answers about a person since removed from the document, and answers a later correction replaced",async()=>{
+      // Critic R16-2: removing someone from a document left their saved answers about it looking current. UX finding 4:
+      // after "it was his hip", the earlier tibia answer stayed above, unmarked, with its withdrawn figures.
+      const cert=uuid(701900);
+      const [daniel,grace]=[people[0].id,people[1].id];
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Marked Answers Plan','MARK-1','Group Insurance','certificate',true,80,'ready','mark.pdf','mark.pdf','scan_clean')",[cert,account,daniel]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$4,'ai_name_match',0.95),($1,$3,$4,'ai_name_match',0.95)",[cert,daniel,grace,account]);
+      const binding=(subjectId:string)=>({policyId:cert,subjectId,benefit:"Hospital cash",documentHash:null,pageStart:1,pageEnd:1,passage:"Hospital cash per day",sentence:"Hospital cash is paid per day.",value:0,currency:"SGD"});
+      const calc=(id:string,subjectId:string)=>({id,sentence:"",calculator:"lump_sum",kind:"conditional_illustration",subjectId,policyId:cert,benefit:"Fracture",documentHash:null,operands:[],steps:[],result:{value:0,currency:"SGD"},currency:"SGD",rounding:{mode:"half_up",precision:2,source:"default"},conditions:[],evidenceRequirements:[]});
+      const answer=(summary:string,extra:Record<string,unknown>)=>({mode:"answer",summary,details:[],claimItems:[],nextSteps:[],missingFacts:[],questions:[],
+        citations:[{chunkId:"c1",policyId:cert,policyName:"Marked Answers Plan",insurer:"Example Insurer",pageStart:1,pageEnd:1,quote:"Hospital cash per day"}],...extra});
+      const c=await openConversation({accountId:account,memberId:null,title:"Marked answers"});
+      const say=async(text:string,a:unknown)=>db.query("INSERT INTO chat_messages(account_id,conversation_id,role,content,answer_json) VALUES($1,$2,'user',$3,NULL),($1,$2,'assistant',$4,$5::jsonb)",[account,c.id,text,(a as {summary:string}).summary,JSON.stringify(a)]);
+      await say("What does Grace's plan pay in hospital?",answer("Grace's plan pays hospital cash per day.",{figureBindings:[binding(grace)],resolvedFamilyMemberId:grace}));
+      await say("And Daniel's?",answer("Daniel's plan pays hospital cash per day.",{figureBindings:[binding(daniel)],resolvedFamilyMemberId:daniel}));
+      await say("He broke his tibia",answer("The fracture benefit for a tibia applies.",{calculations:[calc("calc-tibia",daniel)],resolvedFamilyMemberId:daniel}));
+      await say("Sorry, it was his hip",answer("Updated: the injury is now hip. The fracture benefit for a hip applies.",{calculations:[calc("calc-hip",daniel)],resolvedFamilyMemberId:daniel}));
+      // What the loop saved after the correction: the tibia calculation withdrawn, the hip one current.
+      await db.query("UPDATE chat_conversations SET state=state||$2::jsonb WHERE id=$1",[c.id,JSON.stringify({ragLoop:{v:1,turn:4,claim:{subjectId:daniel,facts:{},derived:[],calcs:{
+        "calc-tibia":{calcId:"calc-tibia",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:3,withdrawn:{cause:"fact",key:"injury",reason:"injury was corrected",turn:4}},
+        "calc-hip":{calcId:"calc-hip",kind:"conditional_illustration",policyId:cert,benefit:"Fracture",factKeys:["injury"],evidenceIds:[],turn:4,withdrawn:null}}}}})]);
+      const reopened=async()=>(await (await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})})).json()).messages
+        .filter((m:{role:string})=>m.role==="assistant") as {content:string;answer_json:ChatAnswer}[];
+      const reopen=async()=>(await reopened()).map(m=>m.answer_json);
+      const save=(ids:string[])=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId:cert,assignments:ids.map(familyMemberId=>({familyMemberId,planTier:null}))})}));
+
+      assert.equal((await save([daniel])).status,200,"The household removes Grace from the document");
+      const [graces,daniels,tibia,hip]=await reopen();
+      assert.equal(graces.invalidated?.reason,"person_unlinked","Grace's answer about the document is marked out of date");
+      assert.match(graces.summary,/removed from the document/);
+      assert.deepEqual([graces.citations.length,graces.figureBindings?.length??0],[0,0],"and shows nothing it read from it");
+      assert.equal(daniels.invalidated,undefined,"Daniel's answer about the same document stays");
+      assert.equal(tibia.invalidated?.reason,"superseded","The tibia answer the correction replaced is marked");
+      assert.match(tibia.summary,/replaced by the corrected answer below/);
+      assert.equal(tibia.calculations?.length??0,0,"and its withdrawn figure is not shown");
+      assert.equal(hip.invalidated,undefined,"The corrected answer stays");
+      // F69-1: the page shows the message's own text, so an out-of-date answer's text is its notice, not the old sentence.
+      const texts=(await reopened()).map(m=>m.content);
+      assert.equal(texts[0],graces.summary);
+      assert.doesNotMatch(texts[0],/hospital cash per day/);
+      assert.equal(texts[2],tibia.summary);
+      assert.doesNotMatch(texts[2],/tibia/);
+      assert.equal(texts[1],"Daniel's plan pays hospital cash per day.","A current answer keeps its own text");
+
+      // Ticking Grace again makes her answer current again.
+      assert.equal((await save([daniel,grace])).status,200);
+      assert.equal((await reopen())[0].invalidated,undefined);
+      await db.query("DELETE FROM chat_conversations WHERE id=$1",[c.id]);
+      await db.query("DELETE FROM policies WHERE id=$1",[cert]);
+    });
+    await test("\"Not in my family\" hides a name read from a document, survives a re-read, and never hides another household's names",async()=>{
+      const doc=uuid(701700),foreignDoc=uuid(701701),[daniel,grace]=[people[0].id,people[1].id];
+      const add=(id:string,acct:string,owner:string)=>db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,needs_review,review_reason) VALUES($1,$2,$3,'Example Insurer','Dismiss Plan','DIS-1','Hospital','personal_schedule',true,60,'ready',$4,$4,'scan_clean',true,'1 named insured person is not linked')",[id,acct,owner,id+".pdf"]);
+      await add(doc,account,daniel);await add(foreignDoc,foreign,foreignPerson);
+      const names=async(acct:string,policyId:string,rows:[string,string|null][])=>{
+        await db.query("DELETE FROM policy_detected_people WHERE policy_id=$1",[policyId]);
+        for(const [name,matched] of rows)await db.query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.9)",[acct,policyId,name,matched]);
+      };
+      await names(account,doc,[["Stranger  Lim",null],[people[1].display_name,grace],["Another Name",null]]);
+      await names(foreign,foreignDoc,[["Stranger Lim",null]]);
+      const post=(body:object)=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}));
+      const shown=async()=>((await (await listPolicies(new NextRequest("http://localhost/api/policies"))).json()).policies.find((x:{id:string})=>x.id===doc).detected_people as {name:string}[]).map(x=>x.name).sort();
+      assert.deepEqual(await shown(),["Another Name",people[1].display_name,"Stranger  Lim"].sort(),"Before: every name read is listed");
+
+      // The household says "Stranger Lim" is not in the family (any spacing or case).
+      const dismissed=await post({policyId:doc,detectedName:" stranger lim ",notFamily:true});
+      assert.equal(dismissed.status,200);
+      assert.deepEqual(await dismissed.json(),{ok:true,notFamily:true,remembered:true});
+      assert.deepEqual(await shown(),["Another Name",people[1].display_name].sort(),"The dismissed name is no longer listed");
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",notFamily:true})).status,200,"Saying it twice is fine");
+      // Dismissing the last unlinked name clears the document's review flag.
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      assert.deepEqual((await db.query<{needs_review:boolean;review_reason:string|null}>("SELECT needs_review,review_reason FROM policies WHERE id=$1",[doc])).rows[0],{needs_review:false,review_reason:null});
+
+      // Critic R30-2: a reason the reading wrote ("check this is the right person") is kept when the names are recounted.
+      const check="The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: X. Check this is the right person";
+      await db.query("UPDATE policies SET needs_review=true,review_reason=$2 WHERE id=$1",[doc,"2 named insured people are not linked to a family profile; "+check]);
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      assert.deepEqual((await db.query<{needs_review:boolean;review_reason:string|null}>("SELECT needs_review,review_reason FROM policies WHERE id=$1",[doc])).rows[0],{needs_review:true,review_reason:check},
+        "Only the unlinked-names part is recounted; the reading's own reason stays");
+      assert.deepEqual(recountedReview("1 named insured person is not linked; 3 extracted coverage items could not be source-verified; "+check,0,1),
+        {needsReview:true,reason:"1 coverage item could not be source-verified; "+check});
+      assert.deepEqual(recountedReview("1 named insured person is not linked",0,0),{needsReview:false,reason:null});
+      // Critic R30-3: the answer is saved even when recounting the flag afterwards fails; the request does not say it failed.
+      await db.query("UPDATE policies SET needs_review=false,review_reason=NULL WHERE id=$1",[doc]);
+      await db.query("ALTER TABLE policy_coverages RENAME TO policy_coverages_away");
+      try{
+        const saved=await post({policyId:doc,detectedName:"Another Name",notFamily:false});
+        assert.equal(saved.status,200,"A failed recount after the save is not a failed request");
+      }finally{await db.query("ALTER TABLE policy_coverages_away RENAME TO policy_coverages");}
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1 AND name_key='another name'",[doc])).rows.length,0,"The undo was saved");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      // The SQL and JS name keys agree.
+      assert.equal((await db.query<{k:string}>(`SELECT ${nameKeySql("$1")} AS k`,["  Jane\t  TAN "])).rows[0].k,nameKey("  Jane\t  TAN "));
+
+      // Reading the document again rebuilds the names; the answer is kept.
+      await names(account,doc,[["Stranger Lim",null],[people[1].display_name,grace],["Another Name",null]]);
+      assert.deepEqual(await shown(),[people[1].display_name],"A re-read does not bring a dismissed name back");
+
+      // Refused: a name that isn't on the document, a name linked to someone, another household's document, and a mixed request.
+      assert.equal((await post({policyId:doc,detectedName:"Nobody Here",notFamily:true})).status,404);
+      assert.equal((await post({policyId:doc,detectedName:people[1].display_name,notFamily:true})).status,409);
+      assert.equal((await post({policyId:foreignDoc,detectedName:"Stranger Lim",notFamily:true})).status,404);
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",notFamily:true,familyMemberId:daniel})).status,400);
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim"})).status,400,"Without notFamily a person is still required");
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1 OR account_id=$2",[foreignDoc,foreign])).rows.length,0,"Nothing was written for the other household");
+
+      // The browser session cannot write a dismissal for another household's document, nor file one under another household.
+      await assert.rejects(createUserSupabaseClient(account,(c)=>c.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,foreign])));
+      await assert.rejects(createUserSupabaseClient(account,(c)=>c.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,account])));
+      // Even a dismissal row filed under another household (written past RLS) hides nothing here, and this household's answers hide nothing there.
+      await db.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'other key','x')",[doc,foreign]);
+      await names(account,doc,[["Stranger Lim",null],[people[1].display_name,grace],["Another Name",null],["Other Key",null]]);
+      assert.ok((await shown()).includes("Other Key"),"Another household's row never hides this household's name");
+      const foreignNames=await db.query<{n:number}>(`SELECT count(*)::int AS n FROM policy_detected_people pd WHERE pd.policy_id=$1 AND ${await notDismissedCondition("pd")}`,[foreignDoc]);
+      assert.equal(foreignNames.rows[0].n,1,"The other household's Stranger Lim is still listed for them");
+
+      // Undo takes the answer back without linking anyone, and only in this household.
+      await db.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,foreign]);
+      assert.equal((await post({policyId:foreignDoc,detectedName:"Stranger Lim",notFamily:false})).status,404,"Another household's document is refused");
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1",[foreignDoc])).rows.length,1,"Their answer is untouched");
+      const undone=await post({policyId:doc,detectedName:"Another  NAME",notFamily:false});
+      assert.equal(undone.status,200);
+      assert.deepEqual(await undone.json(),{ok:true,notFamily:false,remembered:true});
+      assert.ok((await shown()).includes("Another Name"),"The name is listed again");
+      assert.equal((await db.query("SELECT 1 FROM policy_detected_people WHERE policy_id=$1 AND detected_name='Another Name' AND matched_family_member_id IS NULL",[doc])).rows.length,1,"Undo links nobody");
+      assert.equal((await db.query<{needs_review:boolean}>("SELECT needs_review FROM policies WHERE id=$1",[doc])).rows[0].needs_review,true,"It is waiting to be linked again");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:false})).status,200,"Undoing twice is fine");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:false,familyMemberId:daniel})).status,400);
+
+      // Linking the name to someone takes the dismissal back.
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",familyMemberId:daniel,declared:true})).status,200);
+      assert.ok((await shown()).includes("Stranger Lim"),"The name is listed again once the household links it");
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[doc,foreignDoc]]);
+    });
     await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
       const [daniel,grace]=[people[0].id,people[1].id];
       const [schedule,summary,graceSchedule]=[uuid(701800),uuid(701801),uuid(701802)];
@@ -1708,6 +1849,93 @@ async function main(){
       const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
+      // Isolation audit (20 Oct): a row cannot be added for another household's person (the foreign key alone accepted any
+      // household's id, and answered differently for an id that exists).
+      const strangers=await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({familyMemberId:foreignPerson,planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD"})}));
+      assert.equal(strangers.status,404);
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE family_member_id=$1 AND account_id<>$2",[foreignPerson,foreign])).rows.length,0,"Nothing is written against another household's person");
+      // A person or document this household removed (soft-deleted) cannot be given a row either.
+      const removedPerson=uuid(702500),removedDoc=uuid(702501);
+      await db.query("INSERT INTO family_members(id,account_id,display_name,relationship,lifecycle_state) VALUES($1,$2,'Removed Person','child','soft_deleted')",[removedPerson,account]);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state) VALUES($1,$2,$3,'Example Insurer','Removed Plan','Hospital','personal_schedule',true,60,'ready','rm.pdf','rm.pdf','scan_clean','soft_deleted')",[removedDoc,account,people[0].id]);
+      const add=(body:object)=>postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD",...body})}));
+      assert.equal((await add({familyMemberId:removedPerson})).status,404,"a removed person");
+      assert.equal(await addLedgerRow(account,{familyMemberId:people[0].id,policyId:removedDoc,planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD"}),null,"a removed document");
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE family_member_id=$1 OR policy_id=$2",[removedPerson,removedDoc])).rows.length,0);
+      await db.query("DELETE FROM policies WHERE id=$1",[removedDoc]);
+      await db.query("DELETE FROM family_members WHERE id=$1",[removedPerson]);
+    });
+    await test("Coverage works a percentage out from the cover it pays under, and takes no plan column's figure or liability row as the person's",async()=>{
+      // Live release set (20 Oct): the Coverage page showed an accident-scale row (sight in one eye) as a percentage of the
+      // S$1,000,000 term life cover, while the Benefits page used the S$600,000 personal accident cover. A group scheme's
+      // certificate lists every cover under one scheme name, so joining a wording row to "a cover whose name shares a
+      // word" picked whichever came first.
+      const member=people[2].id,cert=uuid(702000);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Example Group Scheme','EGS-1','G-EGS','Group Insurance','certificate',true,95,'ready','egs.pdf','egs.pdf','scan_clean')",[cert,account,member]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[cert,member,account]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,'Group Term Life',1000000,'SGD','Example Group Scheme',1,'Group Term Life SGD 1,000,000',true)",[account,cert,member]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,'Group Personal Accident',600000,'SGD','Example Group Scheme',1,'Group Personal Accident SGD 600,000',true)",[account,cert,member]);
+      const row=async(eventType:string,cause:string|null,note:string)=>(await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,cause,pays_kind,amount,currency,note,origin,status) VALUES($1,$2,$3,'Example Group Scheme',$4,$5,$6,'percent_of_sum',0.5,'SGD',$5,'wording','confirmed') RETURNING id",[account,member,cert,eventType,note,cause])).rows[0].id;
+      const eye=await row("dismemberment","accident","Loss of sight in one eye");
+      const death=await row("death",null,"Death");
+      await seedLedger(account);
+      const basis=async(id:string)=>Number((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[id])).rows[0].sum_basis);
+      assert.equal(await basis(eye),600000,"An accident-scale row is a percentage of the personal accident cover");
+      assert.equal(await basis(death),1000000,"A death row is a percentage of the life cover");
+
+      // Live release set (20 Oct): a travel wording's third-party liability row ("if you are liable for accidental death,
+      // injury or damage to other people", one figure per plan column) showed as the person's own "Accidental death
+      // S$500,000", and a "Not covered" schedule term showed as a S$500 lump sum.
+      const benefit=(name:string,kind:string,value:number,quote:string,rowKind:string|null=null)=>db.query(
+        "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,row_kind) VALUES($1,$2,'Example Group Scheme',$3,ARRAY[]::text[],$4,$5,'SGD',7,$6,'[]'::jsonb,'[]'::jsonb,false,$7)",
+        [account,cert,name,kind,value,quote,rowKind]);
+      await benefit("If you are liable for accidental death, injury or damage to other people","fixed",500000,"If you are liable for accidental death, injury or damage to other people S$500,000 S$750,000 S$1,000,000");
+      await benefit("Sports equipment","fixed",500,"Sports equipment Not covered S$500 S$1,000","not_covered");
+      await benefit("Trip cancellation","fixed",7500,"If you have to cancel your entire trip S$7,500 S$10,000 S$15,000");
+      await seedLedger(account);
+      const seeded=(await db.query<{event_type:string;pays_kind:string;amount:string|null;note:string|null}>(
+        "SELECT event_type,pays_kind,amount::text,note FROM coverage_rules WHERE policy_id=$1 AND origin<>'person' AND note IS NOT NULL",[cert])).rows;
+      const liability=seeded.find(r=>/liable/.test(r.note??""));
+      assert.ok(liability,"The liability row is still listed");
+      assert.equal(liability!.event_type,"other","Liability to other people is not the person's accidental death");
+      assert.equal(liability!.amount,null,"One plan column's figure is not the person's");
+      assert.equal(seeded.some(r=>/Sports equipment/.test(r.note??"")&&r.amount!=null),false,"A \"Not covered\" row carries no amount");
+      assert.equal(seeded.find(r=>/Trip cancellation/.test(r.note??""))?.amount??null,null,"A per-plan cancellation limit is not given as the person's");
+      assert.equal(seeded.some(r=>r.event_type==="accidental_death"&&Number(r.amount)===500000),false);
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=$1",[cert]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=$1",[cert]);
+
+      // Either/or amounts (reviewer, 20 Oct): the wrist as 25% of a fixed S$5,000 limit in one table and 20% of the
+      // S$600,000 accident cover ("% of Sum Insured" printed in the heading) in another. Both pages send the two as one
+      // group on the member row -- never one picked figure (the Benefits page showed S$1,000), never a total.
+      // The two tables are in two documents (the product summary and the benefit summary).
+      const productSummary=uuid(702001);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Example Group Scheme','EGS-1','G-EGS','Group Insurance','product_summary',false,40,'ready','egs-ps.pdf','egs-ps.pdf','scan_clean')",[productSummary,account,member]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[productSummary,member,account]);
+      const ids=(await db.query<{id:string}>(
+        `INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES
+         ($1,$3,'Example Group Scheme','Arm , Elbow, Wrist or Ribs',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','["DearPolicy read this as 25% of the S$5,000 limit stated in the heading of this schedule."]'::jsonb,'[]'::jsonb,true,true),
+         ($1,$2,'Example Group Scheme','Arm, Elbow, Wrist or Ribs (Other Fracture)',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'sum_insured',0.2,'SGD',8,'Arm, Elbow, Wrist or Ribs (Other Fracture) 20%','["DearPolicy read this as 20% of the sum insured, from the heading of the schedule this row sits in."]'::jsonb,'[]'::jsonb,true,true)
+         RETURNING id::text`,[account,cert,productSummary])).rows.map(r=>r.id);
+      const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as {id:string;alternatives:{groupId:string;note:string;options:{rowId:string;amountText:string}[]}|null}[];
+      const wristRows=listed.filter(b=>ids.includes(b.id));
+      assert.equal(wristRows.length,2);
+      for(const b of wristRows){
+        assert.deepEqual(b.alternatives?.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort(),"Benefits: both readings on each member row");
+        assert.match(b.alternatives!.note,/never added together; the insurer decides/);
+      }
+      assert.equal(wristRows[0].alternatives!.groupId,wristRows[1].alternatives!.groupId);
+      assert.doesNotMatch(JSON.stringify(listed),/S\$1,000(?![,\d])|121,250/,"No S$1,000 reading and no total");
+      await seedLedger(account);
+      const ledger=(await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).json()).rows as {policyId:string|null;alternatives:{options:{amountText:string}[]}|null}[];
+      const grouped=ledger.filter(r=>(r.policyId===cert||r.policyId===productSummary)&&r.alternatives);
+      assert.ok(grouped.length>=1,"Coverage: the wrist row carries the group");
+      for(const r of grouped)assert.deepEqual(r.alternatives!.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort());
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary]]);
     });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);

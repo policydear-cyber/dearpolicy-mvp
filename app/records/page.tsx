@@ -43,7 +43,7 @@ export default function RecordsPage() {
           <button className="button primary" type="submit" disabled={!file||busy}>{busy?"Uploading…":"Upload & extract"}</button>
         </form>
         {status && <div className="upload-status">{status}</div>}
-        <div className="note">Upload PDF statements/receipts. Photo and email-receipt OCR can be added before public beta.</div>
+        <div className="note">Upload a premium notice, renewal notice or receipt as a PDF.</div>
       </section>
       <section className="section">
         <div className="section-heading"><div><div className="eyebrow">HISTORY</div><h2>Extracted premium records</h2></div></div>
