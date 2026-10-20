@@ -1002,3 +1002,61 @@ a critical bug on main. But R16-1 means that undoing a mis-tap silently drops th
 and dashboard. The cheapest acceptable fix is to rebuild that person's rows when they are linked again. Failing that, show the
 note "re-analyse to restore". R16-2 and R16-3 should follow before public launch. R16-4 can wait for the stored-exclusion
 decision. The `r5:ux-test` source check that pins the old behaviour is the Test engineer's to update.
+
+---
+
+# Round 17: PR #66 re-check at `c00e41e` (R14 fixes)
+
+Scope: `git diff 23af182 c00e41e -- lib/`, which touches `loop.ts` `whatToDo` and `contactStepFor`, `hook.ts` (sets
+`trace.shown`) and `types.ts`. The repro is a scratch script that mirrors the new selection logic line for line, with no model
+calls. It checks which turn's steps a "what do i do now" repeats and which event the contact step uses.
+
+## R14 re-check
+
+| Finding | Status at `c00e41e` | Evidence |
+|---|---|---|
+| R14-1 raw `args.next_steps` | **Fixed.** The repeat now uses `TraceTurn.shown.nextSteps`, copied from `c.nextSteps`, which are the composed and filtered steps the answer showed (hook.ts, final branch). | The repro repeats only the composed step. |
+| R14-2 person or scenario boundary | **Partly fixed.** It uses one previous answer, only for the same person, and never when this turn corrected or withdrew something. See R17-1 for the gap. | Grace → Daniel (final turn): no repeat. Grace → Daniel (ask turn): no repeat, because the person differs. Correction in this turn: no repeat. |
+| R14-3 event union | **Fixed.** It now uses the latest user message that names an event (`userTexts` includes the current message). | death → fracture → "what do i do now" gives `fracture` only. |
+| R14-4 duplicate open question | **Fixed.** The "still open" note is gone, and the question shows once, as its card. | Code read. |
+
+## R17-1 (High): an ask turn is not a boundary, so an older scenario's steps can come back for the same person
+
+`trace.shown` is set only on the `reply.kind === "final"` branch (hook.ts, after `answer.nextSteps = c.nextSteps`). It is not set
+on the ask branch, the unknown-person branch or the plain-text branch. `whatToDo` takes the latest earlier turn that has `shown`
+(`filter(t => ... && t.shown).at(-1)`), not the immediately previous turn. Repro:
+
+1. Turn 1: "my mum Grace died". The final answer shows "Tell the insurer about the death and ask for the death claim form".
+2. Turn 2: "Grace broke her arm". This becomes an ask card (for example "was it an accident?"), and no `shown` is recorded.
+3. Turn 3: "what do i do now". The reply keeps nothing, and the turn-1 death steps are repeated under "from my last answer".
+
+The repro returns `["Tell the insurer about the death and ask for the death claim form"]`. That is the R14-2 scenario
+contamination again, through a common path, and the code comment ("only the immediately previous answer") does not match.
+
+Fix (hook.ts, a few lines): record `shown` on every branch, with `nextSteps: []` when the turn showed none. Or have `whatToDo` read
+only `state.turns.at(-1)` and repeat nothing if that turn has no `shown`.
+
+## R17-2 (Low): `shown` is copied before the save gate
+
+`trace.shown` is copied before `enforceLiveChatMonetaryBoundary`, `verifyAnswerFigures` and `rescueRejected`. Those can rewrite
+or drop `answer.nextSteps[i]` (answer-verification.ts:1299, :1399). So `shown` can hold a step the household never saw. The later
+turn runs the gate again on the repeated steps, which limits the harm. Copy from `answer.nextSteps` after the final gate so
+"shown" means shown.
+
+## R17-3 (Low): steps from an answer withdrawn later are still repeated
+
+An answer can be withdrawn after it was shown, for example when its document is deleted (`invalidateAnswersWithDeletedPolicies`).
+Its `shown` steps are still repeated by a later "what do i do now". Skip `prev` when any of its cited documents is no longer active,
+or accept this as part of the "superseded answers" item.
+
+## Regressions
+
+There are none outside `whatToDo` and `contactStepFor`. `types.ts` only adds an optional field. Older saved states have no
+`shown`, so the fallback simply does nothing for them, which is safe. The rest of the diff is the Developer's own repro script.
+The returned, saved and reopened answer is still the normal composed path, so it is consistent.
+
+## Verdict on PR #66 at `c00e41e`
+
+**Not ready to merge: one small fix left.** R14-1, R14-3 and R14-4 are fixed. R14-2 is fixed except for R17-1, where an ask turn
+in between lets an older scenario's steps come back for the same person. Recording `shown` on every turn closes it. R17-2 and
+R17-3 can follow.
