@@ -346,3 +346,23 @@ lines last and cut. The household's words are quoted. **This is correct for what
 **Unsupported shown:** none in the quoted text itself. The risk is item 1: the quote's placement implies cover that no page establishes.
 **Not available:** DC's real library (whether it prints these two pages, which policy the panel GP benefit belongs to, and whether Daniel/Desmond's certificate
 lists it), and the live answer's trace.
+
+## 13. PR #64 re-check on head `094da7bf4fd75b37dbc290873bc1b6b99d991631`
+
+Evidence: Code trace (QC) over the anonymised fracture fixture plus the PR's two **invented** Product Summary pages (p20 overseas clause, p25 panel GP; synthetic).
+No QC test run, no model call. Message traced: "daniel tripped on the kerb and fell, his GP bill is $800, can he claim for this?"
+
+| check | what the pages support | what 094da7b does (traced) | verdict |
+| --- | --- | --- | --- |
+| Whose cover the quoted line is (12.1) | CERT p1: Daniel's Term Life, Personal Accident, Living Care and Living Care Plus, all "As of 06/10/2022"; BS p1 names an Outpatient Medicare Policy (OPMC), which is not on his certificate; p25 names no policy or person | Before the note: "Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care and Group Living Care Plus (as of 6 October 2022). The Benefit Summary (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list." After the quote: "The Product Summary (page 25) does not say whose cover that line is; it sits under “SECTION 6: CLINICAL BENEFITS”. Only the insurer or the scheme administrator can confirm whether it applies to Daniel." Built only from his own confirmed, fully stored certificate rows | **Fixed, supported.** Every clause is printed (CERT p1, BS p1, PS p25); no cover is claimed |
+| Overseas line only when the bill is abroad (12.2) | p20 pays only for treatment "received outside Singapore following an Accident", up to $1,000 per Accident | The place is read from the household's words: abroad → the abroad lines are quoted first; home ("in Singapore", "polyclinic", "local GP") → the abroad line is not quoted; **not stated (this message)** → the home line is quoted, and the abroad line is said apart: "The Product Summary (page 20) also prints a benefit for treatment outside Singapore, which applies only if the treatment was abroad: “...”" | **Fixed.** Not hidden when the place is unknown, and conditional as printed. Low: "in <Capitalised word>" counts as abroad, so "in Tampines" or "in Grace's name" would be read as abroad. Both lines are still quoted when there are only two, so nothing supported is lost on these pages |
+| $30 never an amount for the $800 bill | p25: non-panel GP "up to $30 per visit" (bare $), panel GP "no charge" | Quoted verbatim inside the printed line; the server computes nothing from it or from "$800" | **Holds** (server side). The model could still misuse the evidence; the composer's payout rules apply |
+| Household's words | "tripped on the kerb" | "You told me: “tripped on the kerb”." | Supported |
+| Real-anonymised fixture alone (no invented pages) | as section 6/J6 | No medical lines, so G1 behaves as before | Unchanged |
+
+**Still omitted (low or model-dependent):**
+- The whose-cover note covers the panel GP line, but not the separately said overseas line, which also names no policy (low).
+- The benefit's own name "Panel GP Benefit" is dropped as a heading, and the note names the section instead (low; the quoted line itself says "panel GP clinic").
+- Whether the visit was at a panel GP (no charge, or up to $30) is not asked, and the conditional accident benefits are not added. Both depend on the model.
+
+**Unsupported shown:** none found. **Not available:** whether DC's real library prints these two pages, which policy they belong to, and whether his certificate lists it.
