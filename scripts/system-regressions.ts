@@ -19,6 +19,7 @@ import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import { applyImpliedScaleLimit,corroborateInferredRules,holdNonMonotonicBands,impliedScaleLimit,resolveStoredRules } from "@/lib/insurance/scale-limit";
 import { amountAlternatives,ALTERNATIVES_NOTE } from "@/lib/policies/amount-alternatives";
+import { rowSupported } from "@/lib/ledger/extract";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1473,6 +1474,41 @@ export function runSystemRegressions(){
     assert.equal(groups.has("bs-eye"),false,"a row stated once has no alternatives");
     // One option that cannot be worked out (no sum insured to take the share of) drops the whole group.
     assert.equal(amountAlternatives({...scheme,coverages:[]},resolved,()=>"x").size,0);
+  });
+  test("Rows of different benefits that share a name, or a generic name, are never alternatives (Critic R29-2)",()=>{
+    const row=(over:Partial<CatalogBenefit>):CatalogBenefit=>({id:String(over.id),policyId:"doc",productName:"Group Personal Accident",
+      benefitName:"Leg",traits:["bodily_injury","accident"],requires:["accident"],formulaKind:"sum_insured",formulaValue:0.5,currency:"SGD",factKey:null,
+      offsetDays:null,maximumDays:null,sourcePage:1,quote:"Leg 50%",conditions:[],requirements:[],needsReview:false,...over});
+    const scheme:PolicyContract={...contract,coverages:[coverage({id:"gpa",category:"Group Personal Accident",amount:600_000,productName:"Group Personal Accident"})]};
+    const name=()=>"Benefit Summary";
+    // One document, two tables, both with a "Leg" row: a fracture of the leg and the loss of a leg.
+    const oneDocument=[row({id:"fracture-leg",sourcePage:8,formulaKind:"fixed",formulaValue:2500,quote:"Leg 50%"}),
+      row({id:"loss-leg",sourcePage:6,formulaValue:0.5,traits:["bodily_injury","disability","accident"],quote:"Leg 50%"})];
+    assert.equal(amountAlternatives(scheme,oneDocument,name).size,0,"two tables of one document are two benefits");
+    // Two documents: the fracture row in one, the loss-of-limb row in the other.
+    const twoDocuments=[row({id:"fracture-leg",policyId:"summary",formulaKind:"fixed",formulaValue:2500,quote:"Leg 50%"}),
+      row({id:"loss-leg",policyId:"benefit-summary",formulaValue:0.5,traits:["bodily_injury","disability","accident"],quote:"Leg 50%"})];
+    assert.equal(amountAlternatives(scheme,twoDocuments,name).size,0,"a fracture and a loss of limb are not alternatives");
+    // The same name with words naming different events.
+    const namedApart=[row({id:"a",policyId:"summary",formulaKind:"fixed",formulaValue:2500,quote:"Leg (fracture) 50%"}),
+      row({id:"b",policyId:"benefit-summary",formulaValue:0.5,quote:"Leg (loss of leg) 50%"})];
+    assert.equal(amountAlternatives(scheme,namedApart,name).size,0,"rows naming different events are different benefits");
+    // Generic names are never matched.
+    const generic=[row({id:"o1",policyId:"summary",benefitName:"Others",formulaKind:"fixed",formulaValue:500,quote:"Others 10%"}),
+      row({id:"o2",policyId:"benefit-summary",benefitName:"Others",quote:"Others 10%",formulaValue:0.1})];
+    assert.equal(amountAlternatives(scheme,generic,name).size,0,"\"Others\" says nothing about which benefit it is");
+    // Control: the same fracture row printed by two documents still groups.
+    const same=[row({id:"s1",policyId:"summary",formulaKind:"fixed",formulaValue:2500,quote:"Leg 50%"}),row({id:"s2",policyId:"benefit-summary",quote:"Leg 50%"})];
+    assert.equal(amountAlternatives(scheme,same,name).get("s1")?.options.length,2);
+  });
+  test("A row's quote saying the insurer \"shall not be liable\" does not make it a liability row (Critic R29-1)",()=>{
+    const page="Accidental Death 100% of Sum Insured. The Company shall not be liable for death caused by war.\nIf you are liable for accidental death, injury or damage to other people S$500,000";
+    const death={planName:"Group Personal Accident",sourcePage:1,benefitName:"Accidental Death",eventType:"accidental_death" as const,paysKind:"percent_of_sum" as const,
+      amount:1,quote:"Accidental Death 100% of Sum Insured. The Company shall not be liable for death caused by war."};
+    assert.equal(rowSupported(death,page),true,"the person's own accidental death row is kept");
+    const liability={planName:"Travel",sourcePage:1,benefitName:"If you are liable for accidental death, injury or damage to other people",eventType:"accidental_death" as const,
+      paysKind:"lump_sum" as const,amount:500000,quote:"If you are liable for accidental death, injury or damage to other people S$500,000"};
+    assert.equal(rowSupported(liability,page),false,"liability to other people is still not the person's accidental death");
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under

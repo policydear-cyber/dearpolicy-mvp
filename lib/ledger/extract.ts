@@ -66,7 +66,7 @@ const RowSchema=z.object({
   quote:z.string().min(8),
 });
 const ExtractionSchema=z.object({rows:z.array(RowSchema)});
-type ExtractedRow=z.infer<typeof RowSchema>;
+export type ExtractedRow=z.infer<typeof RowSchema>;
 const VerifySchema=z.object({verdicts:z.array(z.object({index:z.number().int(),supported:z.boolean(),why:z.string().optional()}))});
 
 export const LEDGER_SYSTEM=
@@ -103,16 +103,17 @@ function printedPart(quote:string,text:string):string|null{
 /** Round 9: what a ledger row says is what its printed quote says -- the
  * figure in the unit it claims, an event its words can name -- and its
  * restrictions are printed in the document. */
-function rowSupported(row:ExtractedRow,pageText:string){
+export function rowSupported(row:ExtractedRow,pageText:string){
   const part=printedPart(row.quote,pageText);
   if(!part)return false;
   if(!rowFigureSupported(part,row.paysKind,row.amount??null))return false;
   // One plan column's figure is not the person's figure, and "Not covered" pays nothing.
   if(row.amount!=null&&rowFiguresDependOnPlan(part))return false;
-  const words=[...[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)),part].join(" ");
-  // Liability to other people is never the insured person's own death or injury benefit.
-  if(THIRD_PARTY_LIABILITY.test(words)&&row.eventType!=="other")return false;
-  return eventSupported(row.eventType,words);
+  const names=[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)).join(" ");
+  // Liability to other people is never the insured person's own death or injury benefit. Only the
+  // row's own name says so: a quote's "the Company shall not be liable for ..." is an exclusion, not the benefit.
+  if(THIRD_PARTY_LIABILITY.test(names)&&row.eventType!=="other")return false;
+  return eventSupported(row.eventType,[names,part].join(" "));
 }
 function numbersOnPage(row:ExtractedRow,text:string){
   const flat=text.replace(/[,\s]/g,"");

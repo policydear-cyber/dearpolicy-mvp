@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { coverageForBenefit, type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import type { PolicyContract } from "@/lib/policies/inventory";
+import { eventForBenefitName } from "@/lib/ledger/events";
 
 /** Two ways one person's cover works out the same benefit.
  *
@@ -35,6 +36,14 @@ export const ALTERNATIVES_NOTE = "There is more than one way your cover works th
 function rowKey(name: string) {
   return (name ?? "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
 }
+/** Names that say nothing about which benefit a row is ("Others", "Any other fracture"): never matched across tables. */
+const GENERIC_ROW = /^(?:(?:all|any)?others?\w*|balance|remaining|miscellaneous|misc)$/;
+/** What a row pays for, beyond its name: the traits it responds to and the ones it requires. A "Leg" row in a fracture
+ * table and a "Leg" row in a dismemberment table share a name and nothing else. */
+const sameBenefitKey = (b: CatalogBenefit) => [rowKey(b.benefitName), [...(b.requires ?? [])].sort().join(","), [...b.traits].sort().join(",")].join("|");
+/** The event a row's own words name, or null when they name none ("Hip 75%"). */
+const namedEvent = (b: CatalogBenefit) => { const e = eventForBenefitName(`${b.benefitName} ${b.quote}`).event; return e === "other" ? null : e; };
+
 const percentOf = (quote: string) => {
   const m = String(quote ?? "").match(/(\d{1,3}(?:\.\d+)?)\s*%/);
   return m ? Number(m[1]) : null;
@@ -79,11 +88,18 @@ export function amountAlternatives(contract: PolicyContract, benefits: CatalogBe
   for (const b of benefits) {
     // A row read per plan column is narrowed by the person's plan elsewhere (selectTierRows), not offered as an alternative.
     if (b.tier || (b.formulaKind !== "fixed" && b.formulaKind !== "sum_insured")) continue;
-    const key = rowKey(b.benefitName);
-    if (key) groups.set(key, [...(groups.get(key) ?? []), b]);
+    const name = rowKey(b.benefitName);
+    if (!name || GENERIC_ROW.test(name)) continue;
+    const key = sameBenefitKey(b);
+    groups.set(key, [...(groups.get(key) ?? []), b]);
   }
   for (const rows of groups.values()) {
     if (rows.length < 2) continue;
+    // The alternatives are one benefit printed by different documents. Two rows of one document with the same name are
+    // two tables' benefits (a fracture "Leg" and a dismemberment "Leg"), and rows whose words name different events
+    // (a fracture and a loss of limb) are different benefits.
+    if (new Set(rows.map((b) => b.policyId)).size !== rows.length) continue;
+    if (new Set(rows.map(namedEvent).filter(Boolean)).size > 1) continue;
     const options = rows.map((b) => optionFor(contract, b, documentName));
     if (options.some((o) => !o)) continue;
     const opts = options as Option[];

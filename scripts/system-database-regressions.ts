@@ -1804,11 +1804,15 @@ async function main(){
       // Either/or amounts (reviewer, 20 Oct): the wrist as 25% of a fixed S$5,000 limit in one table and 20% of the
       // S$600,000 accident cover ("% of Sum Insured" printed in the heading) in another. Both pages send the two as one
       // group on the member row -- never one picked figure (the Benefits page showed S$1,000), never a total.
+      // The two tables are in two documents (the product summary and the benefit summary).
+      const productSummary=uuid(702001);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Example Group Scheme','EGS-1','G-EGS','Group Insurance','product_summary',false,40,'ready','egs-ps.pdf','egs-ps.pdf','scan_clean')",[productSummary,account,member]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[productSummary,member,account]);
       const ids=(await db.query<{id:string}>(
         `INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES
-         ($1,$2,'Example Group Scheme','Arm , Elbow, Wrist or Ribs',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','["DearPolicy read this as 25% of the S$5,000 limit stated in the heading of this schedule."]'::jsonb,'[]'::jsonb,true,true),
+         ($1,$3,'Example Group Scheme','Arm , Elbow, Wrist or Ribs',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','["DearPolicy read this as 25% of the S$5,000 limit stated in the heading of this schedule."]'::jsonb,'[]'::jsonb,true,true),
          ($1,$2,'Example Group Scheme','Arm, Elbow, Wrist or Ribs (Other Fracture)',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'sum_insured',0.2,'SGD',8,'Arm, Elbow, Wrist or Ribs (Other Fracture) 20%','["DearPolicy read this as 20% of the sum insured, from the heading of the schedule this row sits in."]'::jsonb,'[]'::jsonb,true,true)
-         RETURNING id::text`,[account,cert])).rows.map(r=>r.id);
+         RETURNING id::text`,[account,cert,productSummary])).rows.map(r=>r.id);
       const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as {id:string;alternatives:{groupId:string;note:string;options:{rowId:string;amountText:string}[]}|null}[];
       const wristRows=listed.filter(b=>ids.includes(b.id));
       assert.equal(wristRows.length,2);
@@ -1820,12 +1824,12 @@ async function main(){
       assert.doesNotMatch(JSON.stringify(listed),/S\$1,000(?![,\d])|121,250/,"No S$1,000 reading and no total");
       await seedLedger(account);
       const ledger=(await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).json()).rows as {policyId:string|null;alternatives:{options:{amountText:string}[]}|null}[];
-      const grouped=ledger.filter(r=>r.policyId===cert&&r.alternatives);
+      const grouped=ledger.filter(r=>(r.policyId===cert||r.policyId===productSummary)&&r.alternatives);
       assert.ok(grouped.length>=1,"Coverage: the wrist row carries the group");
       for(const r of grouped)assert.deepEqual(r.alternatives!.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort());
-      await db.query("DELETE FROM policy_benefits WHERE policy_id=$1",[cert]);
-      await db.query("DELETE FROM coverage_rules WHERE policy_id=$1",[cert]);
-      await db.query("DELETE FROM policies WHERE id=$1",[cert]);
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary]]);
     });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);
