@@ -14,6 +14,7 @@ import { readableDates,sgDate } from "@/components/format-date";
 import { AnswerWait,isAnswerStage,type AnswerStageId } from "@/components/answer-wait";
 import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
+import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -26,6 +27,8 @@ const MAX_QUESTION_LENGTH=2000;
  * loaded it: the server refuses to append to a stale copy. */
 const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
 const shown=answerText,words=codeWords;
+/** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
+const nextStepsAfter=(answer?:ChatAnswer)=>{const steps=uniqueSteps(answer?.nextSteps);return steps.length&&!answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;};
 function isConflict(status:number|null,text:string){return status===409||/chat changed|reopen it|changed while|changed underneath/i.test(text);}
 /** Keeps the open conversation in the address bar, so a reload (or a
  * closed tab reopened from history) returns to it -- and to its pending
@@ -355,13 +358,15 @@ function ChatContent(){
     <div className="chat-window" aria-live="polite">
       {!messages.length&&!busy?<ChatWelcome library={library}/>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
-      {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
+      {withQuestionsOnce(messages).map((message,index,all)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
           {/* An answer that arrives with checked statements is shown as cards (bottom line, one card per amount, sources one tap
               away); the same text otherwise, as before. A claim assessment keeps its own layout. */}
           {(()=>{const cards=message.role==="assistant"&&showsCards(message.answer);return <>
-          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>}/>:null}
-          {cards?null:message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
+          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>} after={nextStepsAfter(message.answer)}/>:null}
+          {/* A turn that stopped before answering is drawn as a stop, with one tap to a narrower question. */}
+          {cards?null:message.role==="assistant"&&isStopped(message.answer,message.content)?<StoppedNotice text={readableDates(customerAnswerText(message.content))} question={all.slice(0,index).reverse().find(m=>m.role==="user")?.content} people={family.map(m=>({id:m.id,name:m.display_name}))} onAsk={(text,id)=>{setQuestion(text.slice(0,MAX_QUESTION_LENGTH));if(id)setMemberId(id);composer.current?.focus();}}/>
+          :message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
           {!cards&&message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           </>;})()}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated" data-reason={message.answer.invalidated.reason}><strong>{message.answer.invalidated.reason==="superseded"?"Replaced.":"Out of date."}</strong> {({policy_deleted:"A policy document this answer relied on has been deleted, so it no longer describes your cover.",documents_added:"Documents have been added since this answer, so it may no longer be right.",person_unlinked:"Someone this answer was about has since been removed from the document it relied on.",superseded:"This answer was replaced by the corrected answer below."} as Record<string,string>)[message.answer.invalidated.reason]??"This answer no longer describes your cover."}</div>:null}
@@ -444,12 +449,12 @@ function ChatContent(){
           {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
-          {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&!message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
+          {message.role==="assistant"&&showsCards(message.answer)?null:nextStepsAfter(message.answer)}
           {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
-          {message.answer?.disclaimer?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
+          {message.answer?.disclaimer&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
         </div>
         {message.error?(message.conflict
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>

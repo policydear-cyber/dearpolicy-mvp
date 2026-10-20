@@ -1061,6 +1061,17 @@ table { font-variant-numeric: tabular-nums; }
 /* Short answers (answers that arrive with checked statements). */
 .answer-cards { display: grid; gap: 10px; }
 .answer-bottom-line { font-size: var(--fs-lg, 1.1rem); font-weight: 650; line-height: 1.4; color: var(--ink); margin: 0; }
+/* An answer the documents leave to confirm: flagged before its first word, never drawn like a finding. */
+.answer-bottom-line.to-confirm { border-left: 3px solid var(--warn); padding-left: 10px; }
+.answer-flag { display: block; width: fit-content; margin-bottom: 4px; padding: 1px 8px; border-radius: 999px; background: var(--warn-tint); color: var(--warn-text); font-size: var(--fs-xs); font-weight: 650; letter-spacing: .02em; }
+.answer-cards > .next-steps { margin: 0; }
+/* A turn that stopped before answering: a stop, with one tap to a narrower question. */
+.answer-stopped { display: grid; gap: 6px; }
+.message-body .answer-stopped p { margin: 0; }
+.answer-stopped-title { font-weight: 650; font-size: var(--fs-md); color: var(--ink); }
+.answer-stopped-why { font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-stopped-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.answer-stopped-actions .mini-button { min-height: 44px; }
 .answer-point { margin: 0; }
 .answer-point.caution { background: var(--warn-tint); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); }
 .answer-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 4px; }
