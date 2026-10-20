@@ -15,9 +15,11 @@ export async function GET(request: NextRequest) {
     const result = await createUserSupabaseClient(ctx.userId, (client) =>
       client.query<FamilyRow>(
         `SELECT f.id, f.display_name, f.relationship, f.date_of_birth::text, f.preferred_name, f.notes,
-                count(DISTINCT pm.policy_id)::int AS policy_count
+                count(DISTINCT p.id)::int AS policy_count
            FROM family_members f
            LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id
+           -- Only documents Documents still lists (GET /api/policies): one deleted or replaced is not "linked".
+           LEFT JOIN policies p ON p.id=pm.policy_id AND p.account_id=f.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
           WHERE f.account_id=$1 AND ${activePredicate("f")}
           GROUP BY f.id
           ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END, f.created_at`,
