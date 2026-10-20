@@ -2361,3 +2361,29 @@ beside the change. The new household-journey step 21-22 asserts the still-linked
 delete", and the child still present, which matches round 44.
 
 **Verdict:** both fine. Nothing changes for #71's or #77's readiness.
+
+---
+
+# Round 46: two quick checks before the merge list
+
+**PR #80 at e743e25: test-only, and the checks can fail.** Against its merge base on main, the only file changed is
+`scripts/infrastructure-table-permissions-regressions.ts` (+28). It appends `sql/policy-member-exclusions.sql` and
+`sql/detected-name-dismissals.sql` to MIGRATION_ORDER after `household-rls.sql`/`infrastructure-rls.sql`, and adds
+section 3b for both tables:
+- anon SELECT, INSERT and DELETE must be denied;
+- household B cannot read A's rows (0 rows), write a row for A, delete A's rows (0 rows), or "forge" a row under its own
+  account that names A's document;
+- controls: a member of A reads its own row and can add one.
+
+`record(ok, label)` pushes a failure whenever `ok` is false, so each line fails if the matching policy is loosened. For
+example, the forged-row check fails if the `EXISTS (… p.account_id = …account_id)` clause is removed from the INSERT
+policy, and the read check fails if SELECT becomes `USING (true)`. The `removable` person used in the exclusion insert
+was soft-deleted earlier in the suite (`finishFamilyMemberDeletion` sets `soft_deleted`, `lib/lifecycle/coordinator.ts`
+~1105) but the row still exists. So the foreign key does not mask the RLS result, and the member control proves the
+insert path works. Not run here (a database suite); this is a code read.
+
+**PR #71 at 260aa95: only `.env.example` changed.** `git diff c332676 260aa95` is 4 added comment lines documenting
+DEARPOLICY_PREFETCH_PERSON, DEARPOLICY_SIMPLE_CHAT, DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION and
+DEARPOLICY_SIMPLE_CHAT_MODEL. They contain no values and no secrets. Nothing else changed, so round 43's verdict stands.
+
+**Verdict:** #80 is ready to merge. #71's readiness is unchanged (ready; switch-on still needs the one paid smoke test).
