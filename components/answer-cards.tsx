@@ -50,6 +50,10 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).ma
 /** What a card or point says, beyond its short text: its own basis, conditions and any limit the source notes. */
 /** Each line is shown once: a basis the card's sentence already states, or a note that repeats one of its conditions,
  * is not drawn twice. A point's source note (background, not a limit on an amount) stays in "Where this comes from". */
+/** A condition's closing clause that only repeats the footer under every amount ("…; an illustration from the
+ * document's terms, not a payment or an insurer's decision") is not drawn on each card. */
+const withoutFooterClause = (c: string) => c.replace(/;\s*[^;]*\bnot a payment or an insurer[’']s decision\.?\s*$/i, ".");
+
 function Qualifiers({ s }: { s: AnswerStatement }) {
   const said = norm(s.text);
   const conditions = (s.conditions ?? []).map(norm);
@@ -57,7 +61,7 @@ function Qualifiers({ s }: { s: AnswerStatement }) {
   const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
     {basis ? <p className="answer-card-basis">{basis}</p> : null}
-    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul> : null}
+    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{s.amount ? withoutFooterClause(c) : c}</li>)}</ul> : null}
     {note ? <p className="answer-card-note" data-testid="answer-card-note">{note}</p> : null}
   </>;
 }
@@ -157,9 +161,16 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
     // The answer's own statement that these are alternatives heads the block (and is not drawn again); without one, the group's note does.
     const head = statements.find((u) => u.kind === "uncertainty" && !members.includes(u) && !blocks.some((b) => (b as { key?: string } | null)?.key === "g-" + u.id) && /\balternatives?\b|\bnot a total\b|\beither\b/i.test(u.text));
     if (head) { drawn.add(head.id); const at = blocks.findIndex((b) => (b as { key?: string } | null)?.key === head.id); if (at >= 0) blocks.splice(at, 1); }
+    // A condition every option carries is said once, above them, not repeated on each card.
+    const shared = (members[0].conditions ?? []).filter((c) => members.every((m) => (m.conditions ?? []).some((d) => norm(d) === norm(c))));
+    const own = (m: AnswerStatement) => shared.length ? { ...m, conditions: (m.conditions ?? []).filter((c) => !shared.some((x) => norm(x) === norm(c))) } : m;
+    // When the bottom line already says these are alternatives, the block's label is enough.
+    const noteText = render(head ? head.text : g.note);
+    const saidAbove = !!bottomLine && /\balternatives?\b|\beither\b/i.test(bottomLine);
     blocks.push(<div key={"g-" + g.id} className="answer-either" data-testid="answer-either" role="group" aria-label="Alternative amounts, not a total">
-      <p className="answer-either-note"><b>Either / or</b> {render(head ? head.text : g.note)}</p>
-      {members.map((m, i) => <Fragment key={m.id}>{i ? <div className="answer-either-or" aria-hidden="true"><span>or</span></div> : null}{one(m)}</Fragment>)}
+      <p className="answer-either-note"><b>Either / or</b>{saidAbove ? null : <> {noteText}</>}</p>
+      {shared.length ? <ul className="answer-card-conditions answer-either-shared" data-testid="answer-either-shared">{shared.map((c, i) => <li key={i}>{render(withoutFooterClause(c))}</li>)}</ul> : null}
+      {members.map((m, i) => <Fragment key={m.id}>{i ? <div className="answer-either-or" aria-hidden="true"><span>or</span></div> : null}{one(own(m))}</Fragment>)}
     </div>);
   }
   return <div className="answer-cards">
