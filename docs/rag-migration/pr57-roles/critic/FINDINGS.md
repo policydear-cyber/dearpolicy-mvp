@@ -1899,3 +1899,41 @@ active rows. `activePredicate` is imported in each file. No cross-household path
   non-breaking spaces at the edges.
 
 **Merge order:** #76 before #77. Apply `sql/detected-name-dismissals.sql` after `sql/policy-member-exclusions.sql`.
+
+# Round 34: PR #77 at `c0969e5` (R32 fixes and the "Who covers" line)
+
+Read `git diff 12eac98 c0969e5` (pages, `components/cover-kinds.ts`, `components/device-memory.ts`, AppShell). No builds or browser runs.
+
+## R32-1 fixed: a "to confirm" row never reads as covered
+
+`isToConfirm` (`cover-kinds.ts`) = status present and not `confirmed`, and origin neither `wording` nor `person`. That covers every
+`scheduleSeeds` row (`store.ts:159-177`, origin `schedule`, status `proposed`), i.e. every PRODUCT_DEFAULTS guess. Checked each surface:
+- Coverage row: `amountLine` returns "Plans like this usually include this. Your documents don't confirm it or print an amount."
+  *before* the "Covered." branch. A guess with a figure (life/PA lump sums) keeps the figure and adds "To confirm: plans like this
+  usually include this, but your documents don't confirm it yet."
+- Coverage chips: a kind whose rows are all guesses is labelled "(to confirm)" with a dashed style.
+- Family chips: a kind counts as plain only if one of its rows is not a guess; otherwise it shows "Label (to confirm)".
+- Documents: guesses are split out of **Found** into "Plans like this usually include …, but this document doesn't confirm it".
+- "Covered." now appears only for a stated row from the wording, a confirmed row, or the household's own entry.
+
+Also fixed: R32-2 (gaps also count `/api/benefits` kinds by owner name, and "other"-typed rows are sorted by name). R32-4 (sign-out
+clears the device-only key). The "Covers nobody yet · choose who it covers" line with a Choose button is fine. It adds no claim, and
+"Done" is now always offered.
+
+## R34-1 (Low): the "to confirm" line under a figure can understate what the schedule prints
+
+For a seeded lump sum (for example a Group Life line printing S$500,000, seeded as death = S$500,000), the line says "your documents
+don't confirm it yet". The schedule does print the plan and its sum. What isn't confirmed is what the plan pays for, which matters
+for TPD and terminal illness, so they are rightly flagged. Optional wording: "Your schedule shows this plan's sum; its wording hasn't
+been read to confirm what it pays for." No wrong amount either way.
+
+## R34-2 (Low): a guessed row can make a gap note say "found"
+
+`coverGaps` counts guessed rows as found. A PA default's `accident_medical_expense` guess turns the hospital gap into "For medical
+costs, only accident medical expenses were found". Optional: skip the RELATED note when its event is only a guess (list the gap as
+missing, or say "may include").
+
+## Verdict on PR #77 at `c0969e5`
+
+**Ready to merge** (after #76). R34-1 and R34-2 are optional wording follow-ups. R32-3 still holds: before #76 merges, "Not in my family"
+shows an error rather than the device fallback.
