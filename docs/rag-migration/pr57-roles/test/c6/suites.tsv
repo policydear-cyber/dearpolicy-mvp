@@ -1,0 +1,59 @@
+suite	exit	pass	fail	summary
+reliable-chat:slice-test	0	9	0	reliable-chat slice [wong] 3/3 passed
+reliable-chat:live-regressions-test	0	10	0	reliable-chat live regressions [wong] passed
+reliable-chat:death-journey-test	0	45	0	all passed
+reliable-chat:cache-compaction-test	0	56	0	all passed
+reliable-chat:death-live-repairs-test	0	42	0	all passed
+reliable-chat:dj-live-3-replay-test	0	48	0	all passed (48 passed)
+reliable-chat:death-cause-test	0	31	0	all passed
+reliable-chat:death-applicability-test	0	64	0	all passed
+reliable-chat:cases-test	0	14	0	reliable-chat cases [wong] 8/8 passed
+reliable-chat:conflicts-test	0	40	0	6 route turns passed; no external calls
+reliable-chat:booklet-test	0	249	0	reliable-chat rc-live-9 replay (saved FL5 moves, statement checks): 20 passed, 0 failed
+reliable-chat:cda-recorded-test	0	112	0	reliable-chat rc-live-9 replay (saved FL5 moves, statement checks): 20 passed, 0 failed
+reliable-chat:structured-answers-test	0	131	0	segmentation: 8 passed, 0 failed
+reliable-chat:benefit-records-test	0	66	0	reliable-chat rc-live-9 replay (saved FL5 moves, statement checks): 20 passed, 0 failed
+reliable-chat:applicability-test	0	38	0	reliable-chat applicability [definitions alt]: 2 passed, 0 failed
+reliable-chat:stage3-test	0	10	0	reliable-chat stage 3 [tan] 3/3 passed
+reliable-chat:absence-scope-test	0	32	0	32 passed, 0 failed
+reliable-chat:fx-repairs-test	0	89	0	89 passed, 0 failed
+rag2:loop-test	0	22	0	rag2:loop-test 22/22 passed
+rag2:conv-test	0	22	0	rag2:conv-test (integration) 22/22 passed
+rag2:fix-test	0	35	0	rag2:fix-test 35/35 passed
+rag2:adversarial-test	0	47	0	RESULTS [{"name":"S1","ok":true},{"name":"S1b","ok":true},{"name":"S1c","ok":true},{"name":"S2.1","ok":true},{"name":"S2.2","ok":true},{"nam
+rag2:conv2-test	0	9	0	rag2 conv2 regressions 9/9 passed
+rag2:conv3-test	0	6	0	rag2 conv3 regressions 6/6 passed
+rag2:conv4-test	0	6	0	rag2 conv4 regressions 6/6 passed
+rag2:conv5-test	0	9	0	rag2 conv5 regressions 9/9 passed
+rag2:conv6-test	0	10	0	rag2 conv6 regressions 10/10 passed
+rag2:conv7-test	0	14	0	rag2 conv7 regressions 14/14 passed
+rag2:facts-test	0	11	0	rag2 facts regressions: 11 passed
+rag2:scenario-test	0	16	0	scenario completion 16/16 conversations and controls passed
+rag2:stress-test	0	25	0	stress structures 25/25 passed
+rag2:binding-test	0	47	0	binding 47/47 passed
+rag2:live-verify-test	0	31	0	live-verify multiline 6/6 passed
+rag2:pr50-regressions	0	51	0	pr50 [plain names, plain page 13] 18/18 passed
+rag2:calc-boundary-test	0	25	0	calc boundary regressions 25/25 passed
+rag2:calc-ingested-test	0	14	0	rag2:calc-ingested-test 14/14 passed
+rag2:calc-test	0	39	0	rag2:calc-test 39/39 passed
+rag2:deletion-semantics-test	0	9	0	rag2:deletion-semantics-test 9/9 passed
+rag2:gaps-test	0	18	0	rag2-gaps 18/18 passed
+rag2:presentation-test	0	31	0	RESULTS [{"name":"P1a","ok":true},{"name":"P1b","ok":true},{"name":"P1c","ok":true},{"name":"P1d","ok":true},{"name":"P1e","ok":true},{"name
+rag2:release-test	0	23	0	release acceptance 23/23 passed
+rag2:roster-test	0	10	0	roster regressions 10/10 passed
+rag2:scenario-replay-test	0	22	0	replay of the three actual-model runs + controls: 22/22 passed
+rag2:tools-test	0	38	0	rag2:tools-test 38/38 passed
+rag2:units-test	0	17	0	17/17 passed
+claims:indicative-estimate-test	0	0	0	indicative-estimate and stale-answer regressions passed: 5 cases
+claims:injury-adversarial-test	0	17	0	injury-chat-adversarial-regressions: 17/17 passed
+security:live-chat-monetary-boundary-test	0	0	0	live-chat monetary boundary regressions passed: 32 cases (policy-stated limit source with 10 blockers + controls, boundary stripping, typed-
+v1:chat-contract-test	0	29	0	29/29 turns pass
+v11:answer-test	0	26	0	V1.1 answer regressions: 26/26 passed.
+v11:claims-test	0	17	0	v11 chat-estimate regressions passed: 5 cases
+v11:customer-screens-test	1	10	1	V1.1 customer-screen regressions: 10 passed, some FAILED.
+rag2:s52-replay	0	12	0	replay s52 12/12 passed
+security:env-contract-test	0	0	0	environment-contract regression passed (228 distinct vars referenced across app/+lib/+scripts/+root, all documented in .env.example or expli
+reliable-chat-fracture-replay	0	32	0	32 passed, 0 failed
+fx-live-2-criteria-v2-regressions	0	35	0	35 passed, 0 failed
+fx-live-2-criteria-regressions	0	55	0	55 passed, 0 failed
+usefulness-check-regressions	0	42	0	42 passed, 0 failed
