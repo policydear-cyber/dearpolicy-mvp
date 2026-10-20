@@ -45,7 +45,9 @@ const noteText = (t: string) => t.replace(/\s+/g, " ").trim();
 const quoted = (marker: string, text: string) => `“${noteText(text)}” (marked ${marker})`;
 const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.test(r.policy.product ?? "") ? "certificate" : r.policy.product ?? "document");
 
-type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null };
+type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null;
+  /** A model-written statement the server's own statement replaced (recorded in the trace, not as a verification failure). */
+  superseded?: (text: string) => void };
 
 /** A benefit's printed terms, written from its record (with the evidence and value ids that bind each figure). */
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
@@ -69,7 +71,9 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
     const noted = s.rows.filter((x) => x.notes.length);
     for (const x of noted) for (const n of x.notes) ev.push(d.evidenceId(n.evidence));
     const footnotes = noted.length ? ` The page also prints ${noted.length > 1 ? "footnotes" : "a footnote"} for ${noted.length > 1 ? "these cases" : "one of them"}: ${noted.map((x) => `for “${x.label}”: ${x.notes.map((n) => quoted(n.marker, n.text)).join(" and ")}`).join("; ")}.` : "";
-    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${footnotes}${missing}`, evidence_ids: [...new Set(ev)], value_ids: vals };
+    for (const n of s.conditions ?? []) ev.push(d.evidenceId(n.evidence));
+    const under = s.conditions?.length ? ` Under the table it prints: ${s.conditions.map((n) => `“${noteText(n.text)}”`).join(" and ")}.` : "";
+    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${footnotes}${under}${missing}`, evidence_ids: [...new Set(ev)], value_ids: vals };
   }
   const p = r.printed;
   if (p?.kind === "money") {
@@ -123,7 +127,12 @@ export function paidTerms(paras: string[], cents: number, passage = ""): { cover
 }
 
 /** The footnote(s) the page prints for the percentage's own row (fx-live-1: omitted), said IN the illustration's own sentence (a saved calculation is one complete sentence). */
-const rowNote = (notes: { marker: string; text: string }[] | undefined) => notes?.length ? `; the page prints ${notes.length > 1 ? "footnotes" : "a footnote"} for that row: ${notes.map((n) => quoted(n.marker, n.text)).join(" and ")}` : "";
+const rowNote = (all: { marker: string; text: string }[] | undefined) => {
+  const notes = (all ?? []).filter((n) => n.marker), under = (all ?? []).filter((n) => !n.marker);
+  // (PR #57 follow-up, QC Q1: an unmarked condition printed under the table is the table's benefit's own condition, said with its amount)
+  return (notes.length ? `; the page prints ${notes.length > 1 ? "footnotes" : "a footnote"} for that row: ${notes.map((n) => quoted(n.marker, n.text)).join(" and ")}` : "")
+    + (under.length ? `; under the table it prints: ${under.map((n) => `“${noteText(n.text)}”`).join(" and ")}` : "");
+};
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */
 export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number }): string | null {
   const c = calcOutcomes(d.ctx).get(resultId);
@@ -219,6 +228,21 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const both = [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)];
       const note1 = { kind: "uncertainty", text: frame, evidence_ids: both, subject_id: a.memberId } as Record<string, unknown>;
       const note2 = { kind: "uncertainty", text: status, evidence_ids: [...new Set([...both, ...clauseEv])], subject_id: a.memberId } as Record<string, unknown>;
+      // PR #57 follow-up (K3t1, K4b: the relation said three or four times): a figure-free uncertainty the MODEL wrote that cites nothing beyond
+      // what these two notes cite (the two schedule rows and the documents' standing clauses) says what they say, and is replaced by them.
+      // Anything citing another passage stays (a row's own printed condition, such as "can only be claimed either under the Core Scheme or
+      // Voluntary Scheme", cites its own line).
+      const covered = new Set([...both, ...clauseEv]);
+      for (let k = list.length - 1; k >= 0; k--) {
+        const x = list[k];
+        if (!x || typeof x !== "object" || x.kind !== "uncertainty" || RENDERED.has(x)) continue;
+        const ids = Array.isArray(x.evidence_ids) ? (x.evidence_ids as unknown[]).map(String) : [];
+        if (!ids.length || !ids.every((id) => covered.has(id))) continue;
+        if (x.subject_id != null && x.subject_id !== a.memberId) continue;
+        if (/\d/.test(String(x.text ?? ""))) continue;
+        list.splice(k, 1);
+        d.superseded?.(String(x.text ?? ""));
+      }
       for (const n of [note1, note2]) { RENDERED.add(n); RELATION.add(n); list.push(n); }
       // (the two illustrations name their document and page; each stays one complete sentence, with its own not-a-payment clause)
       for (const sx of rendered) {

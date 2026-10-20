@@ -48,7 +48,10 @@ export type LoopClaim = { subjectId: string | null; facts: Record<string, LoopFa
    * record (lib/rag2/calc/claim-record.ts syncLoopClaimState). */
   calcs?: Record<string, LoopCalcRef>;
   /** Agent G: facts that were only supported by a document that has since been deleted or superseded. */
-  invalidated?: { key: string; value: string | number | boolean; words: string; reason: string; turn: number }[] };
+  invalidated?: { key: string; value: string | number | boolean; words: string; reason: string; turn: number }[];
+  /** PR #57 follow-up (critic H1): household reports taken off this person by a correction of who the event happened to, kept (never
+   * deleted) with the person they moved to, so a later correction back to this person restores them. */
+  reassigned?: { key: string; fact: LoopFact; to: string; turn: number }[] };
 /** A statement derived from claim facts in an earlier answer (an indicative estimate), kept so a correction can
  * withdraw it. */
 export type LoopDerived = { sentence: string; factKeys: string[]; turn: number;

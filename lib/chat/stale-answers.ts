@@ -14,6 +14,8 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatAnswer } from "@/types";
+import { loadDocs, loadLinks } from "@/lib/rag2/store";
+import { scopeDocs } from "@/lib/rag2/loop/absence-scope";
 
 export const STALE_ANSWER_NOTICE = "This answer relied on a policy document that has since been deleted, so it no longer describes your cover. Ask again to get an answer from the documents you have now.";
 
@@ -29,14 +31,16 @@ export function referencedPolicyIds(answer: Partial<ChatAnswer> | null | undefin
   return [...ids];
 }
 
-export function invalidatedAnswer(answer: ChatAnswer): ChatAnswer {
+export const ADDED_DOCUMENTS_NOTICE = "This answer said something was not found in your documents, and documents have been added since, so it may no longer be right. Ask again to get an answer from the documents you have now.";
+
+export function invalidatedAnswer(answer: ChatAnswer, reason: "policy_deleted" | "documents_added" = "policy_deleted"): ChatAnswer {
   return {
     ...answer,
-    summary: STALE_ANSWER_NOTICE,
+    summary: reason === "documents_added" ? ADDED_DOCUMENTS_NOTICE : STALE_ANSWER_NOTICE,
     details: [], claimItems: [], citations: [], nextSteps: [], missingFacts: [], questions: [],
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
-    invalidated: { reason: "policy_deleted" },
+    invalidated: { reason },
   } as ChatAnswer;
 }
 
@@ -51,8 +55,20 @@ export async function invalidateAnswersWithDeletedPolicies<T extends Partial<Cha
   const hashOf = new Map(rows.map((r) => [r.id, r.file_hash]));
   // A "not found" statement was true of the document VERSION it read: a document replaced since (its file changed) no longer supports it.
   const changed = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => (c?.documents ?? []).some((d) => d.fileHash != null && active.has(d.policyId) && (hashOf.get(d.policyId) ?? null) !== d.fileHash));
+  // PR #57 follow-up (critic M4): "your documents do not describe X" over the person's or the whole library's documents was true of the
+  // documents there were then. A document added to that scope since (an upload, or one newly linked to the person) may describe it.
+  const widening = answers.some((a) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => c?.scope === "library" || c?.scope === "subject"));
+  const docs = widening ? await loadDocs(accountId) : [];
+  const links = docs.length ? await loadLinks(accountId, docs.map((d) => d.id)) : [];
+  const grown = (a: Partial<ChatAnswer> | null | undefined) => (Array.isArray(a?.absenceChecks) ? a!.absenceChecks! : []).some((c) => {
+    if (c?.scope !== "library" && c?.scope !== "subject") return false;
+    const saved = new Set((c.documents ?? []).map((d) => d.policyId));
+    const now = scopeDocs({ docs, links, pages: [] }, { policyIds: null, subjectId: c.scope === "subject" ? c.subjectId ?? null : null }).docs;
+    return now.some((d) => !saved.has(d.id));
+  });
   return answers.map((a) => {
     const ids = referencedPolicyIds(a);
-    return (ids.length && ids.some((id) => !active.has(id))) || changed(a) ? (invalidatedAnswer(a as ChatAnswer) as unknown as T) : a;
+    if ((ids.length && ids.some((id) => !active.has(id))) || changed(a)) return invalidatedAnswer(a as ChatAnswer) as unknown as T;
+    return grown(a) ? (invalidatedAnswer(a as ChatAnswer, "documents_added") as unknown as T) : a;
   });
 }

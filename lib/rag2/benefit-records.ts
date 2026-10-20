@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { personBenefits, type PersonBenefit, type PrintedValue } from "./benefits";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadMembers, loadPages, policyFamily, type DocRow } from "./store";
-import { percentTables, rowNotes, type PctTable } from "./calc/pct-rows";
+import { percentTables, rowNotes, tableConditions, type PctTable } from "./calc/pct-rows";
 import { sharedTopic, topicStems } from "./loop/topic";
 import { productSection } from "./headings";
 import { definitionFor, definitionsIn, type Definition } from "./applicability";
@@ -38,7 +38,9 @@ export type BenefitRecord = {
   printed: PrintedValue | null;
   asOf: string | null;
   conditions: string[];
-  schedule: { header: string; base: ScheduleBase; rows: ScheduleRow[]; table: PctTable; page: number; pageText: string } | null;
+  schedule: { header: string; base: ScheduleBase; rows: ScheduleRow[]; table: PctTable; page: number; pageText: string;
+    /** PR #57 follow-up (QC Q1): what the page prints under the table, unmarked, for the table's benefit (every row) -- calc/pct-rows.ts tableConditions. */
+    conditions?: ScheduleNote[] } | null;
   status: "resolved" | "incomplete" | "ambiguous" | "conflicting" | "unsupported";
   unknowns: string[];
   source: { page: number; evidence: EvidenceRef };
@@ -163,8 +165,9 @@ export async function resolveBenefitRecords(accountId: string, memberId: string)
       if (!rows.length) continue;
       const base = resolveBase(t, p.text, d, p.page, docs, view.benefits, memberName, before);
       const id = hid(accountId, memberId, d.id, String(p.page), String(t.start), benefit);
-      out.push({ id, householdId: accountId, memberId, memberName, policy: policyOf(d), benefit, kind: "percentage_schedule", applicability: "shared_wording", printed: null, asOf: null, conditions: [],
-        schedule: { header: t.header, base, rows, table: t, page: p.page, pageText: p.text },
+      const tableConds: ScheduleNote[] = tableConditions(p.text, t).map((n) => ({ marker: "", text: n.text, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: n.start, end: n.end, subjectId: null }) }));
+      out.push({ id, householdId: accountId, memberId, memberName, policy: policyOf(d), benefit, kind: "percentage_schedule", applicability: "shared_wording", printed: null, asOf: null, conditions: tableConds.map((n) => n.text),
+        schedule: { header: t.header, base, rows, table: t, page: p.page, pageText: p.text, conditions: tableConds },
         status: base.kind === "unresolved" ? "incomplete" : "resolved", unknowns: base.kind === "unresolved" ? [base.why] : [],
         source: { page: p.page, evidence: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page: p.page, pageText: p.text, start: t.start, end: t.end, subjectId: null }) }, personBenefit: null, definitions: definitions(d.id, benefit) });
     }

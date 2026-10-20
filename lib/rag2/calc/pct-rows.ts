@@ -201,6 +201,35 @@ export function tableNotes(page: string, table: PctTable): RowNote[] {
   return out;
 }
 /** The footnotes that qualify ONE row of a table (see RowNote). */
+/**
+ * PR #57 follow-up (QC Q1, critic): a sentence the page prints directly under a percentage table, with no marker, before the next heading
+ * ("This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." under the Other Fracture table) is a condition of
+ * THAT TABLE'S benefit, and applies to every row. Footnote definitions (a marker first, attached by rowNotes or to nothing) are skipped; a
+ * heading, a cell line, a bullet, another percentage row or the page footer ends it. Only whole sentences are taken (at most three lines each).
+ */
+export function tableConditions(page: string, table: PctTable): RowNote[] {
+  const real = [...table.rows].reverse().find((r) => r.percents.length > 0);
+  if (!real) return [];
+  const lines: { text: string; start: number; end: number }[] = [];
+  let at = real.end;
+  for (const t of page.slice(real.end).split("\n")) { lines.push({ text: t, start: at, end: at + t.length }); at += t.length + 1; }
+  lines.shift();
+  const DEF = new RegExp(`^(${MARKER})(?:[\\t ]+\\S|(?<=[*†‡])(?=[A-Z]))`);
+  const out: RowNote[] = [];
+  let cur: { text: string; start: number; end: number }[] = [], inNote = false;
+  for (const l of lines) {
+    const t = l.text.trim(), at0 = l.start + (l.text.length - l.text.trimStart().length);
+    if (!t) { if (cur.length) break; continue; }
+    if (/^[•▪●◦]/.test(t) || pctsOf(t).length || /^page\s+\d+\s+of\s+\d+$/i.test(t) || CELL_GAP.test(l.text) || l.text.includes("\t")) break;
+    if (MARKER_ONLY.test(t) || DEF.test(t)) { if (cur.length) break; inNote = !/[.!?]$/.test(t); continue; }
+    if (inNote) { inNote = !/[.!?]$/.test(t); continue; } // a footnote's continuation
+    if (!cur.length && !/^[A-Z]/.test(t)) break;
+    cur.push({ text: t, start: at0, end: l.end });
+    if (/[.!?]$/.test(t)) { out.push({ marker: "", text: cur.map((x) => x.text).join(" "), start: cur[0].start, end: cur.at(-1)!.end }); cur = []; if (out.length >= 2) break; continue; }
+    if (cur.length >= 3) break;
+  }
+  return out;
+}
 export function rowNotes(page: string, table: PctTable, row: PctRow): RowNote[] {
   const marks = rowMarkers(row);
   if (!marks.length) return [];

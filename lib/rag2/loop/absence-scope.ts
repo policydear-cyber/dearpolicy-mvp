@@ -168,13 +168,22 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   const skip = new Set(ctx.names.flatMap((n) => n.toLowerCase().match(/[a-z]{3,}/g) ?? []));
   // (the words of the scope documents' own names are not what a document prints about a topic: "Group Living Care" is the document's
   // product, and what is asked is what it says about cancer)
-  for (const d of scope.docs) for (const w of (d.productName ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? []) skip.add(w);
+  // PR #57 follow-up (critic M3): only for document_silent, where that reason holds. For benefit_not_found the topic's own words are always
+  // searched: a "Dental Plan" document that prints "dental" on every page is never said not to describe dental.
+  if (claim === "document_silent") for (const d of scope.docs) for (const w of (d.productName ?? "").toLowerCase().match(/[a-z]{3,}/g) ?? []) skip.add(w);
   const st = claim === "benefit_not_found" ? searchTerms(t.topic, s.terms, skip) : targetTerms(t.topic, s.terms);
   if (st.problem) return { ok: false, problem: st.problem };
   const pagesOf = new Map<string, { page: number; text: string }[]>();
   for (const p of src.pages) { const l = pagesOf.get(p.policyId) ?? []; l.push({ page: p.page, text: p.text }); pagesOf.set(p.policyId, l); }
   const unread = scope.docs.filter((d) => !(pagesOf.get(d.id) ?? []).some((p) => p.text.trim()));
   if (unread.length) return { ok: false, problem: `the text of ${unread.map((d) => labels.get(d.id)).join(", ")} is not stored, so nothing can be said to be absent from it` };
+  // PR #57 follow-up (critic M2): an absence is said only over a document read in full. A stored page with no text, fewer stored pages than
+  // the document has, or a page count that is not known, means part of it was never read.
+  const partial = scope.docs.filter((d) => {
+    const ps = pagesOf.get(d.id) ?? [];
+    return ps.some((p) => !p.text.trim()) || d.pageCount == null || new Set(ps.map((p) => p.page)).size < d.pageCount;
+  });
+  if (partial.length) return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked` };
   const hits = scanScope(scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) })), st.terms);
   if (hits.length) {
     const shown = hits.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
