@@ -1859,3 +1859,43 @@ households (the ids are per household), but it's a privacy leftover. Optional: c
 
 **Not ready: fix R32-1 first** (the stated-amount line, plus the found and chips filters). Everything else asked about passes. Merge
 after #76. R32-2..4 are follow-ups.
+
+# Round 33: fix check on PR #74 `361a6ce`, PR #75 `43eeb39`, PR #76 `ef4e968`
+
+Read each diff against the head reviewed before (`25365a5`, `6a31182`, `7e87b9b8`). No builds, DB suites or paid calls.
+
+## PR #74 at `361a6ce`: R31-1 and R31-2 fixed
+
+- R31-1: `rowSupported` (`extract.ts:116`) now drops a non-"other" row when the name matches `THIRD_PARTY_LIABILITY` **or** the
+  printed quote matches `THIRD_PARTY_SENSE` (`events.ts:207`). The traced "Legal liability for accidental death or bodily injury
+  to third parties" row is dropped, and "shall not be liable for death caused by war" is still kept.
+- R31-2: `sameBenefitKey` compares only `death`, `disability`, `illness` and `hospitalisation`. The real wrist pair (both
+  fracture-family, keyword or model traits) now keys the same; a fracture "Leg" and a dismemberment "Leg" still split on
+  `disability`.
+- R33-1 (Low, follow-up): `THIRD_PARTY_SENSE` matches a bare "third party" anywhere in the quote. A personal accident row whose
+  printed line says, say, "including injury caused by assault by a third party" is dropped, which hides a documented benefit.
+  That wording is rare in a benefit row, and it was my suggested regex. Narrow it later to the liability sense, e.g.
+  `third[- ]party (?:liabilit|claim|propert)|liab\w* (?:to|for)[^.]{0,60}(?:others?|third)|to other (?:people|persons)|(?:personal|legal|public) liabilit`.
+
+**Verdict: ready to merge.**
+
+## PR #75 at `43eeb39`: ready to merge
+
+`addLedgerRow` now also requires the person and the document to be active (`activePredicate` on both EXISTS). The three extra
+guards (`stale-answers.ts` covered set, `coverage-assignments.ts` `rebuildForAddedPeople`, `read-failures.ts`) only narrow reads to
+active rows. `activePredicate` is imported in each file. No cross-household path, and no optional-table dependency. Still re-apply
+`sql/storage-rls.sql` after merge.
+
+## PR #76 at `ef4e968`: R30-1, R30-2 and R30-3 fixed; ready to merge
+
+- R30-1: ingest (`lib/rag/ingest.ts`) reads `dismissedNameKeys(account, policy)` (scoped by both, and empty when the table is
+  absent). It skips dismissed names in `unmatched`, so a re-read no longer re-flags them. It also no longer falls back to linking a
+  dismissed name to the upload profile, a good extra. This path is untested locally (the PR says so); add it to the post-deploy
+  check (dismiss a name, re-read the document, and see no "not linked" flag).
+- R30-2: `recountedReview` replaces only the "named insured … not linked" and "coverage item(s) could not be source-verified"
+  parts. Its regex matches both the route's and ingest's wording, and every other reason part is kept.
+- R30-3: a failed recount is logged, and the saved change returns 200.
+- Nit (no action): `nameKey` in JS uses `trim()`/`\s`, and SQL uses `btrim` (spaces only). They differ only for names with tabs or
+  non-breaking spaces at the edges.
+
+**Merge order:** #76 before #77. Apply `sql/detected-name-dismissals.sql` after `sql/policy-member-exclusions.sql`.
