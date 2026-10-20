@@ -102,7 +102,7 @@ export default function CoveragePage(){
         </select>
       </div>
     </div>
-    {loaded&&!rows.length&&!error?<div className="empty-card">{reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
+    {loaded&&!rows.length&&!error?<div className="empty-card">{readStalled&&!retrying?"Nothing to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
     {groups.map(([key,list])=><section className="section schedule-group" key={key}>
       <div className="section-heading"><h2>{key}</h2>{list[0].insurer?<small>{list[0].insurer}</small>:null}</div>
       <ul className="benefit-list">{list.map(row=><li key={row.id} className="benefit-item" data-testid="coverage-row">

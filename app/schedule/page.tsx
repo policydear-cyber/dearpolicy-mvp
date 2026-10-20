@@ -138,7 +138,7 @@ export default function BenefitsPage(){
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading your benefits…</div>
-      :!benefits.length?<div className="empty-card">{stillReading?"Your documents are still being read. You can already ask a question in Ask DearPolicy.":<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
+      :!benefits.length?<div className="empty-card">{stillReading?(readStalled&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
