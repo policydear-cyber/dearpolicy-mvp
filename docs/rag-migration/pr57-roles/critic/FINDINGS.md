@@ -155,3 +155,82 @@ For C1 I will also check that the integrated PR keeps the four evidence categori
 - H1, H2, M2, M3 and M4 were reproduced on C0.
 - **M1 is withdrawn.** On C0, `evaluate_benefit` reads the reported "toe" and returns `unlisted_case` even when the model names the Leg row. My finding was inferred from the footnote path alone and missed that case check. **P3 should therefore be dropped from C1**: it is not needed, and as proposed it risked removing every fracture amount on a footnoted row (round 2, P3). M1.1 stays as a guard test.
 - **New, from the Test engineer's N5b (Medium):** when a document's stored file hash changes in place, a reopened answer with a calculation (the S$120,000) is not withdrawn. Only absence answers compare hashes (`lib/chat/stale-answers.ts:53`). Under DC's contract ("Keep returned, saved, displayed and reopened answers consistent"; a document's version and date stay tied to the statement), a replaced version should withdraw a calculation too. The calculation record already stores `documentHash`, so this is the same small check as P7. Whether production re-uploads change a hash in place or create a new row is unverified (Test engineer's limit). Include it with P7 if that check shows the path is real; otherwise list it as open.
+
+---
+
+# Round 3: review of frozen C1 (`8c63250`, recorded by `9d3327e`)
+
+Read: the product diff `4956588..8c63250` (`lib/`, `types/`), `developer/C1.md`, and QC's C1 ruling as relayed. Two checks were executed with tsx against the C1 source, copied verbatim (no DB, no model, no spend); they are marked "executed". The rest is code reading.
+
+task | SHA | status | evidence | blocker
+--- | --- | --- | --- | ---
+Review frozen C1 | 8c63250 | done | this section | C1-1 must be fixed before C2 is frozen
+
+## Findings on C1 (most severe first)
+
+### C1-1. `tableConditions` attaches the NEXT benefit's heading and amount as this table's condition (High)
+
+`lib/rag2/calc/pct-rows.ts` `tableConditions` (new in C1) takes the first capitalised sentence after a percentage table. It does not stop at a heading. It skips leading blank lines, and it does not reject figures. Executed on the C1 source, the fracture table followed by:
+
+| what follows the table | what C1 attaches as the fracture benefit's condition |
+| --- | --- |
+| the fixture's "This Benefit can only be claimed ..." then "F.\tDisappearance" | the Core/Voluntary sentence (correct) |
+| "F. Ambulance Cost" / "We will reimburse ambulance costs up to $500 per event." | "F. Ambulance Cost We will reimburse ambulance costs up to $500 per event." |
+| a blank line, "Ambulance Cost", the same sentence | "Ambulance Cost We will reimburse ..." |
+| "We will also reimburse ambulance costs up to $500 per event." | that sentence |
+
+The attached text goes into the S$120,000 illustration sentence ("under the table it prints: ...") and the benefit's terms. That breaks DC's contract twice: it attaches one benefit's conditions to another, and it puts an unresolved bare "$500" inside an amount sentence. The fixture passes only because its next heading has a tab. Fix at the same place:
+- stop at `isSectionHeading` (already imported in `pct-rows.ts`) or `isHeadingLine`;
+- stop at the first blank line instead of skipping it;
+- refuse any candidate sentence that carries a money figure or a percentage.
+
+Tests (Test engineer): the three bad layouts above attach nothing; the fixture still attaches the Core/Voluntary sentence.
+
+### C1-2. "too ... but it wasn't Grace's fault" is still a correction (Medium)
+
+Executed with `isPersonCorrection` from C1 (from Grace to Daniel):
+
+- Correctly a correction: "Actually it was Daniel who broke his arm, not Grace."; "It wasn't Grace, it was Daniel."; "Sorry, Daniel, not Grace."
+- Correctly not: "Daniel broke his arm too."; "... It was not serious."; "... It was Daniel's bike." (pending about Grace); "... Grace wasn't with him."
+- Still wrongly a correction: "Daniel broke his arm too, but it wasn't Grace's fault."; "Daniel broke his arm too, not Grace's leg this time."
+
+C1 makes the move reversible, which limits the damage, but Grace's illustrations are still withdrawn and her facts moved until someone corrects it back. DC's instructions name exactly this pair. Two structural fixes:
+- a possessive after the first person's name ("Grace's") is not that person;
+- a separate-event cue in the same message ("too", "also", "as well", "both") blocks a correction unless a mix-up phrase is present.
+
+Add both messages as acceptance tests.
+
+### C1-3. The reason for leaving N5b open is incomplete: re-analysis rewrites a document in place (Medium)
+
+The Developer says an active policy's file is never replaced in place. That is true of the file and its `file_hash`. But "Re-analyse" (`app/api/policies/reprocess/route.ts`, which queues `lib/rag/ingest.ts`) keeps the same policy id and hash and deletes and rewrites `policy_pages` (`ingest.ts:529`), `policy_members` (`:615`, `:628`) and the coverage tables (`:631`, `:632`). After a re-analysis:
+- a saved "not found" answer still stands, though the text it was checked against changed (its hash check cannot see it);
+- a saved S$120,000 calculation still stands, though the row it rests on may have been re-read differently.
+
+This conflicts with "keep returned, saved, displayed and reopened answers consistent". `rev` is not a usable signal, because it includes `updated_at`, which changes on any update. The smallest sound fix is to save a digest of the pages each check or calculation read, and compare it on reopen. If that is too large for this round, list N5b with this corrected reason, not "never replaced in place".
+
+### C1-4. The read-in-full rule is safe, but may refuse most absence answers in production (Medium, usefulness)
+
+`absence-scope.ts` refuses when any stored page is empty, or when `page_count` is unknown or larger than the number of stored pages. That is the right side to fail on: it never states an absence it did not check, and the refusal text tells the model to say what was read. It hides no documented benefit, because it only stops a "not described" sentence. The risk is reach. Production documents get `page_count` from `ingest.ts:601`, but an image-only cover page or a scanned back page with no text would make every absence over that document refuse. How often that happens in real uploads is unmeasured. Ask: before release, count (read-only, on test households or with DC's say-so on his library) how many documents have an empty stored page.
+
+**The fixture `page_count` commit (Test engineer) must be checked line by line.** Each fixture document's `page_count` must equal the pages that document really has, not the pages stored. The Product Summary fixture stores 4 of its printed 36 pages (QC Q5), so its `page_count` must be 36 and its absence must stay refused. Setting it to 4 would be changing an expectation to force green. I will check that commit when it lands.
+
+### C1-5. Smaller notes (Low)
+
+- `causeFit`: `replaced` is never filled now, so the trace line's "its terms and amount are left out" clause is dead text. Harmless; remove it in C2.
+- R1/R3 fail in replay because the new condition passage takes the recorded id `e32`. I accept the Developer's reading (a replay artefact; the rule keeps a sentence citing the condition, as it should). It means the de-duplication is **not shown** on C1 by any evidence category. The PR must say so, not "fixed".
+- L1 (`monetary-boundary.ts`), M3 and M4 match the agreed repairs. M4 loads the household's documents on reopen only when an answer has a `library`/`subject` absence. Fine.
+
+## On QC's C1 ruling and the coordinator's C2 additions
+
+- **Sickness-only wording.** I agree with QC, with one condition. "On what you reported, the accident condition is not met; the claim decision is the insurer's" is supported only on the pure-illness path, which C1 now reaches only when no injury word was reported (`INJURY_WORDS`). It must not reach the `unresolved` path. Keep the printed S$250 terms with every condition shown, and no estimate for the stay.
+- **Living Care sentence (overriding my deferral).** I accept the coordinator's ruling under DC's contract. The risks to guard:
+  1. It must be written by the server through the existing `checkNotFound` (`document_silent`, scope the certificate), not as a model sentence.
+  2. It must state S$350,000 / S$300,000 only as "listed as of 6 October 2022", never as cover for this stay or for sickness.
+  3. It must not fire when the person has no such listed-but-undescribed record.
+  4. With C1-4's rule, it will refuse on any certificate with an empty page. Then the answer must still name the listed benefit (as a listing) rather than drop it, or the repair will hide what it is meant to show.
+
+## Release view on C1
+
+Not ready to freeze as the final candidate. C1-1 attaches another benefit's terms and an unresolved amount to an illustration, which DC's contract forbids. It must be fixed in C2. C1-2 and C1-3 should be fixed in C2 or listed accurately as open. The rest of C1 is sound.
+
+The evidence for C1 is scripted tests and recorded replays only. C1 changes tool behaviour the model sees: which messages move an event, and the refusal texts for absence and `note_facts`. So no replay can show how the real model responds. That limit must be stated, and a live check needs DC's authorisation and ledger room.
