@@ -54,3 +54,19 @@ screenshots are in `shots/`.
 
 Not observable locally: real answer stages (`stageId`) and real Coverage rows from a model read. The mocked shapes follow
 `coverage-alternatives-shape.md`.
+
+## Re-check after the designer's fixes (13:05)
+
+`documents-card.patch` (c5cc9814fcbc) and `family-page.patch` (9f3b2177331e) were re-exported. All six patches still
+apply in order on 27af0fd. Same method: synthetic data only, no paid calls.
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| 1. "Not found" when a document couldn't be read | **Pass** | It now says "Not found in the documents read so far: … One document couldn't be read (see above), and it may cover them." and "No cover for SYN Kid was found in the documents read so far…". The reading and done states are unchanged. `shots/recheck-coverage-unreadable.jpg` |
+| 2. Unmatched name can be dismissed | **Pass** | "Not in my family" is offered. Choosing it hides the question, including after a reload, and the notice says "remembered on this device only for now, so DearPolicy may ask again elsewhere". No server call is made, as intended until the server change lands. Minor: there's no way to undo it on the page. `shots/recheck-not-in-my-family.jpg` |
+| 3. Chip overclaim, accidental-death confusion | **Pass** | Daniel's chip now reads "Death". Grace's line adds "For death, only accidental death was found (under Accidents and injuries)." |
+| 4. Family: no doomed "Confirm delete" | **Pass** | For a linked person, the warning (now red) offers "Edit details · Go to Documents · Cancel" and no confirm. `shots/recheck-family-remove-linked-phone.jpg` |
+| 5. Small wording | **Pass** | It now says "may still cover them", "Accidental death, Other Fracture and Hospital cash", and "Ready". The edit form is now behind "Edit details". "3 documents linked →" is a link, though to the whole library rather than filtered to that person. The date field is the browser's own date input, so its format follows the phone or browser's language setting. |
+
+**Verdict: pass.** What's left is minor, for later: an undo for "Not in my family", filtering the library to the person,
+and "Critical illness and hospital and medical cover" reads awkwardly with two "and"s.
