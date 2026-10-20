@@ -89,6 +89,9 @@ export default function PoliciesPage() {
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  /** Family's "N documents linked" opens this page as /policies?person=<id>: only that person's documents. */
+  const [personId, setPersonId] = useState<string | null>(null);
+  useEffect(() => { setPersonId(new URLSearchParams(window.location.search).get("person")); }, []);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -155,6 +158,8 @@ export default function PoliciesPage() {
     }
   }
   const [loaded, setLoaded] = useState(false);
+  // Arriving from Family with ?person=, the filtered list is what they came for, so it is brought into view.
+  useEffect(() => { if (loaded && personId) document.querySelector("[data-testid=person-filter]")?.scrollIntoView({ block: "start" }); }, [loaded, personId]);
   // "Open in Documents" from a chat source lands here with #doc-<id>: once the
   // library has loaded, bring that document into view and outline it.
   useEffect(() => {
@@ -345,14 +350,16 @@ export default function PoliciesPage() {
     }
   }
 
+  const forPerson = useMemo(() => policies.filter((p) => !personId || p.linked_people.some((l) => l.id === personId)), [policies, personId]);
   const shown = useMemo(
-    () => policies.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || false),
-    [policies, filter],
+    () => forPerson.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || false),
+    [forPerson, filter],
   );
   const counts = {
-    personal: policies.filter((p) => p.personal_coverage_confirmed).length,
-    reference: policies.filter((p) => !p.personal_coverage_confirmed).length,
+    personal: forPerson.filter((p) => p.personal_coverage_confirmed).length,
+    reference: forPerson.filter((p) => !p.personal_coverage_confirmed).length,
   };
+
 
   return <div className="page">
     <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule or summary. DearPolicy reads it and works out who it covers.</p></div></header>
@@ -377,7 +384,8 @@ export default function PoliciesPage() {
 
     <section className="section">
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
-      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
+      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
+      {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
       <div className="document-list">{shown.map((policy) => {

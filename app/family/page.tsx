@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
+import { COVER_KINDS, coverKindOf } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -31,12 +33,25 @@ export default function FamilyPage() {
   const [preferred, setPreferred] = useState("");
   const [status, setStatus] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  /** The person the last save or removal was about, so its outcome is also shown on their card (not only at the top). */
+  const [statusFor, setStatusFor] = useState<string | null>(null);
+  const [statusIsError, setStatusIsError] = useState(false);
+  /** Whose details are open for editing: the card shows who they are first, and the form only when asked for. */
+  const [editing, setEditing] = useState<string | null>(null);
+  /** What each person is covered for, by kind, from the Coverage rows. Optional: the page works without it. */
+  const [kinds, setKinds] = useState<Record<string, string[]>>({});
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
     const members: Member[] = data.family ?? [];
     setFamily(members);
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
+    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: { familyMemberId: string; eventType: string; status: string }[] } | null) => {
+      if (!l) return;
+      const by: Record<string, Set<string>> = {};
+      for (const r of l.rows ?? []) if (r.status !== "rejected") (by[r.familyMemberId] ??= new Set()).add(coverKindOf(r.eventType).id);
+      setKinds(Object.fromEntries(Object.entries(by).map(([id, set]) => [id, COVER_KINDS.filter((k) => set.has(k.id)).map((k) => k.label)])));
+    }).catch(() => undefined);
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -53,6 +68,9 @@ export default function FamilyPage() {
     if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes }) });
     const payload = await response.json();
+    setStatusFor(member.id);
+    setStatusIsError(!response.ok);
+    if (response.ok) setEditing(null);
     setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Could not save this profile. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
@@ -74,9 +92,10 @@ export default function FamilyPage() {
     // popup) while still requiring a deliberate second click before anything
     // irreversible happens.
     if (confirmId !== member.id) { setConfirmId(member.id); return; }
-    setConfirmId(null);
+    setConfirmId(null); setStatusFor(member.id);
     const response = await fetch(`/api/family/${member.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
+    setStatusIsError(!response.ok);
     setStatus(response.ok ? `Removed ${member.display_name}.` : (customerMessage(payload.error, "Could not remove this profile. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
@@ -102,18 +121,38 @@ export default function FamilyPage() {
         <div className="section-heading"><div><div className="eyebrow">HOUSEHOLD</div><h2>Your profiles</h2></div></div>
         <div className="profile-list">
           {family.map((member) => (
-            <div className="profile-card" key={member.id}>
-              <div className="avatar profile-avatar">{member.display_name.slice(0,1).toUpperCase()}</div>
-              <div className="profile-fields">
+            <div className="profile-card" key={member.id} data-testid="profile-card">
+              {/* At a glance: who, how they are linked to documents, and what they are covered for. */}
+              <div className="profile-summary">
+                <div className="avatar profile-avatar">{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
+                <div><strong>{baseline[member.id]?.display_name ?? member.display_name}</strong><small>{relationshipLabel(baseline[member.id]?.relationship ?? member.relationship)}{baseline[member.id]?.preferred_name ? ` · goes by ${baseline[member.id]?.preferred_name}` : ""}</small></div>
+              </div>
+              <div className="profile-glance">
+                <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
+                {kinds[member.id]?.length ? <p><b>Covered for</b> {kinds[member.id].join(" · ")}. <a className="text-link" href={`/ledger?member=${member.id}`}>See {baseline[member.id]?.display_name ?? member.display_name}&rsquo;s cover →</a></p>
+                  : member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null}
+              </div>
+              <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
+              {/* Removing someone says what happens before it is confirmed: a person still on a document can't be
+                  removed (untick them there first; answers that used their cover are then marked out of date). */}
+              {confirmId === member.id && <div className="profile-remove-warning" role="alert">{member.policy_count
+                ? <><strong>{baseline[member.id]?.display_name ?? member.display_name} is still linked to {member.policy_count === 1 ? "a document" : `${member.policy_count} documents`}.</strong> Untick them on {member.policy_count === 1 ? "it" : "each one"} on the Documents page first. Saved answers that used their cover are then marked out of date when reopened.</>
+                : <><strong>Remove {baseline[member.id]?.display_name ?? member.display_name} from your household?</strong> This can&rsquo;t be undone. Saved answers that used their cover are marked out of date when reopened. If DearPolicy still has chats or claims about them, it keeps them and says so.</>}</div>}
+              {statusFor === member.id && status && confirmId !== member.id ? <p className={`profile-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : undefined}>{status}</p> : null}
               <div className="profile-actions">
-                <a className="text-link" href={`/ledger?member=${member.id}`}>{member.policy_count === 1 ? "1 linked document" : `${member.policy_count} linked documents`} · see cover →</a>
-                <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
-                <button className="button secondary" onClick={() => remove(member)} aria-label={confirmId === member.id ? `Confirm delete ${member.display_name}` : `Delete ${member.display_name}`}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>
+                {editing === member.id || isDirty(member) ? <>
+                  <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
+                  <button className="button secondary" onClick={() => { update(member.id, baseline[member.id]); setEditing(null); }}>{isDirty(member) ? "Undo changes" : "Close"}</button>
+                </> : <button className="button secondary" aria-expanded={false} aria-controls={`fm-${member.id}-details`} onClick={() => setEditing(member.id)}>Edit details</button>}
+                {/* Someone still on a document can't be removed, so they are sent where the next step is, not offered a delete that fails. */}
+                {confirmId === member.id && member.policy_count
+                  ? <Link className="button primary" href="/policies">Go to Documents</Link>
+                  : <button className={`button secondary${confirmId === member.id ? " danger" : ""}`} onClick={() => remove(member)} aria-label={confirmId === member.id ? `Confirm delete ${member.display_name}` : `Delete ${member.display_name}`}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>}
                 {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}
               </div>
             </div>

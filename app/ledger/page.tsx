@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
+import { COVER_KINDS,coverGaps,coverKindOf,listOf } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
@@ -25,17 +26,8 @@ type Member={id:string;display_name:string;relationship:string};
 type Reading={pending:number;inProgress:boolean;documents?:ReadingDocument[]};
 const slug=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]+/g,"-");
 
-/** Kinds of cover, in the order a person thinks about them. Each event belongs to one. */
-const KINDS:{id:string;label:string;events:string[];core?:boolean}[]=[
-  {id:"life",label:"Life and disability",core:true,events:["death","tpd","terminal_illness","long_term_care","disability_income","maturity"]},
-  {id:"ci",label:"Critical illness",core:true,events:["critical_illness","early_critical_illness"]},
-  {id:"hospital",label:"Hospital and medical",core:true,events:["hospital_daily_cash","icu_daily_cash","surgery","hospital_medical_expense","ambulance"]},
-  {id:"accident",label:"Accidents and injuries",core:true,events:["accidental_death","fracture","dismemberment","accidental_disablement","accident_medical_expense"]},
-  {id:"travel",label:"Travel",events:["travel_delay","trip_cancellation","baggage","travel_medical"]},
-  {id:"property",label:"Home and vehicle",events:["motor_damage","home_damage"]},
-  {id:"other",label:"Other",events:[]},
-];
-const kindOf=(row:Row)=>KINDS.find(k=>k.events.includes(row.eventType))??KINDS[KINDS.length-1];
+const KINDS=COVER_KINDS;
+const kindOf=(row:Row)=>coverKindOf(row.eventType);
 
 /** The server's pays text, read aloud: a capital first letter, and "after the first 1" says what the 1 counts. */
 const plainPays=(pays:string)=>pays.replace(/after the first (\d+)\b(?! day)/,(_,n)=>`after the first ${n==="1"?"day":n+" days"}`).replace(/^./,c=>c.toUpperCase());
@@ -123,11 +115,14 @@ export default function CoveragePage(){
       const seen=new Set<string>();
       const shown=own.filter(r=>{const g=hasAlternatives(r.alternatives)?r.alternatives.groupId:null;if(!g)return true;if(seen.has(g))return false;seen.add(g);return true;});
       const kinds=KINDS.map(k=>({...k,rows:shown.filter(r=>kindOf(r).id===k.id)})).filter(k=>k.rows.length);
-      const gaps=KINDS.filter(k=>k.core&&!kinds.some(x=>x.id===k.id));
+      const gaps=coverGaps(own.map(r=>r.eventType));
       return {name,kinds,gaps,count:own.length};
     });
   },[rows,family,member]);
   const stillReading=reading.pending>0||reading.inProgress;
+  /** A document that could not be read will not be read on its own: gaps are then "in the documents read so far". */
+  const unreadable=stuck.length||(readStalled?Math.max(1,reading.pending):0);
+  const unreadableNote=unreadable?`${unreadable===1?"One document":`${unreadable} documents`} couldn’t be read (see above), and ${unreadable===1?"it":"they"} may cover`:"";
 
   return <div className="page">
     <header className="page-header"><div>
@@ -155,7 +150,9 @@ export default function CoveragePage(){
       {/* At a glance: the kinds of cover found, then the main kinds that are not in the documents. */}
       <div className="coverage-glance">
         {person.kinds.length?<ul className="coverage-kinds" aria-label="Covered for">{person.kinds.map(k=><li key={k.id}><a href={`#cover-${slug(person.name)}-${k.id}`}>{k.label}</a></li>)}</ul>:null}
-        {person.gaps.length&&person.count?<p className="coverage-gaps" data-testid="coverage-gaps"><b>Not found in your uploaded documents{stillReading?" yet":""}:</b> {person.gaps.map(g=>g.label.toLowerCase()).join(", ").replace(/^./,c=>c.toUpperCase())}. {stillReading?"More may appear once all your documents are read.":"A plan you haven’t uploaded may still cover it."}</p>:null}
+        {(person.gaps.missing.length||person.gaps.notes.length)&&person.count?<p className="coverage-gaps" data-testid="coverage-gaps">
+          {person.gaps.missing.length?<><b>{unreadable?"Not found in the documents read so far":`Not found in your uploaded documents${stillReading?" yet":""}`}:</b> {listOf(person.gaps.missing).replace(/^./,c=>c.toUpperCase())}. {unreadable?`${unreadableNote} ${person.gaps.missing.length===1?"it":"them"}.`:stillReading?"More may appear once all your documents are read.":`A plan you haven’t uploaded may still cover ${person.gaps.missing.length===1?"it":"them"}.`}</>:null}
+          {person.gaps.notes.length?<span className="coverage-gap-notes"> {person.gaps.notes.join(" ")}</span>:null}</p>:null}
       </div>
       {person.kinds.map(k=><div className="coverage-kind" key={k.id} id={`cover-${slug(person.name)}-${k.id}`}>
         <h3>{k.label}</h3>
@@ -179,7 +176,7 @@ export default function CoveragePage(){
             </details>
           </li>;})}</ul>
       </div>)}
-      {!person.kinds.length?<p className="empty-row">{stillReading?`Nothing for ${person.name} yet. Documents are still being read.`:`No cover for ${person.name} was found in your uploaded documents. A plan you haven’t uploaded may still cover them.`}</p>:null}
+      {!person.kinds.length?<p className="empty-row">{unreadable?`No cover for ${person.name} was found in the documents read so far. ${unreadableNote} them.`:stillReading?`Nothing for ${person.name} yet. Documents are still being read.`:`No cover for ${person.name} was found in your uploaded documents. A plan you haven’t uploaded may still cover them.`}</p>:null}
     </section>):null}
   </div>;
 }
