@@ -2579,7 +2579,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const whatToDo = (r: LoopReply | null): LoopReply | null => {
     if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
     if (r.composed.sentences.length || r.composed.nextSteps.length || corrections.length || invalidated.length) return r;
-    const prev = [...state.turns].filter((t) => t.turn < state.turn && t.shown).at(-1)?.shown;
+    // Critic R17-1/R17-3: only the answer shown just before this message (an ask card or a withdrawn answer in between shows nothing old).
+    const prev = state.turns.filter((t) => t.turn < state.turn).at(-1)?.shown;
     const subject = r.composed.subjectId ?? state.subjectId;
     if (!prev || !prev.nextSteps.length || !subject || prev.subjectId !== subject) return r;
     (trace.adjusted ??= []).push(`the household asked what to do and the reply kept nothing: the previous answer's next steps were shown again (${prev.nextSteps.length})`);

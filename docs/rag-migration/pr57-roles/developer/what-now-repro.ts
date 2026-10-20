@@ -27,11 +27,17 @@ const gp = (who: string, subject: string): ScriptTurn => ({ steps: [
 ] });
 const plain = (who: string, subject: string): ScriptTurn => ({ steps: [() => [call("resolve_person", { mention: who })], ...final(subject, `${who}'s documents do not include a benefit for this.`, [])] });
 // "what do i do now": the model's general advice, which the composer cannot keep.
-const whatNow: ScriptTurn = { steps: final(DAN, "You need to submit a claim form with the GP bill and receipts to the insurer.", ["You must submit the original receipts within 30 days."]) };
+const whatNowFor = (subject: string): ScriptTurn => ({ steps: final(subject, "You need to submit a claim form with the GP bill and receipts to the insurer.", ["You must submit the original receipts within 30 days."]) });
+const whatNow = whatNowFor(DAN);
+// Critic R17-1: a turn that ends with a question card (no next steps) shown between the answer and "what do i do now".
+const askCard = (who: string, subject: string): ScriptTurn => ({ steps: [() => [call("resolve_person", { mention: who })], () => [call("search_passages", { k: 8, query: "fracture", subject_id: subject })],
+  () => [call("ask_user", { kind: "fact", subject_id: subject, fact_key: "fracture_site", question: `Which bone did ${who} break?` })]] });
 const CASES: [string, [string, ScriptTurn][]][] = [
   ["after a GP-bill answer: repeats only the step that answer showed", [["daniel tripped on the kerb and fell, his GP bill is $800, can he claim for this?", gp("daniel", DAN)], ["what do i do now", whatNow]]],
   ["Grace, then \"it was Daniel\": nothing from Grace's answer", [["grace tripped on the kerb and fell, her GP bill is $800, can she claim?", gp("grace", GRACE)], ["sorry, it was daniel not grace", plain("daniel", DAN)], ["what do i do now", whatNow]]],
   ["a death, then a fracture: nothing from the death answer", [["daniel died in an accident, what does the policy pay?", gp("daniel", DAN)], ["daniel broke his wrist, what can he claim?", plain("daniel", DAN)], ["what do i do now", whatNow]]],
+  ["Critic R17-1: a death answer, then a question card about Grace: nothing from the death answer", [["grace died in an accident, what does the policy pay?", gp("grace", GRACE)], ["grace broke her arm", askCard("grace", GRACE)], ["what do i do now", whatNowFor(GRACE)]]],
+  ["control for R17-1: the same death answer, then \"what do i do now\" straight away repeats its step", [["grace died in an accident, what does the policy pay?", gp("grace", GRACE)], ["what do i do now", whatNowFor(GRACE)]]],
 ];
 async function main() {
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
