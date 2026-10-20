@@ -1,0 +1,13 @@
+import { chromium } from '/home/user/dearpolicy-mvp/node_modules/playwright/index.mjs';
+const [,,vw]=process.argv;
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: vw==='m'?{width:390,height:844}:{ width: 1366, height: 900 }, hasTouch: vw==='m' });
+await p.goto('http://localhost:3300/policies',{waitUntil:'domcontentloaded'}); await p.waitForTimeout(4000);
+const pick = p.locator('[data-testid=covers-picker]').first();
+await pick.getByRole('button',{name:/Tan Hui Min Grace/}).click(); await p.waitForTimeout(2500);
+await pick.getByRole('button',{name:/Lee Wei Ming/}).click(); await p.waitForTimeout(2500);
+await pick.scrollIntoViewIfNeeded(); await p.screenshot({path:`last-${vw}.png`});
+console.log('PICKER:', (await pick.innerText()).replace(/\n/g,' | '));
+await pick.getByRole('button',{name:/Tan Hui Min Grace/}).click(); await p.waitForTimeout(2500);
+console.log('restored:', (await pick.locator('button').allInnerTexts()).join(' | '));
+await b.close();
