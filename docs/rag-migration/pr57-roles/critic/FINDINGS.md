@@ -1177,3 +1177,31 @@ None of these touches amounts, people's links or saved answers.
 sends `statements[]`, and they now hold up against R15 and R18 for when it does. Before the cards are switched on, the Developer's
 fields change must cover R15-4 and R19-1. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
 confirm. The merge is DC's call.
+
+---
+
+# Round 20: PR #66 merge check at `e91d5b7`
+
+Scope: `git diff c00e41e e91d5b7 -- lib/`. In `hook.ts`, `trace.shown` is now set once on the shared tail, after the final
+`verifyAnswerFigures`, for every branch, with `[]` when the turn made a correction or withdrew something. In `loop.ts`,
+`whatToDo` reads only the immediately previous turn. `runLoopChatTurn` has no early return before the tail (hook.ts:163-323), so
+every loop turn records `shown`. The repro is a scratch script that mirrors the new selection logic.
+
+| Check | Result |
+|---|---|
+| R17-1: death → fracture ask card → "what do i do now" | **Fixed.** Nothing is repeated, because the ask turn recorded `shown` with no steps. |
+| R17-2: `shown` copied before the gate | **Fixed.** It is copied from `answer.nextSteps` after the final gate. |
+| R17-3: steps from a withdrawn answer | **Fixed for this turn and the previous one.** A turn that withdrew support records no steps, and this turn's `invalidated` blocks the repeat. |
+| Same scenario: final answer with steps → "what do i do now" | Its steps are repeated, as intended. |
+| Another person in between, or an old saved state with no `shown` | Nothing is repeated. |
+
+**R20-1 (Low, note).** A turn answered outside the loop does not add to `state.turns`, for example a registry or library question
+handled by the older path. So "what do i do now" after one can repeat the loop answer before it. It is still the same person, and
+nothing new in scenario terms came from the loop, so I accept this.
+
+R14 and R17 are all closed, and I found no regressions. The rest of the diff is the Developer's repro script.
+
+## Verdict on PR #66 at `e91d5b7`
+
+**Ready to merge** from the Critic's side. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
+confirm. The merge is DC's call.
