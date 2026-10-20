@@ -1,7 +1,36 @@
 # PR #57 follow-up: release report (Developer)
 
-**Release decision: not release-ready.** The coordinator gives the integrated verdict once testing, evidence review and the UX pass
-on C6 report. Until then the PR stays a draft.
+## Integrated verdict (coordinator, 20 Oct 2026)
+
+**Recommend merging for controlled use, not yet for paying customers.** Merging is DC's decision.
+
+- Tested commit: **C6 `f4937ef160a06420bf5e526df8d3ab979dc9f11b`**.
+- Test engineer (`test/FINDINGS-C6.md`, `e3d0b8b`): 57/58 suites (the customer-screens suite is red on main too), acceptance 34/40
+  with the same six known items (R1, R2, R3, R7, R9, N5b), guards 49/49, browser specs 28/28.
+- Critic round 9: no blocker. Policy Evidence Reviewer: no wrong claimable amount and no unsupported claim open on C0 to C6.
+- Why merge: C6 is safer than production `4956588`. It fixes the wrong-person correction, the dropped accident amount, the GP
+  "couldn't confirm" answer and the unrequested X-ray question.
+- Why not for paying customers yet: the live-site test on main found 22-60 second answers, follow-up questions with no usable answer,
+  no plain bottom line, and sources that cannot be clicked. Those are the next round, not this PR.
+- Evidence limits: scripted and recorded replay only, on test households, with the OpenAI configuration. No real-model run on C6, no
+  check against DC's real library, and the Claude switch (PR #59) is not covered.
+
+### Accepted open items
+
+- Answers replaced by a correction are not marked as replaced (**fix before public launch**).
+- C1-3 / N5b: "Re-analyse" rewrites a document's pages in place, so a saved answer is not withdrawn afterwards (fix: a page digest).
+- Critic R9-1: the "neither kind is defined" note checks only its own document but says "these documents".
+- Critic R6-3: an exclusion sentence can be quoted as medical-expense wording.
+- Critic R6-4: "Policy Policy" in the scheme-listing sentence.
+- Critic R7-2: a non-member row sharing the person's preferred name can be read as theirs (a product name only, never an amount).
+- A quoted scheme line has no "scheme wording, not proof of cover" qualifier.
+- F4: no test that a quoted bare "$" stays currency-unresolved.
+
+### UX top three (next round)
+
+1. Answers take 22-60 seconds on the live site.
+2. Follow-up questions get no usable answer, and answers have no plain bottom line.
+3. Sources are plain text, not clickable, and repeated.
 
 ## Commits
 
