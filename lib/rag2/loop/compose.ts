@@ -12,7 +12,7 @@
 import { isHeadingLine, paragraphs, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
-import { ABSENCE_OF, RENDERED, RENDERED_STEPS } from "./statement-render";
+import { ABSENCE_OF, QUOTED, RENDERED, RENDERED_STEPS } from "./statement-render";
 import type { AbsenceCheck } from "./absence-scope";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
@@ -1146,7 +1146,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const staleEv = evIds.filter((id) => ctx.stale?.has(id));
     if (staleEv.length) { drop(text, `cites evidence from a document that is no longer available (${staleEv.join(", ")})`, ctx.stale!.get(staleEv[0])); continue; }
     // Agent F (D2 / D7): money presented as paid / owed / claimable, or a claim decision, is never stated.
-    const pd = payoutOrDecision(text);
+    // (PR #57 follow-up: in a server quote of the documents, the words inside the quotation marks are the document's own)
+    const pd = payoutOrDecision(QUOTED.has(s) && RENDERED.has(s) ? text.replace(/“[^”]*”/g, "“”") : text);
     if (pd) { drop(text, pd === "payout" ? "calls an amount a payout (paid, owed, reimbursed, received or claimable)" : "states a claim decision (approved / confirmed / fully covered) only the insurer can make", pd === "payout" ? PAYOUT_NOTE : DECISION_NOTE); continue; }
     // Agent F (D1): a sentence resting on an instruction inside a document (not policy wording) is never stated.
     const injected = evIds.filter((id) => instructionLines(ctx.state.evidence[id].passage.text).length && !withoutInstructions(ctx.state.evidence[id].passage.text).split(/\n+/).some((l) => sharesWords(l, text)));

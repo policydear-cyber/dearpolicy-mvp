@@ -39,7 +39,7 @@ import { internalIdsIn } from "./statements";
 import { checkNotFound, SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
 import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
-import { RENDERED, renderStatements } from "./statement-render";
+import { ABSENCE_OF, quotePrinted, QUOTED, RENDERED, renderStatements } from "./statement-render";
 import type { BenefitRecord } from "../benefit-records";
 import { ACCIDENT_COND, NATURAL_CAT, accidentCondition, causeApplicability, amountMayBePresented, type BenefitApplicability } from "../benefit-applicability";
 import { applicabilityOf, CAUSE_ATTRIBUTE, reportedValue, valuesIn } from "../applicability";
@@ -1920,7 +1920,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (!dc || !dc.extra.length) return null;
     const cnStop = await causeNote(subject, dc.extra.map((x) => String(x.benefit ?? ""))).catch(() => null);
     const args: Record<string, unknown> = { subject_id: subject, sentences: [...dc.extra, ...(cnStop ?? [])], next_steps: dc.steps };
-    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+    const problems = await renderStatements(args, args.sentences as Record<string, unknown>[], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
     if (problems.length) return null;
     const composed = composeFinal({ sentences: args.sentences as Record<string, unknown>[], nextSteps: args.next_steps, subjectId: subject }, composeCtx());
     if (!composed.sentences.length) return null;
@@ -2114,6 +2114,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       }
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
+    let serverSaid = false;
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
     for (const m of missing) {
       const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
@@ -2127,10 +2128,26 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         if (line) { found = { id, line: line.length > 260 ? line.slice(0, line.indexOf(".", 120) + 1 || 260) : line, product: policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "your policy" }; break; }
       }
       if (found) sentences.push({ text: `For the stay you mentioned, the ${found.product} says: “${found.line.replace(/[.\s]+$/, "")}”.`, evidence_ids: [found.id], subject_id: subject });
+      // PR #57 follow-up (G2, DC's GP-bill answer): "not yet looked up" is untrue when this turn searched for what pays such a bill; then
+      // the note says what was found: the pages read do not print one (the household's own words quoted as they wrote them).
+      else if (kind === "bill" && trace.toolCalls.some((t) => t.name === "search_passages" && t.ok && /\b(?:medical|expenses?|bills?|outpatient|GP|clinic|reimburs\w*|doctor|consultation)\b/i.test(String(t.args?.query ?? "")))) {
+        // A doctor's bill (GP, clinic, outpatient): the server checks the person's documents for it itself, as a not_found statement
+        // would be (absence-scope.ts, with G1): the absence, what was read of a partly stored scope, or the lines that do print it.
+        let said = false;
+        if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic)\b/i.test(words)) {
+          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation"], subject_id: subject };
+          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: input.people.find((p) => p.id === subject)?.name ?? null, names: input.people.flatMap((p) => [p.name]) });
+          const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
+          if (server) { const { check, ...st } = server; RENDERED.add(st); ABSENCE_OF.set(st, check); sentences.push(st); said = true; }
+          else if (!nf.ok && nf.printed?.length) { const q = quotePrinted(nf.printed, (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), subject); if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; } }
+        }
+        if (!said) notes.push(`The pages I read do not print a benefit for the bill you mentioned${words ? ` (“${words}”)` : ""}.`);
+        else serverSaid = true;
+      }
       else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
     }
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
-    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n)) } : (composed ?? c0);
+    const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n) && !(serverSaid && n === DROPPED_NOTE)) } : (composed ?? c0);
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.
     if (r.kind === "ask") return { ...r, composed: merged, trailing: [...(r.trailing ?? []), ...notes] };
@@ -2219,7 +2236,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             serverAskSteps = null;
             if (stepS) { askStepTmp = call.name === "ask_user"; call.arguments = { ...call.arguments, next_steps: [...(Array.isArray(call.arguments.next_steps) ? call.arguments.next_steps : []), stepS] }; (trace.adjusted ??= []).push(`${call.name}: added the supported next step (the insurer of this person's own policy document) -- the household asked what to do [${stepS}]`); } }
           const list = (call.name === "final_answer" ? call.arguments.sentences : call.arguments.statements) as Record<string, unknown>[] | undefined;
-          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+          const problems = await renderStatements(call.arguments, list, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
           if (problems.length) { noteFailure(call.name); record(call.name, call.arguments, false, [], problems.join("; ")); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: problems.join("; ") }) }); continue; }
           if (askStepTmp) { const { next_steps, ...rest } = call.arguments; serverAskSteps = Array.isArray(next_steps) ? next_steps : null; call.arguments = rest; }
         }
@@ -2239,7 +2256,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           const extra = retainedTerms(sentences, r.terminal.composed.dropped, String(call.arguments.subject_id ?? state.subjectId ?? ""));
           if (extra.length) {
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...extra] } };
-            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+            const p2 = await renderStatements(again.arguments, extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p2.length) {
               await bindCitedFigures(again);
               const r2 = action(again);
@@ -2258,7 +2275,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (dc2?.extra.length && !dc2.rows.includes("(no death benefit established)")) {
             const nextSteps = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : dc2.steps;
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, ...dc2.extra], next_steps: nextSteps } };
-            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+            const p3 = await renderStatements(again.arguments, dc2.extra, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p3.length) {
               await bindCitedFigures(again);
               const r3 = action(again);
@@ -2278,7 +2295,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const steps5 = Array.isArray(call.arguments.next_steps) && call.arguments.next_steps.length ? call.arguments.next_steps : ((await deathCompletion(subj3, sentences, [], true).catch(() => null))?.steps ?? []);
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences.filter((x) => !(x?.kind === "fact" && cn.some((n) => n.text === String(x.text ?? "")))), ...cn], next_steps: steps5 } };
-            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+            const p5 = await renderStatements(again.arguments, cn, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p5.length) {
               await bindCitedFigures(again);
               const prevNotes = r.terminal.composed.notes ?? [];
@@ -2293,7 +2310,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
           if (note) {
             const sentences = call.arguments.sentences as Record<string, unknown>[];
             const again = { ...call, arguments: { ...call.arguments, sentences: [...sentences, note] } };
-            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+            const p4 = await renderStatements(again.arguments, [note], { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
             if (!p4.length) {
               await bindCitedFigures(again);
               const r4 = action(again);
@@ -2540,7 +2557,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   if (!done && BUDGET_STOPS.has(stop?.kind ?? "turn_calls") && [...requirements.values()].some((x) => x.resolvedBy === "household")) {
     const r = [...requirements.values()].filter((x) => x.resolvedBy === "household").at(-1)!;
     const st: Record<string, unknown>[] = [{ kind: "benefit_terms", benefit_id: r.benefitId, subject_id: r.subjectId, text: "-" }];
-    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); } });
+    const problems = await renderStatements({}, st, { ctx, state, evidenceId: (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), nameOf: (id) => input.people.find((p) => p.id === id)?.name ?? null, superseded: (t) => { (trace.adjusted ??= []).push(`superseded by the server's note on the two documents: "${t}"`); }, priorErrors: () => trace.toolCalls.filter((t) => !t.ok).map((t) => t.error ?? "") });
     const composed = !problems.length ? composeFinal({ sentences: st, subjectId: r.subjectId }, composeCtx()) : null;
     const because = r.evidenceIds.filter((id) => state.evidence[id] && !stale.has(id));
     if (because.length) {

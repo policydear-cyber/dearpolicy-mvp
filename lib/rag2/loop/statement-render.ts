@@ -9,7 +9,7 @@
  * composer: a statement that fails is omitted as a unit, never edited into a different claim.
  */
 import type { ToolContext } from "../tools";
-import type { EvidenceRef } from "../evidence";
+import { evidenceFor, type EvidenceRef } from "../evidence";
 import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
@@ -17,7 +17,7 @@ import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-recor
 import { loadDocs, loadLinks, loadMembers, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
 import { documentLabel, profileDocument, standingClause } from "./relation";
-import { checkNotFound, type AbsenceCheck } from "./absence-scope";
+import { checkNotFound, type AbsenceCheck, type PrintedLine } from "./absence-scope";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -27,6 +27,8 @@ const RELATION = new WeakSet<object>();
 export const RENDERED_STEPS = new Set<string>();
 export const STATEMENT_KINDS = ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status", "not_found"] as const;
 /** What the server checked for a not_found statement it wrote (kept aside: a model cannot supply it). */
+/** Server-written statements that quote the documents verbatim (“…”): the quoted words are the insurer's, not a statement that an amount is paid. */
+export const QUOTED = new WeakSet<object>();
 export const ABSENCE_OF = new WeakMap<object, AbsenceCheck>();
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const fmtDate = (iso: string | null) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? ""); return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : iso; };
@@ -47,7 +49,25 @@ const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.
 
 type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null;
   /** A model-written statement the server's own statement replaced (recorded in the trace, not as a verification failure). */
-  superseded?: (text: string) => void };
+  superseded?: (text: string) => void;
+  /** The errors of this turn's earlier tool calls (a refusal the model was already given). */
+  priorErrors?: () => string[] };
+
+/** What the documents print for a refused absence's topic, quoted line by line and cited to its page. */
+export function quotePrinted(lines: PrintedLine[], evidenceId: (ref: EvidenceRef, via?: string) => string, subjectId: string | null): { text: string; evidence_ids: string[] } | null {
+  const parts: string[] = []; const ids: string[] = [];
+  const groups = new Map<string, string[]>();
+  for (const l of lines) {
+    const ref = evidenceFor({ policyId: l.policyId, documentHash: l.fileHash, page: l.page, pageText: l.pageText, passage: l.line, subjectId });
+    if (!ref) continue;
+    ids.push(evidenceId(ref, "printed"));
+    const at = `the ${l.name} (page ${l.page})`; groups.set(at, [...(groups.get(at) ?? []), `“${l.line.replace(/[.\s]+$/, "")}”`]);
+  }
+  for (const [at, qs] of groups) parts.push(`${at} prints: ${qs.join(" and ")}`);
+  if (!parts.length) return null;
+  const text = parts.join("; and ");
+  return { text: `${text.charAt(0).toUpperCase()}${text.slice(1)}.`, evidence_ids: [...new Set(ids)] };
+}
 
 /** A benefit's printed terms, written from its record (with the evidence and value ids that bind each figure). */
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
@@ -192,7 +212,18 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const subject = typeof s.subject_id === "string" && s.subject_id ? s.subject_id : typeof args.subject_id === "string" && args.subject_id ? args.subject_id : d.state.subjectId ?? null;
       const members = await loadMembers(d.ctx.accountId);
       const r = await checkNotFound(d.ctx.accountId, s, { subjectId: subject, who: d.nameOf(subject) ?? null, names: members.flatMap((m) => [m.displayName, m.preferredName ?? ""]).filter(Boolean) });
-      if (!r.ok) { if (r.partial) d.ctx.partialAbsence = { ...r.partial, subjectId: r.partial.check.subjectId, used: false }; problems.push(`statement ${i + 1}: ${r.problem}`); continue; }
+      if (!r.ok) {
+        if (r.partial) d.ctx.partialAbsence = { ...r.partial, subjectId: r.partial.check.subjectId, used: false };
+        // PR #57 follow-up (DC's GP-bill answer): the same absence refused again for what the documents print -- the model could not say
+        // those lines -- is replaced by the server quoting them, cited (never an absence, never a verdict).
+        // (a repeat: an earlier call of this turn was already refused with exactly this problem)
+        if (r.printed?.length && (d.priorErrors?.() ?? []).some((e) => e.includes(r.problem))) {
+          const q = quotePrinted(r.printed, d.evidenceId, subject);
+          // (a new statement in its place: the model's own not_found statement is left as it was sent)
+          if (q && list) { const n = { kind: "fact", ...q, ...(subject ? { subject_id: subject } : {}) }; RENDERED.add(n); QUOTED.add(n); list[i] = n; continue; }
+        }
+        problems.push(`statement ${i + 1}: ${r.problem}`); continue;
+      }
       s.text = r.text; if (r.check.subjectId) s.subject_id = r.check.subjectId; RENDERED.add(s); ABSENCE_OF.set(s, r.check);
       // fx-live-2 review: NO passage is cited for an absence. The household sees which documents were checked in the sentence itself, and
       // the evidence for the scope is the saved check (ChatAnswer.absenceChecks: each document's id, name, file hash and revision, and the

@@ -152,7 +152,11 @@ export function scopeDocs(src: AbsenceSource, opts: { policyIds: string[] | null
   return { docs: src.docs, scope: "library", problem: src.docs.length ? null : "the household has no readable documents to check" };
 }
 
+/** A line the documents print for a refused absence's topic (G1 follow-up: what the server quotes when the model cannot recover). */
+export type PrintedLine = { policyId: string; name: string; page: number; line: string; pageText: string; fileHash: string | null };
 export type NotFoundResult = { ok: true; text: string; check: AbsenceCheck } | { ok: false; problem: string;
+  /** Refused because the documents print words for the topic: those lines (outside a scheme's bare list of its policies first). */
+  printed?: PrintedLine[];
   /** PR #57 follow-up: refused ONLY because part of the scope was not stored -- what the pages that were read show, written by the server. */
   partial?: { text: string; check: AbsenceCheck } };
 /** The whole decision, over data already loaded (pure): whether the statement may be said, and as what sentence. */
@@ -180,9 +184,23 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   const unread = scope.docs.filter((d) => !(pagesOf.get(d.id) ?? []).some((p) => p.text.trim()));
   if (unread.length) return { ok: false, problem: `the text of ${unread.map((d) => labels.get(d.id)).join(", ")} is not stored, so nothing can be said to be absent from it` };
   const hits = scanScope(scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) })), st.terms);
-  if (hits.length) {
+  // PR #57 follow-up (G1, DC's GP-bill answer): a scheme document's own list of its group policies names a policy ("Outpatient Medicare
+  // Policy ("OPMC")") without describing it. When EVERY hit is such a name, and the person's own certificate, read in full, lists neither
+  // that name nor its abbreviation, the hit is set aside and said in its own sentence (the scheme names it, the certificate does not list
+  // it, the insurer confirms current cover); the absence is then decided over the rest as usual. Any other hit refuses as before.
+  const scheme = claim === "benefit_not_found" && hits.length ? schemeListing(scope.docs, pagesOf, hits, st.terms, labels) : null;
+  if (hits.length && !scheme) {
     const shown = hits.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
-    return { ok: false, problem: `not_found refused: the documents checked DO print ${hits.length > 1 ? "words for" : "a word for"} this (${[...new Set(hits.map((h) => h.term))].join(", ")}): ${shown}. Say what those lines print (cite them) or narrow the claim to documents and terms that are truly absent; never say a document does not describe what it prints` };
+    // (what the server quotes if the model cannot say it: for a medical-bill topic, the medical-expense wording first -- critic round 4,
+    // condition 5 -- then any line that is not a scheme's bare list of its policies, else the hits themselves)
+    const medical = st.terms.some((t) => MEDICAL_BILL_TERMS.includes(t) || /medic|outpatient|clinic|doctor/.test(t));
+    const docsOf = scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) }));
+    const pool = [...(medical ? scanScope(docsOf, MEDICAL_BILL_TERMS) : []), ...hits];
+    const outside = pool.filter((h) => !inPolicyList(pagesOf, h));
+    const chosen = (outside.length ? outside : hits).filter((h, i, a) => a.findIndex((x) => x.policyId === h.policyId && x.page === h.page && x.line === h.line) === i).slice(0, 2);
+    const printed = chosen.map((h) => { const pageText = (pagesOf.get(h.policyId) ?? []).find((p) => p.page === h.page)?.text ?? ""; const full = pageText.split(/\n+/).map((l) => l.trim()).find((l) => l.startsWith(h.line.replace(/\.\.\.$/, ""))) ?? h.line;
+      return { policyId: h.policyId, name: h.name, page: h.page, line: full, pageText, fileHash: scope.docs.find((d) => d.id === h.policyId)?.fileHash ?? null }; });
+    return { ok: false, printed, problem: `not_found refused: the documents checked DO print ${hits.length > 1 ? "words for" : "a word for"} this (${[...new Set(hits.map((h) => h.term))].join(", ")}): ${shown}. Say what those lines print (cite them) or narrow the claim to documents and terms that are truly absent; never say a document does not describe what it prints` };
   }
   // PR #57 follow-up (critic M2; after the scan, so a page that prints the topic is still named): an absence is said only over a document read in full. A stored page with no text, fewer stored pages than
   // the document has, or a page count that is not known, means part of it was never read.
@@ -200,14 +218,66 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
     const full = scope.docs.filter((d) => !partial.includes(d)).map((d) => labels.get(d.id) ?? "document");
     const part = partial.map((d) => { const ns = [...new Set((pagesOf.get(d.id) ?? []).filter((p) => p.text.trim()).map((p) => p.page))].sort((a, b) => a - b); return `the ${labels.get(d.id) ?? "document"} (page${ns.length > 1 ? "s" : ""} ${ranges(ns)}${d.pageCount != null ? ` of ${d.pageCount}` : ""})`; });
     const whose = scope.scope === "subject" && ctx.who ? `${ctx.who}’s documents` : "the documents";
-    const text = `Only part of ${whose} could be checked for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. The pages that were read do not mention ${t.topic}; the rest is not stored and could not be checked, so this is not an answer about whether there is such cover.`;
+    const text = `${scheme ? scheme.text(ctx.who) + " " : ""}Only part of ${whose} could be checked for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. The pages that were read do not mention ${t.topic}; the rest is not stored and could not be checked, so this is not an answer about whether there is such cover.`;
     return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked`, partial: { text, check } };
   }
   const check: AbsenceCheck = {
     claim, topic: t.topic, terms: st.terms, subjectId: subjectId ?? null, scope: scope.scope,
     documents: scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", fileHash: d.fileHash ?? null, rev: d.rev ?? null, pages: (pagesOf.get(d.id) ?? []).length })),
   };
-  return { ok: true, check, text: renderAbsence(check, ctx.who) };
+  return { ok: true, check, text: `${scheme ? scheme.text(ctx.who) + " " : ""}${renderAbsence(check, ctx.who)}` };
+}
+
+/** Words a document would print for paying a doctor's or medical bill. G1 sets a hit aside only when none of these is printed anywhere
+ * in the scope outside the scheme's policy list (critic round 4, condition 5: GP / outpatient / clinic alone would miss "medical expenses"). */
+const MEDICAL_BILL_TERMS = ["medical expenses", "medical expense", "medical reimbursement", "medical bills", "medical treatment", "medical fees", "outpatient", "clinic", "general practitioner", "consultation"];
+const POLICY_ENTRY = /([A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*){0,4})\s+(?:Policy\s+)?\(["“]([A-Z]{2,6})["”]\)/g;
+const flat = (t: string) => t.replace(/\s+/g, " ").trim();
+const titleCase = (t: string) => t.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+/** The scheme's own list of its group policies that a hit sits in (a sentence naming three or more policies with their abbreviations). */
+function policyList(pagesOf: Map<string, { page: number; text: string }[]>, h: ScopeHit): { name: string; abbr: string }[] | null {
+  const page = flat((pagesOf.get(h.policyId) ?? []).find((p) => p.page === h.page)?.text ?? "");
+  const sentence = page.split(/(?<=\.)\s+(?=[A-Z])/).find((x) => x.includes(flat(h.line).replace(/\.\.\.$/, ""))) ?? "";
+  const entries = [...sentence.matchAll(POLICY_ENTRY)].map((m) => ({ name: m[1].replace(/^(?:and|or|the)\s+/i, "").trim(), abbr: m[2] }));
+  return entries.length >= 3 ? entries : null;
+}
+const inPolicyList = (pagesOf: Map<string, { page: number; text: string }[]>, h: ScopeHit) => { const e = policyList(pagesOf, h); const re = termPattern(h.term); return !!e && e.some((x) => re.test(x.name)); };
+
+/** G1: whether every hit is the name of a group policy in a scheme document's own list of its policies (a sentence naming three or more
+ * policies with their abbreviations), that the person's certificate, read in full, does not list. Null when anything is in doubt. */
+function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text: string }[]>, hits: ScopeHit[], terms: string[], labels: Map<string, string>): { text: (who: string | null) => string } | null {
+  const certs = docs.filter((d) => d.documentRole === "certificate" && d.personalCoverageConfirmed);
+  const full = (d: DocRow) => { const ps = pagesOf.get(d.id) ?? []; const have = new Set(ps.filter((p) => p.text.trim()).map((p) => p.page)); return d.pageCount != null && d.pageCount > 0 && Array.from({ length: d.pageCount }, (_, i) => i + 1).every((n) => have.has(n)); };
+  if (!certs.length || !certs.every(full)) return null;
+  const certText = certs.flatMap((d) => (pagesOf.get(d.id) ?? []).map((p) => p.text)).join("\n");
+  // (what the certificate lists: its product headings, and the date its rows are printed as of -- one date, or G1 does not fire)
+  const products = [...new Set(certText.split(/\n+/).map((l) => /^\s*([A-Z][A-Z &]{3,60}?)\s*\(\s*POLICY NO/.exec(l)?.[1]?.trim()).filter((x): x is string => !!x))];
+  const dates = [...new Set([...certText.matchAll(/\bAs of (\d{2})\/(\d{2})\/(\d{4})\b/g)].map((m) => `${m[3]}-${m[2]}-${m[1]}`))];
+  if (!products.length || dates.length !== 1) return null;
+  const all = [...new Set([...terms, ...MEDICAL_BILL_TERMS])];
+  const everyHit = scanScope(docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: pagesOf.get(d.id) ?? [] })), all);
+  const named = new Map<string, { name: string; abbr: string; doc: string; page: number }>();
+  for (const h of [...hits, ...everyHit]) {
+    if (certs.some((c) => c.id === h.policyId)) return null;
+    const entries = policyList(pagesOf, h);
+    if (!entries) return null;
+    const re = termPattern(h.term);
+    const entry = entries.find((e) => re.test(e.name));
+    if (!entry || !re.test(h.line) || [...h.line.matchAll(new RegExp(re.source, "gi"))].length !== 1) return null;
+    // (not listed: neither the full name nor the abbreviation appears anywhere on the certificate)
+    if (new RegExp(`\\b${entry.name.replace(/\s+/g, "\\s+")}\\b`, "i").test(certText) || new RegExp(`\\b${entry.abbr}\\b`).test(certText)) return null;
+    named.set(`${h.policyId}:${entry.abbr}`, { ...entry, doc: labels.get(h.policyId) ?? "document", page: h.page });
+  }
+  if (!named.size) return null;
+  const asOf = new Date(dates[0] + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const list = products.map(titleCase);
+  return { text: (who) => {
+    const whose = who ? `${who}’s` : "This person’s";
+    const names = [...named.values()];
+    const scheme = names.map((n) => `the ${n.doc} (page ${n.page}) names the scheme’s ${n.name} Policy (${n.abbr})`).join(", and ");
+    return `${whose} certificate lists ${listOf(list)} (as of ${asOf}). ${scheme.charAt(0).toUpperCase() + scheme.slice(1)}, which that certificate does not list; only the insurer or the scheme administrator can confirm ${who ? `${who}’s` : "their"} current cover.`;
+  } };
 }
 
 /** Loads the household's readable documents, links and stored pages for the turn, then decides. */
