@@ -1698,3 +1698,63 @@ existing behaviour.
 
 **Ready to merge once R29-1 is fixed** (one regex). The alternatives can't be summed, picked silently or attached to the wrong
 person, and inferred-base rows are unchanged. R29-2 is a short follow-up, best in the same push. R29-3 is for the designer.
+
+# Round 30: PR #75 household isolation at `6a31182`, PR #76 "Not in my family" at `7e87b9b8`
+
+Asked: can either PR read, write or hide anything across households, and is the code safe while the optional table is absent?
+Read the lib/app/sql diffs against `effa2a2`. No builds, DB suites or paid calls.
+
+## PR #75 at `6a31182`
+
+- `lib/ledger/store.ts` `addLedgerRow`: the INSERT only runs when the person (`family_members.account_id=$1`) and, if given,
+  the document (`policies.account_id=$1`) belong to the caller's household; otherwise no row and the route returns 404
+  (`app/api/ledger/route.ts`). Closes the cross-household write.
+- `lib/lifecycle/coordinator.ts` `requestInvitationRevocation`: the lookup joins the caller's own `household_members` row, so an
+  invitation in another household reads as "not found", and a non-owner gets `NotFoundError`, both before any
+  `deletion_requests` write. Still the plain pool, but now scoped by the caller join; fine.
+- `sql/storage-rls.sql`: adds `household-exports` to the safety-net UPDATE. Only takes effect when DC re-applies the file.
+- No new table, so nothing depends on an optional migration.
+
+**Verdict: ready to merge.** Note for the release list: re-apply `sql/storage-rls.sql` after merge.
+
+## PR #76 at `7e87b9b8`
+
+Isolation checks, all pass:
+- Every dismissal read is tied to the row's own household and document (`name-dismissals.ts` `notDismissedCondition`:
+  `nd.account_id=pd.account_id AND nd.policy_id=pd.policy_id`). A row filed under another household hides nothing (R21-1 lesson
+  applied; the regression at `scripts/system-database-regressions.ts:1357-1367` covers both directions).
+- Writes run in the caller's RLS session after the document is authorised against `ctx.householdId`; the INSERT/UPDATE
+  policies also require `policies.account_id = account_id`, so a browser can't file a dismissal on another household's document
+  or under another household (tests at :1355-1356). DELETEs are scoped by `account_id`.
+- `notFamily: true` checks the name is on that document (404) and unlinked (409) before writing.
+- `refreshReviewState` (link-person `route.ts`) runs on the service pool but only after the household transaction authorised the
+  document, and filters by `account_id` and `policy_id`.
+
+Table absent: `dismissalsReady()` uses `to_regclass`, caches only `true`, and every caller falls back to "" (no filter), so
+GET /api/policies and the dashboard behave exactly as on main; link-person returns `remembered:false` without touching the table.
+No 500 path found.
+
+## R30-1 (Low): a re-read brings the "not linked" review flag back for a dismissed name
+
+`lib/rag/ingest.ts:751-760` counts every unmatched detected name for `needs_review`/`review_reason` and doesn't know about
+dismissals. After a re-read the name stays hidden (correct), but the document is flagged for review again with "1 named insured
+person is not linked", and the household can't clear it because the name is no longer listed. Fix: apply
+`notDismissedClause` (or skip dismissed keys) when ingest computes `unmatched`. Follow-up is fine.
+
+## R30-2 (Low, existing pattern now reached more often): `refreshReviewState` overwrites reasons it doesn't compute
+
+It rebuilds `review_reason` from unmatched names and unverified items only, so the ingest-only reasons ("linked to the profile it
+was uploaded to … Check this is the right person", "not named in it …") are erased. Linking already did this on main; a "Not in
+my family" tap now does it too, which can clear a "check this is the right person" warning that has nothing to do with the
+dismissed name. Fix: keep those reasons (recompute them, or only remove the "not linked" clause). Follow-up is fine.
+
+## R30-3 (Low): saved, then 500
+
+The review refresh now runs after the commit. If it fails, the dismissal or link is saved but the route returns 500. Retrying is
+safe (`ON CONFLICT DO NOTHING`, idempotent DELETE), so this is only a confusing message. Optional: catch and log instead.
+
+## Verdict on PR #76 at `7e87b9b8`
+
+**Ready to merge.** Nothing reads, writes or hides across households, and it is safe before `sql/detected-name-dismissals.sql` is
+applied. Apply that file after `sql/policy-member-exclusions.sql`, in either order relative to the deploy. R30-1 and R30-2 are
+short follow-ups.
