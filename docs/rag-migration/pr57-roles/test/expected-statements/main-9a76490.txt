@@ -1,0 +1,80 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [GUARD] E1 setup: the Grace answer shows S$1,250 and S$120,000 (today's prose; the script reaches the rows)
+FAIL [AC] E1 Grace broke her arm: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E1 returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+PASS [GUARD] E1b setup: the corrected answer shows Daniel's S$1,250 and S$120,000 (today's prose; the script reaches the rows)
+FAIL [AC] E1b "Actually it was Daniel": bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E1b returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+FAIL [AC] E1b no statement in the corrected answer is about Grace, and the answer says Grace's figures no longer apply
+     []
+     Updated: this is about Daniel, not Grace. The earlier estimates I worked out for Grace from the injury no longer apply, because they were worked out for Grace's policy, not Daniel's.
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Daniel's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+PASS [GUARD] E2a setup: the GP answer completes, keeps $800 as written, and shows the ambulance (500) and recuperation (S$250) terms (today's prose; the script reaches the rows)
+FAIL [AC] E2a GP bill, stored pages only: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E2a returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+PASS [GUARD] E2b setup: the GP answer quotes the panel GP line (30 per visit, bare $) (today's prose; the script reaches the rows)
+FAIL [AC] E2b GP bill with the panel GP and overseas pages: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E2b returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+FAIL [AC] E2b' a GP visit stated as in Singapore: structured answer present, and no $1,000 overseas statement
+     []
+PASS [GUARD] E3 setup: the answer shows S$1,000,000, S$600,000 and S$2,000 (today's prose; the script reaches the rows)
+FAIL [AC] E3 death abroad: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E3 returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+PASS [GUARD] E4 setup: the answer shows the travel S$100,000 (today's prose; the script reaches the rows)
+FAIL [AC] E4 travel, no trip dates: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E4 returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+PASS [GUARD] E5 setup: the answer shows S$3,750 and S$450,000 (today's prose; the script reaches the rows)
+FAIL [AC] E5 hip on conflicting documents: bottomLine and statements[] meet the reference
+     no bottomLine
+     no statements[]
+FAIL [AC] E5 returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[]}
+     saved {"statements":[]}
+     reopened {"statements":[]}
+PASS [GUARD] N0 a structured answer written to the reference passes the checker
+PASS [GUARD] N1 row 2 without its Core/Voluntary condition: the checker rejects it
+PASS [GUARD] N2 the Core/Voluntary condition on row 1: the checker rejects it
+PASS [GUARD] N3 a total in the bottom line: the checker rejects it
+PASS [GUARD] N4 the wrong person on row 2: the checker rejects it
+PASS [GUARD] N5 row 2 without its date: the checker rejects it
+PASS [GUARD] N6 the thumb/finger/palm footnote dropped from row 1: the checker rejects it
+PASS [GUARD] N7 a bottom line that promises payment: the checker rejects it
+PASS [GUARD] N8 the condition only in the prose sentence (fullText), not on the card: the checker rejects it
+PASS [GUARD] N9 a statement missing (row 1): the checker rejects it
+PASS [GUARD] N10 no fields at all (today's answer shape): the checker rejects it
+
+AC 0 passed, 16 failed | GUARD 18 passed, 0 failed

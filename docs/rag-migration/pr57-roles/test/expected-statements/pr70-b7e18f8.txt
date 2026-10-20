@@ -1,0 +1,63 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [GUARD] E1 setup: the Grace answer shows S$1,250 and S$120,000 (today's prose; the script reaches the rows)
+PASS [AC] E1 Grace broke her arm: bottomLine and statements[] meet the reference
+PASS [AC] E1 returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [GUARD] E1b setup: the corrected answer shows Daniel's S$1,250 and S$120,000 (today's prose; the script reaches the rows)
+PASS [AC] E1b "Actually it was Daniel": bottomLine and statements[] meet the reference
+PASS [AC] E1b returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [AC] E1b no statement in the corrected answer is about Grace, and the answer says Grace's figures no longer apply
+PASS [GUARD] E2a setup: the GP answer completes, keeps $800 as written, and shows the ambulance (500) and recuperation (S$250) terms (today's prose; the script reaches the rows)
+FAIL [AC] E2a GP bill, stored pages only: bottomLine and statements[] meet the reference
+     bottomLine lacks: GP or outpatient
+     bottomLine lacks: not the same as not covered
+     bottomLine lacks: his certificate's date (6 Oct 2022)
+     bottomLine lacks: Outpatient Medicare is on the scheme, not on his certificate
+     E2a row 1 (Ambulance Cost): no statement with amount S$500 for /Daniel/
+     E2a row 2 (Accidental Hospital Recuperation): does not carry "within 30 days of the accident"
+     E2a row 2 (Accidental Hospital Recuperation): does not carry "at least 24 continuous hours in hospital"
+PASS [AC] E2a returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [GUARD] E2b setup: the GP answer quotes the panel GP line (30 per visit, bare $) (today's prose; the script reaches the rows)
+FAIL [AC] E2b GP bill with the panel GP and overseas pages: bottomLine and statements[] meet the reference
+     bottomLine lacks: GP or outpatient
+     bottomLine lacks: not the same as not covered
+     E2b row 4 (Panel GP, PS p25): no statement with amount $30
+     E2b row 5 (Emergency outpatient overseas, PS p20): no statement with amount $1,000
+PASS [AC] E2b returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [AC] E2b' a GP visit stated as in Singapore: structured answer present, and no $1,000 overseas statement
+PASS [GUARD] E3 setup: the answer shows S$1,000,000, S$600,000 and S$2,000 (today's prose; the script reaches the rows)
+FAIL [AC] E3 death abroad: bottomLine and statements[] meet the reference
+     bottomLine lacks: Adrian
+     bottomLine lacks: separate policies, never added
+     bottomLine lacks: certificate date (6 Oct 2022)
+     E3 row 1 (Group Term Life): does not carry "notify within 6 months"
+     E3 row 1 (Group Term Life): does not carry "with the death certificate"
+     E3 row 2 (Accidental Death, 100% of GPA): does not carry "caused by an accident"
+     E3 row 2 (Accidental Death, 100% of GPA): does not carry "worldwide territorial limit"
+     E3 row 2 (Accidental Death, 100% of GPA): does not carry "exclusions (war, self-injury)"
+     E3 row 2 (Accidental Death, 100% of GPA): basis "" lacks /100%[^.]*S\$600,000|S\$600,000[^.]*100%/
+     E3 row 3 (Repatriation): does not carry "reimbursement, up to"
+PASS [AC] E3 returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [GUARD] E4 setup: the answer shows the travel S$100,000 (today's prose; the script reaches the rows)
+FAIL [AC] E4 travel, no trip dates: bottomLine and statements[] meet the reference
+     no bottomLine
+     E4 row 1 (Travel Accidental Death): no statement with amount S$100,000 for /Adrian/
+FAIL [AC] E4 returned = saved = reopened (bottomLine and statements[]), and not empty
+     returned {"statements":[{"conditions":[],"fullText":"The Single Trip Travel Insurance - Policy Schedule (page 1) prints Accidental Death: S$100,000. The schedule prints this cover for the insured person “Wong 
+     saved {"statements":[{"conditions":[],"fullText":"The Single Trip Travel Insurance - Policy Schedule (page 1) prints Accidental Death: S$100,000. The schedule prints this cover for the insured person “Wong 
+     reopened {"statements":[{"conditions":[],"fullText":"The Single Trip Travel Insurance - Policy Schedule (page 1) prints Accidental Death: S$100,000. The schedule prints this cover for the insured person “Wong 
+PASS [GUARD] E5 setup: the answer shows S$3,750 and S$450,000 (today's prose; the script reaches the rows)
+PASS [AC] E5 hip on conflicting documents: bottomLine and statements[] meet the reference
+PASS [AC] E5 returned = saved = reopened (bottomLine and statements[]), and not empty
+PASS [GUARD] N0 a structured answer written to the reference passes the checker
+PASS [GUARD] N1 row 2 without its Core/Voluntary condition: the checker rejects it
+PASS [GUARD] N2 the Core/Voluntary condition on row 1: the checker rejects it
+PASS [GUARD] N3 a total in the bottom line: the checker rejects it
+PASS [GUARD] N4 the wrong person on row 2: the checker rejects it
+PASS [GUARD] N5 row 2 without its date: the checker rejects it
+PASS [GUARD] N6 the thumb/finger/palm footnote dropped from row 1: the checker rejects it
+PASS [GUARD] N7 a bottom line that promises payment: the checker rejects it
+PASS [GUARD] N8 the condition only in the prose sentence (fullText), not on the card: the checker rejects it
+PASS [GUARD] N9 a statement missing (row 1): the checker rejects it
+PASS [GUARD] N10 no fields at all (today's answer shape): the checker rejects it
+
+AC 11 passed, 5 failed | GUARD 18 passed, 0 failed
