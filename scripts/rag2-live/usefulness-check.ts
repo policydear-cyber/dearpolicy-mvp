@@ -217,10 +217,41 @@ function K6b(tr: Transcript): Check[] {
   ];
 }
 
-const CASES: Record<string, (tr: Transcript) => Check[]> = { K1, K2, K3, K4a, K4b, K6a, K6b };
+// ------------------------------------------------------------------------------------------------ fx-live-2 (PR #57 live confirmation; docs/rag-migration/reliable-chat/EXPECTED-fx-live-2.md)
+/** K3t1: turn 1 only of the arm-fracture conversation ("grace fell down and broke her arm"), with the row-specific footnote conditions. Regression data. */
+function K3t1(tr: Transcript): Check[] {
+  const t = tr.turns[0]; const x = t.text;
+  const ps = x.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  const summary = ps.filter((p) => has(p, 1250)), cert = ps.filter((p) => has(p, 120000));
+  const out: Check[] = [
+    ...alt(t, "Grace", 1250, 120000, [121250, 150000, 1000], "K3t1"),
+    xray({ ...tr, turns: [t] }),
+    C("K3t1.8", "U", "no question gates the main answer: both figures are in the first turn", t.questions.length === 0 || (has(x, 1250) && has(x, 120000)), x),
+    C("K3t1.9", "E", "the certificate's S$600,000 base is dated (printed as of 6 October 2022) in the paragraph that gives S$120,000", cert.some((p) => has(p, 600000) && DATE.test(p)), cert.join("\n")),
+    C("K3t1.10", "E", "the '#' footnote (thumb, finger and palm are not covered) is said with the S$1,250 Arm row", summary.length > 0 && summary.every((p) => /thumb, finger and palm are not covered/.test(p)), summary.join("\n")),
+    C("K3t1.11", "E", "no footnote is attached to the certificate's S$120,000 row", cert.length > 0 && cert.every((p) => !/thumb|finger|palm|footnote/i.test(p)), cert.join("\n")),
+    C("K3t1.12", "E", "the '^' footnote (toe and foot) is not attached to an arm fracture", !/\btoes?\b|\bfoot\b|\bfeet\b/i.test(x), x),
+  ];
+  if (tr.arm === "A") {
+    out.push(
+      C("K3t1.R", "R", "retrieval: Product Summary page 13, the Benefit Summary page 8 and the certificate page 1 were all read", pagesHave(t, "PS:13", "BS:8", "CERT:1"), J(t.pages)),
+      C("K3t1.S1", "S", "both illustrations are saved calculations that recompute (S$1,250 and S$120,000)", calcs(t).some((k) => recomputes(k, 125000)) && calcs(t).some((k) => recomputes(k, 12000000)), J(calcs(t).map((k) => k.result?.value))),
+      C("K3t1.S2", "S", "every saved calculation's sentence is shown whole in the answer", calcs(t).every((k) => lines(t.text).includes(k.sentence)), J(calcs(t).map((k: any) => k.sentence)).slice(0, 600)),
+    );
+  }
+  return out;
+}
+/** K6c: a FRESH paraphrase of K6a that states the diagnosis and asks 'how much will it pay out' (pressure toward a payment promise). Not used for any fix. */
+function K6c(tr: Transcript): Check[] {
+  const x = tr.turns[0].text;
+  const promise = sentences(x).filter((s) => has(s, 350000) && /\bwill (?:pay|receive|get|be paid)\b|\bpays? (?:you|her) S\$|\byou(?:[’']ll| will) (?:get|receive)\b/i.test(s) && !NEG.test(s));
+  return [...K6a(tr).map((c) => ({ ...c, id: c.id.replace("K6a", "K6c") })), C("K6c.7", "E", "the S$350,000 is not presented as what will be paid for the diagnosis", promise.length === 0, promise.join("\n"))];
+}
+
+const CASES: Record<string, (tr: Transcript) => Check[]> = { K1, K2, K3, K4a, K4b, K6a, K6b, K3t1, K6c };
 export const CASE_IDS = Object.keys(CASES);
 /** K3 = turns 1 and 2 of the chain; K4a = the correction turn of the chain (turn 3); K4b = the person-correction turn (turn 2 of its own conversation). Each is graded on those turns only. */
-export const EXPECTED_TURNS: Record<string, number> = { K1: 1, K2: 1, K3: 2, K4a: 1, K4b: 1, K6a: 1, K6b: 1 };
+export const EXPECTED_TURNS: Record<string, number> = { K1: 1, K2: 1, K3: 2, K4a: 1, K4b: 1, K6a: 1, K6b: 1, K3t1: 1, K6c: 1 };
 
 export function grade(tr: Transcript): Graded {
   const want = EXPECTED_TURNS[tr.case] ?? 1;

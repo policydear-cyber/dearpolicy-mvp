@@ -42,6 +42,9 @@ export const SPECS: Spec[] = [
   { id: "K4b", turns: [MSG1, "Actually it was Daniel who broke his arm, not Grace."], grade: [{ case: "K4b", turns: [1] }] },
   { id: "K6a", turns: ["What does Grace's Group Living Care pay if she is diagnosed with cancer?"], grade: [{ case: "K6a", turns: [0] }] },
   { id: "K6b", turns: ["Does Grace's cover pay for dental treatment?"], grade: [{ case: "K6b", turns: [0] }] },
+  // fx-live-2 (PR #57 live confirmation, docs/rag-migration/reliable-chat/EXPECTED-fx-live-2.md): turn 1 of the fracture chain only, and a fresh paraphrase of K6a
+  { id: "K3t1", turns: [MSG1], grade: [{ case: "K3t1", turns: [0] }] },
+  { id: "K6c", turns: ["Grace has just been told she has cancer. How much will her Group Living Care pay out?"], grade: [{ case: "K6c", turns: [0] }] },
 ];
 /** Plumbing-only conversations (a scripted model plays the recorded production behaviour; they are never model results). */
 const TK1: ScriptTurn = { user: /personal accident/i, steps: [
@@ -203,13 +206,13 @@ function cmdReport(dir: string) {
   fs.writeFileSync(path.join(dir, "results.json"), JSON.stringify(results, null, 1));
 
   const L: string[] = [];
-  L.push(`# ${plumbingRun ? "PLUMBING TEST (no model was called; scripted stand-in; NOT a model result)" : "fx-live-1"}: ${path.basename(dir)}`, "", `Candidate SHA: \`${sha}\` · model \`${MODEL}\` · complete: **${s.complete}**${s.pending.length ? ` · pending: ${s.pending.join(", ")}` : ""}${s.diverged.length ? ` · DIVERGED: ${s.diverged.length}` : ""}`, "");
+  L.push(`# ${plumbingRun ? "PLUMBING TEST (no model was called; scripted stand-in; NOT a model result)" : /fx-live-2/.test(dir) ? "fx-live-2" : "fx-live-1"}: ${path.basename(dir)}`, "", `Candidate SHA: \`${sha}\` · model \`${MODEL}\` · complete: **${s.complete}**${s.pending.length ? ` · pending: ${s.pending.join(", ")}` : ""}${s.diverged.length ? ` · DIVERGED: ${s.diverged.length}` : ""}`, "");
   L.push("## Verdicts (graders v1; a PASS never excuses an unhelpful answer — the answers are below)", "", "| case | conversation | A: current pipeline | B: diagnostic baseline |", "|---|---|---|---|");
   const cases = [...new Set(graded.map((x) => x.c))];
   for (const c of cases) for (const sp of [...new Set(graded.filter((x) => x.c === c).map((x) => x.spec))]) {
     const a = graded.find((x) => x.c === c && x.spec === sp && x.arm === "A"), b = graded.find((x) => x.c === c && x.spec === sp && x.arm === "B");
     const f = (x?: typeof a) => !x ? "—" : x.g.verdict === "INCOMPLETE" ? `INCOMPLETE (${x.g.note})` : `${x.g.verdict}${x.g.checks.filter((k) => k.gate && !k.ok).length ? " — " + x.g.checks.filter((k) => k.gate && !k.ok).map((k) => k.id).join(", ") : ""}`;
-    L.push(`| ${c}${["K3", "K4a"].includes(c) ? " (regression data)" : ""} | ${sp} | ${f(a)} | ${f(b)} |`);
+    L.push(`| ${c}${(/fx-live-2/.test(dir) ? c !== "K6c" : ["K3", "K4a"].includes(c)) ? " (regression data)" : ""} | ${sp} | ${f(a)} | ${f(b)} |`);
   }
   L.push("", "## Stage by stage (gating checks passed / failed, summed over cases)", "", "| stage | A pass | A fail | B pass | B fail |", "|---|---|---|---|---|");
   for (const [k, name] of [["R", "retrieval (A only)"], ["E", "reasoning with the evidence"], ["C", "calculation"], ["V", "verification"], ["S", "saved / displayed (A only)"], ["U", "usefulness"]] as const) {
