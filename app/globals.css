@@ -1034,3 +1034,8 @@ div.answer-point { display: grid; gap: 4px; }
 .stuck-docs li { display: grid; gap: 1px; font-size: var(--fs-sm); color: var(--ink-2); }
 .stuck-docs a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 .stuck-retry { color: var(--muted); }
+/* Phone tap size: inline links and the Documents filter pills reach 44px where fingers are the pointer. */
+@media (pointer: coarse), (max-width: 620px) {
+  .text-link { min-height: 44px; }
+  .filter-pills button, .schedule-filters button { min-height: 44px; }
+}
