@@ -23,6 +23,7 @@ import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+import { dismissedNameKeys, nameKey } from "@/lib/policies/name-dismissals";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -642,6 +643,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     }
 
     const detected: { name: string; matchedMemberId: string | null }[] = [];
+    // Names the household said are not in its family ("Not in my family"): never linked by upload profile, never flagged.
+    const dismissed = await dismissedNameKeys(args.accountId, args.policyId);
     const uploadProfileLinks: string[] = [];
     // A partial match ("Charmaine" for "Charmaine Tan") only stands when no
     // other person printed on this document lands on the same profile: two
@@ -660,7 +663,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // document to a profile they chose, and it names exactly ONE insured
       // person: that choice is the link (flagged for review below). With
       // several named people nothing is guessed.
-      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1) {
+      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))) {
         match = family.find((member) => member.id === args.familyMemberId) ?? null;
         if (match) { link = { source: "upload_hint", confidence: 0.70 }; uploadProfileLinks.push(`${person.name} (linked to ${match.display_name}, the profile it was uploaded to)`); }
       }
@@ -748,7 +751,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     await linkRelatedReferenceDocuments(args.accountId, args.policyId, extraction.groupPolicyNumber);
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
-    const unmatched = detected.filter((d) => !d.matchedMemberId).length;
+    const unmatched = detected.filter((d) => !d.matchedMemberId && !dismissed.has(nameKey(d.name))).length;
     const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted);
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
