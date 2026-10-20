@@ -113,6 +113,7 @@ export async function POST(request:NextRequest){
     const add=Add.parse(body);
     if(!(add.eventType in EVENTS))return NextResponse.json({error:"Unknown event"},{status:400});
     const row=await addLedgerRow(accountId,{...add,eventType:add.eventType as EventType,policyId:null,note:"Entered on the Coverage page"});
+    if(!row)return NextResponse.json({error:"That person isn't in your family."},{status:404});
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){

@@ -1759,6 +1759,12 @@ async function main(){
       const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
+      // Isolation audit (20 Oct): a row cannot be added for another household's person (the foreign key alone accepted any
+      // household's id, and answered differently for an id that exists).
+      const strangers=await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({familyMemberId:foreignPerson,planName:"Probe",eventType:"death",paysKind:"lump_sum",amount:1,currency:"SGD"})}));
+      assert.equal(strangers.status,404);
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE family_member_id=$1 AND account_id<>$2",[foreignPerson,foreign])).rows.length,0,"Nothing is written against another household's person");
     });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);

@@ -114,9 +114,15 @@ export async function addLedgerRow(accountId:string,row:{familyMemberId:string;p
   const currency=statedCurrencyCode(row.currency);
   // A percentage is not money; every other amount must say what currency it is in.
   if(row.amount!=null&&row.paysKind!=="percent_of_sum"&&row.paysKind!=="stated"&&!currency)throw new Error("State the currency of this amount.");
+  // The person (and document, when one is named) must be this household's: the foreign keys alone accept any household's ids.
   const r=await query<{id:string}>(
-    "INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,pays_kind,amount,currency,note,origin,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'person','confirmed') RETURNING id",
+    `INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,pays_kind,amount,currency,note,origin,status)
+     SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'person','confirmed'
+      WHERE EXISTS (SELECT 1 FROM family_members f WHERE f.id=$2::uuid AND f.account_id=$1::uuid)
+        AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM policies p WHERE p.id=$3::uuid AND p.account_id=$1::uuid))
+     RETURNING id`,
     [accountId,row.familyMemberId,row.policyId,row.planName,row.eventType,row.detail??null,row.paysKind,row.amount,currency??UNPRICED_ROW_CURRENCY,row.note??null]);
+  if(!r.rows[0])return null;
   return loadLedgerRow(accountId,r.rows[0].id);
 }
 
