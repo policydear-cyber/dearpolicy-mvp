@@ -1060,3 +1060,74 @@ The returned, saved and reopened answer is still the normal composed path, so it
 **Not ready to merge: one small fix left.** R14-1, R14-3 and R14-4 are fixed. R14-2 is fixed except for R17-1, where an ask turn
 in between lets an older scenario's steps come back for the same person. Recording `shown` on every turn closes it. R17-2 and
 R17-3 can follow.
+
+---
+
+# Round 18: short-answer cards re-check (PR #65 head `91bccc4`, fixes in `3402884`)
+
+Scope: `components/answer-cards.tsx` and the `prose` hand-off in `app/chat/page.tsx`. The repro is a scratch script that runs
+the file's own `norm`, `sentences`, `conditionOf` and `safeBottomLine`, copied verbatim, on sample sentences. No build and no
+model calls.
+
+## R15 re-check
+
+| Finding | Status | Evidence |
+|---|---|---|
+| R15-1 whose amount | **Fixed for named statements.** The card shows "For {personName}". When an answer names more than one person, an amount with no name falls back to its full sentence. See R18-3 for the gap. | Code read. |
+| R15-2 qualifiers | **Mostly fixed.** `source.note`, `basis` and `conditions` now render on every card and point, and the footer covers printed amounts too. The "If …" clause extraction has a real defect, see R18-1. | Script. |
+| R15-3 prose dropped | **Fixed.** `prose` = content + details. Sentences no statement covers show under "Also in this answer", and everything is under a collapsed "Full answer". The matching has a gap, see R18-2. | Code read. |
+| R15-5 shown twice / bottom line | **Improved.** Matching is now normalised. A bottom line with an outcome word and no hedge is hidden, but the hedge list is weak, see R18-4. | Script. |
+| R15-6 bare "$" | **Fixed.** | Code read. |
+| R15-4 statements skip the money checks | **Open.** This is the Developer's, and nothing on this branch changes it. | — |
+
+## R18-1 (High): the "If …" clause extraction can print a wrong amount or cut a condition short
+
+`conditionOf` cuts at the first comma outside “…” and (…). Script output:
+
+- "If the bill exceeds S$1,000, the benefit pays 80% …" → **"If the bill exceeds S$1"**. That is a wrong figure shown on an
+  amount card, which is the worst class of bug.
+- "If Grace is hospitalised for more than 3 days, and the stay is medically necessary, …" → "If Grace is hospitalised for more
+  than 3 days". The second condition is lost.
+- "If the Other Fracture benefit applies, subject to the S$500 deductible, …" → "If the Other Fracture benefit applies". The
+  deductible is lost.
+- Straight quotes `"Arm, Elbow, …"` → `If … case "Arm`. Square brackets `[Plan A, Plan B]` → `[Plan A`.
+- "The illustration is S$1,250 if the benefit applies" → nothing. A condition placed after the amount is not found, so the card
+  shows no condition.
+
+The fixture's own sentence works only because it uses curly quotes. Fix: never parse a condition out of prose in the UI. Either
+the server sends it as its own field, or an amount whose `fullText` carries a condition shows the whole `fullText` on the card. At
+minimum, do not cut at a comma between digits, and fall back to the whole sentence whenever the clause would end inside a number,
+a quote or a bracket.
+
+## R18-2 (Medium): a prose sentence counts as covered when it is any substring of a statement
+
+`isCovered` hides a prose sentence from "Also in this answer" when its normalised text is contained anywhere in a statement's
+text or `fullText` (`c.includes(n)`). In the script, "It is not covered." and "Core Scheme." both count as covered by an
+unrelated statement that happens to contain those words. Short, important sentences are the ones most likely to be hidden. They
+are still under the collapsed "Full answer", but not in view. Fix: treat a sentence as covered only when it equals a statement's
+text or `fullText`.
+
+## R18-3 (Medium): the multi-person fallback only works when someone is named
+
+`asCard` shows a nameless amount card whenever `people.size <= 1`. When no statement has a `personName` (size 0), every amount
+becomes a nameless card, even in a whole-family answer. When one person is named and another amount has no name, that card also
+shows with no name and sits next to the named one. Fix: show a nameless card only when the answer is about exactly one person
+(`answer.resolvedFamilyMemberId` set) and every amount either carries that name or none.
+
+## R18-4 (Medium): the bottom-line guard lets flat outcomes through
+
+`HEDGE` counts "not", "would" and "only" as hedges. These bottom lines all pass, by the script:
+
+- "Grace is not covered for this." (a flat exclusion; missing information is not an exclusion);
+- "Grace would get S$1,250.";
+- "Grace can only claim S$120,000.".
+
+The guard is a backstop. The server contract still has to make sure a bottom line carries its qualifier. At least remove "not",
+"would" and "only" from `HEDGE`, and do not show a bottom line that states an amount unless an amount card shows that same
+figure with its condition.
+
+## Verdict on the cards at `91bccc4`
+
+**Still safe to merge as a dormant change; not yet safe to switch on.** No server path sends `statements[]`, so live answers do
+not change. R15-1, R15-3, R15-5 and R15-6 are fixed or much improved. R18-1 has to be fixed before the server fields go live,
+because it can put a wrong figure on a card. R18-2 to R18-4 are short UI fixes, and R15-4 is still the Developer's.
