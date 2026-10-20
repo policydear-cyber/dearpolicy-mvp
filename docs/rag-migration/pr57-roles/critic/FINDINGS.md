@@ -1275,3 +1275,65 @@ read or a re-analysis. That is acceptable for now, and it should go on the list 
 (staging, then production, with DC's explicit yes, using the runbook's psql line and checks), then merge and deploy. That way
 remembered removals work from the first deploy. Merging first is also safe: removals made before the migration are simply not
 remembered, as on main. The migration and the merge are both DC's call.
+
+---
+
+# Round 22: PR #69 at `7b1574e`: out-of-date notes for removed people and corrected answers
+
+Scope: `lib/chat/stale-answers.ts`, `app/api/chat/history/[id]/route.ts` and `types/index.ts`, read against
+`lib/rag2/calc/engine.ts` (how calculation ids are made), `loop.ts` (where calculations are marked withdrawn) and
+`app/chat/page.tsx`. Read only.
+
+## What holds
+
+- **Another person on the same document is not marked.** Pairs come from each figure binding's and calculation's
+  `subjectId` and `policyId`. A pair counts as covered while any `policy_members` row or the upload profile joins them, so an
+  answer about Daniel stays valid after Grace is removed from the same document.
+- **Superseded is exact.** `calcId` is a content hash of calculator, policy, benefit, person, operands, steps and conditions
+  (engine.ts:89), and `record.id = calcId`. Only an answer carrying that exact calculation is marked. If the same calculation is
+  worked out again after a correction, it is re-recorded with `withdrawn: null` (loop.ts:2673/2698), so the answer comes back,
+  which is right because its inputs are true again.
+- **It follows every way a calculation is withdrawn:** a fact correction (:995), a change of person (:438), the benefit no
+  longer fitting (:416), and a deleted or replaced source (:2796).
+- **Nothing withdrawn is still shown.** Invalidated answers now also drop `figureBindings`, `computations` and `calculations`.
+- **No cross-household effect.** Both queries filter on `account_id`, and pairs are limited to this household's active
+  documents.
+- **Reversible.** Ticking the person again brings the answer back, because nothing is written.
+- **Consistency.** Reopening is deterministic from the stored answer plus the current links and chat state. The returned
+  answer is marked only after a reload (known limit), so returned and reopened differ only in the direction of being more
+  current. Neither shows a withdrawn figure as current once reloaded.
+
+## R22-1 (Medium, fix before or with merge): the alert says a document was deleted, whatever the reason
+
+`app/chat/page.tsx:305` always renders "Out of date. A policy document this answer relied on has been deleted". Under this PR, a
+corrected answer reopens as "This earlier answer was replaced by the corrected answer below" with that alert above it. That tells
+the household a document was deleted when none was. The same false alert already shows for `documents_added`. Fix: one line in
+the page that chooses the alert by `invalidated.reason`, or shows no alert when the summary already says why. The PR names this
+as the designer's copy, but it should land with this PR, not after it.
+
+## R22-2 (Low): an answer about two people is hidden entirely when one is removed
+
+`unlinked` uses `.some`. An answer covering Grace and Daniel on one document is replaced in full when Grace is removed, and
+Daniel's still-valid figures are hidden behind "ask again". That is conservative, the notice is honest, and nothing wrong is
+shown, so I accept it. Ideally only Grace's part would be withdrawn.
+
+## R22-3 (Low): coverage gaps, so the open items are only mostly closed
+
+- An answer with no figure bindings or calculations is never marked `person_unlinked`. For example, "Grace is covered by this
+  document" with no figure.
+- A statement-only answer is not marked `superseded` after a correction (the PR states this).
+- A calculation made outside `state.claim` or `otherClaims` is not tracked, for example an informational what-if with no claim
+  open. So it can't be marked superseded.
+- Until a reload, the earlier answer in the same open chat still shows its withdrawn figure (the PR states this). The corrected
+  answer below does say what no longer applies (hook.ts correction notes), which limits the harm.
+
+**Coverage of the open items:** R16-2 is closed for answers with figures, which are the ones that matter for amounts.
+"Superseded answers unmarked" is closed for calculation answers after a reload. It is still open for statement-only answers and
+within the open session.
+
+## Verdict on PR #69 at `7b1574e`
+
+**Ready to merge once R22-1 is fixed.** That is a one-line alert change, so the chat doesn't tell the household a document was
+deleted when an answer was only corrected or a person removed. The logic is scoped correctly, marks no valid answer about another
+person, and shows no withdrawn figure after a reload. R22-2 and R22-3 can follow. Within them, marking the earlier answer in the
+same open chat is the one that matters most before public launch.
