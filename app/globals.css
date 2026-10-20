@@ -967,3 +967,4 @@ table { font-variant-numeric: tabular-nums; }
 }
 .document-card.focused { box-shadow: 0 0 0 3px var(--brand); transition: box-shadow var(--t-state) var(--ease); }
 .row-error-actions { margin-top: 8px; display: flex; gap: 8px; }
+.summary-unknown { font-size: var(--fs-lg, 1.25rem); color: var(--ink-2); }
