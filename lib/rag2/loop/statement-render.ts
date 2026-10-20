@@ -14,11 +14,12 @@ import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
-import { loadDocs, loadLinks, loadMembers, pageMap, type DocRow, type LinkRow } from "../store";
+import { loadDocs, loadLinks, loadMembers, pageMap, policyFamily, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
 import { ATTRIBUTES, reportedValue } from "../applicability";
+import { familiesOf } from "../event-relations";
 import { documentLabel, profileDocument, standingClause } from "./relation";
-import { checkNotFound, type AbsenceCheck, type PrintedLine } from "./absence-scope";
+import { checkNotFound, unlistedSchemePolicy, type AbsenceCheck, type PrintedLine } from "./absence-scope";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import type { AnswerStatement } from "@/types";
 
@@ -34,7 +35,11 @@ export type StructuredDraft = Omit<AnswerStatement, "id" | "text" | "fullText" |
 function structure(d: Deps, full: string, draft: StructuredDraft): void {
   const key = (f: { currency?: string | null; value: number }) => `${Math.round(f.value * 100)}`;
   const have = moneyFiguresIn(full).map(key);
-  const said = [draft.short, draft.basis ?? "", draft.amount?.text ?? "", ...draft.conditions].flatMap((t) => moneyFiguresIn(t)).map(key);
+  // (an amount whose currency the document leaves unstated is shown as printed, "$500", while its paragraph says "500 (printed with a bare
+  // “$” sign ...)": its number must be in the paragraph, and it is not a money figure of the paragraph's)
+  const bare = draft.amount && !draft.amount.currencyResolved;
+  if (bare && !((full.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) as string[]).includes(draft.amount!.text.replace(/^\$/, ""))) return;
+  const said = [draft.short, draft.basis ?? "", bare ? "" : draft.amount?.text ?? "", ...draft.conditions].flatMap((t) => moneyFiguresIn(t)).map(key);
   if (said.some((f) => !have.includes(f)) || have.some((f) => !said.includes(f))) return;
   if (draft.amount && !draft.personName) return;
   (d.ctx.structured ??= new Map()).set(full, draft);
@@ -95,7 +100,7 @@ export function quotePrinted(lines: PrintedLine[], evidenceId: (ref: EvidenceRef
  * ("Insured Person: ...", "Period of Insurance: ... to ...", "Destination: ...") are said beside the amount, cited -- never the amount
  * without them, and never left out: the household and the insurer judge whether the trip fits the event. */
 const listOf = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] ?? "";
-async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence: EvidenceRef[] } | null> {
+async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence: EvidenceRef[]; conditions: string[] } | null> {
   const page = (await pageMap(d.ctx.accountId, r.policy.id).catch(() => new Map<number, string>())).get(r.source.page) ?? "";
   if (!/^\s*(?:Period of Insurance|Destination)\s*:/im.test(page)) return null;
   const out: { label: string; value: string; ev: EvidenceRef }[] = [];
@@ -107,14 +112,62 @@ async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; ev
   }
   if (!out.some((x) => /period|destination/i.test(x.label))) return null;
   // (C6, Critic R8-1: "trip" only when a Destination line is printed -- an annual schedule prints only its period)
-  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`, evidence: out.map((x) => x.ev) };
+  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`, evidence: out.map((x) => x.ev),
+    // (the card: each printed line as its own condition, and -- from the printed dates alone, never from the household's words -- that the
+    // printed period ended before today. PR #72 E4; Critic R25-1.)
+    conditions: [...out.map((x) => `${x.label.replace(/^./, (c) => c.toUpperCase()).replace(/^(\w+) (\w)/, (_m, a, b) => `${a} ${b.toLowerCase()}`)}: ${x.value}.`), ...periodEnded(out.find((x) => /period/i.test(x.label))?.value ?? "")] };
 }
+/** "The printed period of insurance ended on 17 March 2025, before today." when a printed "dd/mm/yyyy to dd/mm/yyyy" period is over (a fact
+ * of the document and today's date -- never of the household's words: Critic R25-1). */
+export function periodEnded(period: string, now = Date.now()): string[] {
+  const m = /\bto\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(period);
+  if (!m || Date.UTC(+m[3], +m[2] - 1, +m[1]) >= now) return [];
+  return [`The printed period of insurance ended on ${fmtDate(`${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`)}, before today.`];
+}
+/** PR #72 E3 / Evidence Reviewer 18: a printed line of the household's documents from the same insurer for the same product (its name in
+ * the document's own product name) -- quoted and cited as printed, never inferred. `skip`: a document already quoted. */
+async function schemeLine(d: Deps, r: BenefitRecord, product: string, want: RegExp, skip?: string, part?: (line: string) => string): Promise<{ line: string; quote: string; ev: string } | null> {
+  // (the same insurer, or the same policy -- its policy or group policy number: a scheme's summary may print a brand name, "KestrelOne")
+  const all = await loadDocs(d.ctx.accountId).catch(() => [] as DocRow[]);
+  const own = all.find((x) => x.id === r.policy.id);
+  const family = new Set((own ? policyFamily(all, own) : []).map((x) => x.id));
+  const docs = all.filter((x) => x.id !== skip && !!x.productName && x.productName.toLowerCase().includes(product.toLowerCase()) && (family.has(x.id) || (!!x.insurer && x.insurer.toLowerCase() === (r.policy.insurer ?? "").toLowerCase())));
+  for (const doc of docs) {
+    for (const [page, text] of [...(await pageMap(d.ctx.accountId, doc.id).catch(() => new Map<number, string>()))].sort((a, b) => a[0] - b[0])) {
+      let at = 0;
+      for (const raw of text.split("\n")) {
+        const whole = raw.trim();
+        if (want.test(whole)) {
+          // (`part`: the words of the line that are quoted -- a verbatim stretch of it, cited exactly)
+          const line = (part ? part(whole) : whole).trim();
+          const start = at + raw.indexOf(line);
+          const ev = d.evidenceId(evidenceAt({ policyId: doc.id, documentHash: doc.fileHash, page, pageText: text, start, end: start + line.length, subjectId: r.memberId }));
+          // (a bare "$" in the quoted words is said as printed, its currency unstated -- as compose.ts says a bare "$" the model quotes)
+          const bare = (t: string) => t.replace(/(?<![A-Za-z])\$\s?(\d[\d,]*(?:\.\d+)?)/g, "$1 (printed with a “$” sign; the document does not say which currency)");
+          const q = bare(line.replace(/[“”]/g, "\"").replace(/[.\s]+$/, ""));
+          return { line: q, quote: `the ${doc.productName} (page ${page}) prints “${q}”`, ev };
+        }
+        at += raw.length + 1;
+      }
+    }
+  }
+  return null;
+}
+/** Quotes said once per document page: "the X (page 9) prints “A”, “B” and “C”". */
+const quotes = (cs: { quote: string }[]) => {
+  const by = new Map<string, string[]>();
+  for (const c of cs) { const m = /^(.*? prints) (“.*”)$/.exec(c.quote); const k = m?.[1] ?? c.quote; by.set(k, [...(by.get(k) ?? []), m?.[2] ?? ""]); }
+  return listOf([...by].map(([k, qs]) => `${k} ${listOf(qs.filter(Boolean))}`.trim()));
+};
+/** The product a benefit belongs to, for its scheme's other documents: a certificate row names it ("Group Personal Accident"); a document's
+ * own benefit belongs to the product its name starts with ("Public Officers Group Personal Accident - Summary of Benefits"). */
+const productOf = (r: BenefitRecord) => r.applicability === "person_row" ? r.benefit : (r.policy.product ?? "").split(/\s+-\s+/)[0];
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
   const w = await renderTermsBody(r, d);
   const trip = await tripLimits(r, d);
   const out = trip ? { text: w.text + trip.text, evidence_ids: [...new Set([...w.evidence_ids, ...trip.evidence.map((e) => d.evidenceId(e))])], value_ids: w.value_ids } : { text: w.text, evidence_ids: w.evidence_ids, value_ids: w.value_ids };
   // (a trip schedule's insured person, period and destination are the amount's own conditions: they stay on its card)
-  if (w.draft) structure(d, out.text, trip ? { ...w.draft, conditions: [...w.draft.conditions, trip.text.trim()] } : w.draft);
+  if (w.draft) structure(d, out.text, trip ? { ...w.draft, conditions: [...w.draft.conditions, ...trip.conditions, "Whether that trip fits this event is for the insurer to confirm."] } : w.draft);
   return out;
 }
 async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[]; draft?: StructuredDraft }> {
@@ -147,8 +200,29 @@ async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: strin
     const amt = printedAmount(p);
     const amount = { text: p.currency ? amt : `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""}`, currencyResolved: !!p.currency, illustration: false };
     const src = (note: string | null = null) => ({ policyName: r.policy.product ?? "document", page: r.source.page ?? null, rowLabel: null, footnote: null, note });
-    if (r.applicability === "person_row") { const v = r.personBenefit ? await personAmountValue(d.ctx, r.personBenefit, r.memberName, r.memberId) : null; return { text: `${who}'s ${docName(r)} lists ${pretty(r.benefit)} of ${amt}${r.asOf ? ` as of ${fmtDate(r.asOf)}` : ""}.`, evidence_ids: ev, value_ids: v ? [v] : [],
-      draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())} · ${who}'s ${docName(r)}`, personName: who, amount, basis: null, conditions: [], asOf: r.asOf ?? null, source: src() } }; }
+    if (r.applicability === "person_row") {
+      const v = r.personBenefit ? await personAmountValue(d.ctx, r.personBenefit, r.memberName, r.memberId) : null;
+      // (PR #72 E3, Evidence Reviewer 18: on a question about a death, the scheme's own printed death terms travel with the certificate's
+      // amount -- Term Life: how to notify the insurer; Personal Accident: the share of the sum insured it pays on accidental death, where
+      // it applies and what it excludes. Quoted from the same insurer's documents for that product; nothing else is added.)
+      const extra: { line: string; quote: string; ev: string }[] = [];
+      let basis: string | null = null;
+      if (familiesOf(d.ctx.topicText ?? "").has("death") && amount.currencyResolved) {
+        if (/\bTerm Life\b/i.test(r.benefit)) { const c = await schemeLine(d, r, r.benefit, /^Claims:[^.]*\bdeath\b/i, r.policy.id); if (c) extra.push(c); }
+        if (/\bPersonal Accident\b/i.test(r.benefit)) {
+          const death = await schemeLine(d, r, r.benefit, /^Accidental Death:\s*\d+(?:\.\d+)?% of the Sum Insured\b/i, r.policy.id);
+          if (death) {
+            extra.push(death);
+            basis = `${/(\d+(?:\.\d+)?)%/.exec(death.line)![1]}% of ${who}'s sum insured of ${amt}`;
+            for (const want of [/^Territorial Limits?:/i, /^Exclusions?:[^.]*\bdeath\b/i]) { const c = await schemeLine(d, r, r.benefit, want, r.policy.id); if (c) extra.push(c); }
+          }
+        }
+      }
+      for (const c of extra) ev.push(c.ev);
+      const said = extra.length ? `; ${quotes(extra)}` : "";
+      return { text: `${who}'s ${docName(r)} lists ${pretty(r.benefit)} of ${amt}${r.asOf ? ` as of ${fmtDate(r.asOf)}` : ""}${said}.`, evidence_ids: ev, value_ids: v ? [v] : [],
+        draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())} · ${who}'s ${docName(r)}`, personName: who, amount, basis, conditions: extra.map((c) => c.line), asOf: r.asOf ?? null, source: src() } };
+    }
     // PR #54 (rc-live-8): a benefit printed under its own heading, or a row with a footnote, is said in ONE sentence with
     // its name, its section, what it is for, its amount -- or that the document leaves the currency of its bare "$"
     // unstated -- and its own printed conditions, quoted from its own lines (with their own evidence). The clause that
@@ -158,19 +232,38 @@ async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: strin
       for (const e of pb.conditionSources ?? []) ev.push(d.evidenceId(e));
       const doc = r.policy.product ?? "document";
       const sec = pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `, under “${pb.benefit.section}”` : "";
-      const t = paidTerms(r.conditions, p.cents, pb.source.passage);
+      const wording = await wordingOf(r, d);
+      if (wording) for (const e of await conditionEvidence(wording, p.cents, d)) ev.push(d.evidenceId(e));
+      // (the row's own footnote, printed again in the wording with a word's difference -- "the Voluntary Scheme" -- is said once, as the
+      // row's own page prints it: structured-answers J5s)
+      const norm = (c: string) => c.toLowerCase().replace(/\bthe\b|[^a-z]/g, "");
+      const paras = wording ? [...wording.conditions.filter((w) => !r.conditions.some((c) => norm(w) === norm(c))), ...r.conditions] : r.conditions;
+      const t = paidTerms(paras, p.cents, wording ? `${pb.source.passage}\n${wording.personBenefit?.source.passage ?? ""}` : pb.source.passage);
       const figure = p.currency ? amt : `${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}${p.unit ? " " + p.unit : ""} (printed with a bare “$” sign; the ${doc} does not say which currency)`;
       const conds = t.conditions.map((c) => `“${c.replace(/[“”]/g, "\"")}”`);
       const list = conds.length > 1 ? `${conds.slice(0, -1).join(", ")} and ${conds.at(-1)}` : conds[0] ?? "";
-      return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}.`, evidence_ids: ev, value_ids: [],
-        draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())}${t.covers ? ` · ${t.covers}` : ""}`, personName: who, amount, basis: null, conditions: [...(t.cap ? [`${t.cap.replace(/^./, (c) => c.toUpperCase())} this amount.`] : []), ...t.conditions.map((c) => c.replace(/[“”]/g, "\""))], asOf: null, source: src(pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `under “${pb.benefit.section}”` : null) } };
+      return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}${wording ? ` (as the ${wording.policy.product ?? "document"} prints them for this benefit on page ${wording.source.page})` : ""}.`, evidence_ids: ev, value_ids: [],
+        // (PR #72 E2a: a bare "$" amount is shown as printed, "$500", unresolved; its unit goes with its cap; the event it depends on leads)
+        draft: { kind: "benefit_terms", short: `${pretty(r.benefit).replace(/^./, (c) => c.toUpperCase())}${t.covers ? ` · ${t.covers}` : ""}`, personName: who, amount: p.currency ? amount : { ...amount, text: `$${(p.cents / 100).toLocaleString("en-SG", { minimumFractionDigits: p.cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}` },
+          basis: null, conditions: [...(t.lead ? [t.lead.replace(/[“”]/g, "\"")] : []), ...(t.cap ? [`${t.cap.replace(/^./, (c) => c.toUpperCase())} this amount${!p.currency && p.unit ? ` ${p.unit}` : ""}.`] : []), ...t.rest.map((c) => c.replace(/[“”]/g, "\""))], asOf: null, source: src(pb.benefit.section && pb.benefit.section !== pb.benefit.label ? `under “${pb.benefit.section}”` : null) } };
     }
     // (PR #57 follow-up, UX L2: a one-line benefit keeps the condition printed on its own line after the amount -- "S$2,000 per
     // Insured Person, if death occurs outside Singapore as a result of an Accident" -- quoted, never dropped)
     const own = pb?.benefit.source === "label_line" ? r.conditions.find((c) => c.startsWith(pb.benefit.label)) : undefined;
     const rest = own?.slice(pb!.benefit.label.length).replace(/^\s*:\s*/, "").replace(/^(?:S\$|SGD\s?|US\$|\$)?\s?[\d,]+(?:\.\d+)?/, "").replace(/^[\s,;]+/, "").replace(/[.\s]+$/, "").trim();
-    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}${rest ? `, with the printed condition “${rest.replace(/[“”]/g, "\"")}”` : ""}.`, evidence_ids: ev, value_ids: [],
-      draft: { kind: "benefit_terms", short: pretty(r.benefit).replace(/^./, (c) => c.toUpperCase()), personName: who, amount, basis: null, conditions: rest ? [rest.replace(/[“”]/g, "\"")] : [], asOf: null, source: src() } };
+    // (PR #72 E3, Evidence Reviewer 18: a benefit paid on death keeps, on a question about a death, the exclusions its own page prints
+    // and the scheme's policy wording for it -- "reimburse ... up to" -- quoted from the same insurer's documents for that product)
+    const extra: { line: string; quote: string; ev: string }[] = [];
+    if (familiesOf(d.ctx.topicText ?? "").has("death") && /\b(?:death|dies|remains|repatriation)\b/i.test(`${r.benefit} ${rest ?? ""}`)) {
+      const ex = await schemeLine(d, r, r.policy.product ?? r.benefit, /^Exclusions?:[^.]*\bdeath\b/i);
+      // (what the wording says it meets -- "the reasonable cost of returning the remains to Singapore, up to $2,000" -- quoted without its
+      // "we will reimburse": a quote never calls an amount a payment)
+      const wording = /\b(?:remains|repatriat\w*|funeral|burial)\b/i.test(r.benefit) ? await schemeLine(d, r, productOf(r), /\breimburse\b[^.]*\b(?:remains|repatriat\w*|funeral|burial)\b[^.]*\bup to\b/i, r.policy.id, (l) => l.replace(/^.*?\breimburse\s+/i, "")) : null;
+      for (const c of [wording, ex]) if (c) extra.push(c);
+    }
+    for (const c of extra) ev.push(c.ev);
+    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}${rest ? `, with the printed condition “${rest.replace(/[“”]/g, "\"")}”` : ""}${extra.length ? `; ${quotes(extra)}` : ""}.`, evidence_ids: ev, value_ids: [],
+      draft: { kind: "benefit_terms", short: pretty(r.benefit).replace(/^./, (c) => c.toUpperCase()), personName: who, amount, basis: null, conditions: [...(rest ? [rest.replace(/[“”]/g, "\"")] : []), ...extra.map((c) => c.line)], asOf: null, source: src() } };
   }
   if (p?.kind === "percent") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${p.percent}%${p.of ? ` of the ${p.of}` : ""}.`, evidence_ids: ev, value_ids: [] };
   if (p?.kind === "reference") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) defines ${pretty(r.benefit)} as the ${p.of}.`, evidence_ids: ev, value_ids: [] };
@@ -180,26 +273,69 @@ async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: strin
 /** PR #54 (rc-live-8): a benefit's printed paragraphs read as what it pays for, its cap word and its conditions: in the
  * paragraph printing the amount, the comma clause that pays ("we will pay the funeral expenses incurred") gives what
  * it is for, the clause printing the figure gives its cap word ("up to"), and every other clause is a condition, quoted
- * as printed. A paragraph not printing the amount is a condition whole. */
-export function paidTerms(paras: string[], cents: number, passage = ""): { covers: string | null; cap: string | null; conditions: string[] } {
+ * as printed. A paragraph not printing the amount is a condition whole. PR #72 E2a (Evidence Reviewer 18): the event the
+ * amount depends on -- the printed "if" clause and the clauses that continue it, what it is for, and the figure clause's
+ * own words without the figure ("for transportation ... to the Hospital", "a one-time amount per hospitalisation") -- is
+ * also given as ONE leading "Only if ..." condition (`lead`), and `rest` is the conditions it does not already say. */
+export function paidTerms(paras: string[], cents: number, passage = ""): { covers: string | null; cap: string | null; conditions: string[]; lead: string | null; rest: string[] } {
   const figure = (cents / 100).toLocaleString("en-SG", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
   let covers: string | null = null, cap: string | null = null;
   const conditions: string[] = [];
   const PAYS = /\b(?:we|the insurer|the company|it)\s+(?:will|shall)\s+(?:pay|reimburse)\s+(?:for\s+)?(.+)$/i;
+  let ifs: string[] = [], figureClause: string | null = null;
   for (const para of paras) {
     const hasFigure = para.includes(figure);
     if (!hasFigure && !PAYS.test(para)) { conditions.push(para.trim()); continue; }
+    let open = false;
     for (const raw of para.split(/,\s+/)) {
       const c = raw.trim().replace(/[.;]$/, "");
       if (!c) continue;
-      if (c.includes(figure)) { cap = /\b(up to|not exceeding|a maximum of|maximum of|limited to)\b/i.exec(c)?.[1]?.toLowerCase() ?? cap; continue; }
+      if (c.includes(figure)) { cap = /\b(up to|not exceeding|a maximum of|maximum of|limited to)\b/i.exec(c)?.[1]?.toLowerCase() ?? cap; figureClause ??= c; open = false; continue; }
       const m = PAYS.exec(c);
-      if (m) { covers = m[1].trim(); continue; }
+      if (m) { covers = m[1].trim(); open = false; continue; }
       conditions.push(c);
+      // (the "if" clause and the clauses that continue it, up to the clause that pays or prints the figure)
+      if (/^if\b/i.test(c) && !ifs.length) { ifs = [c]; open = true; } else if (open) ifs.push(c);
     }
   }
   cap ??= new RegExp(`\\b(up to|not exceeding|a maximum of|maximum of|limited to)\\s*(?:[A-Z]{0,3}\\$|SGD|USD)?\\s?${figure.replace(/[.,]/g, "\\$&")}\\b`, "i").exec(passage)?.[1]?.toLowerCase() ?? null;
-  return { covers, cap, conditions };
+  if (!ifs.length) return { covers, cap, conditions, lead: null, rest: conditions };
+  const purpose = (figureClause ?? "").replace(new RegExp(`\\s*(?:(?:up to|not exceeding|limited to)\\s+)?(?:(?:a\\s+)?maximum of\\s+)?(?:of\\s+)?(?:[A-Z]{0,3}\\$|SGD\\s?|USD\\s?)?\\s?${figure.replace(/[.,]/g, "\\$&")}\\b`, "i"), "").replace(/^(?:we|the insurer|the company|it)\s+(?:will|shall)\s+(?:pay|reimburse)\s+/i, "").trim();
+  const lead = `Only if ${ifs.join(", ").replace(/^if\s+/i, "")}${covers ? `, for ${covers}` : ""}${purpose ? `, ${/^(?:a|an|one)\b/i.test(purpose) ? "as " : ""}${purpose}` : ""}.`;
+  return { covers, cap, conditions, lead, rest: conditions.filter((c) => !ifs.includes(c)) };
+}
+
+/** PR #72 E2a (Evidence Reviewer 18): a table row whose own page prints only its name and amount ("Accidental Hospital Recuperation
+ * Benefit* S$250") is said with the conditions the same scheme's wording prints for the same benefit and the same amount -- the
+ * person's record of that benefit under its own heading, in the same document or one with the same policy number. Null when none,
+ * or more than one, is found. */
+async function wordingOf(r: BenefitRecord, d: Deps): Promise<BenefitRecord | null> {
+  if (r.printed?.kind !== "money" || r.personBenefit?.benefit.source === "section_heading") return null;
+  const cents = r.printed.cents;
+  const no = (x: BenefitRecord) => x.policy.groupPolicyNumber ?? x.policy.policyNumber;
+  const { recordsFor } = await import("../tools");
+  const same = (await recordsFor(d.ctx, r.memberId).catch(() => [] as BenefitRecord[])).filter((x) => x.id !== r.id
+    && x.benefit.trim().toLowerCase() === r.benefit.trim().toLowerCase() && x.printed?.kind === "money" && x.printed.cents === cents
+    && x.personBenefit?.benefit.source === "section_heading" && (x.policy.id === r.policy.id || (!!no(x) && no(x) === no(r))));
+  return same.length === 1 ? same[0] : null;
+}
+/** The evidence for a wording's conditions: its passage's lines, without the line printing its amount (another document's bare "$250"
+ * would put the row's own printed currency in doubt -- structured-answers J5s; the row's own line is the amount's evidence). */
+async function conditionEvidence(w: BenefitRecord, cents: number, d: Deps): Promise<EvidenceRef[]> {
+  const e = w.source.evidence;
+  const pageText = (await pageMap(d.ctx.accountId, w.policy.id).catch(() => new Map<number, string>())).get(e.passage.onPage);
+  if (!pageText || pageText.slice(e.passage.start, e.passage.end) !== e.passage.text) return [];
+  const figure = (cents / 100).toLocaleString("en-SG", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
+  const out: EvidenceRef[] = [];
+  let at = e.passage.start, run: [number, number] | null = null;
+  const close = () => { if (run) out.push(evidenceAt({ policyId: w.policy.id, documentHash: e.documentHash, page: e.passage.onPage, pageText, start: run[0], end: run[1], subjectId: w.memberId })); run = null; };
+  for (const line of e.passage.text.split("\n")) {
+    const end = at + line.length;
+    if (line.includes(figure) || !line.trim()) close(); else run = run ? [run[0], end] : [at, end];
+    at = end + 1;
+  }
+  close();
+  return out;
 }
 
 /** The footnote(s) the page prints for the percentage's own row (fx-live-1: omitted), said IN the illustration's own sentence (a saved calculation is one complete sentence). */
@@ -340,6 +476,13 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
   if (list && pa && !pa.used && !problems.length && (pa.subjectId ?? null) === replySubject && !list.some((s) => s && typeof s === "object" && s.kind === "not_found")) {
     const n = { kind: "not_found", text: pa.text, evidence_ids: [], subject_id: pa.subjectId } as Record<string, unknown>;
     RENDERED.add(n); ABSENCE_OF.set(n, pa.check); list.push(n); pa.used = true;
+  }
+  // (PR #72 E2a, Evidence Reviewer 18: a household asking about a doctor's or outpatient bill hears that the scheme names an outpatient
+  // policy the person's own certificate does not list -- as found, dated, with who confirms -- when the reply does not already say it)
+  if (list && !problems.length && replySubject && /\b(?:GP|doctor\w*|clinic|outpatient|consultation)\b/i.test(d.ctx.topicText ?? "") && !list.some((s) => /\bwhich that certificate does not list\b/.test(String(s?.text ?? "")))) {
+    const u = await unlistedSchemePolicy(d.ctx.accountId, replySubject, d.nameOf(replySubject) ?? null, /\b(?:outpatient|clinic|GP|medic\w*)\b/i).catch(() => null);
+    const ids = (u?.printed ?? []).map((l) => evidenceFor({ policyId: l.policyId, documentHash: l.fileHash, page: l.page, pageText: l.pageText, passage: l.line, subjectId: replySubject })).filter((x): x is EvidenceRef => !!x).map((ref) => d.evidenceId(ref, "printed"));
+    if (u && ids.length) { const n = { kind: "fact", text: u.text, evidence_ids: ids, subject_id: replySubject } as Record<string, unknown>; RENDERED.add(n); list.push(n); }
   }
   let relationAsked = false;
   // Two documents of one scheme printing a percentage table for the same kind of event, each with its own base: said once,

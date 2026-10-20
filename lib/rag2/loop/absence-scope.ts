@@ -404,6 +404,45 @@ function schemeListing(docs: DocRow[], pagesOf: Map<string, { page: number; text
   } };
 }
 
+/** PR #72 E2a (Evidence Reviewer 18, DC's GP-bill answer): for a household asking about a doctor's or outpatient bill, a scheme policy for
+ * it that the scheme's own list of its group policies names ("Outpatient Medicare Policy ("OPMC")") and the person's own certificate,
+ * read in full, does not list -- said as found: what the certificate lists (dated), that the scheme names that policy, that the
+ * certificate does not list it (the bottom line says who confirms: answer-statements.ts). Never "no outpatient cover". Null when anything is in doubt (as G1 and whoseLines). */
+export async function unlistedSchemePolicy(accountId: string, subjectId: string, who: string | null, want: RegExp): Promise<{ text: string; printed: PrintedLine[] } | null> {
+  const docs = await loadDocs(accountId);
+  const [links, pages, members] = await Promise.all([loadLinks(accountId, docs.map((d) => d.id)), loadPages(accountId, docs.map((d) => d.id)), loadMembers(accountId)]);
+  const scope = scopeDocs({ docs, links, pages, members }, { policyIds: null, subjectId });
+  if (scope.problem || scope.scope !== "subject") return null;
+  const pagesOf = new Map<string, { page: number; text: string }[]>();
+  for (const p of pages) { const l = pagesOf.get(p.policyId) ?? []; l.push({ page: p.page, text: p.text }); pagesOf.set(p.policyId, l); }
+  const cert = certificateListing(scope.docs, pagesOf, subjectId, members);
+  if (!cert) return null;
+  const labels = documentLabels(scope.docs);
+  // (as G1: only when nothing else in the person's documents speaks to such a bill -- a sentence paying for medical treatment, or a
+  // doctor's or outpatient word outside the scheme's bare list of its policies -- Critic A3, GP.c4)
+  const docsOf = scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) }));
+  if (medicalExpenseSentences(docsOf).length || scanScope(docsOf, MEDICAL_BILL_TERMS).some((h) => !inPolicyList(pagesOf, h))) return null;
+  const unlisted = (name: string, abbr: string) => distinct(name).length > 0 && cert.products.every((p) => { const pw = distinct(p); return !pw.some((w) => distinct(name).includes(w)) && !pw.includes(abbr.toLowerCase()); });
+  const found = new Map<string, { name: string; abbr: string; line: PrintedLine }>();
+  for (const d of scope.docs) {
+    if (cert.certs.some((c) => c.id === d.id)) continue;
+    for (const p of (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page)) for (const sentence of flat(p.text).split(/(?<=\.)\s+(?=[A-Z])/)) {
+      const entries = [...sentence.matchAll(POLICY_ENTRY)].map((m) => ({ name: m[1].replace(/^(?:and|or|the)\s+/i, "").trim(), abbr: m[2] }));
+      if (entries.length < 3) continue;
+      for (const e of entries) if (want.test(e.name) && unlisted(e.name, e.abbr) && !found.has(e.abbr))
+        {
+        // (the printed line naming it, as the page prints it: what the statement cites)
+        const raw = p.text.split(/\n+/).map((l) => l.trim()).find((l) => l.includes(e.abbr) && /\(["“]/.test(l));
+        if (raw) found.set(e.abbr, { ...e, line: { policyId: d.id, name: labels.get(d.id) ?? "document", page: p.page, line: raw, pageText: p.text, fileHash: d.fileHash ?? null } });
+      }
+    }
+  }
+  if (!found.size) return null;
+  const whose = who ? `${who}’s` : "This person’s";
+  const named = [...found.values()].map((f) => `the ${f.line.name} (page ${f.line.page}) names the scheme’s ${f.name.replace(/\s+Policy$/i, "")} Policy (${f.abbr})`).join(", and ");
+  return { text: `${whose} certificate lists ${listOf(cert.products.map(titleCase))} (as of ${cert.asOf}). ${named.charAt(0).toUpperCase() + named.slice(1)}, which that certificate does not list.`, printed: [...found.values()].map((f) => f.line) };
+}
+
 /** Loads the household's readable documents, links and stored pages for the turn, then decides. */
 export async function checkNotFound(accountId: string, s: Record<string, unknown>, ctx: { subjectId: string | null; who: string | null; names: string[] }): Promise<NotFoundResult> {
   const docs = await loadDocs(accountId);

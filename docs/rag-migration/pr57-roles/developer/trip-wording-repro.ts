@@ -31,7 +31,8 @@ async function main() {
     try {
       const a: any = await h.send(msg, {});
       const texts = [a.summary, ...(a.details ?? []), a.bottomLine ?? "", ...(a.statements ?? []).flatMap((s: any) => [s.text, ...(s.conditions ?? [])])];
-      const bad = texts.filter((t: string) => CONCLUSION.test(t ?? ""));
+      // (the printed period's end against today's date is the document's own fact, not a conclusion from the household's words)
+      const bad = texts.filter((t: string) => CONCLUSION.test((t ?? "").replace(/The printed period of insurance ended on [^.]*, before today\./g, "")));
       const trip = [a.summary, ...(a.details ?? [])].find((t: string) => /Single Trip/.test(t));
       console.log(`${bad.length ? "FAIL" : "PASS"} ${JSON.stringify(msg)}: no conclusion from the household's place or date words${bad.length ? `\n  ${bad.join("\n  ")}` : ""}\n  trip: ${trip ? trip.slice(trip.indexOf("The schedule prints")) : "(no trip paragraph)"}\n  bottom line: ${a.bottomLine ?? "(none)"}`);
       if (bad.length) failed++;

@@ -2167,7 +2167,9 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     }
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
     // (the note goes first among the notes, so it reads directly under the server's quote -- and only when that quote was kept)
-    notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => u.note));
+    // (PR #72 E2b: what the person's certificate lists, already said by the reply -- statement-render.ts unlistedSchemePolicy -- is not said twice)
+    const saidBefore = (n: string) => c0?.sentences.map((x) => x.text.trim()).find((t) => t.length > 40 && n.startsWith(t));
+    notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => { const dup = saidBefore(u.note); return dup ? u.note.slice(dup.length).trim() : u.note; }).filter(Boolean));
     const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], ...(c0.absenceChecks || composed.absenceChecks ? { absenceChecks: [...(c0.absenceChecks ?? []), ...(composed.absenceChecks ?? [])] } : {}), notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n) && !(serverSaid && n === DROPPED_NOTE)) } : (composed ?? c0);
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.
