@@ -2038,3 +2038,46 @@ the context.
 
 **Safe to merge only while switched off** (the off path is unchanged and nothing leaks across households). **Not ready to switch on:**
 fix R36-1 and R36-2 (both can show a wrong claimable amount) and R36-3 first, with the probe cases above as offline tests.
+
+# Round 37: PR #79 GP bill and budget stops at `516f5d0`
+
+Requested by the Developer. Read `git diff 1ee2aec 516f5d0 -- lib` (`absence-scope.ts` `unlistedGpCover`, `loop.ts`, `statement-render.ts`,
+`usage-meter.ts`) against RELEASE-SET B2 and reviewer ruling R3. No model calls; I did not run the replay script.
+
+Checks:
+- **Never presents the GP benefit as his.** The sentences are "certificate lists … (as of …)", the scheme's GP lines quoted under the
+  "… POLICY" heading, the Part 1 rule (when printed), "not among the policies on his certificate, so the GP benefit is not shown to be
+  his", plus "Only the insurer or the scheme administrator can confirm …". This is said as what the documents show, never "not covered".
+  It promises no amount and never quotes the overseas line (it is skipped when `bill_place` is abroad, and only lines under the
+  matched policy heading are quoted). The household's own words are removed beside it.
+- **Conservative by construction.** `unlistedGpCover` returns null unless the subject's confirmed certificate is read in full, the
+  scheme lists 3+ policies with abbreviations, exactly one unlisted policy holds GP lines, and the certificate shares no name word,
+  abbreviation or product word with it. A variant spelling on the certificate ("Out-Patient Medicare") still shares "medicare", so it
+  is treated as listed. If anything fails, it falls back to the existing not-found check.
+- **The accident "specific results" filter is principled enough.** It takes only the lettered benefits under the certificate-listed
+  accident product's own "BENEFIT n:" heading, whose wording opens on an accident and names no death, disablement, dismemberment,
+  disappearance or coma. It quotes the benefit names only (no amounts), each "only if that result happened". That matches B2
+  (ambulance, a 24h+ stay, fracture). Limit: the grave-word test reads the heading and the next two lines only, so a benefit whose
+  death wording comes later could be listed. That is harmless here, because nothing is calculated.
+- **Running outside budget stops** is limited to a reply that left the reported bill unaddressed (`groundedFallback`), for a local or
+  unknown bill place. Loaders are account-scoped, so there's no cross-household path.
+- **Budget stop.** `reportStopAnswer` only answers a bill or stay reported this turn for the current subject, through `groundedFallback`
+  with `budgetStopped` set, so no repair call. `roomForAnother` uses the meter's own limits. Leaving out a refused absence when no
+  further call fits drops a statement, which is the safe direction.
+
+## R37-1 (Low): "what do i do now" replaces "I couldn't confirm an answer" with "Here is what you can do next."
+
+That only applies when the reply has next steps and no sentences, and B2 asks for it. A household that asked something specific in
+the same message is then not told it went unanswered. Accept, or keep the dropped note after the steps when the message also asks a
+question.
+
+## R37-2 (Observation for the coordinator, not a correctness issue): this is a scheme-shaped server answer
+
+`unlistedGpCover` keys on this scheme's layout: "(POLICY NO" headings, the Part 1 sentence, "BENEFIT n:" lettered benefits. DC's
+11:54 direction was no per-scenario rules, and DC chose to build in the simple chat at 15:08. Worth deciding whether to carry this on
+the rag2 path or let the simple chat handle B2.
+
+## Verdict on PR #79 at `516f5d0`
+
+**Ready to merge.** It's correct for B2 and conservative when the documents don't match exactly. R37-1 is accepted. R37-2 is a
+direction question for the coordinator.
