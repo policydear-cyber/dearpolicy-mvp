@@ -6,7 +6,7 @@ This file consolidates `FINDINGS-C0.md`, `FINDINGS-C1.md` and `GP-BILL.md` (kept
 
 | worker | task | SHA | status | evidence | blocker |
 | --- | --- | --- | --- | --- | --- |
-| Policy Evidence Reviewer | evidence record per journey; compare answers | pages: C0 `4956588` = C1 `8c63250` = `720f5f5` (page text identical); answers: see each journey | C2 not frozen; will apply when relayed | this file | no rendered C1/C2 answer text yet; DC's real library not available |
+| Policy Evidence Reviewer | evidence record per journey; compare answers | C2 `98ada99` (page text identical since C0) | C2 assessed (section 6) | this file | no rendered C2 text from a frozen-copy run; DC's real library not available; live runs needed (section 6) |
 
 ## 1. Evidence sources and what is not available
 
@@ -129,4 +129,28 @@ Expected answer and must-nots: `GP-BILL.md`. Proposed G1 must not say Living Car
 | --- | --- | --- |
 | C0 `4956588` | live answers (c4edd48 code) + pages | no wrong amount; O: J1/J2 condition, J3/J4/J5 Living Care, J5 PS p37 |
 | C1 `8c63250` | code trace | J1/J2 condition fixed (needs an executable check); J5 C1 illness sentence U; J4 refused until fixture page counts (done at `720f5f5`: CERT 1, PS 37, BS unknown) |
-| C2 | pending freeze | to apply: every row of section 3 against the C2 rendered answers |
+| C2 `98ada99` | code trace of the C2 diff over FX pages (page text unchanged; `pageCount` added: CERT 1, PS 37, BS unknown) + the Test engineer's recorded checks; QC ran no suite | see section 6 |
+
+## 6. C2 `98ada990d0a792f7a7b8c2e1931704a07409d33d`, journey by journey
+
+Evidence: Code trace (QC) over FX-copy pages. The Developer's recorded scripted results on C2 (`developer/GP-BILL.md`): acceptance AC 20/26, GUARD 41/41; fx-repairs 89/89.
+No rendered C2 text from a frozen-copy run was available to QC.
+
+| journey | unsupported claims (U) on C2 | supported information omitted (O) on C2 | settled by |
+| --- | --- | --- | --- |
+| J1 fracture FR1/K3t1 | none. Figures, bases, dates and the `#` footnote unchanged. `tableConditions` tightened (stops at a blank line, a heading, or a sentence with an amount); on BS p8 the Core/Voluntary sentence is still the only line before "F.\tDisappearance", so the S$120,000 illustration keeps it (now without its own full stop) | the Voluntary-Scheme point (judgement, low). **No executable check asserts the Core/Voluntary condition inside the S$120,000 illustration** (C3 checks it only for the K2 S$250); still a test gap. Repetition R1/R3 open | code: yes. Repetition: live run |
+| J2 correction K4b | none found by trace. "too / also / as well" no longer counts as a correction, and a possessive ("Grace's fault") no longer names the person (Critic round 3) | none beyond J1's | the model's reaction to `note_facts` refusals and the correction notice: **live run** |
+| J3 cancer K6a/K6c | none | Living Care Plus S$300,000 listed and undescribed; "policy definition" wording (R7, R9 open by decision) | wording gaps; the K6c fresh paraphrase: **live run** |
+| J4 dental K6b | none. With page counts, the absence is now the server's partial-scope text: certificate in full, Product Summary pages 8, 12-13 and 37 of 37, Benefit Summary pages read; "not an answer about whether there is such cover". Correct for incomplete documents | none material. Low: the page list uses stored indexes (PS printed numbers are one lower) | scripted is enough for the text; whether the model sends the absence: live run (low priority) |
+| J5 sickness K2 | **fixed**: the C1 sentence now reads "on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's", which is the ruling. fx-repairs C3 now encodes the ruling (all conditions with the 250, S$ only with the Product Summary, never for this stay) | **mostly fixed**: the server now adds "Grace's certificate also lists Group Living Care and Group Living Care Plus (listed as of 6 October 2022)", without amounts, and states an absence only if its scope is fully read (it is not on FX, so only the listing is said: correct). Still O: PS p37 "only payable upon an accident occurring" (low) | server text: deterministic **once the model states the hospital benefit's terms**; the code runs only on a model `benefit_terms` statement, so **live run** |
+| J6 GP bill | none by trace. On FX the server writes: Daniel's certificate lists its four products (as of 6 October 2022); the Benefit Summary (page 1) names the scheme's Outpatient Medicare Policy (OPMC), which that certificate does not list; only the insurer or administrator can confirm current cover; then the partial-scope absence. G2 replaces "I haven't yet looked up" after a search. Low: "The pages that were read do not mention GP or outpatient treatment" right after quoting "Outpatient Medicare" reads as a contradiction; "do not describe a benefit for" would be exact. The products may print in capitals as on the certificate | **the conditional accident benefits** (ambulance to hospital up to S$500 per incident, a 24-hour stay S$250, fracture) and "Living Care / Living Care Plus are listed but not described". The server adds neither (Developer's note); the partial-scope sentence covers the undescribed point only generally | **live run** (both omissions depend on the model; G2 fires only when the model's search query names medical/bill words) |
+
+**Which journeys need a real-model run to settle (in order of value):**
+1. **J6 GP bill**: DC's own live question. The conditional accident benefits and the Living Care line are model-only, and whether G1/G2 fire depends on the model's calls. Ideally a re-run of DC's real conversation on his actual library (needs DC's permission; FX has no OPMC/GP evidence beyond BS p1).
+2. **J5 sickness K2**: the server's corrected sentence and the listed-cover line appear only if the model states the hospital benefit.
+3. **J2 correction K4b**, plus "Daniel broke his arm too" and a later Grace message: the handoff's planned check of the `note_facts` refusals, which a replay cannot show.
+4. **J3 K6c** (the only fresh paraphrase) and **J1 K3t1** repetition (R1/R3 are replay artefacts on C1/C2).
+J4 needs none for the text. Every paid run goes through the one designated runner, with DC's authorisation, against the shared ledger (US$0.259121 left at C0).
+
+**Release view from the evidence (not a merge decision):** no wrong claimable amount on C0, C1 or C2 by page evidence. The remaining issues are
+omissions that depend on the model, plus one missing executable check (J1). None of this is shown on DC's actual library.
