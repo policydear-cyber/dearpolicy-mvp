@@ -20,7 +20,7 @@
  *   M4  Critic M4: a saved "not described" answer is withdrawn when a document is added to its scope
  *   N   negative controls: wrong person, product, version and percentage base; supported information surviving verification
  *   UX  browser regressions on C2 (UX agent): FX-K4B turn-1 question, FX-K6B bare refusal, lost 'no longer applies', X-ray questions
- *   GP  DC's live GP-bill failure (20 Oct): the journey, a medical-expense control, G1 must-not-fire cases, no applicability clause; Critic round 5 F1, A2, A3, F2 (08fb1b3)
+ *   GP  DC's live GP-bill failure (20 Oct): the journey, a medical-expense control, G1 must-not-fire cases, no applicability clause; Critic round 5 F1, A2, A3, F2 (08fb1b3); C4 items 1, 2, 5 (R6-1, R6-2, F4)
  *   Q3  Policy QC Q3: a person correction where the two people's sums insured differ recalculates from the new person's own row
  *
  *   node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts                 (--show prints every answer; an argument, not an environment variable)
@@ -326,6 +326,7 @@ async function main() {
     check("AC", "N5b (version) with the Benefit Summary's stored file hash changed in place (another version of the file), the reopened calculation answer no longer shows its S$120,000 (on C0 only absence answers compare file hashes: lib/chat/stale-answers.ts)", !/S\$120,000/.test(replaced), replaced);
     const certLine = ok.v.split("\n").find((x) => /S\$120,000/.test(x)) ?? "";
     check("GUARD", "N7 the S$120,000 illustration carries nothing of the next benefit printed below its table (no 'Ambulance', no 'up to $500', no lettered heading)", /S\$120,000/.test(certLine) && !/Ambulance|up to \$\s?500|\bF\.\s/i.test(certLine), certLine);
+    check("GUARD", "N8 (C4 item 6; passes on C3 and C5, so a test of what holds) the S$120,000 illustration carries the condition printed under its table: 'This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme'", /S\$120,000/.test(certLine) && /can only be claimed either under the Core Scheme or Voluntary Scheme/.test(certLine), certLine);
     check("GUARD", "N6 and with the original version restored the reopened answer is whole again", visible((await reopen(ok.conv.id)).at(-1)) === ok.saved);
   }
 
@@ -409,6 +410,7 @@ async function main() {
       ["A3.2 'doctor'", "G. Accident Medical Reimbursement\nIf an Insured Person is injured in an Accident, we will pay the fees charged by a doctor for treatment of that injury, up to $2,000 per Accident.", /Accident Medical Reimbursement|fees charged by a doctor/i],
       ["A3.3 'reimburse ... charges'", "G. Accident Treatment Benefit\nIf an Insured Person is injured in an Accident, we will reimburse the reasonable charges incurred for treatment of that injury, up to $2,000 per Accident.", /Accident Treatment Benefit|reimburse the reasonable charges/i],
     ];
+    ctl.push(["A3.4 label-style (C4 item 2, Critic R6-2) 'G. Medical Expenses Benefit / Up to $2,000 per Accident for medical expenses incurred'", "G. Medical Expenses Benefit\nUp to $2,000 per Accident for medical expenses incurred following an Accident.", /Medical Expenses Benefit|medical expenses incurred/i]);
     const ctlOut: [string, Out][] = [["A3.1 'medical expenses ... registered medical practitioner'", med]];
     for (const [k, page] of ctl.slice(1)) { const o = await full(() => run("A", k), { 6: page }); all.push(o); ctlOut.push([k, o]); }
     for (const [i, [k, o]] of ctlOut.entries())
@@ -431,6 +433,22 @@ async function main() {
     }
     all.push(a2b);
     check("GUARD", "GP.A2.2 (Critic A2; passes on C0, C2 and C3) with Grace's own certificate listing Hospital and Surgical, Daniel's answer does not name it as listed for him", !/Hospital and Surgical|HOSPITAL AND SURGICAL/i.test(a2b.v), a2b.v);
+    // (C4 item 1, Critic R6-1) the member's name in app order ("Daniel Lee Wei Ming", preferred "Daniel") while the certificate cell reads
+    // "Lee Wei Ming, Daniel": G1 still answers, and still names only his rows (Grace-only policy on the same certificate).
+    const nm = (await h.db.query("SELECT display_name, preferred_name FROM family_members WHERE id=$1", [DAN])).rows[0] as { display_name: string; preferred_name: string };
+    await h.db.query("UPDATE family_members SET display_name='Daniel Lee Wei Ming', preferred_name='Daniel' WHERE id=$1", [DAN]);
+    let r61: Out, r61b: Out;
+    try {
+      r61 = await full(() => run("A", "R6-1 app-order member name"));
+      r61b = await full(() => withCert(graceRow, 1, () => run("A", "R6-1 app-order name, Grace-only row")));
+    } finally { await h.db.query("UPDATE family_members SET display_name=$2, preferred_name=$3 WHERE id=$1", [DAN, nm.display_name, nm.preferred_name]); }
+    all.push(r61, r61b);
+    check("AC", "GP.R6-1a (C4 item 1) with the member named 'Daniel Lee Wei Ming' (certificate cell 'Lee Wei Ming, Daniel') the GP journey does not end in 'could not confirm' and G1 names his listed policies", !/could(?:n.t| not) confirm/i.test(r61.v) && G1SAYS.test(r61.v) && /Group Term Life/.test(r61.v) && /Group Personal Accident/.test(r61.v), r61.v);
+    check("AC", "GP.R6-1b (C4 item 1) the same, with a Grace-only policy on the certificate: G1 answers and names only Daniel's rows (no 'Hospital and Surgical')", !/could(?:n.t| not) confirm/i.test(r61b.v) && G1SAYS.test(r61b.v) && !/Hospital and Surgical|HOSPITAL AND SURGICAL/i.test(r61b.v), r61b.v);
+    // (C4 item 5, Critic F4) a line printed with a bare "$" (the controls' "$2,000 per Accident", the certificate's ambulance "$500") stays
+    // currency-unresolved when quoted or restated: never "S$2,000 per Accident" or an S$500 ambulance figure from that wording.
+    const bareAsSgd = (o: Out) => o.v.split("\n").filter((l) => /S\$\s?2,000[^\n]*per Accident|per Accident[^\n]*S\$\s?2,000|ground ambulance[^\n]*S\$\s?500/i.test(l));
+    check("GUARD", "GP.F4 (C4 item 5; passes on C3 and C5, so a test of what holds) no answer turns a bare-'$' printed line into S$ (the controls' $2,000 per Accident; the ground-ambulance $500 of variant B)", all.every((o) => bareAsSgd(o).length === 0), all.flatMap(bareAsSgd).join("\n"));
     // (F1) no answer to the GP-bill question quotes the scheme's bare policy-list line (reference wording, not his cover), whether or not G1
     // fires, including the repeated refusals of the scripted model (each variant repeats its final answer).
     // The roster line names the scheme's policies together ("... Disability Income Policy ("DI"), and Outpatient Medicare Policy ("OPMC") ...");
