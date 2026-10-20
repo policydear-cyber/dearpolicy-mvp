@@ -62,4 +62,103 @@
 | Simple policy question via Coverage page | Complete with friction (some rows suspect, see 2) |
 | Reopening a conversation | Complete with friction (reopens consistently, but the saved answer is finding 1) |
 | Sign-in, sign-out, expiry | Complete without help |
-| Chat journeys (scenario, clarification, correction, side question, conflict, next step) | Not yet run: waiting for authorisation of the planned turns |
+| Chat journeys | See part 2 below |
+
+# Part 2: ten live chat turns (2026-10-20, 07:47–08:00Z)
+
+- Authorised by DC in the thread ("YES", 07:47Z) after the coordinator's card. Exactly 10 messages sent, once each, in
+  4 new chats. 10 model calls on production's own key (not the repository test ledger). 0 errors, every request
+  `202 POST /api/chat`. No retries.
+- Evidence category: actual-library acceptance on the owner's real household, production main 4956588.
+- Names below are generic: "member A" (self), "spouse", "synthetic member". Full transcripts and screenshots are in
+  the private project folder (`ux-live/chat-turns/`, `ux-live/screenshots/`).
+- Turn 3 was planned as "answer its one question", but turn 2 asked none, so I volunteered a fact instead.
+
+## Timing (first feedback vs complete answer)
+
+First feedback was immediate on every turn (0.07–0.12 s): the user's message and a "Checking your policies… 12s"
+indicator with a running timer. That part is good.
+
+| Turn | Message (generic) | Kind | Complete | Target |
+|---|---|---|---|---|
+| 1 | what is [spouse] covered for | direct | 47.2 s | 10 s, missed |
+| 2 | my wife slipped on the stairs and broke her wrist, what can we claim | scenario | 43.0 s | 20 s, missed |
+| 3 | she went to A&E and they put it in a cast, no operation | scenario | 60.2 s | 20 s, missed |
+| 4 | sorry, it was [member A] not her | correction | 41.2 s | 20 s, missed |
+| 5 | side question: does the group plan cover dental? | direct | 26.9 s | 10 s, missed |
+| 6 | ok so roughly how much could he get | scenario | 40.7 s | 20 s, missed |
+| 7 | what do i do now | direct | 22.0 s | 10 s, missed |
+| 8 | [member A] tripped on the kerb, GP bill was $[amount], can he claim | scenario | 37.6 s | 20 s, missed |
+| 9 | is the death payout [large figure] or [small figure]? | direct | 31.2 s | 10 s, missed |
+| 10 | [synthetic member] had a fever and stayed in hospital 2 nights, anything we can claim? | scenario | 31.9 s | 20 s, missed |
+
+All 10 missed their target. Median about 39 s.
+
+## What came back
+
+1. **Cover list (turn 1): good content, slow.** It listed the four certificate covers with the certificate date and
+   said the date doesn't prove current cover. It also added one stray line, a fracture limit from the reference
+   wording, which wasn't asked about.
+2. **Wrist fracture (turns 2, 3, 6): accurate caveats, unusable shape.** Two alternatives, a small figure and one 100×
+   larger, from two documents, "never a total", with no plain line saying what to expect. Each answer is 6 paragraphs,
+   and the same block is repeated almost word for word on turns 3, 4 and 6. Turn 3's new fact ("cast, no operation")
+   changed nothing, which it said. No clarifying question was asked. The 100× alternative needs the Policy Evidence
+   Reviewer to confirm it is supported for a wrist.
+3. **Correction (turn 4): works.** "Updated: this is about [member A], not [spouse]. The earlier estimates … no longer
+   apply." The earlier answers above it stay on screen with no marking.
+4. **Dental (turn 5): no answer.** The whole reply was "The wording also lists a separate dental-expenses benefit for
+   dental treatment medically necessary to treat an injury caused by an accident, subject to its stated conditions."
+   No yes or no, no amount, and it opens with "also".
+5. **"what do i do now" (turn 7): failed.** The whole reply was "I couldn't confirm an answer to that from your
+   documents." The previous answer had a next step, so this is a regression inside the same chat.
+6. **GP bill (turn 8): much better than the saved 20 Oct failure.** It found the GP benefit (panel "as charged",
+   a fixed non-panel amount and a co-pay) and asked one useful question (panel or non-panel GP). But those two figures have no currency, and
+   it adds a confusing line: "I left out a sentence that stated an amount: until claim evidence has been reviewed…".
+7. **"[large] or [small]?" (turn 9): not answered.** It listed seven death-related items (the certificate figure, a
+   small death benefit "in the document (page 9)", a compassionate allowance shown twice, once with "a bare $ sign",
+   catastrophe 15%, and so on) and never says which applies or why they differ. The small figure seems to come from a
+   critical-illness wording that is not linked to anyone; the home page says unlinked documents are not used to
+   answer questions. **Needs the Policy Evidence Reviewer.** It then re-attached the old GP question ("When you're
+   ready, here is the question I was on.").
+8. **Synthetic member hospital stay (turn 10): misleading shape.** It opens with an irrelevant exclusion
+   (self-inflicted injury, pregnancy), withholds the hospital-cash amount, and asks for admission and discharge
+   dates and times. The quoted rule pays only "from the 11th day onwards", so a 2-night stay can't qualify, and the
+   question is unnecessary. It never says plainly that this person has no personal policy on file. No amount was
+   invented.
+9. **Sources: still unusable.** A collapsed "Sources" list of plain text (document name + page), no link, no quote,
+   with duplicates (turn 2 lists page 13 four times and page 8 three times). The product summary and the certificate
+   show the same name.
+
+## Reopen check (all 4 chats)
+
+Reopening took 9–11 s per chat. 9 of 10 saved answers match what was returned word for word. **Turn 8 does not:** the
+reopened version adds a sentence that wasn't on screen when it was returned ("I haven't yet looked up what your
+documents pay for the bill you mentioned (… $[amount]), so that is still open."). Returned and saved answers must
+agree.
+
+## Chat journey verdicts (live, real library)
+
+| Journey | Verdict |
+|---|---|
+| Asking a simple policy question (turn 1) | Complete with friction (correct, 47 s) |
+| Asking what might apply to an accident (turn 2) | Complete with friction, severe (no plain bottom line, 100× alternatives) |
+| Answering a clarification (turn 3) | Complete with friction (no question was asked; whole answer repeated) |
+| Correcting a person (turn 4) | Complete with friction (works; old answers unmarked) |
+| Asking a side question (turn 5) | **Unable to complete** (no yes or no) |
+| Understanding conflicting documents (turn 9) | **Unable to complete** (question not answered; possible use of an unlinked document) |
+| Finding the next practical action (turn 7) | **Unable to complete** ("I couldn't confirm an answer") |
+| Accident GP bill (turn 8) | Complete with friction (good question; bare 30 and 10) |
+| Illness for a person with no policy (turn 10) | **Unable to complete** (unnecessary question, no plain "nothing on file") |
+| Reopening a conversation | Complete with friction (1 of 10 saved answers differs) |
+
+## Top three for the coordinator
+
+1. **Follow-up questions fail.** "what do i do now", "is it [large] or [small]" and "does it cover dental" get
+   no usable answer. These are the most common things a customer types after the first reply.
+2. **Every answer takes 22–60 s** (median about 39 s) against 10 s and 20 s targets. The progress indicator helps,
+   but a paying user won't wait 40 s for a cover list.
+3. **Scenario answers have no plain bottom line and can't be checked.** Six paragraphs repeated on every follow-up,
+   a 100× range with no guidance, and sources that are unlinked, duplicated plain text.
+
+Next after those: mobile tab bar hides Ask DearPolicy; the unreadable upload's missing Re-analyse button; S$0.00
+insurance cost.
