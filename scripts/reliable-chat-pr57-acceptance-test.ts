@@ -19,6 +19,7 @@
  *       M5: the fixture library (two partial copies) never gets an absence; M0-M4 run on documents stored in full
  *   M4  Critic M4: a saved "not described" answer is withdrawn when a document is added to its scope
  *   N   negative controls: wrong person, product, version and percentage base; supported information surviving verification
+ *   GP  DC's live GP-bill failure (20 Oct): the journey, a medical-expense control, G1 must-not-fire cases, no applicability clause
  *   Q3  Policy QC Q3: a person correction where the two people's sums insured differ recalculates from the new person's own row
  *
  *   node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts                 (--show prints every answer; an argument, not an environment variable)
@@ -315,6 +316,83 @@ async function main() {
     const certLine = ok.v.split("\n").find((x) => /S\$120,000/.test(x)) ?? "";
     check("GUARD", "N7 the S$120,000 illustration carries nothing of the next benefit printed below its table (no 'Ambulance', no 'up to $500', no lettered heading)", /S\$120,000/.test(certLine) && !/Ambulance|up to \$\s?500|\bF\.\s/i.test(certLine), certLine);
     check("GUARD", "N6 and with the original version restored the reopened answer is whole again", visible((await reopen(ok.conv.id)).at(-1)) === ok.saved);
+  }
+
+  // ================================================================================================ GP: DC's live GP-bill failure (20 Oct)
+  // RECONSTRUCTION on the anonymised household (Daniel stands in for the policyholder), scripted model: the three plausible model answers of
+  // developer/GP-BILL.md (720f5f5). Ground truth for (a): Policy QC qc/GP-BILL.md (88c8953). Critic round 4 (5b59e01) conditions for G1/G2.
+  // Run on a fully stored variant (missing pages added as pages that print no benefit wording), because an absence is only said over
+  // documents read in full; GP.c1 makes the certificate partial on purpose.
+  if (only("GP")) {
+    const GP_MSG = "daniel tripped over the kerb and fell, his GP bill is $800, can he claim for this?";
+    const contact = ["contact:" + CERT];
+    const gpTurn = (final: (v: any) => ScriptCall[]): ScriptTurn => ({ steps: [
+      () => [call("resolve_person", { mention: "daniel" })],
+      () => [call("note_facts", { subject_id: DAN, facts: [{ key: "how_it_happened", value: "tripped over the kerb and fell", words: "tripped over the kerb and fell" }, { key: "bill_amount", value: "$800 GP bill", words: "his GP bill is $800" }] }), call("person_benefits", { subject_id: DAN, topic: "GP bill after an accident" })],
+      () => [call("search_passages", { k: 8, query: "medical expenses outpatient GP clinic reimbursement accident", subject_id: DAN })],
+      ...Array.from({ length: 6 }, () => final),
+    ] });
+    const GP_TERMS = ["outpatient", "GP", "clinic", "general practitioner"];
+    const absence = { kind: "not_found", text: "-", claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: GP_TERMS, subject_id: DAN };
+    const V: Record<string, ScriptTurn> = {
+      A: gpTurn(() => [call("final_answer", { subject_id: DAN, sentences: [absence], next_steps: contact })]),
+      B: gpTurn((v) => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "fact", text: "Daniel's Group Personal Accident cover reimburses ground ambulance costs after an accident up to $500.", evidence_ids: idsAny(v, /ambulance/i).slice(0, 1), subject_id: DAN }, absence], next_steps: contact })]),
+      C: gpTurn(() => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "fact", text: "Daniel's documents do not include a benefit that pays for a GP bill after a fall.", subject_id: DAN }], next_steps: contact })]),
+    };
+    const PSUM = FX.doc("PRODUCT_SUMMARY").id, BSUM = FX.doc("BENEFIT_SUMMARY").id;
+    const full = async <T,>(f: () => Promise<T>, extra: Record<number, string> = {}): Promise<T> => {
+      const ids = [PSUM, BSUM], counts = [37, 9], added: [string, number][] = [];
+      for (const [k, id] of ids.entries()) {
+        const have = new Set(((await h.db.query("SELECT page_number FROM policy_pages WHERE policy_id=$1", [id])).rows as { page_number: number }[]).map((r) => r.page_number));
+        for (let p = 1; p <= counts[k]; p++) if (!have.has(p)) { await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [FX.ACCOUNT, id, p, (id === BSUM && extra[p]) || `Test variant page ${p}: this page prints no benefit wording.`]); added.push([id, p]); }
+        await h.db.query("UPDATE policies SET page_count=$2 WHERE id=$1", [id, counts[k]]);
+      }
+      try { return await f(); } finally {
+        for (const [id, p] of added) await h.db.query("DELETE FROM policy_pages WHERE policy_id=$1 AND page_number=$2", [id, p]);
+        await h.db.query("UPDATE policies SET page_count=37 WHERE id=$1", [PSUM]);
+        await h.db.query("UPDATE policies SET page_count=NULL WHERE id=$1", [BSUM]);
+      }
+    };
+    const run = (v: string, label = v) => play([V[v]], () => turn(`GP ${label}`, GP_MSG));
+    const NONCOVER = /not covered|does not apply|is not insured|isn.t covered|no cover\b|not eligible/i;
+    const CLAUSE = /specifically stated in Part 1|only applicable to you if|Not all Group Policies or Benefits/i;
+    const G1SAYS = /(?:certificate|it) (?:does not|doesn.t) list/i;
+    const all: Out[] = [];
+    // (a) the journey, each model variant
+    const outs = await full(async () => ({ A: await run("A"), B: await run("B"), C: await run("C") }));
+    for (const [k, o] of Object.entries(outs)) {
+      all.push(o);
+      check("AC", `GP.a1 (variant ${k}) the answer does not end in "couldn't confirm" or the model-error reply`, !/couldn.t confirm|can.t confirm|returned an error/i.test(o.v), o.v);
+      check("AC", `GP.a2 (variant ${k}) it does not say the documents were not looked up after the search ran`, !/haven.t (?:yet )?looked up|have not (?:yet )?looked up/i.test(o.v), o.v);
+      check("GUARD", `GP.a3 (variant ${k}) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable`, !/S\$\s?800/.test(o.v) && !/(?:pay|receive|claim)\w*[^.\n]*\$800/i.test(o.v.replace(/“[^”]*”/g, "")), o.v);
+      check("GUARD", `GP.d (variant ${k}) no answer quotes the Part 1 applicability clause, and nothing says he is not covered`, !CLAUSE.test(o.v) && !NONCOVER.test(o.v.replace(/not the same as saying (?:it is excluded or not covered|there is no such cover)/gi, "")), o.v);
+    }
+    const a = outs.A;
+    check("AC", "GP.a4 (variant A, QC ground truth) the answer says the uploaded documents show no GP or outpatient benefit, names Outpatient Medicare (OPMC) as on the scheme but not on his certificate (with its date), and suggests asking the insurer", /Outpatient Medicare|OPMC/.test(a.v) && G1SAYS.test(a.v) && /6 October 2022/.test(a.v) && /(?:GP|outpatient)/i.test(a.v) && /Contact Aldermoor Life Ltd/.test(a.v), a.v);
+    check("AC", "GP.a5 (variant A, QC ground truth) the certificate's listed policies are named (Group Term Life, Group Personal Accident, Group Living Care)", /Group Term Life/.test(a.v) && /Group Personal Accident/.test(a.v) && /Group Living Care/.test(a.v), a.v);
+    // (b) control: his accident benefit prints a medical-expense reimbursement
+    const MED = "G. Medical Expenses due to Accident\nIf an Insured Person sustains bodily injury as a result of an Accident, we will reimburse the reasonable medical expenses incurred for treatment by a Registered Medical Practitioner within 52 weeks of the Accident, up to $2,000 per Accident.\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.";
+    const med = await full(() => run("A", "b medical-expense control"), { 6: MED });
+    all.push(med);
+    check("AC", "GP.b1 (medical-expense control) the answer surfaces the accident benefit that reimburses medical expenses by a registered medical practitioner", /Medical Expenses/i.test(med.v) && /(?:registered )?medical practitioner/i.test(med.v), med.v);
+    check("GUARD", "GP.b2 (medical-expense control) no absence is stated, and no amount is given for the $800", !/do not (?:describe|print) a benefit for|(?:certificate|it) (?:does not|doesn.t) list/i.test(med.v) && !/S\$\s?800/.test(med.v), med.v);
+    // (c) G1 must not fire: certificate partial; only the abbreviation or only the full name on the certificate; a hit outside the policy list
+    const certPage = (await h.db.query("SELECT text FROM policy_pages WHERE policy_id=$1 AND page_number=1", [CERT])).rows[0] as { text: string };
+    const withCert = async <T,>(text: string | null, count: number, f: () => Promise<T>) => {
+      if (text != null) await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [CERT, text]);
+      await h.db.query("UPDATE policies SET page_count=$2 WHERE id=$1", [CERT, count]);
+      try { return await f(); } finally { await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [CERT, certPage.text]); await h.db.query("UPDATE policies SET page_count=1 WHERE id=$1", [CERT]); }
+    };
+    const addRow = (label: string) => certPage.text.replace("GROUP LIVING CARE PLUS(POLICY NO. 3037850)", `${label}(POLICY NO. 3037850)\nS****411A\tLee Wei Ming, Daniel\tPlan A\tAs of 06/10/2022\nGROUP LIVING CARE PLUS(POLICY NO. 3037850)`);
+    const c1 = await full(() => withCert(null, 2, () => run("A", "c1 certificate partial")));
+    const c2 = await full(() => withCert(addRow("GROUP OPMC"), 1, () => run("A", "c2 abbreviation only")));
+    const c3 = await full(() => withCert(addRow("GROUP OUTPATIENT MEDICARE"), 1, () => run("A", "c3 full name only")));
+    const c4 = await full(() => run("A", "c4 hit in a benefit's own wording"), { 4: "H. Accidental Medical Treatment\nOutpatient treatment at a clinic following an Accident is reimbursed under the Outpatient Medicare Policy only." });
+    all.push(c1, c2, c3, c4);
+    for (const [k, o] of [["c1 certificate not read in full", c1], ["c2 the certificate lists 'OPMC' (abbreviation only)", c2], ["c3 the certificate lists 'Outpatient Medicare' (full name only)", c3], ["c4 a hit inside a benefit's own wording, outside the scheme's policy list", c4]] as const)
+      check("GUARD", `GP.${k}: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated`, !G1SAYS.test(o.v) && !/do not (?:describe|print) a benefit for (?:GP|outpatient)/i.test(o.v), o.v);
+    check("GUARD", "GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause", all.every((o) => !CLAUSE.test(o.v)), all.filter((o) => CLAUSE.test(o.v)).map((o) => o.v).join("\n====\n"));
+    check("GUARD", "GP.r every GP answer: returned = saved = reopened", all.every(same), all.filter((o) => !same(o)).map((o) => `${o.shown}\n--\n${o.reopened}`).join("\n====\n"));
   }
 
   const t = tally;
