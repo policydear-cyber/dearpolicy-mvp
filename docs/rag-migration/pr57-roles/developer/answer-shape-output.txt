@@ -4,13 +4,13 @@
   BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies.
   [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
       source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
-  [calculation] Simple Fracture · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture · Arm, Elbow, Wrist or Ribs
       amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
       condition: Only if the Simple Fracture benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
       condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
       source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
-  [calculation] Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
       amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
       condition: Only if the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
@@ -34,13 +34,13 @@
   BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies; the next step is to contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
   [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
       source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
-  [calculation] Simple Fracture · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture · Arm, Elbow, Wrist or Ribs
       amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
       condition: Only if the Simple Fracture benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
       condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
       source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
-  [calculation] Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
       amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
       condition: Only if the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
@@ -86,13 +86,13 @@
   BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies.
   [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
       source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
-  [calculation] Simple Fracture · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture · Arm, Elbow, Wrist or Ribs
       amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
       condition: Only if the Simple Fracture benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
       condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
       source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
-  [calculation] Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000002:b731d37a353|b80a32aeffb:arm, elbow, wrist or ribs} Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
       amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
       condition: Only if the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
@@ -117,13 +117,13 @@
   [fact] Updated: this is about Daniel, not Grace. The earlier estimates I worked out for Grace from the injury no longer apply, because they were worked out for Grace's policy, not Daniel's.
   [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
       source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
-  [calculation] Simple Fracture · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000001:bb01760beec|bd4c7000dd1:arm, elbow, wrist or ribs} Simple Fracture · Arm, Elbow, Wrist or Ribs
       amount S$1,250 (currency stated, illustration) for Daniel; basis 25% of the Simple Fracture benefit limit of S$5,000
       condition: Only if the Simple Fracture benefit applies to Daniel's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
       condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
       source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
-  [calculation] Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
+  [calculation] {alt:7d000000-0000-4000-8000-000000000001:bb01760beec|bd4c7000dd1:arm, elbow, wrist or ribs} Simple Fracture or Other Fracture due to Accident · Arm, Elbow, Wrist or Ribs
       amount S$120,000 (currency stated, illustration) for Daniel; basis 20% of Daniel's sum insured of S$600,000; as of 2022-10-06
       condition: Only if the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case; an illustration from the document's terms, not a payment or an insurer's decision.
       condition: Only if it results from bodily injury as a result of an Accident.
@@ -147,5 +147,6 @@ UNIT a card that leaves out a condition's amount (S$100) is sent as plain text, 
 UNIT a card stating an amount its paragraph does not is sent as plain text: true
 UNIT an invalidated answer (deleted or added documents) has no statements and no bottom line: true
 UNIT only the relation note's calculations are grouped; a third independent one is not, and the bottom line says no "either": true ("Your documents print three amounts that may apply, each with its own conditions and dates below, and only the insurer decides whether any applies; the next step is to contact the insurer.")
+UNIT two injuries (hip and arm) give two separate either/or pairs, never one choice across four amounts: true ([["alt:g:bs|ps:arm, elbow, wrist or ribs",2],["alt:g:bs|ps:hip",2]]; "Grace's documents print two alternative amounts for each injury below (alternatives, never a total), and only the insurer decides which applies; the next step is to contact the insurer.")
 
 all consistent

@@ -14,6 +14,8 @@ const squash = (t: string) => t.replace(/\s+/g, " ").trim();
 /** A count said in words (a bottom line states no number that is not on an amount card). */
 const COUNT = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 const count = (n: number) => COUNT[n] ?? "several";
+/** A money amount in a paragraph (a currency or a bare "$" before digits). */
+const MONEY = /(?:\b[A-Z]{0,3}\$|\b(?:SGD|USD|MYR|EUR|GBP)\s?)\s?\d/;
 /** A paragraph saying a printed benefit does not apply here: a condition not met, a trip or period that does not fit. */
 const VERDICT = /\bnot met\b|\bnot an amount for\b|\bdoes(?:n['’]t| not) (?:fit|cover|apply)\b|\boutside (?:the|its) (?:period|trip|dates)\b|\bended\b/i;
 
@@ -80,6 +82,11 @@ function bottomLine(statements: AnswerStatement[], nextSteps: string[]): string 
   // (one illustration is the outcome with its "if"; a printed amount alone never is -- its dates, trip and conditions are on its card,
   // Evidence Reviewer 1)
   if (amounts.length === 1 && amounts[0].kind === "calculation") return then(`If it applies, ${amounts[0].personName ? `${amounts[0].personName}'s documents give` : "the documents give"} an illustration of ${amounts[0].amount!.text}, and only the insurer decides whether it applies`);
+  if (groups.length > 1 && amounts.every((a) => a.group)) return then(`${amounts[0].personName ? `${amounts[0].personName}'s documents` : "The documents"} print two alternative amounts for each injury below (alternatives, never a total), and only the insurer decides which applies`);
+  // (Critic R24-1: an amount said in plain text -- a row the server did not render as a card -- is printed too, so the count is said only
+  // when every amount the answer states is on a card)
+  const plainMoney = statements.some((s) => !s.amount && MONEY.test(s.fullText));
+  if (amounts.length >= 1 && plainMoney) return then("Your documents print amounts that may apply, each with its own conditions and dates below, and only the insurer decides whether any applies");
   if (amounts.length >= 1) return then(`Your documents print ${count(amounts.length)} ${amounts.length > 1 ? "amounts" : "amount"} that may apply, each with its own conditions and dates below, and only the insurer decides whether ${amounts.length > 1 ? "any applies" : "it applies"}`);
   // (Evidence Reviewer 5: a printed benefit whose condition the household's account does not meet is the outcome -- said as the answer
   // says it, with whose decision it is)

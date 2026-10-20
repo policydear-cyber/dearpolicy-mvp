@@ -106,8 +106,21 @@ async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; ev
     at += line.length + 1;
   }
   if (!out.some((x) => /period|destination/i.test(x.label))) return null;
+  // (Evidence Reviewer 16: WHY a trip does not fit, when the page and the household's own words show it -- the period ended before today,
+  // the household said it happened recently, and where it happened is not the printed destination. Said from what they told us; the
+  // claim decision stays the insurer's.)
+  const facts = (d.state.claim?.subjectId === r.memberId ? d.state.claim?.facts : d.state.otherClaims?.[r.memberId ?? ""]?.facts) ?? {};
+  const words = Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`).concat(d.ctx.topicText ?? "").join(" ");
+  const end = /\bto\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(out.find((x) => /period/i.test(x.label))?.value ?? "");
+  const ended = end && Date.UTC(+end[3], +end[2] - 1, +end[1]) < Date.now() ? fmtDate(`${end[3]}-${end[2].padStart(2, "0")}-${end[1].padStart(2, "0")}`) : null;
+  const recent = /\b(?:last (?:week|night|month)|yesterday|today|this (?:week|morning)|days? ago|recently|just)\b/i.test(words);
+  const dest = out.find((x) => /destination/i.test(x.label))?.value.trim() ?? null;
+  const place = /\bin ([A-Z][a-z]+(?: [A-Z][a-z]+)?)\b/.exec(words)?.[1] ?? null;
+  const elsewhere = dest && place && !dest.toLowerCase().includes(place.toLowerCase()) && !place.toLowerCase().includes(dest.toLowerCase()) ? place : null;
+  const why = [ended ? `its period of insurance ended on ${ended}${recent ? ", before the event you described" : ""}` : null, elsewhere ? `you said it happened in ${elsewhere}, not ${dest}` : null].filter((x): x is string => !!x);
+  const verdict = why.length && (elsewhere || (ended && recent)) ? ` On what you have told me, this trip's cover does not fit this event: ${listOf(why)}; any claim decision is the insurer's.` : why.length ? ` ${listOf(why).replace(/^./, (c) => c.toUpperCase())}; whether it covers this event is for the insurer to confirm.` : null;
   // (C6, Critic R8-1: "trip" only when a Destination line is printed -- an annual schedule prints only its period)
-  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`, evidence: out.map((x) => x.ev) };
+  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}${verdict ? `.${verdict}` : `; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`}`, evidence: out.map((x) => x.ev) };
 }
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
   const w = await renderTermsBody(r, d);
@@ -211,7 +224,14 @@ const rowNote = (all: { marker: string; text: string }[] | undefined) => {
     + (under.length ? `; under the table it prints: ${under.map((n) => `“${noteText(n.text).replace(/[.!?]+$/, "")}”`).join(" and ")}` : "");
 };
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */
-export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number }): string | null {
+/** The either/or group of an illustration: one person, one pair of alternative readings (here two documents' schedules; later the
+ * catalog's amount alternatives for one benefit), and one injury -- the row's case without its kind label ("Arm , Elbow, Wrist or Ribs"
+ * and "Arm, Elbow, Wrist or Ribs (Other Fracture)" are one injury). Null when the row names no case: such an amount stays ungrouped. */
+export function alternativeGroupId(memberId: string, pair: string[], rowLabel: string): string | null {
+  const injury = rowLabel.replace(/\([^)]*\)/g, "").replace(/\s+,/g, ",").replace(/\s+/g, " ").trim().toLowerCase();
+  return injury ? `alt:${memberId}:${[...pair].sort().join("|")}:${injury}` : null;
+}
+export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number; group?: string | null }): string | null {
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c) return null;
   const who = d.nameOf(c.subjectId) ?? "this person";
@@ -262,7 +282,7 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
       amount: { text: money(c.amount, c.currency), currencyResolved: true, illustration: true }, basis: pct && base ? `${pct.value}% of ${baseShort}` : null, conditions, asOf: baseAsOf ?? null,
       source: { policyName: alt?.label ?? product, page: alt?.page ?? null, rowLabel: pct?.label ?? null, footnote: marked ? { marker: marked.marker, text: noteText(marked.text) } : null, note: undefinedNote ? undefinedNote.trim().replace(/^\(|\)$/g, "") : null },
       // (Critic R23-2: only the illustrations the two-document relation note re-rendered are alternatives to each other)
-      ...(alt ? { group: { id: `alt:${c.subjectId}`, kind: "either_or" as const, note: "These are alternatives from different documents, never a total. The documents don't say which one applies; the insurer decides." } } : {}) });
+      ...(alt?.group ? { group: { id: alt.group, kind: "either_or" as const, note: "These are alternatives from different documents, never a total. The documents don't say which one applies; the insurer decides." } } : {}) });
     return full;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {
@@ -399,7 +419,13 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       // (the two illustrations name their document and page; each stays one complete sentence, with its own not-a-payment clause)
       for (const sx of rendered) {
         const out = calcOutcomes(d.ctx).get(String(sx.result_id));
-        const which = out?.policyId === a.policy.id ? { label: la, page: a.schedule.page } : out?.policyId === b.policy.id ? { label: lb, page: b.schedule.page } : null;
+        // (Critic R24-2: the group is this note's own pair -- the two schedules, by benefit and document -- and only their illustrations join it)
+        // (Critic R24-2, Evidence Reviewer 16: the group is this note's own pair of schedules AND one injury -- the row's case, read without
+        // its kind label: "Arm , Elbow, Wrist or Ribs" and "Arm, Elbow, Wrist or Ribs (Other Fracture)" -- so a hip and an arm are two
+        // separate either/or choices, never one choice across four amounts; a row with no partner in the other document stays ungrouped)
+        const row = (out?.record?.operands ?? []).find((o) => o.unit === "percent")?.label ?? "";
+        const group = out && ((out.policyId === a.policy.id && out.benefit === a.benefit) || (out.policyId === b.policy.id && out.benefit === b.benefit)) ? alternativeGroupId(a.memberId ?? "", [a.id, b.id], row) : null;
+        const which = out?.policyId === a.policy.id ? { label: la, page: a.schedule.page, group } : out?.policyId === b.policy.id ? { label: lb, page: b.schedule.page, group } : null;
         const t = which ? renderCalculation(String(sx.result_id), d, which) : null;
         if (t) sx.text = t;
       }

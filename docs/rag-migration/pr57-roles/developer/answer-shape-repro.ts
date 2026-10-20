@@ -9,6 +9,7 @@ import * as FX from "../../../../scripts/fixtures/reliable-chat/fracture-convers
 import { FRACTURE_SCENARIOS } from "../../../../scripts/fixtures/reliable-chat/fracture-scenarios";
 import { FX_REPAIR_SCENARIOS } from "../../../../scripts/fixtures/reliable-chat/fx-repairs-scenarios";
 import { ScriptedLoopModel } from "@/lib/rag2/loop/scripted-model";
+import { alternativeGroupId } from "@/lib/rag2/loop/statement-render";
 import { reconcileStatements, sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { excerptOf } from "@/lib/rag2/evidence";
 import { invalidatedAnswer } from "@/lib/chat/stale-answers";
@@ -43,7 +44,7 @@ async function main() {
         console.log(`\n=== ${sc.id} turn ${i + 1}: ${m}\n  returned = saved = reopened: ${same}   statements cover every paragraph: ${covered}`);
         console.log(`  BOTTOM LINE: ${a.bottomLine ?? "(none)"}`);
         for (const s of a.statements ?? []) {
-          console.log(`  [${s.kind}] ${s.text}${s.amount ? `\n      amount ${s.amount.text} (currency ${s.amount.currencyResolved ? "stated" : "NOT stated"}${s.amount.illustration ? ", illustration" : ""}) for ${s.personName}${s.basis ? `; basis ${s.basis}` : ""}${s.asOf ? `; as of ${s.asOf}` : ""}` : ""}`);
+          console.log(`  [${s.kind}]${s.group ? ` {${s.group.id}}` : ""} ${s.text}${s.amount ? `\n      amount ${s.amount.text} (currency ${s.amount.currencyResolved ? "stated" : "NOT stated"}${s.amount.illustration ? ", illustration" : ""}) for ${s.personName}${s.basis ? `; basis ${s.basis}` : ""}${s.asOf ? `; as of ${s.asOf}` : ""}` : ""}`);
           for (const c of s.conditions ?? []) console.log(`      condition: ${c}`);
           if (s.source) console.log(`      source: ${s.source.policyName}${s.source.page ? ` p.${s.source.page}` : ""}${s.source.rowLabel ? ` row “${s.source.rowLabel}”` : ""}${s.source.footnote ? ` footnote ${s.source.footnote.marker}: ${s.source.footnote.text}` : ""} cites ${JSON.stringify(s.source.citationIds)}`);
         }
@@ -82,6 +83,18 @@ async function main() {
   const st = three.statements ?? [];
   const ok5 = st.length === 3 && st[0].group?.id === "alt:g" && st[1].group?.id === "alt:g" && !st[2].group && !!st[2].amount && !/either/.test(three.bottomLine ?? "");
   console.log(`UNIT only the relation note's calculations are grouped; a third independent one is not, and the bottom line says no "either": ${ok5} (${JSON.stringify(three.bottomLine)})`); if (!ok5) failed++;
+  // Critic R24-2 / Evidence Reviewer 16: two injuries for one person -- a hip and an arm -- are two separate either/or pairs, never one
+  // choice across four amounts. (A live turn naming both parts at once asks which first -- evaluate_benefit's case_conflict -- so the
+  // grouping is checked where it is decided: the group id, then the statements and bottom line built from four such cards.)
+  const gid = (row: string) => alternativeGroupId("g", ["ps", "bs"], row);
+  const ok6 = gid("Arm , Elbow, Wrist or Ribs") === gid("Arm, Elbow, Wrist or Ribs (Other Fracture)") && gid("Hip") === gid("Hip (Other Fracture)") && gid("Hip") !== gid("Arm, Elbow, Wrist or Ribs") && alternativeGroupId("g", ["ps", "bs"], "") === null && alternativeGroupId("g", ["ps", "bs"], "Hip") !== alternativeGroupId("g", ["ps", "other"], "Hip");
+  const Q = ["If it applies to Grace, the Product Summary arm illustration is S$1,250: 25% of S$5,000.", "If it applies to Grace, the certificate arm illustration is S$120,000: 20% of S$600,000.", "If it applies to Grace, the Product Summary hip illustration is S$3,750: 75% of S$5,000.", "If it applies to Grace, the certificate hip illustration is S$300,000: 50% of S$600,000."];
+  const four: any = { summary: Q[0], details: Q.slice(1), claimItems: [], nextSteps: ["Contact the insurer."], citations: [], questions: [], mode: "answer" };
+  const g4 = (id: string | null) => ({ id, kind: "either_or" as const, note: "These are alternatives from different documents, never a total." });
+  buildStatements(four, null, new Map([[Q[0], draft("Simple Fracture · Arm", "S$1,250", "25% of S$5,000", g4(gid("Arm , Elbow, Wrist or Ribs")))], [Q[1], draft("Other Fracture · Arm", "S$120,000", "20% of S$600,000", g4(gid("Arm, Elbow, Wrist or Ribs (Other Fracture)")))], [Q[2], draft("Simple Fracture · Hip", "S$3,750", "75% of S$5,000", g4(gid("Hip")))], [Q[3], draft("Other Fracture · Hip", "S$300,000", "50% of S$600,000", g4(gid("Hip (Other Fracture)")))]]), []);
+  const gs = new Map<string, number>(); for (const x of four.statements ?? []) if (x.group) gs.set(x.group.id, (gs.get(x.group.id) ?? 0) + 1);
+  const ok7 = ok6 && gs.size === 2 && [...gs.values()].every((n) => n === 2) && !/\beither\b/.test(four.bottomLine ?? "") && /for each injury/.test(four.bottomLine ?? "");
+  console.log(`UNIT two injuries (hip and arm) give two separate either/or pairs, never one choice across four amounts: ${ok7} (${JSON.stringify([...gs])}; ${JSON.stringify(four.bottomLine)})`); if (!ok7) failed++;
   console.log(failed ? `\n${failed} FAILED` : "\nall consistent");
   process.exit(failed ? 1 : 0);
 }
