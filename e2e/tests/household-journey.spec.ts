@@ -216,6 +216,9 @@ test.describe.serial("synthetic household journey", () => {
     await cb.getByRole("button", { name: "Delete" }).click();
     await cb.getByRole("button", { name: "Confirm delete" }).click();
     await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
+    // PR #77: the notice above can still be the first deletion's, so wait for this document to leave the library before
+    // leaving the page (leaving earlier could cut the request off). Was: went straight to /family.
+    await expect.poll(async () => (await policies(page)).map((p) => p.id), { timeout: 30_000 }).not.toContain(ids.b);
     await page.goto("/family");
     const childCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
     await childCard.getByRole("button", { name: "Delete" }).click();
