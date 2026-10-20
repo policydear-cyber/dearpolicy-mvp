@@ -828,3 +828,86 @@ is consistently wrong.
 **Not ready to merge.** R14-1 and R14-2 are blockers: the fallback can surface amounts and requirements the composer had removed,
 and steps for the wrong person or an earlier scenario. Both fixes are local to `whatToDo`. Without them the safe fallback is to show
 only the open question, plus the server's own insurer contact step for the current event.
+
+---
+
+# Round 15: short-answer cards (PR #65 branch head `989f34b`, cards commit `2d56c27`)
+
+Scope: `components/answer-cards.tsx`, the cards switch in `app/chat/page.tsx` (:327-331, :410, :415), and the fixture
+`scripts/fixtures/ux/answer-cards-fr1.json`. This was read only, with no build and no model calls. The server does not send
+`statements[]` or `bottomLine` yet, so on today's server the cards path never runs and production answers render as before.
+The findings below are about what happens once the Developer's answer-fields change starts sending those fields.
+
+## R15-1 (High): an amount card never says whose amount it is
+
+`AmountCard` (answer-cards.tsx:39-57) renders `amount`, `text`, `basis`, `conditions`, the source and the date. It never renders
+`personName`. In the fixture, card s1 shows "S$1,250 · Simple Fracture · arm, elbow, wrist or ribs" with no name. Only the bottom
+line says Grace. In a whole-family answer, two people's cards would look identical. That breaks "each benefit stays tied to its
+person". Fix: put `personName` on the card, and keep a card hidden when `personName` is missing and the answer is about more than
+one person.
+
+## R15-2 (High): qualifiers leave the card
+
+- The card shows the short `text`. `fullText` holds the conditional wording ("If the Simple Fracture benefit applies to Grace's
+  case …"), and that wording is never shown. The card keeps only the label "illustration".
+- In s2, the qualifier "The documents do not define which fractures count as Other Fracture, so the insurer decides" sits in
+  `source.note`. That only renders inside the collapsed "Where this comes from" section (:71). The amount S$120,000 shows
+  without it.
+- A `benefit_terms` (or any) statement with `amount: null` renders as a bare `<p>{text}</p>` (:92). Its `basis` and
+  `conditions` are dropped, not even collapsed.
+- The "not a payment or an insurer's decision" footer appears only when at least one amount is an illustration (:94). The type
+  says `text` has no "not a payment" tail. So a printed amount (illustration=false) loses that qualifier entirely.
+
+Fix: on the card itself, show a qualifier line whenever `fullText` starts with a condition or `source.note` names a limit on
+cover. Render `basis` and `conditions` for every statement, not only amount ones. Show the footer for printed amounts too.
+
+## R15-3 (High): cards replace the whole answer text
+
+When `statements[]` is present, page.tsx:330-331 drops `message.content`, and :410 drops `answer.details`. Anything the prose
+says that is not one of the statements disappears. Examples are a scheme or certificate listing, the death-completion sentence,
+a second benefit, or a "not found in these documents" scope line. Hiding a documented benefit is a failure. Fix, either of:
+(a) the server guarantees, and a test checks, that every sentence of `content` and `details` maps to a statement; or (b) the UI
+shows the remaining prose sentences under the cards, or at least a "Full answer" disclosure with `content` and `details`.
+
+## R15-4 (High): statements skip the server's money checks, so returned and reopened answers can differ
+
+`sanitizeStoredAnswer` → `enforceLiveChatMonetaryBoundary` (monetary-boundary.ts:304-323, :248-271) runs when a saved answer is
+reopened. It rewrites `claimItems`, `policyStatedLimits`, `potentialPayoutTotals` and `payoutQualifiers`. It does not touch
+`statements[]`. `verifyAnswerFigures` (answer-verification.ts:1294) and `invalidateAnswersWithDeletedPolicies` also read only the
+existing fields. So when the boundary strips an amount from the prose on reopen, the card still shows it. A statement can also
+carry a figure that verification never checked. Fix (Developer, with the fields change): run `statements[].amount`, `basis` and
+`conditions` through the same verification and monetary boundary as the prose, on both the live path and the reopen path, and drop
+the card when its figure is removed. A test should compare the cards for one answer as returned, saved and reopened.
+
+## R15-5 (Medium): the fallback can show a sentence twice, and the bottom line has no link to its qualifier
+
+- With no `bottomLine`, the summary is hidden only when it exactly equals a statement's `fullText ?? text` (:89). A summary
+  that differs by markdown, a date rewrite or one trimmed clause shows next to the card that says the same thing. The two
+  versions can differ in their qualifiers, with the summary carrying the "If …" and the card not. Fix: compare after the same
+  `render` normalisation, or have the server mark which statement the summary is.
+- `bottomLine` renders on its own, in bold, first. Nothing ties it to the conditions it depends on. The fixture's "may be able
+  to claim" is fine, but the UI has no guard. The server contract should require that a `bottomLine` naming an outcome carries
+  its qualifier in the same sentence.
+
+## R15-6 (Low): the wording for an unknown currency assumes a bare "$"
+
+`currencyResolved: false` always renders "The document prints a bare “$”" (:72). That is wrong when the figure has no symbol,
+or prints "dollars". Use "The document does not say which currency" unless the server says a bare $ was printed.
+
+## Answers to the coordinator's four questions
+
+1. Can a card show an amount without its conditions, person or currency status? Person: yes, always (R15-1). Conditions: yes,
+   for the "If … applies" wording and the insurer-decides note (R15-2). Currency status: no, "currency not stated" stays on the
+   card.
+2. Can `bottomLine` appear without its qualifier? Yes, nothing prevents it (R15-5).
+3. Can the fallback mix `fullText` and card fields so a statement shows twice or half? Twice, yes (R15-5). Half, yes, because
+   `text` replaces `fullText` (R15-2) and the rest of the prose is dropped (R15-3).
+4. Do returned, saved and reopened answers render the same? The rendering is the same if the stored JSON keeps `statements`,
+   which it does (`answer_json` is copied whole). But the reopen path re-applies the monetary boundary to the prose and not to
+   the statements, so they can differ (R15-4).
+
+## Verdict on the cards at `989f34b`
+
+**Safe to merge as a dormant change; not safe to switch on.** No server path sends `statements[]` today, so PR #65 changes no live
+answer. R15-1 to R15-4 must be fixed before the Developer's answer-fields change lands. R15-1 to R15-3 are UI fixes. R15-4 belongs
+to the Developer.
