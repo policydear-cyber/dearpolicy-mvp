@@ -223,7 +223,7 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       if (la === lb) { la = `${la} (page ${a.schedule.page})`; lb = `${lb} (page ${b.schedule.page})`; }
       const frame = `${a.memberName}'s documents give two different answers for ${outs.length > 0 ? "this event" : "the same kind of event"}, and what they say does not settle which applies: these are alternatives from separate documents, never a total.`;
       const standing = [standingClause(la, pa), standingClause(lb, pb)].filter((x): x is string => !!x);
-      const status = [`The ${la} (page ${a.schedule.page}) takes its percentage of ${baseOf(a)}; the ${lb} (page ${b.schedule.page}) takes its percentage of ${baseOf(b)}.`, ...standing, "Neither document says whether one amends, replaces or adds to the other, or which applies to this event."].join(" ");
+      const status = [`The ${la} (page ${a.schedule.page}) takes its percentage of ${baseOf(a)}; the ${lb} (page ${b.schedule.page}) takes its percentage of ${baseOf(b)}.`, ...standing, "Neither document says whether one amends, replaces or adds to the other." /* (which applies is said once, in the frame above: PR #57 follow-up, K3t1 repetition) */].join(" ");
       const clauseEv = [...pa.clauses, ...pb.clauses].map((c) => d.evidenceId(c.evidence, "standing"));
       const both = [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)];
       const note1 = { kind: "uncertainty", text: frame, evidence_ids: both, subject_id: a.memberId } as Record<string, unknown>;
@@ -239,7 +239,8 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
         const ids = Array.isArray(x.evidence_ids) ? (x.evidence_ids as unknown[]).map(String) : [];
         if (!ids.length || !ids.every((id) => covered.has(id))) continue;
         if (x.subject_id != null && x.subject_id !== a.memberId) continue;
-        if (/\d/.test(String(x.text ?? ""))) continue;
+        // (a figure: an amount or a percentage -- a document's own name, "Certificate of Insurance Part 2", is not one)
+        if (/(?:[A-Z]{0,3}\$|\b(?:SGD|USD|MYR|EUR|GBP)\s?)\d|\d(?:[.,]\d+)?\s*(?:%|per ?cent)/i.test(String(x.text ?? ""))) continue;
         list.splice(k, 1);
         d.superseded?.(String(x.text ?? ""));
       }

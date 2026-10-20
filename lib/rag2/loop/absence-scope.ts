@@ -177,18 +177,18 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   for (const p of src.pages) { const l = pagesOf.get(p.policyId) ?? []; l.push({ page: p.page, text: p.text }); pagesOf.set(p.policyId, l); }
   const unread = scope.docs.filter((d) => !(pagesOf.get(d.id) ?? []).some((p) => p.text.trim()));
   if (unread.length) return { ok: false, problem: `the text of ${unread.map((d) => labels.get(d.id)).join(", ")} is not stored, so nothing can be said to be absent from it` };
-  // PR #57 follow-up (critic M2): an absence is said only over a document read in full. A stored page with no text, fewer stored pages than
+  const hits = scanScope(scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) })), st.terms);
+  if (hits.length) {
+    const shown = hits.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
+    return { ok: false, problem: `not_found refused: the documents checked DO print ${hits.length > 1 ? "words for" : "a word for"} this (${[...new Set(hits.map((h) => h.term))].join(", ")}): ${shown}. Say what those lines print (cite them) or narrow the claim to documents and terms that are truly absent; never say a document does not describe what it prints` };
+  }
+  // PR #57 follow-up (critic M2; after the scan, so a page that prints the topic is still named): an absence is said only over a document read in full. A stored page with no text, fewer stored pages than
   // the document has, or a page count that is not known, means part of it was never read.
   const partial = scope.docs.filter((d) => {
     const ps = pagesOf.get(d.id) ?? [];
     return ps.some((p) => !p.text.trim()) || d.pageCount == null || new Set(ps.map((p) => p.page)).size < d.pageCount;
   });
   if (partial.length) return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked` };
-  const hits = scanScope(scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", pages: (pagesOf.get(d.id) ?? []).sort((a, b) => a.page - b.page) })), st.terms);
-  if (hits.length) {
-    const shown = hits.slice(0, 3).map((h) => `${h.name} page ${h.page} prints “${h.line}”`).join("; ");
-    return { ok: false, problem: `not_found refused: the documents checked DO print ${hits.length > 1 ? "words for" : "a word for"} this (${[...new Set(hits.map((h) => h.term))].join(", ")}): ${shown}. Say what those lines print (cite them) or narrow the claim to documents and terms that are truly absent; never say a document does not describe what it prints` };
-  }
   const check: AbsenceCheck = {
     claim, topic: t.topic, terms: st.terms, subjectId: subjectId ?? null, scope: scope.scope,
     documents: scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", fileHash: d.fileHash ?? null, rev: d.rev ?? null, pages: (pagesOf.get(d.id) ?? []).length })),
