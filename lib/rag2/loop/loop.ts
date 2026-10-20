@@ -36,7 +36,7 @@ import { CAUSE_KEYS, checkFact, confirmed, contentWords, EVENT_KEY, factConcept,
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, firstClauseOnly, relevantEvidence, resolverOf, statedInMessage, unprintedAsk } from "./questions";
 import { internalIdsIn } from "./statements";
-import { SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
+import { checkNotFound, SAYS_NOT_PRINTED, UNCHECKED_ABSENCE_DROP } from "./absence-scope";
 import { estimateTokens, LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, normalizeCitationKeys, NOTE_FACTS, TERMINAL } from "./actions";
 import { RENDERED, renderStatements } from "./statement-render";
@@ -114,9 +114,12 @@ const nameAlt = (names: string[]) => names.map((n) => n.replace(/[.*+?^${}()|[\]
 export function isPersonCorrection(message: string, fromNames: string[], toNames: string[], pendingAboutFrom: boolean): boolean {
   if (MIX_UP.test(message)) return true;
   if (!fromNames.length || !toNames.length) return false;
+  // (critic round 3: "Daniel broke his arm too, but it wasn't Grace's fault" -- "too / also / as well" adds a person's event; only a
+  // mix-up phrase makes such a message a correction)
+  if (/\b(?:too|also|as well)\b/i.test(message)) return false;
   const to = new RegExp(`\\b(?:${nameAlt(toNames)})\\b`, "i");
   if (!to.test(message)) return false;
-  const away = new RegExp(`(?:\\bnot|n['’]t|\\bnever|\\brather than|\\binstead of)\\s+(?:(?:was|were|it|him|her|for|about|to|with)\\s+){0,2}(?:${nameAlt(fromNames)})\\b(?!['’]s?\\s+(?:with|there|around))`, "i");
+  const away = new RegExp(`(?:\\bnot|n['’]t|\\bnever|\\brather than|\\binstead of)\\s+(?:(?:was|were|it|him|her|for|about|to|with)\\s+){0,2}(?:${nameAlt(fromNames)})\\b(?!['’])`, "i"); // (a possessive -- "Grace's fault" -- does not name Grace as the person)
   if (away.test(message)) return true;
   return pendingAboutFrom && new RegExp(`\\b(?:i meant|i mean|meant to say|it was|it's|it is)\\s+(?:${nameAlt(toNames)})\\b(?!['’])`, "i").test(message);
 }
@@ -1816,12 +1819,34 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       const via = (acc.via as typeof r | undefined) ?? r;
       // (critic H2: the server never decides the condition is met or not; the insurer does)
       const text = c.cause === "illness"
-        ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an illness, not an accident, so its printed terms are not an estimate for this stay; whether its condition is met is for the insurer to decide.`
+        ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an illness, not an accident, so on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's.`
         : c.cause === "unresolved"
         ? `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). What you reported describes both an illness and an injury, so whether that condition is met is for the insurer to decide.`
         : `${label(r)} (page ${r.source.page}) is printed with an accident condition (“${wording}”). The cause you reported (“${said}”) is an accident, which is what that condition requires.`;
       out.push({ kind: "fact", subject_id: subj, text, evidence_ids: [evidenceIdOf(state, via.source.evidence, "statement")] });
       // (PR #57 follow-up, DC's instructions: a documented benefit is never hidden. Its printed terms stay beside the condition.)
+    }
+    // PR #57 follow-up (v1 K2.3, coordinator decision under DC's contract that a documented benefit is never hidden): on the illness path,
+    // the other cover the person's own certificate LISTS with no cause condition (not a death benefit) is named once. Whether its terms are described is decided by the server's own absence check (./absence-scope.ts, document_silent over
+    // the person's other documents); when that check refuses, the listing alone is said. An amount is only ever "listed as of <date>".
+    if (c.cause === "illness" && out.length) {
+      const docIds = [...new Set(recs.filter((r) => r.memberId === subj).map((r) => r.policy.id))];
+      const GENERIC = /\b(?:group|benefits?|cover|plan|insurance)\b/gi;
+      const keyOf = (r: (typeof recs)[number]) => label(r).replace(GENERIC, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      const listedOnly = recs.filter((r) => r.memberId === subj && r.policy.personalProof && r.kind === "printed_amount" && !seen.has(r.id) && !deathBenefit(r.benefit) && !accidentCondition(r, recs) && keyOf(r).length >= 4);
+      const names = [...new Set(listedOnly.map((r) => label(r)))];
+      if (names.length) {
+        const list = names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names.at(-1) : names[0];
+        const dates = [...new Set(listedOnly.map((r) => r.asOf).filter((x): x is string => !!x))];
+        const asOf = dates.length === 1 ? ` (listed as of ${new Date(dates[0] + "T00:00:00Z").toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })})` : "";
+        const ev = [...new Set(listedOnly.map((r) => evidenceIdOf(state, r.source.evidence, "statement")))];
+        out.push({ kind: "fact", subject_id: subj, evidence_ids: ev, text: `${listedOnly[0].memberName}'s certificate also lists ${list}${asOf}.` });
+        const others = docIds.filter((id) => !listedOnly.some((r) => r.policy.id === id));
+        const absence = { kind: "not_found", claim: "document_silent", subject_id: subj, topic: `what ${names.join(" or ")} ${names.length > 1 ? "cover" : "covers"}`, terms: listedOnly.map(keyOf), scope_policy_ids: others };
+        const members = input.people.map((p) => p.name);
+        const pre = others.length ? await checkNotFound(input.accountId, absence, { subjectId: subj, who: listedOnly[0].memberName, names: members }).catch(() => null) : null;
+        if (pre?.ok) out.push(absence);
+      }
     }
     if (!out.length) return null;
     (trace.adjusted ??= []).push(`stated how the reported cause (“${said}”) fits the printed accident condition of ${[...seen].map((id) => label(ctx.benefitRecords!.get(id)!)).join(", ")}${replaced.size ? "; its terms and amount are left out for a cause it does not fit" : ""}`);
