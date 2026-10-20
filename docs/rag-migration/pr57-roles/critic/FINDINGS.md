@@ -234,3 +234,36 @@ This conflicts with "keep returned, saved, displayed and reopened answers consis
 Not ready to freeze as the final candidate. C1-1 attaches another benefit's terms and an unresolved amount to an illustration, which DC's contract forbids. It must be fixed in C2. C1-2 and C1-3 should be fixed in C2 or listed accurately as open. The rest of C1 is sound.
 
 The evidence for C1 is scripted tests and recorded replays only. C1 changes tool behaviour the model sees: which messages move an event, and the refusal texts for absence and `note_facts`. So no replay can show how the real model responds. That limit must be stated, and a live check needs DC's authorisation and ledger room.
+
+---
+
+# Round 3b: rulings on the Test engineer's C1.1 (`0a5dfb0`) and notes on pre-C2 `86ffadf`
+
+## Product Summary page count: 37, not 36
+
+Agreed: 37. `page_count` is the document's length, and the fixture stores page index 37 (which prints "Page 36 of 36"). A count of 36 would sit below a stored page, which is impossible for a real document. Either value keeps the copy incomplete (4 stored of 37), so neither forces anything green. The certificate at 1 ("Page 1 of 1") and the Benefit Summary as unknown are also right.
+
+The unit fixture in `reliable-chat-absence-scope-test.ts` was renumbered so that each synthetic document is stored in full. That is acceptable. I checked that no assertion depends on the old page numbers: F1 names its own page 20 document. The partial cases moved to the new S12 and S13, so nothing that was tested is lost.
+
+## fx-repairs A2 to A5, A9 (and B1): genuine expectation errors; do not edit them to pass, re-point them
+
+These checks assert that the three-document dental absence ("do not describe a benefit for dental treatment", scope of 3 documents, saved and reopened) is said over the fracture fixture. Two of those three documents are partial copies: 4 of 37 pages, and 6 of an unknown number. QC Q5 already noted that an absence over that copy says nothing about the real document. The expectation therefore asserted a claim the documents could not support. That is an expectation error, not a regression in C1.
+
+Ruling:
+1. **Keep the original checks' intent and re-point them at fully stored documents.** Add a fully stored variant of the household (every page stored, true `page_count`) and run A2 to A5, A9 and B1 there with their wording unchanged. This keeps "a supported absence is still said, scoped, saved and reopened identically" under test. That is the guard against C1-4 (the full-read rule hiding supported answers), and it must be able to fail.
+2. **On the partial fixture, add new checks, not edited ones:** no absence is said (M5 covers this), and the answer stays useful. It must name what was read and that the rest could not be checked. It must not end in "couldn't confirm an answer" or in the model-error answer. The C1 replay shows K6a ending in "I couldn't finish: the assistant model returned an error". That happens because the recorded calls have no repair step, which is a replay limit. But nothing yet shows the live path ends well, so this is an open item for a live run.
+3. **Publish the reason** next to the change (in `test/`): the original lines, why each was an expectation error (asserted absence over 4 of 37 pages), and the commit that preserves them. Do not delete the old assertions from history.
+
+## New product regressions from the Test engineer's C1 run (for the Developer; tests must not be changed for these)
+
+- **`rag2:tools-test` F4 (Medium, contract):** `lib/chat/stale-answers.ts` now imports `lib/rag2/store` and `lib/rag2/loop/absence-scope` (M4 repair). That breaks the rule that the existing chat path does not load the loop when it is off. Fix in product code: do the M4 widening check in SQL inside `stale-answers.ts`, or behind the flagged hook. The suite's boundary must not be relaxed.
+- **`reliable-chat:structured-answers-test` J2, J3, J3b, J4, SBa (Medium):** the table condition is quoted with its own full stop inside the illustration sentence, and the sentence splitter then splits one saved calculation into two. This is DC's "one complete sentence" rule for a saved calculation. Fix the rendering (quote the condition without its final full stop, or put it in brackets); do not change the splitter's expectation.
+- **"the J, Accidental Hospital Recuperation Benefit" (Low):** the section letter is taken into the benefit label on the sickness path. Same family as C1-1 (layout text read as content); fix where the label is read.
+
+## Pre-C2 `86ffadf` (read, not run)
+
+- **C1-1 fix:** stops at `isSectionHeading` / `isHeadingLine`, at the first blank line, and at any sentence with an amount or percentage. That matches my ask, and N7 tests it. Accepted, pending the Test engineer's run.
+- **C1-2 fix:** "too / also / as well" blocks a correction unless a mix-up phrase is present, and a possessive is not the person. This fails safe (a missed correction leaves facts where they were). H1.6 tests it. Accepted.
+- **Sickness wording:** matches QC's ruling, and is reachable only with no injury word. Accepted.
+- **Living Care sentence:** names the listed cover with no amount, says "listed as of <date>", and adds the server-checked `document_silent` absence only when `checkNotFound` passes; otherwise the listing alone is said. That meets all four conditions I set. Accepted.
+- **C1-3 (re-analysis in place):** not addressed yet. It must be fixed or listed with the corrected reason in C2.
