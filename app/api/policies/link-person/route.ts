@@ -21,8 +21,9 @@ const Schema = z.object({
   familyMemberId: z.string().uuid().optional(),
   declared: z.boolean().optional(),
   // "Not in my family": the detected name is nobody in this household.
-  notFamily: z.literal(true).optional(),
-}).refine((b) => b.notFamily ? !!b.detectedName && !b.familyMemberId && !b.declared : !!b.familyMemberId, { message: "Choose a family member, or send notFamily with the detected name only." });
+  // false takes the answer back (Undo) without linking the name to anyone.
+  notFamily: z.boolean().optional(),
+}).refine((b) => b.notFamily !== undefined ? !!b.detectedName && !b.familyMemberId && !b.declared : !!b.familyMemberId, { message: "Choose a family member, or send notFamily with the detected name only." });
 
 /** Round 5 (item 3): set everyone a document covers in one request, each
  * with the cover tier they hold when the document has tiers. Everyone the
@@ -118,6 +119,11 @@ export async function POST(request: NextRequest) {
       );
       if (!policyRow.rows[0]) throw new PolicyNotFound();
 
+      if (body.notFamily === false) {
+        if (!remembersDismissals) return { ok: true, notFamily: false, remembered: false };
+        await client.query(`DELETE FROM policy_name_dismissals WHERE policy_id=$1 AND account_id=$2 AND name_key=${nameKeySql("$3")}`, [body.policyId, ctx.householdId, body.detectedName!]);
+        return { ok: true, notFamily: false, remembered: true, refresh: true };
+      }
       if (body.notFamily) {
         const name = body.detectedName!;
         const named = await client.query<{ matched: string | null }>(

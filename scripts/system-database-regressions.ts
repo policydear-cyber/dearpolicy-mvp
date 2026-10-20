@@ -1314,6 +1314,7 @@ async function main(){
       assert.equal((await reopen())[0].invalidated,undefined);
       await db.query("DELETE FROM chat_conversations WHERE id=$1",[c.id]);
       await db.query("DELETE FROM policies WHERE id=$1",[cert]);
+    });
     await test("\"Not in my family\" hides a name read from a document, survives a re-read, and never hides another household's names",async()=>{
       const doc=uuid(701700),foreignDoc=uuid(701701),[daniel,grace]=[people[0].id,people[1].id];
       const add=(id:string,acct:string,owner:string)=>db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,needs_review,review_reason) VALUES($1,$2,$3,'Example Insurer','Dismiss Plan','DIS-1','Hospital','personal_schedule',true,60,'ready',$4,$4,'scan_clean',true,'1 named insured person is not linked')",[id,acct,owner,id+".pdf"]);
@@ -1359,6 +1360,19 @@ async function main(){
       assert.ok((await shown()).includes("Other Key"),"Another household's row never hides this household's name");
       const foreignNames=await db.query<{n:number}>(`SELECT count(*)::int AS n FROM policy_detected_people pd WHERE pd.policy_id=$1 AND ${await notDismissedCondition("pd")}`,[foreignDoc]);
       assert.equal(foreignNames.rows[0].n,1,"The other household's Stranger Lim is still listed for them");
+
+      // Undo takes the answer back without linking anyone, and only in this household.
+      await db.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,foreign]);
+      assert.equal((await post({policyId:foreignDoc,detectedName:"Stranger Lim",notFamily:false})).status,404,"Another household's document is refused");
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1",[foreignDoc])).rows.length,1,"Their answer is untouched");
+      const undone=await post({policyId:doc,detectedName:"Another  NAME",notFamily:false});
+      assert.equal(undone.status,200);
+      assert.deepEqual(await undone.json(),{ok:true,notFamily:false,remembered:true});
+      assert.ok((await shown()).includes("Another Name"),"The name is listed again");
+      assert.equal((await db.query("SELECT 1 FROM policy_detected_people WHERE policy_id=$1 AND detected_name='Another Name' AND matched_family_member_id IS NULL",[doc])).rows.length,1,"Undo links nobody");
+      assert.equal((await db.query<{needs_review:boolean}>("SELECT needs_review FROM policies WHERE id=$1",[doc])).rows[0].needs_review,true,"It is waiting to be linked again");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:false})).status,200,"Undoing twice is fine");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:false,familyMemberId:daniel})).status,400);
 
       // Linking the name to someone takes the dismissal back.
       assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",familyMemberId:daniel,declared:true})).status,200);
