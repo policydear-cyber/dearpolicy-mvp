@@ -2,7 +2,7 @@
  * system prompt, the conversation so far, and the answer. No retrieval, benefit records, calculators or checks.
  * Experiment only (scripts/simple-answer/compare.ts); nothing in the live app imports this. */
 import type Anthropic from "@anthropic-ai/sdk";
-import type { Household, HouseholdDocument } from "./household";
+import type { Household } from "./household";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const MAX_OUTPUT_TOKENS = 8000;
@@ -11,25 +11,8 @@ export const SYSTEM_PROMPT = `You answer a household's questions about their own
 
 Answer only from these pages. For every fact you give, quote the words that support it and cite the document name and page, and say whose policy it is. Keep each amount with its conditions, limits and currency exactly as printed. If the documents do not say something, say that plainly rather than guessing; missing wording is not an exclusion. A dated certificate shows what was true on its date, not necessarily today. Do not promise that a claim will be paid; the insurer decides. If you need one fact from the household to answer properly, answer what you can first and then ask for it. Be brief and plain: lead with the answer.`;
 
-const attr = (name: string, value: string | null | undefined) => (value ? ` ${name}="${value.replace(/"/g, "'")}"` : "");
-
-export function renderDocument(doc: HouseholdDocument, index: number): string {
-  const head = `<document id="D${index + 1}" name="${doc.name.replace(/"/g, "'")}"` +
-    attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
-    attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
-    attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
-    attr("linked_people", doc.linkedPeople.join(", ")) + attr("superseded", doc.supersededAt) +
-    (doc.processingStatus && doc.processingStatus !== "ready" ? attr("reading_status", doc.processingStatus) : "") + ">";
-  const pages = doc.pages.length
-    ? doc.pages.map((p) => `<page n="${p.page}">\n${p.text}\n</page>`).join("\n")
-    : "<no_readable_text/>";
-  return `${head}\n${pages}\n</document>`;
-}
-
-export function renderLibrary(household: Household): string {
-  const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
-  return `<household_members>${people}</household_members>\n<documents>\n${household.documents.map(renderDocument).join("\n")}\n</documents>`;
-}
+export { renderDocument, renderLibrary } from "../../lib/simple-chat/library";
+import { renderLibrary } from "../../lib/simple-chat/library";
 
 /** Rough token count for planning (no API call). Conservative: 3 characters per token. */
 export const estimateTokens = (s: string) => Math.ceil(s.length / 3);

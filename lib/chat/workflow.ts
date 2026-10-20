@@ -135,6 +135,7 @@ import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } fro
 // Conversational RAG (Prompt 2): DEARPOLICY_RAG_LOOP (default off) hands the turn to the model-driven loop; the loop
 // module is loaded only when the flag is on (lib/rag2/loop/hook.ts).
 import { ragLoopEnabled } from "@/lib/rag2/loop/flag";
+import { simpleChatEnabled } from "@/lib/simple-chat/flag";
 
 
 export type ChatRequest={
@@ -302,6 +303,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
+  if(simpleChatEnabled())return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).prepareLoopChat(request);
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
@@ -1572,6 +1574,7 @@ function asksSideQuestion(text:string,state:ConversationState,holdings:string[])
   return true;
 }
 async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string;side?:boolean}):Promise<ChatResult>{
+  if(simpleChatEnabled())return (await import("@/lib/simple-chat/hook")).runSimpleChat(context,{check:options?.check,jobId:options?.jobId});
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).runLoopChat(context,{save:saveTurn,check:options?.check,jobId:options?.jobId});
   const {conversation}=context;let {request}=context;
   if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);
