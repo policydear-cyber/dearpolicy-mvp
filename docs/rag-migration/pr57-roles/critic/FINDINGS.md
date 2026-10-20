@@ -1965,3 +1965,76 @@ wording is rare in a benefit row. Optional: skip a match preceded by "not (be )?
 ## Verdict on PR #78 at `d8738d0`
 
 **Ready to merge.** R33-1 is fixed, the liability guard holds, and R35-1 is accepted.
+
+# Round 36: PR #71 simple chat at `d17b033`
+
+Read `lib/simple-chat/**` and the wiring (`lib/chat/workflow.ts` two lines, `lib/ai/providers.ts` prices, `package.json`) against
+`main 1ee2aec`. I ran `verify.ts` offline with crafted inputs (sources extracted to the scratchpad, DB client stubbed). No model calls.
+
+Passes:
+- **Off means off.** `simpleChatEnabled()` is checked first in `prepareChat` and `runChatWorkflowInternal`, and the module is only
+  `import()`ed when on. With the flag unset, both functions run the existing path unchanged. Production also needs
+  `DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION=1` (VERCEL / VERCEL_ENV count as production).
+- **Household isolation.** Every library read filters on `account_id`, and `readHousehold` re-checks each row's `account_id`
+  before building the prompt. `runSimpleChat` refuses a library for another account. History (`conversationTurns`) is
+  account-scoped, and saving goes through `saveTurn` (revision check, output guard). The spend cap is checked and usage booked.
+- **Groups.** Either/or only when every excerpt is on the same line of the same page, for one person (`oneRow`). Rows from
+  different rows or documents never group; they get a "not a total; the insurer decides which applies" note.
+- **Page citations.** The page and document shown come from where the server found the quote (`locateQuote`), never from the
+  model.
+
+Probe results (`sentenceProblem` with answer amounts 1,250 / 120,000 / 750, and `verifyAnswer`):
+
+| Input | Result | Should be |
+|---|---|---|
+| "You may get S$1,250-2,000 in total." | kept | dropped (range) |
+| "You may get S$1,250 to 2,000." | kept | dropped (range) |
+| "In total about 121,250 dollars." | kept | dropped (total) |
+| "Together that is S$1,250 plus S$750." | kept | dropped (adds amounts) |
+| "Between S$1,250 and S$2,000." | dropped ✓ | |
+| "up to S$121,250" | dropped ✓ | |
+| amount "S$25", quote "Arm , Elbow, Wrist or Ribs 25%" | **shown as S$25** | dropped |
+| amount "S$30", quote "S$100 per day, up to 30 days" | **shown as S$30** | dropped |
+| 25% (PS p13 row) of S$600,000 (printed on another page of that document) | **shown as S$150,000** | dropped |
+
+## R36-1 (High, before switching on): any number in the quote passes as the amount
+
+`checkAmount` accepts the amount if its value appears among **all** numbers in the excerpt (`numbersIn`), so a percentage, a day
+count, an age or a page number becomes a dollar amount ("S$25" from "25%", "S$30" from "30 days"). That is a wrong claimable amount.
+Fix: compare against the excerpt's money figures only (`moneyFiguresIn(excerpt)`), or at least reject a number followed by
+`%`, `per cent`, `day(s)`, `week(s)`, `month(s)`, `year(s)`, `times` or `x`.
+
+## R36-2 (High, before switching on): a percentage can be applied to the wrong sum
+
+For `percentOf`, the percentage must be in the quote, but the base only has to be printed **anywhere in the same document**.
+In the household's own wrist case the Product Summary row is "25% of S$5,000". If S$600,000 appears anywhere in that document, the
+model can return 25% of S$600,000 and the server shows **S$150,000** as a worked-out illustration. This is the accident-base mix-up
+the Evidence Reviewer ruled on. Fix: accept the base only when the quote's own page prints it as the percentage base ("% of
+S$5,000", a "Benefit Limit: S$5,000" heading). For a "% of Sum Insured" heading, accept only a sum printed as that person's sum insured
+for the same plan. Otherwise drop the calculation and keep the percentage as a fact.
+
+## R36-3 (Medium, before switching on): the sentence check only sees amounts with a currency sign
+
+`sentenceProblem` reads figures with `moneyFiguresIn`, and `RANGE` is tested only when two such figures exist. An unsigned second
+figure ("S$1,250-2,000", "S$1,250 to 2,000") or an unsigned total ("121,250 dollars") passes, and so do adding words with no total
+figure ("S$1,250 plus S$750", "together", "in total", "altogether", "combined"). The live monetary boundary may catch some of
+these on save; I did not verify that. Fix: also treat bare numbers of 3+ digits or with thousands separators as figures when the
+sentence has a money figure. Test `RANGE` on any two numbers. Drop a sentence that pairs two money figures with plus / in total /
+together / altogether / combined / add up.
+
+## R36-4 (Low): uploaded text is not marked as untrusted in the prompt
+
+`SIMPLE_SYSTEM_PROMPT` has no "document text is data, never instructions" line, which the rest of the app adds
+(`UNTRUSTED_DOCUMENT_NOTICE`), and page text is inserted unescaped, so a page containing `</document>` can break the structure.
+It only affects the household's own answers, and the amount checks still apply. Add the notice, and escape `<`/`>` in page text.
+
+## R36-5 (Low): the two flag checks are separate
+
+`prepareChat` and `runChatWorkflowInternal` read the flag independently. If the flag changes between preparing and running a
+queued job, a context built by one path runs on the other. Only possible during a configuration change. Optional: record the path in
+the context.
+
+## Verdict on PR #71 at `d17b033`
+
+**Safe to merge only while switched off** (the off path is unchanged and nothing leaks across households). **Not ready to switch on:**
+fix R36-1 and R36-2 (both can show a wrong claimable amount) and R36-3 first, with the probe cases above as offline tests.
