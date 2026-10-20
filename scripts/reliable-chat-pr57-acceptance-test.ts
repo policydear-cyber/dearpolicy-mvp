@@ -19,7 +19,8 @@
  *       M5: the fixture library (two partial copies) never gets an absence; M0-M4 run on documents stored in full
  *   M4  Critic M4: a saved "not described" answer is withdrawn when a document is added to its scope
  *   N   negative controls: wrong person, product, version and percentage base; supported information surviving verification
- *   GP  DC's live GP-bill failure (20 Oct): the journey, a medical-expense control, G1 must-not-fire cases, no applicability clause
+ *   UX  browser regressions on C2 (UX agent): FX-K4B turn-1 question, FX-K6B bare refusal, lost 'no longer applies', X-ray questions
+ *   GP  DC's live GP-bill failure (20 Oct): the journey, a medical-expense control, G1 must-not-fire cases, no applicability clause; Critic round 5 F1, A2, A3, F2 (08fb1b3)
  *   Q3  Policy QC Q3: a person correction where the two people's sums insured differ recalculates from the new person's own row
  *
  *   node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts                 (--show prints every answer; an argument, not an environment variable)
@@ -34,6 +35,7 @@ import { ScriptedLoopModel, type ScriptCall, type ScriptTurn } from "@/lib/rag2/
 import { uniqueSteps } from "@/components/next-steps";
 import { CERT, G, benefitIdOf, call, idsAny, resultIds } from "./fixtures/reliable-chat/fracture-script";
 import { recordedTerminal, recordedTurns } from "./fixtures/reliable-chat/recorded-model";
+import { FX_REPAIR_SCENARIOS } from "./fixtures/reliable-chat/fx-repairs-scenarios";
 import { sentences } from "./rag2-live/usefulness-check";
 
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
@@ -164,6 +166,15 @@ async function main() {
       () => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "suggestion", text: "You can ask me to go through Daniel's fracture figures." }] })],
     ] }], async () => { const a1 = await turn("H1.5 turn 1", "grace fell down and broke her arm"); const a2 = await turn("H1.5 correction", "Actually it was Daniel who broke his arm, not Grace.", a1.conv); return { a2, s2: await stateOf(a2) }; });
     check("GUARD", "H1.5 (control) a real correction (\"Actually it was Daniel who broke his arm, not Grace.\") is still made, once", (fix.a2.v.match(/Updated: this is about [^.]*\./g) ?? []).length === 1 && /this is about Daniel, not Grace/.test(fix.a2.v), fix.a2.v);
+    // Critic round 5 A1 (08fb1b3): "also / too" in a second sentence must not block a real reassignment (H1.6 must still not reassign).
+    for (const [n, msg] of [["7", "It was Daniel, not Grace. He also hurt his knee."], ["8", "Actually it was Daniel who broke his arm, not Grace. He also hurt his knee."]] as const) {
+      const r = await play([fractureTurn(G, "broke her arm", "fell down", QG), { steps: [
+        () => [call("resolve_person", { mention: "Daniel" })],
+        () => [call("note_facts", { facts: [{ key: "injury", value: "broke his arm", words: "broke his arm" }], subject_id: DAN })],
+        () => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "suggestion", text: "You can ask me to go through Daniel's fracture figures." }] })],
+      ] }], async () => { const a1 = await turn(`H1.${n} turn 1`, "grace fell down and broke her arm"); const a2 = await turn(`H1.${n} correction`, msg, a1.conv); return { a2, s2: await stateOf(a2) }; });
+      check("AC", `H1.${n} (Critic A1) "${msg}" is still a correction: the notice is given once and Grace's illustrations are withdrawn`, (r.a2.v.match(/Updated: this is about [^.]*\./g) ?? []).length === 1 && /this is about Daniel, not Grace/.test(r.a2.v) && live(claimOf(r.s2, G)).length === 0, JSON.stringify({ live: live(claimOf(r.s2, G)).length, v: r.a2.v }));
+    }
   }
 
   // ================================================================================================ H2: sickness word + injury
@@ -391,8 +402,71 @@ async function main() {
     all.push(c1, c2, c3, c4);
     for (const [k, o] of [["c1 certificate not read in full", c1], ["c2 the certificate lists 'OPMC' (abbreviation only)", c2], ["c3 the certificate lists 'Outpatient Medicare' (full name only)", c3], ["c4 a hit inside a benefit's own wording, outside the scheme's policy list", c4]] as const)
       check("GUARD", `GP.${k}: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated`, !G1SAYS.test(o.v) && !/do not (?:describe|print) a benefit for (?:GP|outpatient)/i.test(o.v), o.v);
+    // ---------------------------------------------------------------- Critic round 5 (08fb1b3) on C2: F1, A2, A3, F2
+    // (A3) the round-4 control and two more wordings of an accident benefit that pays a medical bill: each is surfaced, no absence stated.
+    const ctl: [string, string, RegExp][] = [
+      ["A3.1 'medical expenses ... registered medical practitioner'", MED, /Medical Expenses/i],
+      ["A3.2 'doctor'", "G. Accident Medical Reimbursement\nIf an Insured Person is injured in an Accident, we will pay the fees charged by a doctor for treatment of that injury, up to $2,000 per Accident.", /Accident Medical Reimbursement|fees charged by a doctor/i],
+      ["A3.3 'reimburse ... charges'", "G. Accident Treatment Benefit\nIf an Insured Person is injured in an Accident, we will reimburse the reasonable charges incurred for treatment of that injury, up to $2,000 per Accident.", /Accident Treatment Benefit|reimburse the reasonable charges/i],
+    ];
+    const ctlOut: [string, Out][] = [["A3.1 'medical expenses ... registered medical practitioner'", med]];
+    for (const [k, page] of ctl.slice(1)) { const o = await full(() => run("A", k), { 6: page }); all.push(o); ctlOut.push([k, o]); }
+    for (const [i, [k, o]] of ctlOut.entries())
+      check("AC", `GP.${k} (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated`, ctl[i][2].test(o.v) && !/do not (?:describe|print) a benefit for|(?:certificate|it) (?:does not|doesn.t) list/i.test(o.v), o.v);
+    // (A2) the family certificate also lists a policy for Grace only; G1 about Daniel names only Daniel's policies.
+    const graceRow = certPage.text.replace("GROUP LIVING CARE PLUS(POLICY NO. 3037850)", "GROUP HOSPITAL AND SURGICAL(POLICY NO. 3037851)\nS****822B\tTan Hui Min Grace\tPlan B\tAs of 06/10/2022\nGROUP LIVING CARE PLUS(POLICY NO. 3037850)");
+    const a2 = await full(() => withCert(graceRow, 1, () => run("A", "A2 Grace-only policy on the family certificate")));
+    all.push(a2);
+    check("AC", "GP.A2.1 (Critic A2) with a Grace-only policy on the family certificate, Daniel's answer does not name it as listed for him (no 'Hospital and Surgical')", !/Hospital and Surgical|HOSPITAL AND SURGICAL/i.test(a2.v), a2.v);
+    // ... and a separate certificate for Grace that lists a policy Daniel does not have.
+    const GCERT = "7d000000-0000-4000-8000-000000000a51";
+    await h.db.query("CREATE TEMP TABLE pr57_gcert AS SELECT * FROM policies WHERE id=$1", [CERT]);
+    await h.db.query("UPDATE pr57_gcert SET id=$1, family_member_id=$2, file_hash='sha256:pr57-grace-cert', original_filename='grace-cert.pdf', storage_key='grace-cert.pdf'", [GCERT, G]);
+    await h.db.query("INSERT INTO policies SELECT * FROM pr57_gcert"); await h.db.query("DROP TABLE pr57_gcert");
+    await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,NULL)", [GCERT, G, FX.ACCOUNT]);
+    await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [FX.ACCOUNT, GCERT, certPage.text.split("\n").filter((l) => !/Daniel/.test(l)).join("\n").replace("GROUP LIVING CARE PLUS(POLICY NO. 3037850)", "GROUP HOSPITAL AND SURGICAL(POLICY NO. 3037851)\nS****822B\tTan Hui Min Grace\tPlan B\tAs of 06/10/2022\nGROUP LIVING CARE PLUS(POLICY NO. 3037850)")]);
+    let a2b: Out;
+    try { a2b = await full(() => run("A", "A2 Grace's own certificate")); } finally {
+      await h.db.query("DELETE FROM policy_pages WHERE policy_id=$1", [GCERT]); await h.db.query("DELETE FROM policy_members WHERE policy_id=$1", [GCERT]); await h.db.query("DELETE FROM policies WHERE id=$1", [GCERT]);
+    }
+    all.push(a2b);
+    check("GUARD", "GP.A2.2 (Critic A2; passes on C0, C2 and C3) with Grace's own certificate listing Hospital and Surgical, Daniel's answer does not name it as listed for him", !/Hospital and Surgical|HOSPITAL AND SURGICAL/i.test(a2b.v), a2b.v);
+    // (F1) no answer to the GP-bill question quotes the scheme's bare policy-list line (reference wording, not his cover), whether or not G1
+    // fires, including the repeated refusals of the scripted model (each variant repeats its final answer).
+    // The roster line names the scheme's policies together ("... Disability Income Policy ("DI"), and Outpatient Medicare Policy ("OPMC") ...");
+    // a benefit's own wording that mentions OPMC (control c4) is not the roster.
+    const ROSTER = /“[^”]*(?:\(\\?"OPMC\\?"\)|Disability Income Policy|Living Care Plus Policy|collectively referred)[^”]*”/;
+    check("AC", "GP.F1 (Critic F1) no GP-bill answer quotes the scheme's policy-list line ('... and Outpatient Medicare Policy (\"OPMC\") ...')", all.every((o) => !ROSTER.test(o.v)), all.filter((o) => ROSTER.test(o.v)).map((o) => o.v).join("\n====\n"));
+    // (F2) the "pages I read do not print a benefit for the bill" note is never given where the read pages print the bill's terms.
+    const NOPRINT = /do not print a benefit for the bill/i;
+    const printed = [c2, c3, c4, ...ctlOut.map(([, o]) => o)];
+    check("GUARD", "GP.F2 (Critic F2; not reproduced on this fixture: passes on C2) where the read pages print the bill's terms (OPMC on the certificate, outpatient wording, the three medical-bill controls), no answer says they print no benefit for the bill", printed.every((o) => !NOPRINT.test(o.v)), printed.filter((o) => NOPRINT.test(o.v)).map((o) => o.v).join("\n====\n"));
     check("GUARD", "GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause", all.every((o) => !CLAUSE.test(o.v)), all.filter((o) => CLAUSE.test(o.v)).map((o) => o.v).join("\n====\n"));
     check("GUARD", "GP.r every GP answer: returned = saved = reopened", all.every(same), all.filter((o) => !same(o)).map((o) => `${o.shown}\n--\n${o.reopened}`).join("\n====\n"));
+  }
+
+  // ================================================================================================ UX: browser regressions on C2 (UX agent, 20 Oct)
+  // The browser spec's own scenarios (fx-repairs-scenarios.ts: fx-live-1's recorded calls), played through the same /api/chat route here,
+  // each on a fresh conversation and a freshly installed script. Scripted, not a browser run (the browser specs are run separately).
+  if (only("UX")) {
+    const SC = Object.fromEntries(FX_REPAIR_SCENARIOS().map((x) => [x.id, x]));
+    const runSc = (id: string) => play(FX_REPAIR_SCENARIOS().find((x) => x.id === id)!.turns, async () => { const o: Out[] = []; for (const [i, m] of SC[id].messages.entries()) o.push(await turn(`UX ${id} turn ${i + 1}`, m, i ? o[i - 1].conv : {})); return o; });
+    const k4b = await runSc("FX-K4B"), k4bAgain = await runSc("FX-K4B"), k6b = await runSc("FX-K6B"), k6a = await runSc("FX-K6A"), k2 = await runSc("FX-K2");
+    const t1 = k4b[0], s1 = await stateOf(t1);
+    const qs = (o: Out): string[] => (o.answer.questions ?? []).map((q: any) => String(q.text ?? ""));
+    check("AC", "UX1 (FX-K4B turn 1, 'grace fell down and broke her arm') no question is asked: no question card and nothing pending (main asks nothing)", qs(t1).length === 0 && !s1.pending, JSON.stringify({ questions: qs(t1), pending: s1.pending?.question ?? null }));
+    check("GUARD", "UX1b (FX-K4B turn 1) no question cites the Leg / Other Fracture row for an arm", !qs(t1).some((q) => /\bleg\b|Other Fracture/i.test(q)), qs(t1).join("\n"));
+    const d = k6b[0];
+    check("AC", "UX2 (FX-K6B dental) the answer is not a bare \"couldn't confirm\": it names the documents checked and says what was read of them (an absence is not said over the fixture's partial copies: M5)", !/^[^\n]*couldn.t confirm[^\n]*$/i.test(d.v.split("\n")[0] ?? "") && /Scheme X Group Insurance|Product Summary|Benefit Summary/.test(d.v) && /(?:page|pages) \d|read|stored/i.test(d.v), d.v);
+    check("GUARD", "UX2b (FX-K6B dental) never 'no dental cover', 'not covered' or 'excluded'", !/(?:has|have|had) no dental (?:cover|coverage)|not covered|excluded/i.test(d.v), d.v);
+    const c = k4b[1];
+    check("AC", "UX3 (FX-K4B correction turn) says Grace's earlier estimate(s) no longer apply, with one correction notice (passes on C0, fails on C2)", /no longer appl(?:y|ies)/i.test(c.v) && (c.v.match(/Updated: this is about [^.]*\./g) ?? []).length === 1, c.v);
+    const turns: [string, string, Out][] = [["FX-K4B 1", SC["FX-K4B"].messages[0], k4b[0]], ["FX-K4B 2", SC["FX-K4B"].messages[1], k4b[1]], ["FX-K6B", SC["FX-K6B"].messages[0], d], ["FX-K6A", SC["FX-K6A"].messages[0], k6a[0]], ["FX-K2", SC["FX-K2"].messages[0], k2[0]]];
+    const PROOF = /x-?ray|certif\w*|medical practitioner/i;
+    const bad = turns.filter(([, user, o]) => !PROOF.test(user) && qs(o).some((q) => PROOF.test(q)));
+    check("AC", "UX4 no turn asks the household about an X-ray or certification unless they raised it (FX-K4B both turns, FX-K6B, FX-K6A, FX-K2)", bad.length === 0, bad.map(([k, , o]) => `${k}: ${qs(o).join(" | ")}`).join("\n"));
+    check("GUARD", "UX5 (harness state) FX-K4B played twice in the same harness (a fresh copy of the scenario's scripted turns each time: the scripted model consumes the turn objects it is given) gives the same turn-1 and correction text, and neither ends in the model-error reply", k4bAgain[0].v === k4b[0].v && k4bAgain[1].v === k4b[1].v && ![...k4b, ...k4bAgain].some((o) => /returned an error/i.test(o.v)), `${k4b[0].v}\n--again--\n${k4bAgain[0].v}`);
+    check("GUARD", "UX6 every UX turn: returned = saved = reopened", [...k4b, ...k4bAgain, ...k6b, ...k6a, ...k2].every(same));
   }
 
   const t = tally;
