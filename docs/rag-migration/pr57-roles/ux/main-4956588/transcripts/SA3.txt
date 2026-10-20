@@ -1,0 +1,58 @@
+
+===== USER (1): daniel fell off a ladder at home, doc thinks hip but maybe tibia, not sure yet. closed fracture. what would his accident cover pay?
+[status 202; first feedback 65ms; settled ~2764ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Mention a name, relationship, “I”, or ask about the whole family
+New chat
+Previous chats · 1
+You
+
+daniel fell off a ladder at home, doc thinks hip but maybe tibia, not sure yet. closed fracture. what would his accident cover pay?
+
+DearPolicy
+
+I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
+
+===== USER (2): scan says tibia
+[status 202; first feedback 63ms; settled ~1386ms]
+
+ASK DEARPOLICY
+Your policies. Your questions.
+
+Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.
+
+AUTOMATIC FAMILY CONTEXT
+Mention a name, relationship, “I”, or ask about the whole family
+New chat
+Previous chats · 1
+You
+
+daniel fell off a ladder at home, doc thinks hip but maybe tibia, not sure yet. closed fracture. what would his accident cover pay?
+
+DearPolicy
+
+I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+
+You
+
+scan says tibia
+
+DearPolicy
+
+I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+
+0 / 2,000
+Send →
+
+Personal records confirm ownership. Matching policy wording supports benefit assessments.
