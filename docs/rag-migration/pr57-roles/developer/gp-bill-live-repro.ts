@@ -20,8 +20,9 @@ const visible = (a: any) => [a?.summary, ...(a?.details ?? []), ...(a?.questions
 
 const PS_P20 = ["SECTION 4: TRAVEL ASSISTANCE", "Emergency Outpatient Treatment Overseas", "We will reimburse the reasonable medical expenses for emergency outpatient treatment received outside Singapore following an Accident, up to $1,000 per Accident."].join("\n");
 const PS_P25 = ["SECTION 6: CLINICAL BENEFITS", "Panel GP Benefit", "Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP consultation: up to $30 per visit."].join("\n");
-const DOCS = FX.DOCS.map((d: any) => d.key === "PRODUCT_SUMMARY" ? { ...d, pages: { ...d.pages, 20: PS_P20, 25: PS_P25 } } : d);
-const HH = { ...FX, DOCS, doc: (k: string) => DOCS.find((d: any) => d.key === k)! };
+// (Critic R10-1: the same panel GP line under a heading that names the scheme's Outpatient Medicare Policy, which Daniel's certificate does not list)
+const PS_P25_OPMC = PS_P25.replace("SECTION 6: CLINICAL BENEFITS", "OUTPATIENT MEDICARE POLICY");
+const household = (p25: string) => { const DOCS = FX.DOCS.map((d: any) => d.key === "PRODUCT_SUMMARY" ? { ...d, pages: { ...d.pages, 20: PS_P20, 25: p25 } } : d); return { ...FX, DOCS, doc: (k: string) => DOCS.find((d: any) => d.key === k)! }; };
 
 // The model records the fact in its own words and answers without addressing the bill (the case where the server's G2 check runs).
 const final = (): ScriptCall[] => [call("final_answer", { subject_id: DAN, sentences: [{ kind: "fact", text: "Daniel's documents do not include a benefit that pays for a GP bill after a fall.", subject_id: DAN }], next_steps: ["contact:" + CERT] })];
@@ -32,17 +33,25 @@ const TURN: ScriptTurn = { steps: [
   ...Array.from({ length: 6 }, () => final),
 ] };
 
+const CASES: [string, string, string][] = [
+  ["A place not said (the live question)", MSG, PS_P25],
+  ["the bill abroad (Critic R10-2)", "daniel tripped on the kerb in Bangkok and fell, his GP bill is $800, can he claim for this?", PS_P25],
+  ["panel GP under the Outpatient Medicare Policy heading (Critic R10-1)", MSG, PS_P25_OPMC],
+];
 async function main() {
+  const { installLoopModel } = await import("@/lib/rag2/loop/model");
+  for (const [name, msg, p25] of CASES) {
+  const HH = household(p25);
   setEnv(HH as any);
   const h = await startHarness(HH as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
-  const { installLoopModel } = await import("@/lib/rag2/loop/model");
   installLoopModel(new ScriptedLoopModel([TURN]));
   try {
-    const a = await h.send(MSG, {});
+    const a = await h.send(msg, {});
     const s = await h.savedAnswer(a.conversationId!);
     const tr = s.state.ragLoop.turns.at(-1);
-    console.log(`\n=== live re-ask reconstruction\n${visible(s.answer)}\n  outcome: ${tr.outcome}\n  incomplete: ${JSON.stringify(tr.incomplete ?? [])}\n  calls: ${JSON.stringify((tr.toolCalls ?? []).map((c: any) => `${c.name}${c.ok ? "" : " ERR " + String(c.error ?? "").slice(0, 300)}`))}`);
+    console.log(`\n=== ${name}\n${visible(s.answer)}\n  outcome: ${tr.outcome}\n  incomplete: ${JSON.stringify(tr.incomplete ?? [])}\n  dropped: ${JSON.stringify((tr.dropped ?? []).map((d: any) => `${String(d.sentence).slice(0, 60)} -- ${d.reason}`))}\n  calls: ${JSON.stringify((tr.toolCalls ?? []).map((c: any) => `${c.name}${c.ok ? "" : " ERR " + String(c.error ?? "").slice(0, 300)}`))}`);
   } finally { installLoopModel(null); }
+  }
 }
 main().catch((e) => { console.error(e); process.exit(1); });

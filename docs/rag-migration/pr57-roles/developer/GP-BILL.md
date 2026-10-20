@@ -117,3 +117,19 @@ outpatient clause on page 20, a panel GP benefit on page 25; no production data 
 
 Reconstruction after the fix: the answer quotes the panel GP line (page 25), not the overseas clause. Not done by the server: asking
 whether a panel GP was seen (depends on the model).
+
+### PR #64 second commit: Policy Evidence Reviewer 12.1-12.2, Critic R10-1 to R10-4
+
+- **Whose cover (12.1, R10-1, R10-3)**: when a quoted line is not from the person's own confirmed certificate and its page does not name
+  them, the server's note after the quote says what their certificate lists (dated), any scheme policy the scheme's list names that the
+  certificate does not list (G1's facts, kept), the heading the line sits under (and that the certificate does not list it, when the heading
+  names a policy), and that only the insurer or the scheme administrator can confirm whether it applies to them.
+- **Where the bill was (12.2, R10-2)**: G2 passes the place the household gave (abroad, home, or not said). A line that pays only for
+  treatment abroad ("in Singapore or overseas" is not abroad-only) is quoted only when the bill was placed abroad. Otherwise it is said
+  apart, as applying only if the treatment was abroad (when the place was not said, or when nothing else is printed). The ranking runs only
+  on this bill path, not on other refusals.
+- **Headings (R10-4)**: a short heading ("Panel GP Benefit") is not quoted beside a line of its own.
+- The "$30 per visit" stays inside the quote, marked as printed with a bare "$"; nothing ties it to the $800 bill and nothing is computed.
+
+`gp-bill-live-repro.ts` now runs three cases: place not said, the bill in Bangkok, and the panel GP line under an "OUTPATIENT MEDICARE
+POLICY" heading. The original fixture (`gp-bill-reconstruction.ts` variant C) is unchanged: G1 still states the certificate and OPMC.

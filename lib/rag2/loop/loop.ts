@@ -2137,12 +2137,25 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         let said = false, refused = false;
         if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic|physician)\b/i.test(words)) {
           // (critic round 5 A3: the doctor's own words are searched too; a page that reimburses medical treatment refuses the absence)
-          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject };
-          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: input.people.find((p) => p.id === subject)?.name ?? null, names: input.people.flatMap((p) => [p.name]) });
+          // (PR #64, Critic R10-2: where the household placed the bill decides whether a line that pays only abroad is quoted)
+          const told = userTexts.join(" ");
+          const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b|\bin (?!Singapore\b|(?:January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|A&E)\b)[A-Z][a-z]+\b/.test(told);
+          const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(told);
+          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject, bill_place: away && !home ? "abroad" : home && !away ? "home" : "unknown" };
+          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: short || null, names: input.people.flatMap((p) => [p.name]) });
           const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
           refused = !nf.ok && !nf.partial;
           if (server) { const { check, ...st } = server; RENDERED.add(st); ABSENCE_OF.set(st, check); sentences.push(st); said = true; }
-          else if (!nf.ok && nf.printed?.length) { const q = quotePrinted(nf.printed, (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), subject); if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; } }
+          else if (!nf.ok && (nf.printed?.length || nf.abroad)) {
+            // (PR #64: whose cover a quoted line is not shown to be, said beside it; a line that pays only abroad, said apart when the
+            // household did not place the bill abroad)
+            const idOf = (ref: Parameters<typeof evidenceIdOf>[1], via?: string) => evidenceIdOf(state, ref, via ?? "statement");
+            const q = nf.printed?.length ? quotePrinted(nf.printed, idOf, subject) : null;
+            // (the quote is checked against its lines like any quote; what is said of whose cover it is follows it as the server's own note)
+            if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; if (nf.before || nf.after) notes.push([nf.before, nf.after].filter(Boolean).join(" ")); }
+            const a = nf.abroad ? quotePrinted([nf.abroad], idOf, subject) : null;
+            if (a && nf.abroad) { const st = { kind: "fact", text: `${q ? "The" : "The only line found is in the"} ${nf.abroad.name} (page ${nf.abroad.page})${q ? " also" : ""} prints a benefit for treatment outside Singapore, which applies only if the treatment was abroad: ${a.text.replace(/^.*? prints: /, "")}`, evidence_ids: a.evidence_ids, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; }
+          }
         }
         // (critic round 5 F2: "do not print" only when no check refused -- a refusal means the documents print something for it, or were not read)
         if (!said) notes.push(refused ? `I could not confirm from your documents what pays for the bill you mentioned${words ? ` (“${words}”)` : ""}.` : `The pages I read do not print a benefit for the bill you mentioned${words ? ` (“${words}”)` : ""}.`);
