@@ -6,6 +6,7 @@
  * real chat route on PGlite. No model call, no spend. Developer-owned scratch, not a registered test.
  *
  *   node --import tsx docs/rag-migration/pr57-roles/developer/gp-bill-reconstruction.ts
+ *   DISPLAY="Daniel Lee Wei Ming" ...   (critic round 6 R6-1: the member saved under an app-style name, not the certificate's order)
  */
 import { setEnv, startHarness } from "../../../../scripts/fixtures/rag2-loop/harness";
 import * as FX from "../../../../scripts/fixtures/reliable-chat/fracture-conversation";
@@ -43,9 +44,10 @@ const VARIANTS: Record<string, ScriptTurn> = {
   ], next_steps: contact })]),
 };
 
+const HH = process.env.DISPLAY ? { ...FX, M: { ...FX.M, daniel: { ...FX.M.daniel, name: process.env.DISPLAY } } } : FX;
 async function main() {
-  setEnv(FX as any);
-  const h = await startHarness(FX as any);
+  setEnv(HH as any);
+  const h = await startHarness(HH as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   for (const [name, t] of Object.entries(VARIANTS)) {
