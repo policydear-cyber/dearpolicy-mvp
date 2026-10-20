@@ -1,0 +1,7 @@
+spec	household	exit	passed	failed	summary
+reliable-chat	tan	0	3 passed	0 failed	  3 passed (1.3m)
+reliable-chat-booklet	booklet	0	6 passed	0 failed	  6 passed (25.2s)
+reliable-chat-actuallib	actuallib	0	8 passed	0 failed	  8 passed (39.8s)
+reliable-chat-fracture	fracture	0	6 passed	0 failed	  6 passed (23.5s)
+reliable-chat-deathjourney	deathjourney	0	3 passed	0 failed	  3 passed (15.1s)
+reliable-chat-dj-live-3	deathvalues	0	2 passed	0 failed	  2 passed (6.6s)

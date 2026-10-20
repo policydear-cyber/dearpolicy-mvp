@@ -1,0 +1,70 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+FAIL [AC] H1.1 "Daniel broke his arm too. It was not serious." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+FAIL [AC] H1.2 "Daniel broke his arm too. I mean, he fell off his bike." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+FAIL [AC] H1.3 "Daniel broke his arm too, he slipped rather than fell." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+PASS [GUARD] H1.6 "Daniel broke his arm too, but it wasn't Grace's fault." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [GUARD] H1.4 (control) plain "Daniel broke his arm too." carries nothing and moves nothing
+PASS [GUARD] H1.5 (control) a real correction ("Actually it was Daniel who broke his arm, not Grace.") is still made, once
+PASS [AC] H1.7 (Critic A1) "It was Daniel, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+PASS [AC] H1.8 (Critic A1) "Actually it was Daniel who broke his arm, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+FAIL [AC] GP.a1 (variant A) the answer does not end in "couldn't confirm" or the model-error reply
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [AC] GP.a2 (variant A) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant A) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant A) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a1 (variant B) the answer does not end in "couldn't confirm" or the model-error reply
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [AC] GP.a2 (variant B) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant B) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant B) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a1 (variant C) the answer does not end in "couldn't confirm" or the model-error reply
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     I couldn’t confirm an answer to that from your documents.
+     I haven't yet looked up what your documents pay for the bill you mentioned (“his GP bill is $800”), so that is still open.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] GP.a2 (variant C) it does not say the documents were not looked up after the search ran
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     I couldn’t confirm an answer to that from your documents.
+     I haven't yet looked up what your documents pay for the bill you mentioned (“his GP bill is $800”), so that is still open.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] GP.a3 (variant C) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant C) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+FAIL [AC] GP.a4 (variant A, QC ground truth) the answer says the uploaded documents show no GP or outpatient benefit, names Outpatient Medicare (OPMC) as on the scheme but not on his certificate (with its date), and suggests asking the insurer
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.a5 (variant A, QC ground truth) the certificate's listed policies are named (Group Term Life, Group Personal Accident, Group Living Care)
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.b1 (medical-expense control) the answer surfaces the accident benefit that reimburses medical expenses by a registered medical practitioner
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [GUARD] GP.b2 (medical-expense control) no absence is stated, and no amount is given for the $800
+PASS [GUARD] GP.c1 certificate not read in full: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c2 the certificate lists 'OPMC' (abbreviation only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c3 the certificate lists 'Outpatient Medicare' (full name only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c4 a hit inside a benefit's own wording, outside the scheme's policy list: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+FAIL [AC] GP.A3.1 'medical expenses ... registered medical practitioner' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.A3.2 'doctor' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [AC] GP.A3.3 'reimburse ... charges' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [AC] GP.A2.1 (Critic A2) with a Grace-only policy on the family certificate, Daniel's answer does not name it as listed for him (no 'Hospital and Surgical')
+PASS [GUARD] GP.A2.2 (Critic A2; passes on C0, C2 and C3) with Grace's own certificate listing Hospital and Surgical, Daniel's answer does not name it as listed for him
+PASS [AC] GP.F1 (Critic F1) no GP-bill answer quotes the scheme's policy-list line ('... and Outpatient Medicare Policy ("OPMC") ...')
+PASS [GUARD] GP.F2 (Critic F2; not reproduced on this fixture: passes on C2) where the read pages print the bill's terms (OPMC on the certificate, outpatient wording, the three medical-bill controls), no answer says they print no benefit for the bill
+PASS [GUARD] GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause
+PASS [GUARD] GP.r every GP answer: returned = saved = reopened
+PASS [AC] UX1 (FX-K4B turn 1, 'grace fell down and broke her arm') no question is asked: no question card and nothing pending (main asks nothing)
+PASS [GUARD] UX1b (FX-K4B turn 1) no question cites the Leg / Other Fracture row for an arm
+FAIL [AC] UX2 (FX-K6B dental) the answer is not a bare "couldn't confirm": it names the documents checked and says what was read of them (an absence is not said over the fixture's partial copies: M5)
+     Grace’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+PASS [GUARD] UX2b (FX-K6B dental) never 'no dental cover', 'not covered' or 'excluded'
+PASS [GUARD] UX3 (FX-K4B correction turn) says Grace's earlier estimate(s) no longer apply, with one correction notice (scripted: passes on C0, C2 and C3; the browser finding is not reproduced here)
+PASS [AC] UX4 no turn asks the household about an X-ray or certification unless they raised it (FX-K4B both turns, FX-K6B, FX-K6A, FX-K2)
+PASS [GUARD] UX5 (harness state) FX-K4B played twice in the same harness (a fresh copy of the scenario's scripted turns each time: the scripted model consumes the turn objects it is given) gives the same turn-1 and correction text, and neither ends in the model-error reply
+PASS [GUARD] UX6 every UX turn: returned = saved = reopened
+
+AC 8 passed, 14 failed | GUARD 23 passed, 0 failed | INFO 0 same, 0 differ

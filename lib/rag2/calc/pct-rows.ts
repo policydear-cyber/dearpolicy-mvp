@@ -12,6 +12,7 @@
  * or the same row printed twice with different percentages is returned as unresolved, never as the first or the larger.
  */
 import { isSectionHeading } from "../section-scope";
+import { isHeadingLine } from "../headings";
 export type PctRow = { label: string; percents: number[]; start: number; end: number; text: string; lines: number };
 export type PctTable = { name: string | null; /** the nearest section heading above the table (bullet / marker removed), however far above: the benefit the table belongs to */ section?: string | null; heading: string; header: string; base: string; headerStart: number; start: number; end: number; rows: PctRow[] };
 
@@ -201,6 +202,42 @@ export function tableNotes(page: string, table: PctTable): RowNote[] {
   return out;
 }
 /** The footnotes that qualify ONE row of a table (see RowNote). */
+/**
+ * PR #57 follow-up (QC Q1, critic): a sentence the page prints directly under a percentage table, with no marker, before the next heading
+ * ("This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." under the Other Fracture table) is a condition of
+ * THAT TABLE'S benefit, and applies to every row. Footnote definitions (a marker first, attached by rowNotes or to nothing) are skipped; a
+ * heading, a cell line, a bullet, another percentage row or the page footer ends it. Only whole sentences are taken (at most three lines each).
+ */
+export function tableConditions(page: string, table: PctTable): RowNote[] {
+  const real = [...table.rows].reverse().find((r) => r.percents.length > 0);
+  if (!real) return [];
+  const lines: { text: string; start: number; end: number }[] = [];
+  let at = real.end;
+  for (const t of page.slice(real.end).split("\n")) { lines.push({ text: t, start: at, end: at + t.length }); at += t.length + 1; }
+  lines.shift();
+  const DEF = new RegExp(`^(${MARKER})(?:[\\t ]+\\S|(?<=[*†‡])(?=[A-Z]))`);
+  const out: RowNote[] = [];
+  let cur: { text: string; start: number; end: number }[] = [], inNote = false;
+  for (const [i, l] of lines.entries()) {
+    const t = l.text.trim(), at0 = l.start + (l.text.length - l.text.trimStart().length);
+    if (!t) break; // (critic round 3: the first blank line ends what is printed under the table)
+    if (/^[•▪●◦]/.test(t) || pctsOf(t).length || /^page\s+\d+\s+of\s+\d+$/i.test(t) || CELL_GAP.test(l.text) || l.text.includes("\t")) break;
+    // (critic round 3: the next benefit's heading -- "F. Ambulance Cost" -- ends it, so its terms never become this table's condition)
+    if (!cur.length && (isSectionHeading(l.text, lines[i + 1]?.text ?? null, lines[i - 1]?.text ?? null) || isHeadingLine(t, lines[i + 1]?.text ?? null))) break;
+    if (MARKER_ONLY.test(t) || DEF.test(t)) { if (cur.length) break; inNote = !/[.!?]$/.test(t); continue; }
+    if (inNote) { inNote = !/[.!?]$/.test(t); continue; } // a footnote's continuation
+    if (!cur.length && !/^[A-Z]/.test(t)) break;
+    cur.push({ text: t, start: at0, end: l.end });
+    if (/[.!?]$/.test(t)) {
+      const text = cur.map((x) => x.text).join(" ");
+      // (a sentence carrying an amount or a percentage is another benefit's terms, never a condition of this table: it ends the reading)
+      if (/\d\s*%|[$€£]\s?\d|\b(?:S\$|SGD|USD|MYR)\s?\d/i.test(text)) break;
+      out.push({ marker: "", text, start: cur[0].start, end: cur.at(-1)!.end }); cur = []; if (out.length >= 2) break; continue;
+    }
+    if (cur.length >= 3) break;
+  }
+  return out;
+}
 export function rowNotes(page: string, table: PctTable, row: PctRow): RowNote[] {
   const marks = rowMarkers(row);
   if (!marks.length) return [];

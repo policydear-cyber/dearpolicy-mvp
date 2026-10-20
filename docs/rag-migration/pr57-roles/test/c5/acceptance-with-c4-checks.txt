@@ -1,0 +1,181 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+FAIL [INFO] R0 K2 turn 1: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me this benefit's condition is not met and no amount is given for it.
+     --replay:
+     The Scheme X Group Insurance (page 9) prints the Accidental Hospital Recuperation Benefit, 250 (printed with a bare “$” sign; the Scheme X Group Insurance does not say which currency), with the printed conditions “In addition to the specific exclusions listed below”, “if within 30 days following bodily injury as a result of an Accident”, “it is medically necessary due to the said injury (whether directly or indirectly necessary) of the Insured Person to be confined as a resident patient in a Hospital for a continuous period of at least 24 hours on the recommendation of a Registered Medical Practitioner but not for the purpose of convalescent rest”, “Subsequent hospitalisation resulting from the same injury will not be payable.” and “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.”.
+     Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's.
+     Grace's certificate also lists Group Living Care and Group Living Care Plus (listed as of 6 October 2022).
+FAIL [INFO] R0 K3t1 turn 1: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     Grace’s documents give different alternatives for this event, and do not establish which applies; the amounts are not to be added together.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.
+     The Product Summary and Certificate of Insurance Part 2 use different bases for their fracture percentages.
+     The uploaded documents do not establish which document governs this event.
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+     --replay:
+     The Product Summary and Certificate of Insurance Part 2 use different bases for their fracture percentages.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The uploaded documents do not establish which document governs this event.
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+FAIL [INFO] R0 K4b turn 1: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+     --replay:
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+FAIL [INFO] R0 K4b turn 2: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     Updated: this is about Daniel, not Grace. The earlier estimates I worked out for Grace from the injury and how it happened no longer apply, because they were worked out for Grace's policy, not Daniel's.
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.
+     The uploaded documents do not establish which of these two fracture provisions applies to Daniel's event.
+     The Product Summary says precise terms are in the certificate, while the certificate wording has a separate fracture benefit.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Daniel's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+     --replay:
+     Updated: this is about Daniel, not Grace. The earlier estimates I worked out for Grace from the injury and how it happened no longer apply, because they were worked out for Grace's policy, not Daniel's.
+     The uploaded documents do not establish which of these two fracture provisions applies to Daniel's event.
+     If the Simple Fracture benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The Product Summary says precise terms are in the certificate, while the certificate wording has a separate fracture benefit.
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Daniel's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+FAIL [INFO] R0 K6a turn 1: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     The Scheme X Group Insurance does not state what Group Living Care pays for cancer. That is not the same as saying it is excluded or not covered: it only means this document does not show it, and only the insurer can confirm it.
+     Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; this is the amount shown on that date, not confirmation of cover now.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     --replay:
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+FAIL [INFO] R0 K6b turn 1: the replay on this tree shows the same text as the live run (answers.json)
+     live:
+     Grace’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     --replay:
+     I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.
+PASS [INFO] R0 K6c turn 1: the replay on this tree shows the same text as the live run (answers.json)
+FAIL [AC] R1 (K3t1, repetition) that the documents leave open which alternative applies is said at most once
+     The uploaded documents do not establish which document governs this event.
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+FAIL [AC] R2 (K4b correction turn, repetition) the same, at most once
+     The uploaded documents do not establish which of these two fracture provisions applies to Daniel's event.
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+FAIL [AC] R3 (K3t1, repetition) that the two documents use different bases is said once (no 'different bases' sentence beside the bases sentence)
+     The Product Summary and Certificate of Insurance Part 2 use different bases for their fracture percentages.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured.
+PASS [GUARD] R4 (K3t1) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said
+PASS [GUARD] R4 (K4b) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said
+PASS [AC] R5 (K2, v1 K2.3) the sickness answer says the certificate also lists Living Care cover that no stored page describes
+PASS [GUARD] R6 (K2) any 250 is the benefit's printed terms with its conditions (accident injury, 30 days, 24 hours) and currency basis (S$ only with the Product Summary, else the bare '$'), never an amount for this stay; nothing promises payment; no question is asked
+FAIL [AC] R7 (K6a) the S$350,000 sentence itself carries the limitation that the documents do not show what Living Care pays for cancer
+FAIL [INFO] R8x (K6a) the recorded calls reach a refusal the live run did not meet, so the replay ends there (needs a live run): statement 1: Scheme X Group Insurance was not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from it
+PASS [GUARD] R8 (K6a, K6c, the turns that completed) S$350,000 is dated and never presented as what will be paid
+FAIL [AC] R9 (K6c) no definition is implied where none was shown ('meets the policy definition')
+     Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; that dated amount does not confirm cover now.
+     The uploaded documents do not establish whether Grace’s cancer meets the policy definition or what amount would be payable for it.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] R10 (K6b) the dental answer cites no passage (whether the absence is said over the fixture's partial documents is M5)
+PASS [GUARD] R11 every replayed turn: returned = saved = reopened
+PASS [AC] H1.1 "Daniel broke his arm too. It was not serious." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [AC] H1.2 "Daniel broke his arm too. I mean, he fell off his bike." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [AC] H1.3 "Daniel broke his arm too, he slipped rather than fell." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [GUARD] H1.6 "Daniel broke his arm too, but it wasn't Grace's fault." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [GUARD] H1.4 (control) plain "Daniel broke his arm too." carries nothing and moves nothing
+PASS [GUARD] H1.5 (control) a real correction ("Actually it was Daniel who broke his arm, not Grace.") is still made, once
+PASS [AC] H1.7 (Critic A1) "It was Daniel, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+PASS [AC] H1.8 (Critic A1) "Actually it was Daniel who broke his arm, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+PASS [AC] H2.1 an injury reported with a sickness word ('felt sick and fainted, hitting her head'): the server does not decide the accident condition is unmet, and the benefit's terms (S$250) stay with the printed accident condition
+PASS [GUARD] H2.2 (control) a plain accident keeps the terms (S$250) and no 'not met'
+PASS [GUARD] H2.3 returned = saved = reopened
+PASS [GUARD] M1.0 (setup, the test can fail) the toe turn completes with a final answer
+PASS [GUARD] M1.1 (Critic M1, not reproduced on C0: the server reads the reported 'toe' and returns unlisted_case) 'broke her toe' mapped by the model to the 'Leg, Ankle or Knee^' row: no S$2,500 is given beside that row's own 'toe and foot are not covered' footnote
+PASS [GUARD] M1.2 (control) 'broke her ankle' on the same row still gets S$2,500 (the footnote names toe and foot, not ankle)
+PASS [AC] M5 over the fixture's own library (Product Summary 4 of 37 pages stored; Benefit Summary of unknown length) no absence of dental is said
+PASS [GUARD] M0 (setup) over documents stored in full (certificate 1 of 1, Hospital Plan 2 of 2) the dental absence is said
+PASS [AC] M2 with one stored page of a scoped document empty (Hospital Plan page 2), 'do not describe a benefit for dental' is not said over a page that was never read
+PASS [AC] M2b with a page of the Hospital Plan never stored (page_count 3, pages 1-2 stored), no absence is said
+PASS [AC] M2c with page_count 2 but pages 1 and 3 stored (page 2 never stored), no absence is said: a count of stored pages is not a full read
+PASS [GUARD] M3.1 (control) a page that prints a dental benefit refuses the absence (terms ['dentist'], topic 'dental treatment')
+PASS [AC] M3.2 the same page refuses it when the document's product name contains 'Dental' (the topic word is still searched)
+PASS [GUARD] M4.0 (setup) the absence is said and saved before the new document arrives
+PASS [AC] M4 after a document for Grace that prints a dental benefit is added, the reopened answer no longer says her documents do not describe one
+PASS [GUARD] Q3.1 (setup) Grace's answer uses her own S$600,000: S$120,000
+PASS [GUARD] Q3.2 the corrected answer is recalculated from Daniel's own row: 20% of S$400,000 = S$80,000, and Grace's S$120,000 / S$600,000 is not carried
+PASS [GUARD] Q3.3 Grace's illustrations are withdrawn and every live calculation is Daniel's
+PASS [GUARD] Q3.4 returned = saved = reopened
+PASS [GUARD] N1 (percentage base) S$1,250 is 25% of the fixed S$5,000 limit and S$120,000 is 20% of Grace's S$600,000; neither base is swapped (no S$150,000, no S$1,000)
+PASS [GUARD] N2 (supported information survives verification) the date, the '#' footnote and the insurer contact step all reach the saved and reopened answer
+PASS [GUARD] N3 (wrong person) Grace's calculations stated with Daniel as their subject are not shown as Daniel's
+PASS [GUARD] N4 (wrong product) a contact step naming a document that is not in Grace's library names no insurer
+PASS [GUARD] N5a (version) with the Benefit Summary deleted, the reopened answer no longer shows its S$120,000
+FAIL [AC] N5b (version) with the Benefit Summary's stored file hash changed in place (another version of the file), the reopened calculation answer no longer shows its S$120,000 (on C0 only absence answers compare file hashes: lib/chat/stale-answers.ts)
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+PASS [GUARD] N7 the S$120,000 illustration carries nothing of the next benefit printed below its table (no 'Ambulance', no 'up to $500', no lettered heading)
+PASS [AC] N8 (C4 item 6) the S$120,000 illustration carries the condition printed under its table: 'This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme'
+PASS [GUARD] N6 and with the original version restored the reopened answer is whole again
+[chat] output guard changed an answer
+[chat] output guard changed an answer
+[chat] output guard changed an answer
+PASS [AC] GP.a1 (variant A) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant A) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant A) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant A) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a1 (variant B) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant B) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant B) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant B) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a1 (variant C) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant C) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant C) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant C) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a4 (variant A, QC ground truth) the answer says the uploaded documents show no GP or outpatient benefit, names Outpatient Medicare (OPMC) as on the scheme but not on his certificate (with its date), and suggests asking the insurer
+PASS [AC] GP.a5 (variant A, QC ground truth) the certificate's listed policies are named (Group Term Life, Group Personal Accident, Group Living Care)
+PASS [AC] GP.b1 (medical-expense control) the answer surfaces the accident benefit that reimburses medical expenses by a registered medical practitioner
+PASS [GUARD] GP.b2 (medical-expense control) no absence is stated, and no amount is given for the $800
+PASS [GUARD] GP.c1 certificate not read in full: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c2 the certificate lists 'OPMC' (abbreviation only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c3 the certificate lists 'Outpatient Medicare' (full name only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c4 a hit inside a benefit's own wording, outside the scheme's policy list: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [AC] GP.A3.1 'medical expenses ... registered medical practitioner' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+PASS [AC] GP.A3.2 'doctor' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+PASS [AC] GP.A3.3 'reimburse ... charges' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+PASS [AC] GP.A3.4 label-style (C4 item 2, Critic R6-2) 'G. Medical Expenses Benefit / Up to $2,000 per Accident for medical expenses incurred' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+[chat] output guard changed an answer
+PASS [AC] GP.A2.1 (Critic A2) with a Grace-only policy on the family certificate, Daniel's answer does not name it as listed for him (no 'Hospital and Surgical')
+[chat] output guard changed an answer
+PASS [GUARD] GP.A2.2 (Critic A2; passes on C0, C2 and C3) with Grace's own certificate listing Hospital and Surgical, Daniel's answer does not name it as listed for him
+[chat] output guard changed an answer
+[chat] output guard changed an answer
+PASS [AC] GP.R6-1a (C4 item 1) with the member named 'Daniel Lee Wei Ming' (certificate cell 'Lee Wei Ming, Daniel') the GP journey does not end in 'could not confirm' and G1 names his listed policies
+PASS [AC] GP.R6-1b (C4 item 1) the same, with a Grace-only policy on the certificate: G1 answers and names only Daniel's rows (no 'Hospital and Surgical')
+PASS [AC] GP.F4 (C4 item 5) no answer turns a bare-'$' printed line into S$ (the controls' $2,000 per Accident; the ground-ambulance $500 of variant B)
+PASS [AC] GP.F1 (Critic F1) no GP-bill answer quotes the scheme's policy-list line ('... and Outpatient Medicare Policy ("OPMC") ...')
+PASS [GUARD] GP.F2 (Critic F2; not reproduced on this fixture: passes on C2) where the read pages print the bill's terms (OPMC on the certificate, outpatient wording, the three medical-bill controls), no answer says they print no benefit for the bill
+PASS [GUARD] GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause
+PASS [GUARD] GP.r every GP answer: returned = saved = reopened
+PASS [AC] UX1 (FX-K4B turn 1, 'grace fell down and broke her arm') no question is asked: no question card and nothing pending (main asks nothing)
+PASS [GUARD] UX1b (FX-K4B turn 1) no question cites the Leg / Other Fracture row for an arm
+PASS [AC] UX2 (FX-K6B dental) the answer is not a bare "couldn't confirm": it names the documents checked and says what was read of them (an absence is not said over the fixture's partial copies: M5)
+PASS [GUARD] UX2b (FX-K6B dental) never 'no dental cover', 'not covered' or 'excluded'
+PASS [AC] UX3 (FX-K4B correction turn) says Grace's earlier estimate(s) no longer apply, with one correction notice (passes on C0, fails on C2)
+PASS [AC] UX4 no turn asks the household about an X-ray or certification unless they raised it (FX-K4B both turns, FX-K6B, FX-K6A, FX-K2)
+PASS [GUARD] UX5 (harness state) FX-K4B played twice in the same harness (a fresh copy of the scenario's scripted turns each time: the scripted model consumes the turn objects it is given) gives the same turn-1 and correction text, and neither ends in the model-error reply
+PASS [GUARD] UX6 every UX turn: returned = saved = reopened
+
+AC 36 passed, 6 failed | GUARD 47 passed, 0 failed | INFO 1 same, 7 differ
+exit 1

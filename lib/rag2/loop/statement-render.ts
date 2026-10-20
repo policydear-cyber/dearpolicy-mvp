@@ -9,15 +9,16 @@
  * composer: a statement that fails is omitted as a unit, never edited into a different claim.
  */
 import type { ToolContext } from "../tools";
-import type { EvidenceRef } from "../evidence";
+import { evidenceAt, evidenceFor, type EvidenceRef } from "../evidence";
 import type { RagLoopState } from "./types";
 import { calcOutcomes } from "../calc/tool";
 import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
-import { loadDocs, loadLinks, loadMembers, type DocRow, type LinkRow } from "../store";
+import { loadDocs, loadLinks, loadMembers, pageMap, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
+import { ATTRIBUTES, reportedValue } from "../applicability";
 import { documentLabel, profileDocument, standingClause } from "./relation";
-import { checkNotFound, type AbsenceCheck } from "./absence-scope";
+import { checkNotFound, type AbsenceCheck, type PrintedLine } from "./absence-scope";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -27,6 +28,8 @@ const RELATION = new WeakSet<object>();
 export const RENDERED_STEPS = new Set<string>();
 export const STATEMENT_KINDS = ["fact", "calculation", "benefit_terms", "uncertainty", "suggestion", "library_status", "not_found"] as const;
 /** What the server checked for a not_found statement it wrote (kept aside: a model cannot supply it). */
+/** Server-written statements that quote the documents verbatim (“…”): the quoted words are the insurer's, not a statement that an amount is paid. */
+export const QUOTED = new WeakSet<object>();
 export const ABSENCE_OF = new WeakMap<object, AbsenceCheck>();
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const fmtDate = (iso: string | null) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? ""); return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : iso; };
@@ -45,10 +48,53 @@ const noteText = (t: string) => t.replace(/\s+/g, " ").trim();
 const quoted = (marker: string, text: string) => `“${noteText(text)}” (marked ${marker})`;
 const docName = (r: BenefitRecord) => (r.policy.personalProof && /certificate/i.test(r.policy.product ?? "") ? "certificate" : r.policy.product ?? "document");
 
-type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null };
+type Deps = { ctx: ToolContext; state: RagLoopState; evidenceId: (ref: EvidenceRef, via?: string) => string; nameOf: (id: string | null | undefined) => string | null;
+  /** A model-written statement the server's own statement replaced (recorded in the trace, not as a verification failure). */
+  superseded?: (text: string) => void;
+  /** The errors of this turn's earlier tool calls (a refusal the model was already given). */
+  priorErrors?: () => string[] };
+
+/** What the documents print for a refused absence's topic, quoted line by line and cited to its page. */
+export function quotePrinted(lines: PrintedLine[], evidenceId: (ref: EvidenceRef, via?: string) => string, subjectId: string | null): { text: string; evidence_ids: string[] } | null {
+  const parts: string[] = []; const ids: string[] = [];
+  const groups = new Map<string, string[]>();
+  for (const l of lines) {
+    const ref = evidenceFor({ policyId: l.policyId, documentHash: l.fileHash, page: l.page, pageText: l.pageText, passage: l.line, subjectId });
+    if (!ref) continue;
+    ids.push(evidenceId(ref, "printed"));
+    const at = `the ${l.name} (page ${l.page})`; groups.set(at, [...(groups.get(at) ?? []), `“${l.line.replace(/[.\s]+$/, "")}”`]);
+  }
+  for (const [at, qs] of groups) parts.push(`${at} prints: ${qs.join(" and ")}`);
+  if (!parts.length) return null;
+  const text = parts.join("; and ");
+  return { text: `${text.charAt(0).toUpperCase()}${text.slice(1)}.`, evidence_ids: [...new Set(ids)] };
+}
 
 /** A benefit's printed terms, written from its record (with the evidence and value ids that bind each figure). */
+/** C5 (Policy Evidence Reviewer on C4): a trip schedule's amount is that trip's. The lines its own page prints for whom, when and where
+ * ("Insured Person: ...", "Period of Insurance: ... to ...", "Destination: ...") are said beside the amount, cited -- never the amount
+ * without them, and never left out: the household and the insurer judge whether the trip fits the event. */
+const listOf = (xs: string[]) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] ?? "";
+async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence: EvidenceRef[] } | null> {
+  const page = (await pageMap(d.ctx.accountId, r.policy.id).catch(() => new Map<number, string>())).get(r.source.page) ?? "";
+  if (!/^\s*(?:Period of Insurance|Destination)\s*:/im.test(page)) return null;
+  const out: { label: string; value: string; ev: EvidenceRef }[] = [];
+  let at = 0;
+  for (const line of page.split("\n")) {
+    const m = /^(\s*)(Insured Person|Period of Insurance|Destination)\s*:\s*(.+?)\s*$/i.exec(line);
+    if (m) out.push({ label: m[2], value: m[3], ev: evidenceAt({ policyId: r.policy.id, documentHash: r.policy.version.documentHash, page: r.source.page, pageText: page, start: at + m[1].length, end: at + line.length, subjectId: r.memberId }) });
+    at += line.length + 1;
+  }
+  if (!out.some((x) => /period|destination/i.test(x.label))) return null;
+  // (C6, Critic R8-1: "trip" only when a Destination line is printed -- an annual schedule prints only its period)
+  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`, evidence: out.map((x) => x.ev) };
+}
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
+  const w = await renderTermsBody(r, d);
+  const trip = await tripLimits(r, d);
+  return trip ? { text: w.text + trip.text, evidence_ids: [...new Set([...w.evidence_ids, ...trip.evidence.map((e) => d.evidenceId(e))])], value_ids: w.value_ids } : w;
+}
+async function renderTermsBody(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
   const who = r.memberName;
   const ev = [d.evidenceId(r.source.evidence)];
   if (r.kind === "percentage_schedule" && r.schedule) {
@@ -69,7 +115,9 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
     const noted = s.rows.filter((x) => x.notes.length);
     for (const x of noted) for (const n of x.notes) ev.push(d.evidenceId(n.evidence));
     const footnotes = noted.length ? ` The page also prints ${noted.length > 1 ? "footnotes" : "a footnote"} for ${noted.length > 1 ? "these cases" : "one of them"}: ${noted.map((x) => `for “${x.label}”: ${x.notes.map((n) => quoted(n.marker, n.text)).join(" and ")}`).join("; ")}.` : "";
-    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${footnotes}${missing}`, evidence_ids: [...new Set(ev)], value_ids: vals };
+    for (const n of s.conditions ?? []) ev.push(d.evidenceId(n.evidence));
+    const under = s.conditions?.length ? ` Under the table it prints: ${s.conditions.map((n) => `“${noteText(n.text).replace(/[.!?]+$/, "")}”`).join(" and ")}.` : "";
+    return { text: `The ${r.policy.product ?? "document"} (page ${s.page}) pays the ${r.benefit} as a percentage of ${base} for each listed case: ${cases}.${none}${footnotes}${under}${missing}`, evidence_ids: [...new Set(ev)], value_ids: vals };
   }
   const p = r.printed;
   if (p?.kind === "money") {
@@ -90,7 +138,11 @@ export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: st
       const list = conds.length > 1 ? `${conds.slice(0, -1).join(", ")} and ${conds.at(-1)}` : conds[0] ?? "";
       return { text: `The ${doc} (page ${r.source.page}${sec}) prints the ${pretty(r.benefit)}${t.covers ? ` for ${t.covers}` : ""}, ${t.cap ? t.cap + " " : ""}${figure}${list ? `, with the printed condition${conds.length > 1 ? "s" : ""} ${list}` : ""}.`, evidence_ids: ev, value_ids: [] };
     }
-    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}.`, evidence_ids: ev, value_ids: [] };
+    // (PR #57 follow-up, UX L2: a one-line benefit keeps the condition printed on its own line after the amount -- "S$2,000 per
+    // Insured Person, if death occurs outside Singapore as a result of an Accident" -- quoted, never dropped)
+    const own = pb?.benefit.source === "label_line" ? r.conditions.find((c) => c.startsWith(pb.benefit.label)) : undefined;
+    const rest = own?.slice(pb!.benefit.label.length).replace(/^\s*:\s*/, "").replace(/^(?:S\$|SGD\s?|US\$|\$)?\s?[\d,]+(?:\.\d+)?/, "").replace(/^[\s,;]+/, "").replace(/[.\s]+$/, "").trim();
+    return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${amt}${rest ? `, with the printed condition “${rest.replace(/[“”]/g, "\"")}”` : ""}.`, evidence_ids: ev, value_ids: [] };
   }
   if (p?.kind === "percent") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) prints ${pretty(r.benefit)}: ${p.percent}%${p.of ? ` of the ${p.of}` : ""}.`, evidence_ids: ev, value_ids: [] };
   if (p?.kind === "reference") return { text: `The ${r.policy.product ?? "document"} (page ${r.source.page}) defines ${pretty(r.benefit)} as the ${p.of}.`, evidence_ids: ev, value_ids: [] };
@@ -123,7 +175,13 @@ export function paidTerms(paras: string[], cents: number, passage = ""): { cover
 }
 
 /** The footnote(s) the page prints for the percentage's own row (fx-live-1: omitted), said IN the illustration's own sentence (a saved calculation is one complete sentence). */
-const rowNote = (notes: { marker: string; text: string }[] | undefined) => notes?.length ? `; the page prints ${notes.length > 1 ? "footnotes" : "a footnote"} for that row: ${notes.map((n) => quoted(n.marker, n.text)).join(" and ")}` : "";
+const rowNote = (all: { marker: string; text: string }[] | undefined) => {
+  const notes = (all ?? []).filter((n) => n.marker), under = (all ?? []).filter((n) => !n.marker);
+  // (PR #57 follow-up, QC Q1: an unmarked condition printed under the table is the table's benefit's own condition, said with its amount)
+  return (notes.length ? `; the page prints ${notes.length > 1 ? "footnotes" : "a footnote"} for that row: ${notes.map((n) => quoted(n.marker, n.text)).join(" and ")}` : "")
+    // (without its own full stop: a saved calculation is ONE sentence, and a quoted "." would split it)
+    + (under.length ? `; under the table it prints: ${under.map((n) => `“${noteText(n.text).replace(/[.!?]+$/, "")}”`).join(" and ")}` : "");
+};
 /** A calculation's result, written from the saved outcome (its case, percentage, base and document). */
 export function renderCalculation(resultId: string, d: Deps, alt?: { label: string; page: number }): string | null {
   const c = calcOutcomes(d.ctx).get(resultId);
@@ -146,7 +204,14 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // the reported event is the document's to define, and these documents print no definition of it)
     const label = pct ? pct.label.replace(/\s*\(([^)]*\bFracture)\)\s*$/i, "") : "";
     const tagged = pct ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
-    return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${tagged ? ` (the row the document labels “${tagged}”; these documents print no definition of which fractures that is)` : ""}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision${rowNote(c.record?.rowNotes)}.`;
+    // (C4, Policy Evidence Reviewer / UX on C3: beside that figure, plainly: what is not defined, the household's own reported kind of
+    // fracture, and that the insurer decides)
+    const kind = tagged ? reportedValue(ATTRIBUTES[0], d.ctx.reportedFacts?.get(c.subjectId) ?? []).value : null;
+    // (C6, Test engineer on C5: an untagged row of a benefit that names both kinds -- "Simple Fracture or Other Fracture due to Accident",
+    // "Hip" -- carries the same plain note after a correction as a labelled row does: neither kind is defined here)
+    const bothKinds = !tagged && /\bSimple Fracture\b[^.]*\bOther Fracture\b/i.test(c.benefit) && ![...(d.ctx.benefitRecords?.values() ?? [])].some((r) => r.policy.id === c.policyId && r.definitions.length);
+    const undefinedNote = bothKinds ? " (the benefit names Simple Fracture and Other Fracture alike, and this row is labelled as neither; these documents do not define either kind, so the insurer decides how it applies)" : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
+    return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}; it is an illustration from the document's terms, not a payment or an insurer's decision${rowNote(c.record?.rowNotes)}.`;
   }
   if ((c.kind === "indicative_estimate" || c.kind === "conditional_illustration") && c.amount != null) {
     const rate = c.printed.find((x) => x.unit === "money");
@@ -159,6 +224,7 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
  * the model must fix (an id this turn did not produce), or [] when every statement could be written. */
 export async function renderStatements(args: Record<string, unknown>, list: Record<string, unknown>[] | undefined, d: Deps): Promise<string[]> {
   const problems: string[] = [];
+  const omitted: number[] = [];
   for (const [i, s] of (list ?? []).entries()) {
     if (!s || typeof s !== "object") continue;
     const kind = typeof s.kind === "string" ? s.kind : null;
@@ -182,7 +248,21 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const subject = typeof s.subject_id === "string" && s.subject_id ? s.subject_id : typeof args.subject_id === "string" && args.subject_id ? args.subject_id : d.state.subjectId ?? null;
       const members = await loadMembers(d.ctx.accountId);
       const r = await checkNotFound(d.ctx.accountId, s, { subjectId: subject, who: d.nameOf(subject) ?? null, names: members.flatMap((m) => [m.displayName, m.preferredName ?? ""]).filter(Boolean) });
-      if (!r.ok) { problems.push(`statement ${i + 1}: ${r.problem}`); continue; }
+      if (!r.ok) {
+        if (r.partial) d.ctx.partialAbsence = { ...r.partial, subjectId: r.partial.check.subjectId, used: false };
+        // PR #57 follow-up (DC's GP-bill answer): the same absence refused again for what the documents print -- the model could not say
+        // those lines -- is replaced by the server quoting them, cited (never an absence, never a verdict).
+        // (a repeat: an earlier call of this turn was already refused with exactly this problem)
+        if (r.printed && list && (d.priorErrors?.() ?? []).some((e) => e.includes(r.problem))) {
+          const q = r.printed.length ? quotePrinted(r.printed, d.evidenceId, subject) : null;
+          // (a new statement in its place: the model's own not_found statement is left as it was sent)
+          if (q) { const n = { kind: "fact", ...q, ...(subject ? { subject_id: subject } : {}) }; RENDERED.add(n); QUOTED.add(n); list[i] = n; continue; }
+          // (critic round 5 F1: nothing quotable -- only a scheme's bare list of its policies -- so the statement is left out, and the rest of
+          // the reply, or the server's fallback for a reported bill, answers)
+          omitted.push(i); continue;
+        }
+        problems.push(`statement ${i + 1}: ${r.problem}`); continue;
+      }
       s.text = r.text; if (r.check.subjectId) s.subject_id = r.check.subjectId; RENDERED.add(s); ABSENCE_OF.set(s, r.check);
       // fx-live-2 review: NO passage is cited for an absence. The household sees which documents were checked in the sentence itself, and
       // the evidence for the scope is the saved check (ChatAnswer.absenceChecks: each document's id, name, file hash and revision, and the
@@ -191,6 +271,16 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       // it under Sources made a dental answer cite a S$300,000 row.
       s.evidence_ids = [];
     }
+  }
+  if (list) for (const i of omitted.reverse()) list.splice(i, 1);
+  // PR #57 follow-up: an absence refused earlier this turn only because part of its scope was not stored is answered with what WAS read,
+  // written by the server (absence-scope.ts), when the reply that follows states no absence of its own -- never the "couldn't confirm" note.
+  const pa = d.ctx.partialAbsence;
+  // (critic round 5 F3: only in a reply about the same person the refused absence was about)
+  const replySubject = typeof args.subject_id === "string" && args.subject_id ? args.subject_id : d.state.subjectId ?? null;
+  if (list && pa && !pa.used && !problems.length && (pa.subjectId ?? null) === replySubject && !list.some((s) => s && typeof s === "object" && s.kind === "not_found")) {
+    const n = { kind: "not_found", text: pa.text, evidence_ids: [], subject_id: pa.subjectId } as Record<string, unknown>;
+    RENDERED.add(n); ABSENCE_OF.set(n, pa.check); list.push(n); pa.used = true;
   }
   let relationAsked = false;
   // Two documents of one scheme printing a percentage table for the same kind of event, each with its own base: said once,
@@ -214,11 +304,27 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       if (la === lb) { la = `${la} (page ${a.schedule.page})`; lb = `${lb} (page ${b.schedule.page})`; }
       const frame = `${a.memberName}'s documents give two different answers for ${outs.length > 0 ? "this event" : "the same kind of event"}, and what they say does not settle which applies: these are alternatives from separate documents, never a total.`;
       const standing = [standingClause(la, pa), standingClause(lb, pb)].filter((x): x is string => !!x);
-      const status = [`The ${la} (page ${a.schedule.page}) takes its percentage of ${baseOf(a)}; the ${lb} (page ${b.schedule.page}) takes its percentage of ${baseOf(b)}.`, ...standing, "Neither document says whether one amends, replaces or adds to the other, or which applies to this event."].join(" ");
+      const status = [`The ${la} (page ${a.schedule.page}) takes its percentage of ${baseOf(a)}; the ${lb} (page ${b.schedule.page}) takes its percentage of ${baseOf(b)}.`, ...standing, "Neither document says whether one amends, replaces or adds to the other." /* (which applies is said once, in the frame above: PR #57 follow-up, K3t1 repetition) */].join(" ");
       const clauseEv = [...pa.clauses, ...pb.clauses].map((c) => d.evidenceId(c.evidence, "standing"));
       const both = [d.evidenceId(a.source.evidence), d.evidenceId(b.source.evidence)];
       const note1 = { kind: "uncertainty", text: frame, evidence_ids: both, subject_id: a.memberId } as Record<string, unknown>;
       const note2 = { kind: "uncertainty", text: status, evidence_ids: [...new Set([...both, ...clauseEv])], subject_id: a.memberId } as Record<string, unknown>;
+      // PR #57 follow-up (K3t1, K4b: the relation said three or four times): a figure-free uncertainty the MODEL wrote that cites nothing beyond
+      // what these two notes cite (the two schedule rows and the documents' standing clauses) says what they say, and is replaced by them.
+      // Anything citing another passage stays (a row's own printed condition, such as "can only be claimed either under the Core Scheme or
+      // Voluntary Scheme", cites its own line).
+      const covered = new Set([...both, ...clauseEv]);
+      for (let k = list.length - 1; k >= 0; k--) {
+        const x = list[k];
+        if (!x || typeof x !== "object" || x.kind !== "uncertainty" || RENDERED.has(x)) continue;
+        const ids = Array.isArray(x.evidence_ids) ? (x.evidence_ids as unknown[]).map(String) : [];
+        if (!ids.length || !ids.every((id) => covered.has(id))) continue;
+        if (x.subject_id != null && x.subject_id !== a.memberId) continue;
+        // (a figure: an amount or a percentage -- a document's own name, "Certificate of Insurance Part 2", is not one)
+        if (/(?:[A-Z]{0,3}\$|\b(?:SGD|USD|MYR|EUR|GBP)\s?)\d|\d(?:[.,]\d+)?\s*(?:%|per ?cent)/i.test(String(x.text ?? ""))) continue;
+        list.splice(k, 1);
+        d.superseded?.(String(x.text ?? ""));
+      }
       for (const n of [note1, note2]) { RENDERED.add(n); RELATION.add(n); list.push(n); }
       // (the two illustrations name their document and page; each stays one complete sentence, with its own not-a-payment clause)
       for (const sx of rendered) {

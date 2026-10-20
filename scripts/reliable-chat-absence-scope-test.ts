@@ -10,20 +10,25 @@ import type { DocRow } from "@/lib/rag2/store";
 let failed = 0, passed = 0;
 const check = (name: string, ok: boolean, detail = "") => { if (ok) passed++; else failed++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${!ok && detail ? "\n     " + detail.split("\n").slice(0, 12).join("\n     ") : ""}`); };
 
-const doc = (id: string, productName: string, extra: Partial<DocRow> = {}): DocRow => ({ id, ownerId: "m-dan", insurer: "Aldermoor Life", productName, policyNumber: "P1", groupPolicyNumber: null, policyType: null, documentRole: "certificate", personalCoverageConfirmed: false, status: "ready", fileHash: "sha:" + id, effectiveDate: null, expiryDate: null, documentDate: null, createdAt: null, pageCount: 2, rev: "1@t", ...extra });
+const doc = (id: string, productName: string, extra: Partial<DocRow> = {}): DocRow => ({ id, ownerId: "m-dan", insurer: "Aldermoor Life", productName, policyNumber: "P1", groupPolicyNumber: null, policyType: null, documentRole: "certificate", personalCoverageConfirmed: false, status: "ready", fileHash: "sha:" + id, effectiveDate: null, expiryDate: null, documentDate: null, createdAt: null, pageCount: 1, rev: "1@t", ...extra });
 const CERT = doc("c1", "Scheme X Group Insurance Scheme", { personalCoverageConfirmed: true });
 const SUM = doc("s1", "Scheme X Group Insurance", { documentRole: "product_summary" });
-const BEN = doc("b1", "Scheme X Group Insurance", { documentRole: "certificate" });
+const BEN = doc("b1", "Scheme X Group Insurance", { documentRole: "certificate", pageCount: 2 });
+// Every unit document here is synthetic and stored in full: its pageCount is the number of pages the test stores, numbered from 1
+// (PR #57 follow-up C1.1: an absence is only said over a document read in full; partial documents are S12/S13).
 const PAGES = [
   { policyId: "c1", page: 1, text: "Certificate of Insurance\nGroup Term Life S$1,000,000\nGroup Living Care S$350,000\nGroup Personal Accident S$600,000" },
-  { policyId: "s1", page: 8, text: "Group Personal Accident\nCoverage for fracture due to accident.\nBenefits of a personal accident policy will only be payable upon an accident occurring." },
-  { policyId: "b1", page: 3, text: "Group Term Life: death or Terminal Illness 100% of the sum insured" },
-  { policyId: "b1", page: 9, text: "Accidental Hospital Recuperation Benefit\nwithin 30 days following bodily injury as a result of an Accident, confined as a resident patient" },
+  { policyId: "s1", page: 1, text: "Group Personal Accident\nCoverage for fracture due to accident.\nBenefits of a personal accident policy will only be payable upon an accident occurring." },
+  { policyId: "b1", page: 1, text: "Group Term Life: death or Terminal Illness 100% of the sum insured" },
+  { policyId: "b1", page: 2, text: "Accidental Hospital Recuperation Benefit\nwithin 30 days following bodily injury as a result of an Accident, confined as a resident patient" },
 ];
 const LINKS_BOTH = [{ policyId: "c1", memberId: "m-gr" }, { policyId: "c1", memberId: "m-dan" }, { policyId: "s1", memberId: "m-gr" }, { policyId: "s1", memberId: "m-dan" }, { policyId: "b1", memberId: "m-gr" }, { policyId: "b1", memberId: "m-dan" }];
 const src = (over: Partial<AbsenceSource> = {}): AbsenceSource => ({ docs: [CERT, SUM, BEN], links: LINKS_BOTH, pages: PAGES, ...over });
 const ctx: { subjectId: string | null; who: string | null; names: string[] } = { subjectId: "m-gr", who: "Grace", names: ["Grace", "Daniel", "Lee Wei Ming"] };
 const run = (s: Record<string, unknown>, a = src(), c = ctx) => decideNotFound({ kind: "not_found", text: "-", ...s }, a, c);
+
+check("S12 (C1.1) a document with a page never stored (pageCount 3, two pages stored) is not read in full: no absence is said", !run({ claim: "benefit_not_found", topic: "dental treatment", terms: ["dental"] }, src({ docs: [CERT, SUM, { ...BEN, pageCount: 3 }] })).ok);
+check("S13 (C1.1) a document with a stored page that has no text is not read in full: no absence is said", !run({ claim: "benefit_not_found", topic: "dental treatment", terms: ["dental"] }, src({ pages: PAGES.map((p) => (p.policyId === "b1" && p.page === 2 ? { ...p, text: "  " } : p)) })).ok);
 
 // ------------------------------------------------------------------------------------------------ the word test
 check("W1 'dental' is NOT found inside 'accidental' (whole words only)", !termPattern("dental").test("Accidental Death Benefit") && termPattern("dental").test("Dental treatment") && termPattern("dental").test("dentally"));

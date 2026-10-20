@@ -52,6 +52,9 @@ async function main() {
       [d.id, acct, d.owner, d.insurer, d.product, d.policyNumber, d.groupPolicyNumber ?? null, d.policyType, d.role, d.personal, d.processing ?? "ready", d.filename ?? "synthetic-dptest-" + d.key.toLowerCase() + ".pdf", d.hash, d.effective ?? null, d.expiry ?? null, d.documentDate ?? null, d.processingError ?? null, d.superseded ? new Date().toISOString() : null, (d as { lifecycle?: string }).lifecycle ?? "active"]);
     for (const m of d.members) await pool.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier) VALUES($1,$2,$3,'test',1,$4)", [d.id, m.id, acct, m.tier ?? null]);
     for (const [page, text] of Object.entries(d.pages)) await pool.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, d.id, Number(page), text]);
+    // PR #57 follow-up (Test engineer): the PDF's page count, as the PGlite harness writes it (scripts/fixtures/rag2-loop/harness.ts); an
+    // absence is only said over documents stored in full, so a browser seed without it would make every document read as partial.
+    if ((d as { pageCount?: number | null }).pageCount != null) await pool.query("UPDATE policies SET page_count=$2 WHERE id=$1", [d.id, (d as { pageCount?: number | null }).pageCount]);
   }
   console.log("seeded the report-layout households");
   await pool.end();

@@ -1,0 +1,17 @@
+=== livelib
+PASS [AC] D1 (death abroad, C4 item 3) the travel Accidental Death S$100,000 never appears without its insured person, period of insurance and destination (Adrian; 10/03/2025 to 17/03/2025; Indonesia)
+PASS [GUARD] D2 the death answer still shows the Group Personal Accident S$600,000 and the S$2,000 repatriation with its 'outside Singapore' condition
+PASS [GUARD] D3 returned = saved
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+
+=== actuallib
+PASS [AC] F1 (closed fracture, C4 item 4; SA2 turn 1: closed tibia) every Other Fracture illustration says, in its own sentence, that these documents do not define which fractures that row covers
+PASS [GUARD] F2 (SA2 turn 1) returned = saved
+FAIL [AC] F1 (closed fracture, C4 item 4; SA2 turn 2: corrected to the hip) every Other Fracture illustration says, in its own sentence, that these documents do not define which fractures that row covers
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Hip”, the conditional illustration is S$450,000: 75% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 1 April 2024, not confirmation of cover on a later date), in the Group Personal Accident Benefit Summary (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+PASS [GUARD] F2 (SA2 turn 2) returned = saved
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+
+
+AC 2 passed, 1 failed | GUARD 4 passed, 0 failed
+exit 1
