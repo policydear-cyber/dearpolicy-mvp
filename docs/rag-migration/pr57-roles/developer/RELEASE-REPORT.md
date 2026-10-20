@@ -1,13 +1,34 @@
 # PR #57 follow-up: release report (Developer)
 
 **Release decision: not release-ready.** The coordinator gives the integrated verdict once testing, evidence review and the UX pass
-on C4 report. Until then the PR stays a draft.
+on C5 report. Until then the PR stays a draft.
 
 ## Commits
 
-- Tested commit: **C4 `fbeed4af76800a62c866def07b6d6bd1587c5749`** (`CANDIDATE.md`). C3 `1766863` was assessed by the Test engineer
-  (`test/FINDINGS-C3.md`, `b4e0ed0`); C4 adds only the fixes for the C3 reviews. C0 is `4956588` (main, production).
-- PR head: C4 plus docs only. No product code after C4.
+- Tested commit: **C5 `177c073427bab0acb231a34018208a8d0448100f`** (`CANDIDATE.md`), the last code round. C3 `1766863` was assessed
+  by the Test engineer (`test/FINDINGS-C3.md`, `b4e0ed0`); C4 and C5 add only the fixes for the C3 and C4 reviews. C0 is `4956588`.
+- PR head: C5 plus docs only. No product code after C5.
+
+### C5 changes (after the C4 reviews)
+
+- Travel (Evidence Reviewer, Critic R7-1): C4's suppression is removed; it compared the trip with today, not the date of death, and
+  needed the exact destination word. A trip schedule's terms now always carry what its own page prints: "The Single Trip Travel
+  Insurance - Policy Schedule (page 1) prints Accidental Death: S$100,000. The schedule prints this cover for the insured person “Wong
+  Jia Hui, Adrian”, the period of insurance “10/03/2025 to 17/03/2025” and the destination “Indonesia”; whether that trip fits this
+  event is for the insurer to confirm." (`developer/japan-death-repro.ts`, scripted)
+- Partial copy: "are not in the copy that was uploaded" when the page count proves pages are missing (e.g. 4 of 37); "may not all be"
+  only when no page count is known.
+- R7-3: "an open fracture".
+- Closed hip on actuallib (Evidence Reviewer): checked, no change needed. The answer gives S$3,750 (Product Summary p13) and S$450,000
+  (Benefit Summary p8) under "these are alternatives from separate documents, never a total", with the Core-or-Voluntary condition
+  printed under the table, "Neither document says whether one amends, replaces or adds to the other", and the next step asking the
+  insurer which schedule applies (scripted hip variant of actuallib J1).
+
+Results on C5 (scripted, no spend): acceptance AC 31/37 (the same 6 open), GUARD 47/47; structured-answers 123/123 + 8/8,
+absence-scope 32/32, tools 38/38, applicability 36/36 + 2/2, death suites green, live-verify 5/5, env-contract and typecheck green;
+fx-repairs 88/89 (A12 expects the replaced partial-copy words; Test engineer's check); s52 replay 11/12 as on C2-C4.
+
+### C4 changes (after the C3 reviews)
 
 ### C4 changes (after the C3 reviews)
 
@@ -19,9 +40,7 @@ on C4 report. Until then the PR stays a draft.
   fracture is one, so the insurer decides whether it applies", beside the figure (actuallib, scripted).
 - Partial copy (UX): "I checked Grace's documents for dental treatment: ... (pages 8, 12-13 of 37). Those pages do not mention dental
   treatment. The other pages are not in the copy that was uploaded, so I can't say either way whether there is such cover."
-- Travel S$100,000 (Evidence Reviewer): a single-trip schedule's amount is not added to a death answer when its printed destination is not
-  the one the household names, or its period of insurance has ended. Left out, not explained: the answer does not say the trip schedule
-  was set aside.
+- Travel S$100,000: suppressed in C4; replaced in C5 (above).
 
 Results on C4 (scripted, no spend): acceptance with the Test engineer's new checks AC 31/37 (the same 6 open), GUARD 47/47;
 structured-answers 123/123 + 8/8, absence-scope 32/32, tools 38/38, applicability 36/36 + 2/2, death suites green, live-verify 5/5,
@@ -58,7 +77,8 @@ the Test engineer owns that check. s52 replay 11/12 as on C2 and C3.
 | item | owner view |
 | --- | --- |
 | N5b / Critic C1-3: "Re-analyse" keeps the document's id and file hash but rewrites its pages, members and coverage in place, so a saved calculation or absence still stands afterwards | Medium, open. Fix: save a digest of the pages each answer read and compare on reopen (`developer/C1.md`). Not in C3 |
-| Death answer: the Term Life "Terminal Illness Benefit" line is added to a death answer; a set-aside trip schedule is not mentioned | Low, open |
+| Death answer: the Term Life "Terminal Illness Benefit" line is added to a death answer | Low, open |
+| Critic R7-2: a non-member row sharing the person's preferred name can be read as theirs in the scheme-listing sentence (a product name only, never an amount) | Low, open |
 | Critic R6-3: an exclusion sentence can be quoted as medical-expense wording | open |
 | Critic R6-4: "Policy Policy" in the scheme-listing sentence when a list entry already ends in "Policy" | open |
 | A quoted scheme line carries no "scheme wording, not proof of cover" qualifier | open |
