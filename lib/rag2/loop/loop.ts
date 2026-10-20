@@ -2181,6 +2181,17 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     if (merged) merged.notes = [...merged.notes, ...notes];
     return merged ? { kind: "final", composed: merged } : r;
   };
+  // Speed (Developer, 20 Oct 2026: 99% of a turn is model calls, one after another; the first one nearly always only asks who the message
+  // names): when the household's first message about an event names exactly one member, the server makes that resolve_person call itself,
+  // through the same tool and the same handling below, before the first model call -- the model starts from its result. Never while a
+  // question is open, a person was tapped, or a claim is under way (a correction of who it is about stays the model's call).
+  // Hosted models only, unless DEARPOLICY_PREFETCH_PERSON is "0" (off) -- or "1", which turns it on for the scripted model (the offline proof).
+  const prefetch = process.env.DEARPOLICY_PREFETCH_PERSON === "1" || (input.model.kind === "hosted" && process.env.DEARPOLICY_PREFETCH_PERSON !== "0");
+  const said = (n: string) => new RegExp(`(?<![\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").exec(input.message)?.[0] ?? null;
+  const named = prefetch && !pendingBefore && !input.personChoiceId && !state.claim ? input.people.filter((p) => namesFor(p.id).some((n) => said(n))) : [];
+  const preMention = named.length === 1 ? namesFor(named[0].id).map(said).find((x): x is string => !!x) ?? null : null;
+  let preCalls: ToolCall[] | null = preMention ? [{ id: "server_resolve_person_1", name: "resolve_person", arguments: { mention: preMention } }] : null;
+  if (preCalls) (trace.adjusted ??= []).push(`resolve_person (${preMention}): made by the server before the first model call`);
   for (let step = 0; !reply; step++) {
     // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
     // and answer with what is already supported (the notice rides on the latest tool result).
@@ -2192,10 +2203,13 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     newToolRound();
     // Once retrieval is closed the model is offered only what can still finish the turn (the answer, the question, the server-side
     // evaluation): the lookups it was refused are not re-described to it on every call.
-    const m = await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
+    const synthetic = preCalls;
+    preCalls = null;
+    const m = synthetic ? { ok: true as const, out: { toolCalls: synthetic, text: null, usage: { input: 0, output: 0 }, modelId: "", latencyMs: 0 } } : await meter.next({ messages, tools: retrievalClosed || lastRetrieval ? tools.filter((t) => LOOP_ACTIONS.some((a) => a.name === t.name) || t.name === "evaluate_benefit") : tools, maxOutputTokens: limits.maxOutputTokens });
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") { record("model", {}, false, [], m.stop.detail); } break; }
     const out = m.out;
-    trace.steps++; trace.modelId = out.modelId || trace.modelId;
+    if (!synthetic) trace.steps++;
+    trace.modelId = out.modelId || trace.modelId;
     messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls });
     if (!out.toolCalls.length) { messages.push({ role: "user", content: "Use the tools. End the turn only with ask_user or final_answer." }); continue; }
     for (const call of out.toolCalls) {
