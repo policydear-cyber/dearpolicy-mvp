@@ -462,3 +462,25 @@ Low:
 Passes: the wrist pair and its bases, the accident condition, the S$250 and the ended trip as plain text, the sick-stay verdict line, and dates.
 
 Not in PR #70: the live app's Benefits page S$1,000 and the Coverage page S$1,000,000 bases (see the release-set confirmations in the project folder). These are page-level figures that PR #70 does not touch.
+
+## 17. PR #70 re-check on head `76de2d8` (section 16 fixes)
+
+| worker | task | SHA | status | evidence | blocker |
+| --- | --- | --- | --- | --- | --- |
+| Policy Evidence Reviewer | re-check the death outcome line, the per-injury either/or, and the ended-trip wording | `76de2d8` | done | diff `c685b92..76de2d8` (`answer-statements.ts`, `statement-render.ts`) and the Developer's new unit check; code trace | not run here (no `node_modules`) |
+
+| item | result |
+| --- | --- |
+| Death outcome line | **Pass.** When any plain-text paragraph states money, the line no longer gives a count: "Your documents print amounts that may apply, each with its own conditions and dates below, and only the insurer decides whether any applies". With Term Life and Accidental Death as plain text, that is true and no longer understates the cover. Low: it does not say "never added", although each death benefit is from a separate policy |
+| Either/or per injury | **Pass.** The group is now one person, one pair of schedules and one injury, with the row read without its kind label, so the PS "Arm , Elbow, Wrist or Ribs" and the BS "...(Other Fracture)" pair up. Footnote markers are already stripped from labels (`pct-rows.ts`), so "Leg^, Ankle" pairs with BS "Leg, Ankle ... (Other Fracture)". A hip and an arm give two pairs, and the bottom line says "two alternative amounts for each injury ... never a total". The unit check covers two injuries |
+| Ended-trip wording (Japan death) | **Pass for E3.** From the household's words "car accident in Japan" it now says: "On what you have told me, this trip's cover does not fit this event: its period of insurance ended on 17 March 2025 and you said it happened in Japan, not Indonesia; any claim decision is the insurer's." The card is gone (period ended) |
+
+**New finding (medium), from the same change.** The place test is a plain word comparison, so it can rule out a trip that fits:
+- `place` is the first "in <Capitalised word>" in the household's words, and `elsewhere` is true whenever that word is not inside the printed destination, or the destination inside it. So:
+  - "Adrian was hurt in Bali" against "Destination: Indonesia" gives "you said it happened in Bali, not Indonesia", and the cover "does not fit this event", although Bali is in Indonesia.
+  - "in October" or "in Grace's car" is read as a place.
+- For a current trip that is a documented benefit stated as not fitting, on no evidence. DC's contract: missing information is not an exclusion. This is the same failure class as C4's "elsewhere" finding (section 9).
+- Safer: state only what the page and the household say ("you said Japan; the schedule prints Indonesia"), and keep "does not fit" for the period alone, when the event date the household gave is outside the printed period.
+- Separately, "ended" compares the printed end with today, not with the event date. The verdict needs "recent" words or a place, so the false-verdict risk there is lower, but the event date is the right comparison when the household gave one.
+
+**Verdict on 76de2d8:** the three re-checked items pass. One new medium finding: the place comparison can say "does not fit" for a place inside the printed destination.
