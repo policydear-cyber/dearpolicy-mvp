@@ -11,7 +11,7 @@ import { uniqueSteps } from "@/components/next-steps";
 import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
 import { SourceList } from "@/components/source-list";
-import { AnswerCards,hasStatements } from "@/components/answer-cards";
+import { AnswerCards,showsCards } from "@/components/answer-cards";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -326,8 +326,8 @@ function ChatContent(){
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
           {/* An answer that arrives with checked statements is shown as cards (bottom line, one card per amount, sources one tap
               away); the same text otherwise, as before. A claim assessment keeps its own layout. */}
-          {(()=>{const cards=message.role==="assistant"&&hasStatements(message.answer)&&message.answer.mode!=="claim_assessment";return <>
-          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>}/>:null}
+          {(()=>{const cards=message.role==="assistant"&&showsCards(message.answer);return <>
+          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>}/>:null}
           {cards?null:message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
           {!cards&&message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           </>;})()}
@@ -407,12 +407,12 @@ function ChatContent(){
           {/* Round 13: on a claim answer, what applies to every card is said once, under its own heading. */}
           {message.answer?.mode==="claim_assessment"&&message.answer.details.length&&message.answer.claimItems.some(item=>item.status!=="not_applicable")
             ?<div className="claim-before" data-testid="claim-before"><strong>Before you claim</strong>{message.answer.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}</div>
-            :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:hasStatements(message.answer)?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
+            :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:message.role==="assistant"&&showsCards(message.answer)?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
           {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
           {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&!message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
-          {message.answer?.citations.length&&!(hasStatements(message.answer)&&message.answer.mode!=="claim_assessment")?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
+          {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}

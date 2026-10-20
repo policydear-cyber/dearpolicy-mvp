@@ -1018,3 +1018,14 @@ table { font-variant-numeric: tabular-nums; }
 .answer-where-item blockquote { margin: 4px 0 0; font-style: italic; }
 .answer-cards-foot { font-size: var(--fs-xs); color: var(--muted); margin: 0; }
 .answer-where-all { margin-top: 12px; font-size: var(--fs-sm); }
+/* Round 15: whose amount, the condition it depends on and any limit stay on the card. */
+.answer-card-person { font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+.answer-card-condition { font-size: var(--fs-sm); color: var(--ink-2); font-style: italic; }
+.answer-card-note { font-size: var(--fs-sm); background: var(--warn-tint); border-radius: var(--r-sm); padding: 6px 8px; color: var(--ink); margin-top: 2px !important; }
+div.answer-point { display: grid; gap: 4px; }
+.message-body div.answer-point p { margin: 0; }
+.answer-full summary { cursor: pointer; color: var(--brand-ink); font-weight: 600; font-size: var(--fs-sm); }
+.message-body .answer-full p { font-size: var(--fs-sm); color: var(--ink-2); margin: 6px 0 0; }
+.answer-remaining { border-left: 3px solid var(--line-strong); padding-left: 10px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-remaining b { display: block; color: var(--ink); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+.message-body .answer-remaining p { margin: 4px 0 0; }

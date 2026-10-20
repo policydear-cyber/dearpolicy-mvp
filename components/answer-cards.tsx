@@ -25,6 +25,10 @@ export type StructuredAnswer = ChatAnswer & { bottomLine?: string | null; statem
 export const hasStatements = (answer: ChatAnswer | undefined): answer is StructuredAnswer =>
   !!answer && Array.isArray((answer as StructuredAnswer).statements) && (answer as StructuredAnswer).statements!.length > 0;
 
+/** Whether the chat shows this answer as cards. A claim assessment keeps its own layout. */
+export const showsCards = (answer: ChatAnswer | undefined): answer is StructuredAnswer =>
+  hasStatements(answer) && answer.mode !== "claim_assessment";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LONG_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const isoDate = (iso: string, long = false) => {
@@ -33,19 +37,56 @@ const isoDate = (iso: string, long = false) => {
 };
 const pageRef = (page: number | null | undefined) => page == null ? "" : ` · p.${page}`;
 
-/** An amount card: the figure, whose and what it is, its own basis and
- * conditions, and where it comes from as a chip. Conditions never move off
- * the card their amount is on. */
-function AmountCard({ s }: { s: AnswerStatement }) {
+/** For comparing two renderings of one sentence: markup, quotes, case, spacing and end punctuation do not count. */
+const norm = (s: string) => s.replace(/[*_`#>]/g, "").replace(/[“”"‘’']/g, "").replace(/\s+/g, " ").trim().replace(/[.;:,!?]+$/, "").toLowerCase();
+
+/** Sentences of the prose, split only at a full stop, ! or ? followed by a capital or an opening quote. */
+const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
+
+/** The condition an amount depends on, as the checked sentence words it: "If the Simple Fracture benefit applies to
+ * Grace's case “…”". It is the clause before the first comma outside quotes; when there is no clean clause the whole
+ * checked sentence is used, so the condition is never cut short. */
+const CONDITION_START = /^(if|when|only if|provided|subject to|unless|as long as|where)\b/i;
+function conditionOf(fullText: string | undefined): string | null {
+  const t = fullText?.trim();
+  if (!t || !CONDITION_START.test(t)) return null;
+  let depth = 0;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (ch === "“" || ch === "(") depth++;
+    else if ((ch === "”" || ch === ")") && depth > 0) depth--;
+    else if (ch === "," && depth === 0) return t.slice(0, i);
+  }
+  return t;
+}
+
+/** A bottom line naming an outcome must carry its own qualifier; one that states an outcome flatly is not shown. */
+const OUTCOME = /\b(claim|covered|cover|pays?|payable|entitled|eligible|receive|get)\b/i;
+const HEDGE = /\b(may|might|could|if|unless|depends?|subject to|likely|not|only|insurer decides|would)\b/i;
+const safeBottomLine = (line: string | null | undefined) => !!line?.trim() && (!OUTCOME.test(line) || HEDGE.test(line));
+
+/** What a card or point says, beyond its short text: its own basis, conditions and any limit the source notes. */
+function Qualifiers({ s }: { s: AnswerStatement }) {
+  return <>
+    {s.basis ? <p className="answer-card-basis">{s.basis}</p> : null}
+    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul> : null}
+    {s.source?.note ? <p className="answer-card-note" data-testid="answer-card-note">{s.source.note}</p> : null}
+  </>;
+}
+
+/** An amount card: whose it is, the figure, the condition it depends on, its own basis and conditions, and where it
+ * comes from as a chip. Nothing that limits the amount moves off its card. */
+function AmountCard({ s, condition }: { s: AnswerStatement; condition: string | null }) {
   const a = s.amount!;
   return <div className="answer-card" data-testid="answer-card">
+    {s.personName ? <p className="answer-card-person" data-testid="answer-card-person">For {s.personName}</p> : null}
     <div className="answer-card-amount">
       <strong>{a.text}</strong>
       <small>{a.illustration ? "illustration" : "printed amount"}{a.currencyResolved ? "" : " · currency not stated"}</small>
     </div>
+    {condition ? <p className="answer-card-condition" data-testid="answer-card-condition">{condition}</p> : null}
     <p className="answer-card-text">{s.text}</p>
-    {s.basis ? <p className="answer-card-basis">{s.basis}</p> : null}
-    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{c}</li>)}</ul> : null}
+    <Qualifiers s={s} />
     <div className="answer-chips">
       {s.source ? <span className="answer-chip">{s.source.policyName}{pageRef(s.source.page)}</span> : null}
       {s.asOf ? <span className="answer-chip muted">As printed {isoDate(s.asOf)}</span> : null}
@@ -53,9 +94,8 @@ function AmountCard({ s }: { s: AnswerStatement }) {
   </div>;
 }
 
-/** Where each card's figure comes from, one tap away: document, page, row,
- * footnote, date and the quoted words. Nothing here is left out of the
- * answer; it is only moved below it. */
+/** Where each card's figure comes from, one tap away: document, page, row, footnote, date and the quoted words. Nothing
+ * here is left out of the answer; it is only moved below it. */
 function WhereFrom({ statements, citations, sources }: { statements: AnswerStatement[]; citations: ChatCitation[]; sources?: React.ReactNode }) {
   const sourced = statements.filter((s) => s.source);
   if (!sourced.length && !citations.length) return null;
@@ -69,7 +109,9 @@ function WhereFrom({ statements, citations, sources }: { statements: AnswerState
         {src.footnote ? <p>Footnote {src.footnote.marker}: <q>{src.footnote.text}</q></p> : null}
         {src.note ? <p>{src.note}</p> : null}
         {s.asOf ? <p>Printed on {isoDate(s.asOf, true)}. That does not confirm cover on a later date.</p> : null}
-        {s.amount && !s.amount.currencyResolved ? <p>The document prints a bare “$” and does not say which currency.</p> : null}
+        {s.amount && !s.amount.currencyResolved
+          ? <p>{/^\$/.test(s.amount.text.trim()) ? "The document prints a bare “$” and does not say which currency." : "The document does not say which currency."}</p>
+          : null}
         {quotes.map((q, i) => <blockquote key={i}>“{q}”</blockquote>)}
       </div>;
     })}
@@ -77,20 +119,37 @@ function WhereFrom({ statements, citations, sources }: { statements: AnswerState
   </details>;
 }
 
-/** The short answer: bottom line (only when the server marked a real
- * outcome), one card per amount, other statements as short points, and the
- * source detail collapsed underneath. */
-export function AnswerCards({ answer, render, sources }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode }) {
+/** The short answer: bottom line (only when the server marked a real outcome and it carries its qualifier), one card
+ * per amount, other statements as short points, any sentence of the prose no statement covers, and the source detail
+ * collapsed underneath. `prose` is the answer's own text (content, then details): the cards never drop any of it. */
+export function AnswerCards({ answer, render, sources, prose = [] }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[] }) {
   const statements = answer.statements ?? [];
+  const people = new Set(statements.map((s) => s.personName).filter(Boolean));
+  // An amount whose person is missing in an answer about several people is shown as its checked sentence, never as a nameless card.
+  const asCard = (s: AnswerStatement) => !!s.amount && (!!s.personName || people.size <= 1);
+  const covered = statements.flatMap((s) => [s.fullText, s.text].filter((t): t is string => !!t).map((t) => norm(render(t))));
+  const isCovered = (sentence: string) => { const n = norm(sentence); return !n || covered.some((c) => c === n || c.includes(n)); };
+  const bottomLine = safeBottomLine(answer.bottomLine) ? answer.bottomLine! : null;
+  const summary = answer.summary?.trim() ? render(answer.summary) : "";
+  const showSummary = !bottomLine && summary && !isCovered(summary);
+  const alreadyShown = new Set([...(showSummary ? sentences(summary) : []), ...(bottomLine ? sentences(render(bottomLine)) : [])].map(norm));
+  const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s))))];
   const illustrations = statements.some((s) => s.amount?.illustration);
+  const amounts = statements.some((s) => s.amount);
+  const fullProse = prose.map(render).filter((t) => t.trim());
   return <div className="answer-cards">
-    {answer.bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(answer.bottomLine)}</p> : null}
-    {/* No bottom line: the answer's own first sentence stays, unbolded, unless a statement below already says it. */}
-    {!answer.bottomLine && answer.summary?.trim() && !statements.some((s) => (s.fullText ?? s.text).trim() === answer.summary.trim()) ? <p className="answer-point">{render(answer.summary)}</p> : null}
-    {statements.map((s) => s.amount
-      ? <AmountCard key={s.id} s={{ ...s, text: render(s.text), basis: s.basis ? render(s.basis) : s.basis }} />
-      : <p key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>{render(s.text)}</p>)}
+    {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
+    {showSummary ? <p className="answer-point">{summary}</p> : null}
+    {statements.map((s) => asCard(s)
+      ? <AmountCard key={s.id} s={{ ...s, text: render(s.text), basis: s.basis ? render(s.basis) : s.basis }} condition={(() => { const c = conditionOf(s.fullText); return c ? render(c) : null; })()} />
+      : <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
+          <p>{render(s.amount ? s.fullText ?? s.text : s.text)}</p>
+          <Qualifiers s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
+        </div>)}
+    {/* What the prose says that no statement covers stays in view, in its own words. */}
+    {remaining.length ? <div className="answer-remaining" data-testid="answer-remaining"><b>Also in this answer</b>{remaining.map((s, i) => <p key={i}>{s}</p>)}</div> : null}
     <WhereFrom statements={statements} citations={answer.citations} sources={sources} />
-    {illustrations ? <p className="answer-cards-foot">Illustrations from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
+    {fullProse.length ? <details className="answer-full" data-testid="answer-full"><summary>Full answer</summary>{fullProse.map((t, i) => <p key={i}>{t}</p>)}</details> : null}
+    {amounts ? <p className="answer-cards-foot">{illustrations ? "Illustrations" : "Amounts"} from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
   </div>;
 }

@@ -1,17 +1,73 @@
 {
-  "_note": "SYNTHETIC, hand-written for UI screenshots only. The fracture household's FR1 answer (scripted model) with the bottomLine and statements[] fields the Developer's answer-fields change is adding. Figures, pages and wording copy the FR1 prose; citation ids are FR1's own. Not produced by the server.",
-  "bottomLine": "Grace may be able to claim a fracture benefit for her arm. Her two documents print different amounts, and they are not added together.",
-  "statements": [
-    { "id": "s1", "kind": "calculation", "text": "Simple Fracture · arm, elbow, wrist or ribs",
-      "fullText": "If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
-      "personName": "Grace", "amount": { "text": "S$1,250", "currencyResolved": true, "illustration": true },
-      "basis": "25% of the S$5,000 Simple Fracture limit", "conditions": ["Not for fractures of the thumb, finger or palm"], "asOf": null,
-      "source": { "policyName": "Product Summary", "page": 13, "rowLabel": "Arm, Elbow, Wrist or Ribs", "footnote": { "marker": "#", "text": "For the avoidance of doubt, any fractures of thumb, finger and palm are not covered" }, "note": "The summary says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021).", "citationIds": ["rag2:e5", "rag2:e20", "rag2:e21"] } },
-    { "id": "s2", "kind": "calculation", "text": "Other Fracture · accident only",
-      "fullText": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (…), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (…), in the Certificate of Insurance Part 2 (page 8); …",
-      "personName": "Grace", "amount": { "text": "S$120,000", "currencyResolved": true, "illustration": true },
-      "basis": "20% of Grace's S$600,000 sum insured", "conditions": ["Bodily injury caused by an accident", "Can only be claimed under either the Core Scheme or the Voluntary Scheme"], "asOf": "2022-10-06",
-      "source": { "policyName": "Certificate of Insurance Part 2", "page": 8, "rowLabel": "Other Fracture", "footnote": null, "note": "The documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies. The sum insured is from Group Personal Accident on the certificate.", "citationIds": ["rag2:e14", "rag2:e22", "rag2:e2"] } },
-    { "id": "s3", "kind": "uncertainty", "text": "The two documents don't say which one applies. The insurer decides." }
-  ]
+ "_note": "SYNTHETIC, hand-written for UI screenshots only. The fracture household's FR1 answer (scripted model) with the bottomLine and statements[] fields the Developer's answer-fields change is adding. Figures, pages and wording copy the FR1 prose; citation ids are FR1's own. Not produced by the server.",
+ "bottomLine": "Grace may be able to claim a fracture benefit for her arm. Her two documents print different amounts, and they are not added together.",
+ "statements": [
+  {
+   "id": "s1",
+   "kind": "calculation",
+   "text": "Simple Fracture · arm, elbow, wrist or ribs",
+   "fullText": "If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).",
+   "personName": "Grace",
+   "amount": {
+    "text": "S$1,250",
+    "currencyResolved": true,
+    "illustration": true
+   },
+   "basis": "25% of the S$5,000 Simple Fracture limit",
+   "conditions": [
+    "Not for fractures of the thumb, finger or palm"
+   ],
+   "asOf": null,
+   "source": {
+    "policyName": "Product Summary",
+    "page": 13,
+    "rowLabel": "Arm, Elbow, Wrist or Ribs",
+    "footnote": {
+     "marker": "#",
+     "text": "For the avoidance of doubt, any fractures of thumb, finger and palm are not covered"
+    },
+    "note": "The summary says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021).",
+    "citationIds": [
+     "rag2:e5",
+     "rag2:e20",
+     "rag2:e21"
+    ]
+   }
+  },
+  {
+   "id": "s2",
+   "kind": "calculation",
+   "text": "Other Fracture · accident only",
+   "fullText": "If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.",
+   "personName": "Grace",
+   "amount": {
+    "text": "S$120,000",
+    "currencyResolved": true,
+    "illustration": true
+   },
+   "basis": "20% of Grace's S$600,000 sum insured",
+   "conditions": [
+    "Bodily injury caused by an accident",
+    "Can only be claimed under either the Core Scheme or the Voluntary Scheme"
+   ],
+   "asOf": "2022-10-06",
+   "source": {
+    "policyName": "Certificate of Insurance Part 2",
+    "page": 8,
+    "rowLabel": "Other Fracture",
+    "footnote": null,
+    "note": "The documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies. The sum insured is from Group Personal Accident on the certificate.",
+    "citationIds": [
+     "rag2:e14",
+     "rag2:e22",
+     "rag2:e2"
+    ]
+   }
+  },
+  {
+   "id": "s3",
+   "kind": "uncertainty",
+   "text": "The two documents don't say which one applies. The insurer decides."
+  }
+ ]
 }
