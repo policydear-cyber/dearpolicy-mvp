@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError, customerMessage } from "@/components/customer-text";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
+import type { ReadingDocument } from "@/components/reading-status";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -58,7 +59,13 @@ const quarantineLabel = policyQuarantineLabel;
 function documentName(policy: Pick<Policy, "product_name" | "original_filename">) {
   return policy.product_name?.trim() || policy.original_filename?.trim() || "Untitled document";
 }
-function roleLabel(role: string | null) { return (role ?? "document").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
+function roleLabel(role: string | null) { const t = (role ?? "document").replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1); }
+/** "a, b and 2 more": what a document was found to pay for, in a line. */
+function foundLine(labels: string[]) {
+  const l = labels;
+  return l.length <= 3 ? l.join(l.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1") : `${l.slice(0, 3).join(", ")} and ${l.length - 3} more`;
+}
+const NOT_FAMILY_KEY = "dearpolicy.notFamily";
 function stageLabel(_stage: string | null, status: string) {
   if (status === "failed") return "Could not be read";
   if (status === "ready") return "Ready";
@@ -90,6 +97,63 @@ export default function PoliciesPage() {
   // Confirmations of actions taken on the library itself (delete, who a
   // document covers, unlocking), shown where the person is looking.
   const [libraryNotice, setLibraryNotice] = useState("");
+  /** Names the household said are not in the family. The server remembers this answer and leaves those names out of
+   * detected_people; until its table is applied it answers remembered: false, and the answer is then kept on this
+   * device only, and the page says so. */
+  const [notFamily, setNotFamily] = useState<string[]>([]);
+  useEffect(() => { try { setNotFamily(JSON.parse(localStorage.getItem(NOT_FAMILY_KEY) || "[]")); } catch { /* storage unavailable */ } }, []);
+  /** The last "Not in my family" answer, so the notice can offer to undo it. */
+  const [undoNotFamily, setUndoNotFamily] = useState<{ policyId: string; detectedName: string; notice: string } | null>(null);
+  function saveNotFamily(next: string[]) {
+    setNotFamily(next);
+    try { localStorage.setItem(NOT_FAMILY_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+  }
+  async function postNotFamily(policyId: string, detectedName: string, notFamily: boolean) {
+    const response = await fetch("/api/policies/link-person", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ policyId, detectedName, notFamily }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    return { status: response.status, ok: response.ok, remembered: payload.remembered === true, error: payload.error as string | undefined };
+  }
+  /** Returns false when the answer was not taken, so the question stays as it was. */
+  async function markNotFamily(policyId: string, detectedName: string): Promise<boolean> {
+    try {
+      const result = await postNotFamily(policyId, detectedName, true);
+      if (result.status === 409) {
+        setLibraryNotice(`${detectedName} is already linked to someone in your family. To change who this document covers, use “Change” on the document.`);
+        return false;
+      }
+      if (!result.ok) throw new Error(result.error || "Could not save that answer");
+      let notice = `Noted: ${detectedName} is not in your family, so nothing in this document is used for them.`;
+      if (!result.remembered) {
+        saveNotFamily([...new Set([...notFamily, `${policyId}:${detectedName}`])]);
+        notice += " This is remembered on this device only for now, so DearPolicy may ask again elsewhere.";
+      }
+      setUndoNotFamily({ policyId, detectedName, notice });
+      setLibraryNotice(notice);
+      if (result.remembered) await refresh();
+      return true;
+    } catch (error) {
+      setLibraryNotice(customerError(error, "Could not save that answer. Please try again in a moment."));
+      return false;
+    }
+  }
+  async function undoMarkNotFamily() {
+    if (!undoNotFamily) return;
+    const { policyId, detectedName } = undoNotFamily;
+    try {
+      const result = await postNotFamily(policyId, detectedName, false);
+      if (!result.ok) throw new Error(result.error || "Could not undo that answer");
+      saveNotFamily(notFamily.filter((k) => k !== `${policyId}:${detectedName}`));
+      setUndoNotFamily(null);
+      setLibraryNotice("");
+      await refresh();
+    } catch (error) {
+      setLibraryNotice(customerError(error, "Could not undo that. Please try again in a moment."));
+    }
+  }
   const [loaded, setLoaded] = useState(false);
   // "Open in Documents" from a chat source lands here with #doc-<id>: once the
   // library has loaded, bring that document into view and outline it.
@@ -105,11 +169,22 @@ export default function PoliciesPage() {
     return () => clearTimeout(timer);
   }, [loaded]);
 
+  // What each document was found to pay for (Coverage rows by document), and documents whose benefits are still
+  // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
+  const [found, setFound] = useState<Record<string, string[]>>({});
+  const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
   async function refresh() {
     const [f, p] = await Promise.all([
       fetch("/api/family", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
     ]);
+    void fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: { policyId: string | null; eventLabel: string; status: string }[]; reading?: { documents?: ReadingDocument[] } } | null) => {
+      if (!l) return;
+      const byDoc: Record<string, string[]> = {};
+      for (const r of l.rows ?? []) if (r.policyId && r.status !== "rejected" && !(byDoc[r.policyId] ??= []).includes(r.eventLabel)) byDoc[r.policyId].push(r.eventLabel);
+      setFound(byDoc);
+      setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
+    }).catch(() => undefined);
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);
     setLoaded(true);
@@ -304,7 +379,7 @@ export default function PoliciesPage() {
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
       <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
 
-      {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}<button type="button" className="mini-button" onClick={() => setLibraryNotice("")} aria-label="Dismiss">✕</button></div>}
+      {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
       <div className="document-list">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
@@ -316,20 +391,20 @@ export default function PoliciesPage() {
         // quarantine banner would render at the same time and contradict
         // each other.
         const processing = isProcessing(policy) && !quarantineHeld && !scanRejected;
-        const unmatched = policy.detected_people.filter((p) => !p.matchedFamilyMemberId);
+        const unmatched = policy.detected_people.filter((p) => !p.matchedFamilyMemberId && !notFamily.includes(`${policy.id}:${p.name}`));
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
         const pct = Math.max(0, Math.min(100, Number(policy.processing_progress ?? 0)));
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong><span>{processing ? "Usually ready in under a minute" : `${policy.insurer ?? "Insurer not known yet"} · ${roleLabel(policy.document_role)}`}</span></div>
-            {!processing && <div className={`document-authority ${policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")].join(" · ")}</span>}
+              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? "Ready" : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{!processing && <span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          {/* Whose it is, then what was found in it: the two things a person checks first. */}
+          {!processing && policy.personal_coverage_confirmed && !!personalLinks.length && <p className="document-for"><b>For</b> {personalLinks.map((p) => p.name).join(", ")}</p>}
 
-          {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
 
           {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>
             <b>{scanRejected ? "Rejected" : documentSafetyMode === "not_scanned_prototype" ? "Received" : "Scanning"}</b>
@@ -345,16 +420,32 @@ export default function PoliciesPage() {
           {!processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
 
           {!processing && policy.personal_coverage_confirmed ? <>
-            {!!personalLinks.length && <div className="linked-people"><b>Personal coverage linked to</b>{personalLinks.map((p) => <span key={p.id} className="person-tag">{p.name}</span>)}</div>}
-            {!!policy.detected_people.length && <div className="detected-block"><b>Named insured people found</b>{policy.detected_people.map((person) => <div className="detected-row" key={person.name}><span>{person.name}</span>{person.matchedFamilyMemberId ? <span className="matched">Matched ✓</span> : <select defaultValue="" onChange={(e) => e.target.value && linkPerson(policy.id, person.name, e.target.value)}><option value="">Match to family profile…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</select>}</div>)}</div>}
-            {!!unmatched.length && <div className="document-warning">{unmatched.length} real name{unmatched.length === 1 ? "" : "s"} from this personalised document still need matching.</div>}
+            {/* Names printed in it: matched ones in one quiet line; each unmatched one asks who it is. */}
+            {policy.detected_people.some((p) => p.matchedFamilyMemberId) && <p className="document-names">Named in it: {policy.detected_people.filter((p) => p.matchedFamilyMemberId).map((p) => `${p.name} (${family.find((m) => m.id === p.matchedFamilyMemberId)?.display_name ?? "matched"})`).join(", ")}</p>}
+            {!!unmatched.length && <div className="detected-block">{unmatched.map((person) => <div className="detected-row" key={person.name}>
+              <label htmlFor={`who-${policy.id}-${person.name}`}>&ldquo;{person.name}&rdquo; is named in it. Who is this?</label>
+              <select id={`who-${policy.id}-${person.name}`} defaultValue="" onChange={(e) => { const select = e.target; if (select.value === "__not_family") void markNotFamily(policy.id, person.name).then((taken) => { if (!taken) select.value = ""; }); else if (select.value) void linkPerson(policy.id, person.name, select.value); }}><option value="">Choose a family member…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
+            </div>)}<small className="muted">Until you choose, nothing in it is used for that person.</small></div>}
           </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
 
+          {!processing && policy.processing_status === "ready" && (() => {
+            const state = benefitReading[policy.id];
+            const labels = found[policy.id] ?? [];
+            if (state && (state.state === "failed" || state.state === "backed_off")) return <p className="document-found warn" data-testid="document-found">Its benefits couldn&rsquo;t be read for Coverage yet{state.reason ? `: ${state.reason.charAt(0).toLowerCase()}${state.reason.slice(1).replace(/\.?\s*$/, ".")}` : "."}{state.state === "backed_off" && state.retryAfter ? " DearPolicy tries again later on its own." : ""} You can still ask about it.</p>;
+            if (state) return <p className="document-found" data-testid="document-found">Reading its benefits for Coverage…</p>;
+            if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
+            return null;
+          })()}
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
             ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
             : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span>{policy.page_count
               ? <small>If you have a clearer copy or the original file, delete this one and upload that instead.</small>
               : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
+
+          {/* Its numbers and the actions on it come last. */}
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+
+          {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
