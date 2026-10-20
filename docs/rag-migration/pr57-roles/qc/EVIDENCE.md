@@ -366,3 +366,28 @@ No QC test run, no model call. Message traced: "daniel tripped on the kerb and f
 - Whether the visit was at a panel GP (no charge, or up to $30) is not asked, and the conditional accident benefits are not added. Both depend on the model.
 
 **Unsupported shown:** none found. **Not available:** whether DC's real library prints these two pages, which policy they belong to, and whether his certificate lists it.
+
+## 14. PR #64 re-check on head `7f4dbd35e2b7cdda75e33190d8f697dbacec7b18`
+
+| worker | task | SHA | status | evidence | blocker |
+| --- | --- | --- | --- | --- | --- |
+| Policy Evidence Reviewer | re-check Critic round 11 fixes: every statement supported, nothing supported omitted, incl. a certificate that lists Outpatient Medicare | `7f4dbd3` | done | diff of `lib/rag2/loop/absence-scope.ts`, `loop.ts` traced by hand over the fracture pages plus the Developer's invented PS p20 / PS p25 | no suite, build or model call run; DC's real library unavailable |
+
+Message traced: "daniel tripped on the kerb and fell, his GP bill is $800, can he claim for this?"
+
+| statement on 7f4dbd3 | supported? | pages |
+| --- | --- | --- |
+| Daniel's certificate lists Group Term Life, Group Personal Accident, Group Living Care, Group Living Care Plus, as of 6 Oct 2022 | Yes | CERT p1 |
+| The scheme names an Outpatient Medicare Policy that his certificate does not list; a benefit applies only if its policy is listed | Yes. The new distinctive-word comparison finds no shared word between "Outpatient Medicare" and his four products | BS p1, CERT p1 |
+| Quote of the panel GP line, followed by the note "The Product Summary (page 25) prints that line under “Panel GP Benefit” in “SECTION 6: CLINICAL BENEFITS”, and it does not say whose cover it is" | Yes. The note now sits under the quote and names the benefit. It makes no "does not list" claim, correctly, because the section prints no policy name | PS p25 (invented) |
+| Overseas outpatient line said only as abroad-only, and only because the message did not say where | Yes. Abroad is now read from explicit words only ("overseas", "abroad", "on holiday", "travelling", "on a trip"); "in Tampines" or a kerb no longer reads as abroad | PS p20 (invented) |
+| No amount computed from $800; $30 is only quoted | Yes | PS p25 (invented) |
+
+**Certificate that lists Outpatient Medicare.** With Daniel's rows changed to "GROUP OUTPATIENT MEDICARE" (or "GROUP OPMC"): `unlisted` is false and `schemeListing` returns null, so no "does not list" sentence is written, and the listed product appears with his other certificate rows. Correct: no false exclusion, and the listed cover is not hidden.
+
+Low items, none blocking:
+- A shared generic distinctive word between a scheme policy and a listed product (for example "care") would suppress a true "does not list". That errs on the safe side (says less, never wrongly excludes).
+- When the place is not stated, the abroad-only line comes before the home quote. It is labelled abroad-only, so it does not mislead, but the home benefit reads second.
+- Still model-dependent from earlier rounds: no panel/non-panel question, and the conditional accident benefits (ambulance S$500, hospital stay S$250, fracture alternatives) are not added by the server.
+
+**Verdict:** every statement traced is supported, and nothing supported is newly omitted. **Unsupported shown:** none found. **Not available:** whether DC's real library prints these pages, which policy they belong to, and whether his real certificate lists it.
