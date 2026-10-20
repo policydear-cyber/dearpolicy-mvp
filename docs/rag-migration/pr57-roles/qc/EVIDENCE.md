@@ -6,7 +6,7 @@ This file consolidates `FINDINGS-C0.md`, `FINDINGS-C1.md` and `GP-BILL.md` (kept
 
 | worker | task | SHA | status | evidence | blocker |
 | --- | --- | --- | --- | --- | --- |
-| Policy Evidence Reviewer | evidence record per journey; compare answers | C4 `fbeed4a` (page text identical since C0) | final summary (section 9) | this file | live runs needed (section 6); DC's real library not available |
+| Policy Evidence Reviewer | evidence record per journey; compare answers | C5 `177c073` (page text identical since C0) | final summary on C5 (section 11) | this file | live runs needed (section 6); DC's real library not available |
 
 ## 1. Evidence sources and what is not available
 
@@ -274,3 +274,35 @@ condition "can only be claimed either under the Core Scheme or Voluntary Scheme"
 hip row; that the documents do not say which applies; that the two are never added; and that the insurer decides which applies and any claim. It must not
 attach the "do not define which fractures count as Other Fracture" note to this row (that would be another row's condition), and it must not drop S$450,000,
 because that would hide a documented benefit.
+
+## 11. Final check on C5 `177c073427bab0acb231a34018208a8d0448100f`, and the final evidence summary
+
+C5 changes product code in `absence-scope.ts`, `loop.ts` and `statement-render.ts`. Evidence: Code trace (QC); UX browser transcript on C4 for the hip (the hip
+path is unchanged in C5; Scripted). No QC test run, no model call.
+
+| check | source | verdict |
+| --- | --- | --- |
+| Death abroad: travel S$100,000 with its limits | livelib TRAVEL p1 (synthetic): "Insured Person: Wong Jia Hui, Adrian", "Period of Insurance: 10/03/2025 to 17/03/2025", "Destination: Indonesia", "Accidental Death: S$100,000" | **Confirmed by code trace.** C4's hiding rule is removed. `tripLimits` reads those three printed lines from the amount's own page and adds, cited: "The schedule prints this cover for the insured person “Wong Jia Hui, Adrian”, the period of insurance “10/03/2025 to 17/03/2025” and the destination “Indonesia”; whether that trip fits this event is for the insurer to confirm." Values, person and page are exact; nothing supported is lost, and PA 100% of S$600,000, Repatriation S$2,000 and Term Life S$1,000,000 are untouched. Low: it does not say that the household named Japan, which differs from the printed destination; the reader has to compare. The C4 trip-hiding finding is **closed** |
+| Partial-copy wording | fracture household (real-anonymised): CERT pageCount 1 (1 stored), PS pageCount 37 (stored 8, 12, 13, 37), BS pageCount unknown (stored 1, 3, 5, 7, 8, 9) | **Matches.** The PS is proven short (4 < 37), so "The other pages are not in the copy that was uploaded"; the listing reads "the certificate in full, and the Product Summary (pages 8, 12-13, 37 of 37) and the Benefit Summary (pages 1, 3, 5, 7-9)". That is also true for the BS on these pages (its gaps 2, 4 and 6 prove missing pages). Low, general: the "definite" form is chosen if *any* partial document is proven short, so a document with an unknown count and no gaps would share the definite wording. Not the case here |
+| Closed hip, two-document caveat | actuallib (real-anonymised) PA p8 / PS p13 | **Present** (UX `c4-fbeed4a/SA2x.txt`): "two different answers ... does not settle which applies ... never a total"; S$3,750 (75% of S$5,000, PS p13) and S$450,000 (75% of Daniel's S$600,000, printed as of 1 April 2024, PA p8), each "not a payment or an insurer's decision"; the Core/Voluntary condition; the bases note; next step "ask which of the two schedules applies". No "Other Fracture" note on the hip row (correct). It meets section 10's checklist. The fact that the hip row covers "a Simple Fracture or Other Fracture" is conveyed by the benefit's name rather than said outright: acceptable |
+
+### Final evidence summary on C5 (for the release report)
+
+**Unsupported claims: none open.** Across C0 to C5, no wrong claimable amount and no unsupported statement remains open in the fracture, correction,
+cancer, dental, sickness, GP-bill and death-abroad journeys, by page evidence (code trace and scripted transcripts). Fixed during the round: the sickness
+verdict wording (C2), "I haven't yet looked up" after a search (C2), and the travel amount without its trip limits (C3, then C5).
+
+**Supported information omitted (open):**
+1. GP bill: the conditional accident benefits (ambulance to hospital up to S$500 per incident; a hospital stay of at least 24 hours S$250; fracture) and
+   "Living Care / Living Care Plus listed but not described". These depend on the model; a live run is needed.
+2. No executable check pins the Core/Voluntary condition on the fracture illustration. It is shown in scripted browser runs.
+3. Low: the sickness answer lacks PS p37 "only payable upon an accident occurring"; the cancer answers lack Living Care Plus S$300,000; the death-abroad answer
+   does not contrast Japan with the printed destination; the fracture answers lack the Voluntary-Scheme context (a judgement call).
+
+**Evidence not available:**
+- DC's actual library and saved production conversations (DC's GP-bill trace was not read). Every finding is on anonymised copies (fracture, actuallib) or
+  synthetic test data (booklet, livelib, the added deathjourney pages).
+- Unstored pages: Product Summary 33 of 37; Benefit Summary pages 2, 4, 6, section I and after page 9 (total unknown). No page describes Living Care,
+  Living Care Plus, Outpatient Medicare, Disability Income or the Core Scheme, or defines Accident, Simple Fracture or Other Fracture.
+- A real model on C1 to C5. The only live evidence is fx-live-2 (OpenAI, `c4edd48`, one run per conversation); nothing covers the Claude switch (PR #59).
+  Live runs needed, in order: GP bill, sickness stay, person correction, then cancer (fresh wording) and fracture repetition.
