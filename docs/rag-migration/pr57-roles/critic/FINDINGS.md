@@ -1459,3 +1459,68 @@ check runs on the server whichever model writes, so the risk is in what the mode
 
 **Ready to merge once R24-1 is fixed** (one line). R23-1 to R23-4 are fixed, with tests for the two blockers, and the new changes
 only move amounts toward safer display. R24-2 can follow. PR #65 can merge in either order with this one after that.
+
+---
+
+# Round 25: PR #70 at `76de2d8`
+
+Scope: `git diff c685b92 76de2d8 -- lib/`, which covers `answer-statements.ts` (the bottom-line count) and `statement-render.ts`
+(group ids and the trip verdict). The repro is a scratch script that runs the new trip-verdict expressions, copied verbatim, on
+sample household messages. No model calls.
+
+## R24 re-check
+
+| Finding | Status |
+|---|---|
+| R24-1 count leaves out plain-text amounts | **Fixed.** The count is said only when no plain paragraph states money. Otherwise it reads "Your documents print amounts that may apply …". |
+| R24-2 shared group id | **Fixed.** The id is `alt:{member}:{sorted policy pair}:{injury}`, with the injury read from the row label without its kind label. A hip and an arm are separate choices, and a row with no partner stays ungrouped (a singleton group is dropped by reconcile). The bottom line for several groups says "two alternative amounts for each injury below". |
+
+## R25-1 (High, blocker): the new trip verdict tells the household that cover does not fit, from guesses
+
+`tripLimits` now adds "On what you have told me, this trip's cover does not fit this event: …". It does so when either:
+
+- `elsewhere` is set, from the first capitalised word after "in" in the household's words; or
+- the period has ended and `recent` matches.
+
+`recent` includes the bare word "just". The script, on the expressions copied verbatim, gives this:
+
+| Household said | Destination | Result |
+|---|---|---|
+| "My dad died in a car accident in Tokyo" | Japan | "you said it happened in **Tokyo**, not Japan", so **does not fit** |
+| "He broke his leg in March while skiing" | Japan | "you said it happened in **March**, not Japan", so **does not fit** |
+| "Dad died on 12/03/2025 in Japan, I just found the policy" (inside the printed period) | Japan | `recent` from "just", so "ended … before the event you described" and **does not fit** |
+| "She was admitted in Singapore after flying home from Japan" | Japan | "in **Singapore**, not Japan", so **does not fit** |
+
+That sentence then does three things:
+
+- It joins the amount's `conditions[]`.
+- It matches `VERDICT` ("does not fit"), so the amount is demoted from a card to plain text.
+- It becomes the bottom line ("a printed benefit whose condition … is the outcome").
+
+So the headline tells the household a documented benefit doesn't apply, on a misread. That is the "hiding a documented benefit"
+and "missing information is not an exclusion" failure, said as the answer.
+
+Fix: remove the verdict and keep the earlier neutral sentence ("whether that trip fits this event is for the insurer to
+confirm"). If a reason is wanted, say only what is printed next to what the household recorded, without a conclusion. Two
+examples:
+
+- "The period printed is 10/03/2025 to 17/03/2025; you said it happened last week."
+- "The destination printed is Japan."
+
+Use only recorded facts: an event date compared with the period, and a recorded location. Never take a capitalised word after
+"in", and never the word "just".
+
+## Two injuries in one message: "which injury?"
+
+Asking "which injury?" when the household named two, for example "he broke his wrist and his hip", is a problem. Both injuries
+may each have a benefit, and the new grouping already keeps one either/or choice per injury. Making them pick one hides the
+other's amounts, and they may not know that both count. The chat should take both as reported facts and answer each, one group
+per injury. If something is genuinely unknown, it should ask about both at once ("was each from an accident?"), never make
+them choose. I haven't traced where the question comes from in this diff. It belongs to the Developer's injury fact handling,
+as a separate fix, not a blocker for this PR on its own.
+
+## Verdict on PR #70 at `76de2d8`
+
+**Not ready to merge.** R24-1 and R24-2 are closed. R25-1 is new in this push and is a blocker: the trip verdict can turn a
+covered event into "does not fit" as the bottom line. Removing the verdict, which brings back the previous neutral wording, is
+enough to merge.
