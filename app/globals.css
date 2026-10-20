@@ -921,7 +921,7 @@ table { font-variant-numeric: tabular-nums; }
    never pushed off the edge of the bar. Wide screens keep the full sidebar. */
 .nav-more-toggle, .nav-label-short, .nav-more-sheet, .nav-more-backdrop { display: none; }
 @media (max-width: 900px) {
-  .nav.nav-tabbed { overflow: visible; mask-image: none; -webkit-mask-image: none; position: relative; z-index: 2; background: var(--surface); }
+  .nav.nav-tabbed { overflow: visible; mask-image: none; -webkit-mask-image: none; position: relative; z-index: 49; background: var(--surface); }
   .nav.nav-tabbed .nav-more-item { display: none; }
   .nav.nav-tabbed .nav-item { flex: 1 1 0; min-width: 0; order: var(--tab, 5); }
   .nav-more-toggle { display: grid; background: transparent; font-family: inherit; cursor: pointer; }
