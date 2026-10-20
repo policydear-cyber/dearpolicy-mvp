@@ -177,3 +177,16 @@ insurance cost.
 - Neither PR #61's new server sentence for an unpaid bill ("I could not confirm from your documents what pays for the
   bill…" / "The pages I read do not print a benefit for the bill…") nor the old one appeared, so the wording can't
   tell us which build answered. One sample can't separate a deployment change from the model's normal variation.
+
+# Part 4: page inconsistencies found while drafting the release question set (read-only, 12:00Z)
+
+For the Policy Evidence Reviewer. These are seen on the app's own pages; I didn't check them against the PDFs.
+- **Personal accident base differs between pages.** Coverage computes the scheme's accident percentages on the life
+  sum insured ("100% of the sum insured ([life figure])"), while Benefits computes the same rows on the personal
+  accident sum insured, which is lower. One of them is wrong.
+- **One fracture row, three amounts.** "Arm, Elbow, Wrist or Ribs" shows 25% of the fixed fracture limit on Coverage,
+  20% of that limit on Benefits, and 20% of the personal sum insured in chat (about 100× more).
+- **A travel wording's personal-liability row is shown on Coverage as "Accidental death [amount], only when caused by
+  an accident"** for member A. A row literally titled "Not covered" also appears with an amount.
+The release question set (32 questions with expected answers) is in the private project folder,
+`ux-live/release-set/`, because it contains real household data.
