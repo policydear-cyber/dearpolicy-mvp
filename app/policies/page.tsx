@@ -160,7 +160,9 @@ export default function PoliciesPage() {
 
   /** Reads an unreadable document again from the PDF DearPolicy already
    * kept: nothing is re-uploaded, and it is the same request the locked-PDF
-   * form uses, without a password. */
+   * form uses, without a password. Offered only when no pages were stored:
+   * re-reading a partly stored document rewrites its pages in place, and
+   * answers saved from them are not withdrawn (open item C1-3). */
   async function retryReading(policy: Policy) {
     const label = policy.product_name ?? policy.original_filename;
     setRetryingId(policy.id);
@@ -338,7 +340,9 @@ export default function PoliciesPage() {
 
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
             ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
-            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></div>)}
+            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span>{policy.page_count
+              ? <small>If you have a clearer copy or the original file, delete this one and upload that instead.</small>
+              : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>

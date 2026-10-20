@@ -16,6 +16,9 @@ export function groupSources(citations: ChatCitation[]): SourceDoc[] {
     if (page && !doc.pages.includes(page)) doc.pages.push(page);
     const excerpt = c.excerpt?.replace(/\s+/g, " ").trim();
     if (excerpt && !doc.excerpts.includes(excerpt)) doc.excerpts.push(excerpt);
+    // Any of the document's citations saying it is not confirmed current is enough.
+    if (c.notConfirmedCurrent) doc.notConfirmedCurrent = true;
+    if (!doc.documentDate && c.documentDate) doc.documentDate = c.documentDate;
     docs.set(key, doc);
   }
   for (const doc of docs.values()) doc.pages.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
@@ -31,7 +34,8 @@ export function SourceList({ citations }: { citations: ChatCitation[] }) {
     </>;
     return doc.excerpts.length
       ? <details className="citation source-doc" key={doc.key}><summary>{head}</summary>
-          {doc.excerpts.map((e, i) => <blockquote key={i}>“{e.length > 320 ? e.slice(0, 317) + "…" : e}”</blockquote>)}
+          {/* Shown whole: cutting a passage could drop the qualifier at its end. */}
+          {doc.excerpts.map((e, i) => <blockquote key={i}>“{e}”</blockquote>)}
           {doc.notConfirmedCurrent ? <small className="source-date">{doc.documentDate ? `Dated ${doc.documentDate}. ` : ""}This does not confirm cover today.</small> : null}
           <a className="source-open" href={`/policies#doc-${doc.policyId}`}>Open in Documents</a>
         </details>
