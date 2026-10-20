@@ -210,6 +210,18 @@ test.describe.serial("synthetic household journey", () => {
     await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     expect((await policies(page)).map((p) => p.id)).not.toContain(ids.bad);
 
+    // Negative control (PR #77): while the child's document is still in the library, Family refuses to remove them and
+    // sends the household to Documents instead; nothing is deleted.
+    await page.goto("/family");
+    const linkedCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
+    await linkedCard.getByRole("button", { name: "Delete" }).click();
+    await expect(linkedCard.getByRole("alert")).toContainText(`${child} is still linked to a document`);
+    await expect(linkedCard.getByRole("link", { name: "Go to Documents" })).toHaveAttribute("href", "/policies");
+    await expect(linkedCard.getByRole("button", { name: /Confirm delete/ })).toHaveCount(0);
+    await linkedCard.getByRole("button", { name: "Cancel" }).click();
+    expect(((await api<{ family: { id: string }[] }>(page, "/api/family")).body.family ?? []).map((f) => f.id)).toContain(ids[child]);
+    await page.goto("/policies");
+
     // Remove the child's policy, then the child's profile, through the UI.
     const b = (await policies(page)).find((p) => p.id === ids.b)!;
     const cb = card(page, b);
