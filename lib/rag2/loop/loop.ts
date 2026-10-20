@@ -1678,7 +1678,9 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
     if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
     if (Array.isArray(given) && given.some(isContactStep)) return null;
-    const asked = familiesOf(input.message);
+    // (live "what do i do now": a follow-up that names no event takes the event from this conversation's earlier messages)
+    // (Critic R14-3: the latest one that names an event -- never a mix of every event the conversation has been about)
+    const asked = [...userTexts].reverse().map((t) => familiesOf(t)).find((f) => f.size) ?? familiesOf("");
     if (!asked.size) return null;
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
     const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
@@ -2585,7 +2587,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     (trace.adjusted ??= []).push("the reply ended without the absence refused for a partly stored scope: the server's statement of what was read was added");
     return { kind: "final", composed: { ...c0, sentences: [...c0.sentences, ...c.sentences], absenceChecks: [...(c0.absenceChecks ?? []), ...(c.absenceChecks ?? [])], notes: c0.notes.filter((n) => n !== DROPPED_NOTE) } };
   };
-  let done = await requirementQuestion(conditionQuestion(withInventory(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null)))));
+  /** Live finding (20 Oct, "what do i do now", turn 7): a household that asks what to do next, when nothing the reply said could be kept,
+   * gets the next steps the previous answer SHOWED (as composed and checked then: TraceTurn.shown), instead of "I couldn't confirm an
+   * answer to that". Only the immediately previous answer, only for the same person, and never when this turn corrected or withdrew it
+   * (Critic R14-1, R14-2). An open question is not repeated here: the answer ends with it as its question card (R14-4). */
+  const whatToDo = (r: LoopReply | null): LoopReply | null => {
+    if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
+    if (r.composed.sentences.length || r.composed.nextSteps.length || corrections.length || invalidated.length) return r;
+    // Critic R17-1/R17-3: only the answer shown just before this message (an ask card or a withdrawn answer in between shows nothing old).
+    const prev = state.turns.filter((t) => t.turn < state.turn).at(-1)?.shown;
+    const subject = r.composed.subjectId ?? state.subjectId;
+    if (!prev || !prev.nextSteps.length || !subject || prev.subjectId !== subject) return r;
+    (trace.adjusted ??= []).push(`the household asked what to do and the reply kept nothing: the previous answer's next steps were shown again (${prev.nextSteps.length})`);
+    return { ...r, composed: { ...r.composed, notes: [`Here ${prev.nextSteps.length > 1 ? "are the next steps" : "is the next step"} from my last answer.`, ...r.composed.notes.filter((n) => n !== DROPPED_NOTE)], nextSteps: prev.nextSteps } };
+  };
+  let done = await requirementQuestion(conditionQuestion(withInventory(whatToDo(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null))))));
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
