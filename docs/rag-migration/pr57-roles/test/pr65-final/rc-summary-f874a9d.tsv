@@ -1,0 +1,14 @@
+spec	household	exit	passed	failed	summary
+reliable-chat	tan	0	3 passed	0 failed	  3 passed (1.3m)
+reliable-chat-booklet	booklet	0	6 passed	0 failed	  6 passed (24.8s)
+reliable-chat-actuallib	actuallib	0	8 passed	0 failed	  8 passed (39.0s)
+reliable-chat-fracture	fracture	0	6 passed	0 failed	  6 passed (23.5s)
+reliable-chat-deathjourney	deathjourney	0	3 passed	0 failed	  3 passed (14.3s)
+reliable-chat-dj-live-3	deathvalues	0	2 passed	0 failed	  2 passed (6.2s)
+reliable-chat-gp-bill	gpbill	0	5 passed	0 failed	  5 passed (14.9s)
+rag2-binding	binding	0	2 passed	0 failed	  2 passed (8.8s)
+rag2-livelib	livelib	1	1 passed	1 failed	  1 passed (6.8s)
+rag2-pr50	pr50	0	3 passed	0 failed	  3 passed (8.8s)
+rag2-s50-replay	binding-cells	1	0 passed	1 failed	    [chromium] › e2e/tests/rag2-s50-replay.spec.ts:29:5 › R50 replay of s50-live-2: what the browser displays is the saved answer, turn 
+rag2-s52-replay	livelib	1	0 passed	1 failed	  3 did not run
+rag2-report	report	0	6 passed	0 failed	  6 passed (30.5s)

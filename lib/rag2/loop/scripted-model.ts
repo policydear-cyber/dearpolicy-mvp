@@ -50,7 +50,9 @@ export class ScriptedLoopModel implements LoopModel {
     const after = msgs.slice(lastUser + 1);
     const step = after.filter((m) => m.role === "assistant").length;
     const key = lastUser + "|" + user;
-    if (step === 0 && key !== this.lastUserKey) { this.turnIndex++; this.lastUserKey = key; }
+    // (a new household message starts the next scripted turn -- also when the server already made the turn's first call itself, so the
+    // first model call of the turn is its second step)
+    if (key !== this.lastUserKey) { this.turnIndex++; this.lastUserKey = key; }
     const turn = this.turns[this.turnIndex];
     if (!turn) throw new Error(`the script has no turn ${this.turnIndex + 1} (message: ${user})`);
     if (turn.user && !(typeof turn.user === "string" ? user.includes(turn.user) : turn.user.test(user))) throw new Error(`script turn ${this.turnIndex + 1} expected a message like ${String(turn.user)}, got: ${user}`);

@@ -1,0 +1,53 @@
+
+Running 2 tests using 1 worker
+
+--- SR1 replaced answer as displayed:
+DearPolicy
+
+Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+
+Replaced.
+This answer was replaced by the corrected answer below.
+  ✓  1 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:64:7 › reopened answers that no longer stand › SR1: tibia -> hip correction, reloaded: the tibia answer is replaced and shows no figure (6.4s)
+--- SR2 out-of-date answer as displayed:
+DearPolicy
+
+If the Simple Fracture benefit applies to Grace's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.
+
+Out of date.
+Someone this answer was about has since been removed from the document it relied on.
+  ✘  2 [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:85:7 › reopened answers that no longer stand › SR2: Grace removed from the document her answer used, chat reopened: the 'removed' note, no figure; ticked again, it comes back (7.7s)
+
+
+  1) [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:85:7 › reopened answers that no longer stand › SR2: Grace removed from the document her answer used, chat reopened: the 'removed' note, no figure; ticked again, it comes back 
+
+    Error: the out-of-date answer shows no figure
+
+    expect(received).not.toMatch(expected)
+
+    Expected pattern: not /S\$\s?[\d,]+|\b\d+%/
+    Received string:      "DearPolicy
+    
+    If the Simple Fracture benefit applies to Grace's case “Hip”, the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary; it is an illustration from the document's terms, not a payment or an insurer's decision.
+    
+    Out of date.
+    Someone this answer was about has since been removed from the document it relied on."
+
+       98 |     await expect(grace.getByTestId("answer-invalidated")).toContainText("Out of date. Someone this answer was about has since been removed from the document it relied on.");
+       99 |     console.log(`--- SR2 out-of-date answer as displayed:\n${await grace.innerText()}`);
+    > 100 |     expect.soft(await grace.innerText(), "the out-of-date answer shows no figure").not.toMatch(FIGURE);
+          |                                                                                        ^
+      101 |     const daniel = answerAfter(page, u1);
+      102 |     await expect(daniel.getByTestId("answer-invalidated"), "control: Daniel is still covered by the document").toHaveCount(0);
+      103 |     expect(await daniel.innerText()).toMatch(/S\$[\d,]+/);
+        at /home/user/pr69/e2e/tests/reliable-chat-stale-answers.spec.ts:100:88
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    e2e-results/reliable-chat-stale-answers/reliable-chat-stale-answer-15f60--ticked-again-it-comes-back-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: e2e-results/reliable-chat-stale-answers/reliable-chat-stale-answer-15f60--ticked-again-it-comes-back-chromium/error-context.md
+
+  1 failed
+    [chromium] › e2e/tests/reliable-chat-stale-answers.spec.ts:85:7 › reopened answers that no longer stand › SR2: Grace removed from the document her answer used, chat reopened: the 'removed' note, no figure; ticked again, it comes back 
+  1 passed (15.2s)

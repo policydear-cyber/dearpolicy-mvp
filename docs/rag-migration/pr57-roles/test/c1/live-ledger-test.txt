@@ -1,0 +1,25 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS L1 earlier spending reduces what a new run may use (cap = min(request, exercise cap - spent - unsettled))
+PASS L2 the real ledger limits a run: remaining = 1.00 - every spend - the open trial reservation
+PASS L3 a run_id already in the ledger is refused (live and preflight); a first use is admitted
+PASS L4 a duplicate run_id cannot be written: validateLedger and the append command both refuse; the file is left unchanged
+PASS L5 the open trial reservation stays excluded from automated spend, and is released only when the entry is closed
+PASS L6 fail closed: no run id, no ledger, an invalid ledger or a wrong exercise cap refuses the run
+PASS L7 a preflight spends nothing, so it is admitted when the budget is used up, but never past an unreadable ledger
+PASS L8 every test entry point reaches the guard, and the runners name their run before it admits
+PASS L9 reconcile: a recorded run without a ledger entry, a disagreeing entry, plumbing and a free preflight are told apart
+FAIL L10 reconcile on the repository: no recorded run is missing from, or disagrees with, LEDGER.json
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+       {
+         mismatched: [],
+         missing: [],
+     +   unreadable: [
+     +     'fx-live-2'
+     +   ]
+     -   unreadable: []
+       }
+     
+
+ledger regressions 9/10 passed

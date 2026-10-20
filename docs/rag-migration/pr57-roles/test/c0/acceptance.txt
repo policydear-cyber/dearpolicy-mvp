@@ -1,0 +1,79 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [INFO] R0 K2 turn 1: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K3t1 turn 1: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K4b turn 1: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K4b turn 2: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K6a turn 1: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K6b turn 1: the replay on this tree shows the same text as the live run (answers.json)
+PASS [INFO] R0 K6c turn 1: the replay on this tree shows the same text as the live run (answers.json)
+FAIL [AC] R1 (K3t1, repetition) that the documents leave open which alternative applies is said at most once
+     Grace’s documents give different alternatives for this event, and do not establish which applies; the amounts are not to be added together.
+     The uploaded documents do not establish which document governs this event.
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+FAIL [AC] R2 (K4b correction turn, repetition) the same, at most once
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     The uploaded documents do not establish which of these two fracture provisions applies to Daniel's event.
+     Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+FAIL [AC] R3 (K3t1, repetition) that the two documents use different bases is said once (no 'different bases' sentence beside the bases sentence)
+     The Product Summary and Certificate of Insurance Part 2 use different bases for their fracture percentages.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured.
+PASS [GUARD] R4 (K3t1) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said
+PASS [GUARD] R4 (K4b) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said
+FAIL [AC] R5 (K2, v1 K2.3) the sickness answer says the certificate also lists Living Care cover that no stored page describes
+     Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me this benefit's condition is not met and no amount is given for it.
+PASS [GUARD] R6 (K2) no amount is given for the accident hospital benefit, nothing promises payment, no question is asked
+FAIL [AC] R7 (K6a) the S$350,000 sentence itself carries the limitation that the documents do not show what Living Care pays for cancer
+     Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; this is the amount shown on that date, not confirmation of cover now.
+PASS [GUARD] R8 (K6a, K6c) S$350,000 is dated and never presented as what will be paid
+FAIL [AC] R9 (K6c) no definition is implied where none was shown ('meets the policy definition')
+     Grace’s certificate lists Group Living Care at S$350,000 as of 6 October 2022; that dated amount does not confirm cover now.
+     The uploaded documents do not establish whether Grace’s cancer meets the policy definition or what amount would be payable for it.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] R10 (K6b) the dental absence answer cites no passage
+PASS [GUARD] R11 every replayed turn: returned = saved = reopened
+FAIL [AC] H1.1 "Daniel broke his arm too. It was not serious." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+FAIL [AC] H1.2 "Daniel broke his arm too. I mean, he fell off his bike." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+FAIL [AC] H1.3 "Daniel broke his arm too, he slipped rather than fell." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+     {"grace":{},"live":0,"v":"Updated: this is about Daniel, not Grace.\nYou can ask me to go on with the question about Grace."}
+PASS [GUARD] H1.4 (control) plain "Daniel broke his arm too." carries nothing and moves nothing
+PASS [GUARD] H1.5 (control) a real correction ("Actually it was Daniel who broke his arm, not Grace.") is still made, once
+FAIL [AC] H2.1 an injury reported with a sickness word ('felt sick and fainted, hitting her head'): the server does not decide the accident condition is unmet, and the benefit's terms (S$250) stay with the printed accident condition
+     Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“felt sick and fainted, hitting her head”) is an illness, not an accident, so on what you have told me this benefit's condition is not met and no amount is given for it.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] H2.2 (control) a plain accident keeps the terms (S$250) and no 'not met'
+PASS [GUARD] H2.3 returned = saved = reopened
+PASS [GUARD] M1.0 (setup, the test can fail) the toe turn completes with a final answer
+PASS [GUARD] M1.1 (Critic M1, not reproduced on C0: the server reads the reported 'toe' and returns unlisted_case) 'broke her toe' mapped by the model to the 'Leg, Ankle or Knee^' row: no S$2,500 is given beside that row's own 'toe and foot are not covered' footnote
+PASS [GUARD] M1.2 (control) 'broke her ankle' on the same row still gets S$2,500 (the footnote names toe and foot, not ankle)
+PASS [GUARD] M0 (setup) the dental absence is said over the three documents as stored
+FAIL [AC] M2 with one stored page of a scoped document empty (Benefit Summary page 1), 'do not describe a benefit for dental' is not said over pages that were never read
+     Grace’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] M3.1 (control) a page that prints a dental benefit refuses the absence (terms ['dentist'], topic 'dental treatment')
+FAIL [AC] M3.2 the same page refuses it when the document's product name contains 'Dental' (the topic word is still searched)
+     Grace’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance and Scheme X Dental Plan) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+FAIL [AC] M4 after a document for Grace that prints a dental benefit is added, the reopened answer no longer says her documents do not describe one
+     Grace’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for dental treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] Q3.1 (setup) Grace's answer uses her own S$600,000: S$120,000
+PASS [GUARD] Q3.2 the corrected answer is recalculated from Daniel's own row: 20% of S$400,000 = S$80,000, and Grace's S$120,000 / S$600,000 is not carried
+PASS [GUARD] Q3.3 Grace's illustrations are withdrawn and every live calculation is Daniel's
+PASS [GUARD] Q3.4 returned = saved = reopened
+PASS [GUARD] N1 (percentage base) S$1,250 is 25% of the fixed S$5,000 limit and S$120,000 is 20% of Grace's S$600,000; neither base is swapped (no S$150,000, no S$1,000)
+PASS [GUARD] N2 (supported information survives verification) the date, the '#' footnote and the insurer contact step all reach the saved and reopened answer
+PASS [GUARD] N3 (wrong person) Grace's calculations stated with Daniel as their subject are not shown as Daniel's
+PASS [GUARD] N4 (wrong product) a contact step naming a document that is not in Grace's library names no insurer
+PASS [GUARD] N5a (version) with the Benefit Summary deleted, the reopened answer no longer shows its S$120,000
+FAIL [AC] N5b (version) with the Benefit Summary's stored file hash changed in place (another version of the file), the reopened calculation answer no longer shows its S$120,000 (on C0 only absence answers compare file hashes: lib/chat/stale-answers.ts)
+     Grace's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Grace's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other, or which applies to this event.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+PASS [GUARD] N6 and with the original version restored the reopened answer is whole again
+
+AC 0 passed, 14 failed | GUARD 25 passed, 0 failed | INFO 7 same, 0 differ

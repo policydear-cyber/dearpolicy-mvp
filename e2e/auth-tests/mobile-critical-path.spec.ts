@@ -6,7 +6,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { name, syntheticWordingPdf } from "../support/synthetic";
-import { api, emailFor, newPassword, outboxLink, signUpThroughUi, signInThroughUi, signOutThroughUi, expectNoHorizontalScroll, hideDevOverlay, recordHousehold, hardenNavigation } from "../support/journey";
+import { api, emailFor, newPassword, outboxLink, signUpThroughUi, signInThroughUi, expectNoHorizontalScroll, hideDevOverlay, recordHousehold, hardenNavigation } from "../support/journey";
 
 test.describe.serial("mobile critical path", () => {
   test.setTimeout(420_000);
@@ -52,10 +52,17 @@ test.describe.serial("mobile critical path", () => {
     await expect(page.locator(".document-card").filter({ hasText: file.replace(/\.pdf$/, "") }).or(page.locator(".document-card").first())).toContainText("Ready");
     await expectNoHorizontalScroll(page, "documents with a card");
 
-    // Bottom navigation by touch.
-    await page.locator(".sidebar .nav").getByRole("link", { name: "Claims" }).tap();
+    // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Coverage and More;
+    // Claims and Family sit in the sheet that More opens.
+    const bar = page.locator(".sidebar .nav");
+    await expect(bar.locator('a[href="/chat"]')).toBeVisible();
+    await expect(bar.locator('a[href="/claims"]')).toBeHidden();
+    await bar.getByRole("button", { name: "More" }).tap();
+    await page.locator("#nav-more-sheet").getByRole("menuitem", { name: "Claims" }).tap();
     await expect(page).toHaveURL(/\/claims$/);
-    await page.locator(".sidebar .nav").getByRole("link", { name: "Family" }).tap();
+    await expect(page.locator("#nav-more-sheet")).toHaveCount(0);
+    await bar.getByRole("button", { name: "More" }).tap();
+    await page.locator("#nav-more-sheet").getByRole("menuitem", { name: "Family" }).tap();
     await expect(page).toHaveURL(/\/family$/);
     await expect(page.locator(`.profile-card input[value="${person}"]`)).toHaveCount(1);
   });
@@ -70,6 +77,8 @@ test.describe.serial("mobile critical path", () => {
     await page.getByRole("button", { name: "Permanently delete household" }).tap();
     await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }); // its own confirmation page
     expect((await api(page, "/api/policies")).status).toBe(404);
-    await signOutThroughUi(page);
+    // The confirmation page has its own Sign out button besides the top bar's; use the page's.
+    await page.getByTestId("household-deleted").getByRole("button", { name: "Sign out" }).tap();
+    await page.waitForURL(/\/login/);
   });
 });

@@ -1,0 +1,35 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS S12 (C1.1) a document with a page never stored (pageCount 3, two pages stored) is not read in full: no absence is said
+PASS S13 (C1.1) a document with a stored page that has no text is not read in full: no absence is said
+PASS W1 'dental' is NOT found inside 'accidental' (whole words only)
+PASS W2 inflections are found: 'fractures' finds 'fractured'; 'hospitalisation' finds 'hospital'
+PASS W3 a phrase is found across a line break or hyphen: 'critical illness'
+PASS W4 scanScope reports the document, page and line of every hit
+PASS A1 (K6b) a benefit the scope never prints is kept: the scope is the person's three documents, 'accidental' is not 'dental'
+PASS A2 (K6b) the sentence says the DOCUMENTS do not describe it, and that this is not 'no cover'
+PASS A3 the documents checked are named, told apart when they share a product name
+PASS A4 the check carries the scope: each document's id, name, file hash and version
+PASS F1 a false absence is refused when a scoped document prints the topic, naming the page and the line
+PASS F2 'no illness benefit' is refused while Term Life prints 'Terminal Illness'
+PASS F3 the topic's own distinctive words are searched even when the model's terms miss them
+PASS F4 a topic that carries a verdict ('is excluded') is refused: the statement says what documents print, not what cover exists
+PASS F5 'no dental cover' as a topic is refused: it names the absence, not the thing looked for
+PASS F6 a figure in the topic is refused
+PASS F7 no specific word to search for: refused with what to supply
+PASS F8 a scoped document whose text is not stored: nothing can be said to be absent from it
+PASS S1 a document linked only to another member is not in this person's scope: Daniel's dental plan does not make Grace's statement false
+PASS S2 ... and it does make Daniel's false
+PASS S3 a document linked to nobody could belong to anyone: it is in every person's scope
+PASS S4 no person: the whole library is the scope, said as 'Your uploaded documents'
+PASS S5 (K6a) a named document that does not state the topic: kept, said of that document alone, with 'not excluded / not covered' kept out
+PASS S6 (K6a) the product's own words ('Group Living Care') are not searched for: only what it is asked to say about (cancer)
+PASS S6b (K6a) terms that do not include the topic's own word are refused: the word asked about is always searched
+PASS S7 a named document that DOES print the topic: refused
+PASS S8 document_silent without scope_policy_ids: refused
+PASS S9 a scope id that is not one of the household's documents: refused
+PASS S10 an unknown claim is refused
+PASS S11 many documents are summarised in the sentence but all are recorded in the check
+PASS T1 cleanTopic strips a leading article and refuses sentences
+PASS T2 documentLabels: unique names stay as they are; shared names are told apart by role
+
+32 passed, 0 failed

@@ -1,0 +1,82 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+PASS [AC] H1.1 "Daniel broke his arm too. It was not serious." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [AC] H1.2 "Daniel broke his arm too. I mean, he fell off his bike." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [AC] H1.3 "Daniel broke his arm too, he slipped rather than fell." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [GUARD] H1.6 "Daniel broke his arm too, but it wasn't Grace's fault." is another person's scenario, not a correction: Grace keeps 'broke her arm' and 'fell down', her two illustrations stay live, her question stays open, no correction notice
+PASS [GUARD] H1.4 (control) plain "Daniel broke his arm too." carries nothing and moves nothing
+PASS [GUARD] H1.5 (control) a real correction ("Actually it was Daniel who broke his arm, not Grace.") is still made, once
+FAIL [AC] H1.7 (Critic A1) "It was Daniel, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+     {"live":2,"v":"You can ask me to go through Daniel's fracture figures.\nWhen you’re ready, here is the question I was on.\nWas Grace confined as a resident patient in a hospital for a continuous period of at least 24 hours?"}
+FAIL [AC] H1.8 (Critic A1) "Actually it was Daniel who broke his arm, not Grace. He also hurt his knee." is still a correction: the notice is given once and Grace's illustrations are withdrawn
+     {"live":2,"v":"You can ask me to go through Daniel's fracture figures.\nWhen you’re ready, here is the question I was on.\nWas Grace confined as a resident patient in a hospital for a continuous period of at least 24 hours?"}
+[chat] output guard changed an answer
+[chat] output guard changed an answer
+[chat] output guard changed an answer
+PASS [AC] GP.a1 (variant A) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant A) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant A) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant A) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a1 (variant B) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant B) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant B) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant B) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a1 (variant C) the answer does not end in "couldn't confirm" or the model-error reply
+PASS [AC] GP.a2 (variant C) it does not say the documents were not looked up after the search ran
+PASS [GUARD] GP.a3 (variant C) the household's "$800" is kept as written (bare "$"), never turned into S$800 or an amount payable
+PASS [GUARD] GP.d (variant C) no answer quotes the Part 1 applicability clause, and nothing says he is not covered
+PASS [AC] GP.a4 (variant A, QC ground truth) the answer says the uploaded documents show no GP or outpatient benefit, names Outpatient Medicare (OPMC) as on the scheme but not on his certificate (with its date), and suggests asking the insurer
+PASS [AC] GP.a5 (variant A, QC ground truth) the certificate's listed policies are named (Group Term Life, Group Personal Accident, Group Living Care)
+PASS [AC] GP.b1 (medical-expense control) the answer surfaces the accident benefit that reimburses medical expenses by a registered medical practitioner
+PASS [GUARD] GP.b2 (medical-expense control) no absence is stated, and no amount is given for the $800
+PASS [GUARD] GP.c1 certificate not read in full: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c2 the certificate lists 'OPMC' (abbreviation only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c3 the certificate lists 'Outpatient Medicare' (full name only): G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+PASS [GUARD] GP.c4 a hit inside a benefit's own wording, outside the scheme's policy list: G1 does not fire (no 'the certificate does not list ...'), and no absence is stated
+[chat] output guard changed an answer
+PASS [AC] GP.A3.1 'medical expenses ... registered medical practitioner' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+PASS [AC] GP.A3.2 'doctor' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+FAIL [AC] GP.A3.3 'reimburse ... charges' (Critic A3) the benefit printed on Benefit Summary page 6 is surfaced and no absence is stated
+     Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care and Group Living Care Plus (as of 6 October 2022). The Scheme X Group Insurance (certificate summary) (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list; only the insurer or the scheme administrator can confirm Daniel’s current cover. Daniel’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for GP or outpatient treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+[chat] output guard changed an answer
+FAIL [AC] GP.A2.1 (Critic A2) with a Grace-only policy on the family certificate, Daniel's answer does not name it as listed for him (no 'Hospital and Surgical')
+     Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care, Group Hospital And Surgical and Group Living Care Plus (as of 6 October 2022). The Scheme X Group Insurance (certificate summary) (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list; only the insurer or the scheme administrator can confirm Daniel’s current cover. Daniel’s documents (Scheme X Group Insurance Scheme, Scheme X Group Insurance (product summary) and Scheme X Group Insurance (certificate summary)) do not describe a benefit for GP or outpatient treatment. That is not the same as saying there is no such cover: it only means none is shown in these documents, and only the insurer can confirm whether there is one.
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+[chat] output guard changed an answer
+PASS [GUARD] GP.A2.2 (Critic A2; passes on C0, C2 and C3) with Grace's own certificate listing Hospital and Surgical, Daniel's answer does not name it as listed for him
+FAIL [AC] GP.F1 (Critic F1) no GP-bill answer quotes the scheme's policy-list line ('... and Outpatient Medicare Policy ("OPMC") ...')
+     The Scheme X Group Insurance (certificate summary) (page 1) prints: “("LC"), Living Care Plus Policy ("LCP"), Disability Income Policy ("DI"), and Outpatient Medicare Policy ("OPMC") (collectively referred to”.
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     ====
+     The Scheme X Group Insurance (certificate summary) (page 1) prints: “("LC"), Living Care Plus Policy ("LCP"), Disability Income Policy ("DI"), and Outpatient Medicare Policy ("OPMC") (collectively referred to”.
+     You told me tripped over the kerb and fell.
+     You told me his GP bill is $800.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+PASS [GUARD] GP.F2 (Critic F2; not reproduced on this fixture: passes on C2) where the read pages print the bill's terms (OPMC on the certificate, outpatient wording, the three medical-bill controls), no answer says they print no benefit for the bill
+PASS [GUARD] GP.d (all GP answers, including the controls) none quotes the Part 1 applicability clause
+PASS [GUARD] GP.r every GP answer: returned = saved = reopened
+FAIL [AC] UX1 (FX-K4B turn 1, 'grace fell down and broke her arm') no question is asked: no question card and nothing pending (main asks nothing)
+     {"questions":["Was Grace’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?"],"pending":null}
+PASS [GUARD] UX1b (FX-K4B turn 1) no question cites the Leg / Other Fracture row for an arm
+FAIL [AC] UX2 (FX-K6B dental) the answer is not a bare "couldn't confirm": it names the documents checked and says what was read of them (an absence is not said over the fixture's partial copies: M5)
+     I couldn’t confirm an answer to that from your documents.
+PASS [GUARD] UX2b (FX-K6B dental) never 'no dental cover', 'not covered' or 'excluded'
+FAIL [GUARD] UX3 (FX-K4B correction turn) says Grace's earlier estimate(s) no longer apply, with one correction notice (scripted: passes on C0, C2 and C3; the browser finding is not reproduced here)
+     Updated: this is about Daniel, not Grace.
+     Daniel's documents give two different answers for this event, and what they say does not settle which applies: these are alternatives from separate documents, never a total.
+     If the Simple Fracture benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000, in the Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision; the page prints a footnote for that row: “For the avoidance of doubt, any fractures of thumb, finger and palm are not covered” (marked #).
+     If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs” (the row the document labels “Other Fracture”; these documents print no definition of which fractures that is), the conditional illustration is S$120,000: 20% of Daniel's sum insured of S$600,000 (Group Personal Accident, printed as of 6 October 2022, not confirmation of cover on a later date), in the Certificate of Insurance Part 2 (page 8); it is an illustration from the document's terms, not a payment or an insurer's decision; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme”.
+     The Product Summary (page 13) takes its percentage of a fixed Simple Fracture Benefit Limit; the Certificate of Insurance Part 2 (page 8) takes its percentage of Daniel's own sum insured. The Product Summary describes itself as a summary and says the precise terms are set out in the certificate of insurance (page 37; its information is dated July 2021). The Certificate of Insurance Part 2, its highlights of cover, says it is not a contract of insurance (page 1). Neither document says whether one amends, replaces or adds to the other.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+FAIL [AC] UX4 no turn asks the household about an X-ray or certification unless they raised it (FX-K4B both turns, FX-K6B, FX-K6A, FX-K2)
+     FX-K4B 1: Was Grace’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?
+PASS [GUARD] UX5 (harness state) FX-K4B played twice in the same harness (a fresh copy of the scenario's scripted turns each time: the scripted model consumes the turn objects it is given) gives the same turn-1 and correction text, and neither ends in the model-error reply
+PASS [GUARD] UX6 every UX turn: returned = saved = reopened
+
+AC 14 passed, 8 failed | GUARD 22 passed, 1 failed | INFO 0 same, 0 differ

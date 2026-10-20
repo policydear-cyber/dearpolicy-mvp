@@ -9,7 +9,7 @@ import { statedCurrencyCode } from "@/lib/format/currency";
 import { addLedgerRow,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
-import { ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
+import { ledgerReadDocuments,ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -43,7 +43,8 @@ export async function GET(request:NextRequest){
     };
     const pending=await pendingDocumentCount(accountId);
     return NextResponse.json({rows:shown,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
-      reading:{pending,inProgress:ledgerReadingInProgress(accountId)}});
+      // documents: which document is waiting, being read, or failed and why.
+      reading:{pending,inProgress:ledgerReadingInProgress(accountId),documents:await ledgerReadDocuments(accountId)}});
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load the coverage ledger"},{status:500});

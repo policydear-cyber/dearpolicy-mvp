@@ -1,0 +1,5 @@
+DearPolicy PostgreSQL/pgvector/API checks passed (84 checks; simulated Ollama responses).
+Model calls exercised: interpretation=59, policy reading=63, explanation=23. Maximum user-prompt characters=14868.
+exit 0
+rag2:deletion-semantics-test 9/9 passed
+exit 0

@@ -1,0 +1,27 @@
+  ✓   1 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:85:7 › owner and reviewer journey with real sessions › 1. sign-up form validation: the form and the server both refuse bad input (1.3s)
+  ✓   2 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:108:7 › owner and reviewer journey with real sessions › 2. sign-up leaves the account pending email confirmation; sign-in is refused until confirmed (1.5s)
+  ✓   3 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:132:7 › owner and reviewer journey with real sessions › 3-4. the confirmation link signs the owner in and the first household exists, owned by them (1.5s)
+  ✓   4 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:153:7 › owner and reviewer journey with real sessions › 5. sign-out ends the session; protected pages and APIs refuse; sign-in returns to the requested page (1.4s)
+  ✓   5 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:167:7 › owner and reviewer journey with real sessions › 6. an expired session is treated as signed out and the person signs in again (1.2s)
+  ✓   6 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:176:7 › owner and reviewer journey with real sessions › 7. family members: add, edit and keep them in the household (2.6s)
+  ✓   7 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:195:7 › owner and reviewer journey with real sessions › 8-9. policy upload: clean, flagged, delayed and failed scans, and an extraction failure; linking a ready policy (29.6s)
+  ✓   8 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:278:7 › owner and reviewer journey with real sessions › 10. operator step: synthetic certificates for the claim steps (local database, this household only) (408ms)
+  ✘   9 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:284:7 › owner and reviewer journey with real sessions › 11. a factual chat question is answered from the policy's own cited page, with no amount (2.4s)
+  -  10 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:300:7 › owner and reviewer journey with real sessions › 12. every claim category enters deterministic fact-finding, with no amount
+  -  11 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:324:7 › owner and reviewer journey with real sessions › 13. claim evidence: upload through the Claims page; clean, flagged and unreadable documents; no estimate before review
+  -  12 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:371:7 › owner and reviewer journey with real sessions › 14-17. reviewer: operator provisioning, sign-in without a household, decisions, and per-currency indicative estimates
+  -  13 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:467:7 › owner and reviewer journey with real sessions › 18. cross-household isolation: another owner can neither see nor act on this household's data
+  -  14 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:493:7 › owner and reviewer journey with real sessions › 19. export: a recently signed-in owner downloads only this household's synthetic data
+  -  15 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:519:7 › owner and reviewer journey with real sessions › 20. deleting claim evidence removes what was estimated from it
+  -  16 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:532:7 › owner and reviewer journey with real sessions › 21. deleting a policy invalidates the saved answer that relied on it
+  -  17 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:552:7 › owner and reviewer journey with real sessions › 22. deleting a family member through the Family page (refused while documents are linked)
+  -  18 [desktop] › e2e/auth-tests/owner-reviewer-journey.spec.ts:573:7 › owner and reviewer journey with real sessions › 23. deleting both households leaves nothing readable, and the owners can sign out
+  ✓  19 [mobile] › e2e/auth-tests/mobile-critical-path.spec.ts:20:7 › mobile critical path › sign up, confirm by email, add a person, upload a document and use the bottom navigation (9.8s)
+  ✓  20 [mobile] › e2e/auth-tests/mobile-critical-path.spec.ts:70:7 › mobile critical path › sign out from the top bar, sign back in, delete the household (3.0s)
+  ✓  21 [keyboard] › e2e/auth-tests/keyboard-critical-path.spec.ts:43:7 › keyboard-only critical path › sign in, manage a person and upload a document using only the keyboard (3.7s)
+  ✓  22 [keyboard] › e2e/auth-tests/keyboard-critical-path.spec.ts:97:7 › keyboard-only critical path › sign out, sign in and delete the household using only the keyboard (2.9s)
+    e2e-results/auth/owner-reviewer-journey-own-a0d33-n-cited-page-with-no-amount-desktop/test-failed-1.png
+  1 failed
+  9 did not run
+  12 passed (1.1m)
+playwright exit 1

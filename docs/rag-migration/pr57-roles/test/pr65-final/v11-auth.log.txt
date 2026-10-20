@@ -1,0 +1,9 @@
+  ✓  1 [desktop] › e2e/tests/v11-journey.spec.ts:208:7 › V1.1 release journey › the whole journey (2.3m)
+  ✓  2 [desktop] › e2e/tests/v11-ux-login.spec.ts:67:7 › sign-in works on the first click › browser-filled credentials: one click signs in (3.5s)
+  ✓  3 [desktop] › e2e/tests/v11-ux-login.spec.ts:88:7 › sign-in works on the first click › typed credentials: one click signs in, three times in a row (9.1s)
+  ✓  4 [desktop] › e2e/tests/v11-ux-login.spec.ts:105:7 › sign-in works on the first click › typed before the page finished loading: one click signs in (33.6s)
+  ✓  5 [desktop] › e2e/tests/v11-ux-login.spec.ts:132:7 › sign-in works on the first click › wrong password: one click shows a plain message and keeps the person on the page (791ms)
+  ✓  6 [desktop] › e2e/tests/v11-ux-r5.spec.ts:90:7 › round 5: the exploratory findings, fixed › upload, group booklet, locked PDF, chat, empty states and household deletion (19.8s)
+  ✓  7 [desktop] › e2e/tests/v11-ux-screens.spec.ts:74:7 › household screens show answers, not the system's work › every household screen; claims list and detail agree; operator area gated (5.8m)
+  7 passed (9.3m)
+playwright exit 0
