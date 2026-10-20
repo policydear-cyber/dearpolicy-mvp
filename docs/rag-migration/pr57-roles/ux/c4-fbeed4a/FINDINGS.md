@@ -52,3 +52,12 @@ the library (4).
 | Understanding conflicting documents | **Complete with friction** | The conflict is stated and the next step says to ask which schedule applies, but a 100x gap in dense prose with unopenable sources is hard to weigh |
 | Reopening a conversation | Complete without help | C3 result stands; no change in C4 |
 | Finding the next practical action | Complete with friction | Present but generic, sometimes duplicated |
+
+## Reviewer answer (relayed 07:10Z)
+
+The "Hip 75%" row on the PA Benefit Summary page 8 is not an Other Fracture row, and the benefit covers "a Simple
+Fracture or Other Fracture". **S$450,000 for a closed hip is supported**, not a wrong amount. What remains undetermined is
+which of the two documents applies; the Product Summary page 13 gives S$3,750. So the accident verdict is final as
+**complete with friction**. Top issue 1 is **major** (an explanation problem): the hip answer needs the same "the insurer
+decides which document applies" caveat that the arm and leg rows carry. The coordinator has asked the Developer for this
+in C5.
