@@ -17,6 +17,9 @@ import { resolve } from "node:path";
 import { answerSimply, DEFAULT_MODEL, estimateTokens, MAX_OUTPUT_TOKENS, PRICES, renderLibrary, SYSTEM_PROMPT, costUsd, type ModelClient, type Turn } from "./answer";
 import { loadHouseholdFromDb, loadHouseholdFromFile, type Household } from "./household";
 
+/** DC's authorisation for the comparison run (decision card, 20 Oct 2026 12:15Z: "Opus, cap $10"). */
+export const AUTHORISED_CAP_USD = 10;
+
 export type Question = { id: string; turns: string[]; person?: string; notes?: string };
 export function loadQuestions(path: string): Question[] {
   const raw = JSON.parse(readFileSync(path, "utf8"));
@@ -116,15 +119,20 @@ export async function runComparison(opts: {
 }): Promise<{ rows: RowResult[]; spentUsd: number; stoppedEarly: boolean }> {
   const model = opts.model ?? DEFAULT_MODEL;
   const rows: RowResult[] = [];
+  let prefix = estimateTokens(SYSTEM_PROMPT) + estimateTokens(renderLibrary(opts.household));
   let spent = 0, stoppedEarly = false;
   for (const q of opts.questions) {
-    if (spent >= opts.maxUsd) { stoppedEarly = true; break; }
     const history: Turn[] = [];
     const row: RowResult = { id: q.id, person: q.person, notes: q.notes, turns: [] };
     for (const turn of q.turns) {
+      // Admit a call only if it fits under the cap even with no cache hit and a maximum-length answer.
+      const fresh = estimateTokens(turn) + history.reduce((n, t) => n + estimateTokens(t.text), 0);
+      if (spent + costUsd(model, { input: prefix + fresh, cacheWrite: 0, cacheRead: 0, output: MAX_OUTPUT_TOKENS }) > opts.maxUsd) { stoppedEarly = true; break; }
       try {
         const a = await answerSimply(opts.client, opts.household, history, turn, model);
         spent += a.costUsd;
+        // The estimate is a character heuristic; once a real count is back, admit later calls on whichever is larger.
+        prefix = Math.max(prefix, a.usage.input + a.usage.cacheWrite + a.usage.cacheRead - fresh);
         row.turns.push({ question: turn, baseline: { answer: a.text, ms: a.ms, costUsd: a.costUsd, usage: a.usage, stopReason: a.stopReason }, current: null });
         history.push({ role: "user", text: turn }, { role: "assistant", text: a.text });
       } catch (error) {
@@ -132,9 +140,11 @@ export async function runComparison(opts: {
         break; // a later turn without the earlier answer would not be the same conversation
       }
     }
-    const current = await opts.current.ask(q);
+    if (!row.turns.length) break;
+    const current = await opts.current.ask({ ...q, turns: q.turns.slice(0, row.turns.length) });
     row.turns.forEach((t, i) => (t.current = current[i] ?? null));
     rows.push(row);
+    if (stoppedEarly) break;
     opts.onProgress?.(`${q.id}: baseline ${row.turns.length}/${q.turns.length} turns, spent US$${spent.toFixed(4)}`);
   }
   return { rows, spentUsd: spent, stoppedEarly };
@@ -181,11 +191,15 @@ async function main(argv: string[]) {
 
   const runId = arg(argv, "--run-id"), maxUsd = Number(arg(argv, "--max-usd"));
   if (!runId || !(maxUsd > 0)) throw new Error("--paid needs --run-id and --max-usd");
+  if (maxUsd > AUTHORISED_CAP_USD) throw new Error(`--max-usd ${maxUsd} is above the authorised US$${AUTHORISED_CAP_USD}; a higher cap needs a new authorisation and a code change`);
   if (estimate.worstCaseUsd > maxUsd) console.log(`Worst case US$${estimate.worstCaseUsd.toFixed(2)} exceeds the cap; the run stops once US$${maxUsd} is spent.`);
   const out = outsideRepo(arg(argv, "--out") ?? `/mnt/project-files/ux-live/release-set/${runId}`);
   if (existsSync(resolve(out, "results.json"))) throw new Error(`${out} already holds a run; use a new --run-id`);
   mkdirSync(out, { recursive: true });
   const currentArg = arg(argv, "--current") ?? "none";
+  // Which build of the current app answered, e.g. the production deployment's commit, checked before the run.
+  const currentBuild = arg(argv, "--current-build");
+  if (currentArg !== "none" && !currentBuild) throw new Error("--current needs --current-build <commit that answered>");
   const current: CurrentPipeline = currentArg === "none" ? { label: "none", ask: async () => [] }
     : currentArg.startsWith("file:") ? recordedCurrent(currentArg.slice(5))
     : currentArg === "live" ? await liveCurrent(arg(argv, "--storage-state") ?? (() => { throw new Error("--current live needs --storage-state"); })())
@@ -193,7 +207,7 @@ async function main(argv: string[]) {
   const startedAt = new Date().toISOString();
   try {
     const result = await runComparison({ household, questions, client: new Anthropic() as unknown as ModelClient, current, model, maxUsd, onProgress: console.log });
-    const meta = { runId, startedAt, finishedAt: new Date().toISOString(), model, current: current.label, householdAccountId: household.accountId, estimate, spentUsd: result.spentUsd, stoppedEarly: result.stoppedEarly };
+    const meta = { runId, startedAt, finishedAt: new Date().toISOString(), model, current: current.label, currentBuild: currentBuild ?? null, householdAccountId: household.accountId, estimate, spentUsd: result.spentUsd, stoppedEarly: result.stoppedEarly };
     writeFileSync(resolve(out, "results.json"), JSON.stringify({ meta, rows: result.rows }, null, 2));
     writeFileSync(resolve(out, "side-by-side.md"), sideBySide(result.rows, meta));
     console.log(`Spent US$${result.spentUsd.toFixed(4)} on the baseline. Wrote ${out}/side-by-side.md`);

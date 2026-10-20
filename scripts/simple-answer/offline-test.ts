@@ -120,12 +120,18 @@ await check("comparison: both answers side by side, follow-up sees the earlier t
   const md = sideBySide(result.rows, { runId: "offline" });
   assert.ok(md.includes("**Simple baseline**") && md.includes("**Current pipeline** · 22.0 s") && md.includes("Actually it was Grace"));
 });
-await check("spend cap stops the run before the next question", async () => {
+await check("spend cap admits a call only if its worst case still fits", async () => {
+  const one = estimateRun(household, [questions[1]]).worstCaseUsd;
   const { client, seen } = stub(() => "x");
-  const result = await runComparison({ household, questions, client, current: recordedCurrent(curPath), maxUsd: 0.000001 });
-  assert.equal(result.stoppedEarly, true);
-  assert.equal(result.rows.length, 1);
-  assert.equal(seen.length, 2);
+  const none = await runComparison({ household, questions, client, current: recordedCurrent(curPath), maxUsd: one * 0.99 });
+  assert.equal(none.stoppedEarly, true);
+  assert.equal(seen.length, 0, "no call when even one worst-case call would exceed the cap");
+  const some = await runComparison({ household, questions, client, current: recordedCurrent(curPath), maxUsd: one * 1.5 });
+  assert.equal(some.stoppedEarly, true);
+  assert.equal(seen.length, 1, "the follow-up turn is not admitted once the cap could be crossed");
+  assert.equal(some.rows[0].turns.length, 1);
+  assert.equal(some.rows[0].turns[0].current?.answer, "current gp 1");
+  assert.ok(some.spentUsd <= one * 1.5);
 });
 await check("estimate: cached expected cost is far below the no-cache worst case", () => {
   const e = estimateRun(household, questions);
@@ -147,6 +153,13 @@ await check("CLI refuses to write real output inside the git checkout", () => {
     { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "" } });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /inside the git checkout/);
+});
+await check("CLI refuses a cap above the authorised US$10", () => {
+  const hhPath = join(dir, "household.json");
+  const run = spawnSync(process.execPath, ["--import", "tsx", "scripts/simple-answer/compare.ts", "--questions", qPath, "--household-file", hhPath, "--paid", "--run-id", "t", "--max-usd", "10.01", "--out", join(dir, "out")],
+    { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" } });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /above the authorised US\$10/);
 });
 console.log(`${passed} checks passed`);
 }
