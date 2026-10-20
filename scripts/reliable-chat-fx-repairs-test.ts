@@ -57,27 +57,59 @@ async function main() {
   const play = async <T>(turns: ScriptTurn[], f: () => Promise<T>): Promise<T> => { installLoopModel(new ScriptedLoopModel(turns)); try { return await f(); } finally { installLoopModel(null); } };
   /** Recorded turn(s) of `tag`, with continuation steps appended to the LAST recorded turn. */
   const withContinuation = (tag: string, ...more: ((v: any) => ScriptCall[])[]): ScriptTurn[] => { const t = recordedTurns(tag); t[t.length - 1].steps.push(...(more as any)); return t; };
+  /**
+   * A fully stored variant of the fracture household (PR #57 follow-up, Critic ruling 553c1e8). The fixture's Product Summary stores 4 of
+   * its 37 pages and the Benefit Summary 6 pages of a document whose length no page prints; an absence over them is refused (an absence is
+   * only said over a document read in full). For the checks of a SUPPORTED absence the missing pages are added as pages that print no
+   * benefit wording, and page_count is set (Product Summary 37, Benefit Summary 9). The stored pages are unchanged. Restored afterwards.
+   */
+  const fullyStored = async <T,>(f: () => Promise<T>): Promise<T> => {
+    const ids = [FX.doc("PRODUCT_SUMMARY").id, FX.doc("BENEFIT_SUMMARY").id], counts = [37, 9];
+    const added: [string, number][] = [];
+    for (const [k, id] of ids.entries()) {
+      const have = new Set(((await h.db.query("SELECT page_number FROM policy_pages WHERE policy_id=$1", [id])).rows as { page_number: number }[]).map((r) => r.page_number));
+      for (let p = 1; p <= counts[k]; p++) if (!have.has(p)) { await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [FX.ACCOUNT, id, p, `Test variant page ${p}: this page prints no benefit wording.`]); added.push([id, p]); }
+      await h.db.query("UPDATE policies SET page_count=$2 WHERE id=$1", [id, counts[k]]);
+    }
+    try { return await f(); } finally {
+      for (const [id, p] of added) await h.db.query("DELETE FROM policy_pages WHERE policy_id=$1 AND page_number=$2", [id, p]);
+      await h.db.query("UPDATE policies SET page_count=$2 WHERE id=$1", [ids[0], 37]);
+      await h.db.query("UPDATE policies SET page_count=NULL WHERE id=$1", [ids[1]]);
+    }
+  };
 
   // ================================================================================================ A: absence statements
   if (only("A")) {
     // A1: the exact fx-live-1 K6b output, then what a model that follows the repair message sends
     const notFoundDental = (extra: Record<string, unknown> = {}) => (): ScriptCall[] => [call("final_answer", { subject_id: G, sentences: [{ kind: "not_found", text: "-", claim: "benefit_not_found", topic: "dental treatment", terms: ["dental", "dentist", "tooth"], ...extra }], next_steps: nextStepsOf("A/K6b") })];
-    const a1 = await play(withContinuation("A/K6b", notFoundDental()), () => turn("A1 K6b recorded + repair", K6B_MSG));
-    check("A1 (K6b) the recorded uncertainty is sent back ONCE with the instruction to use a not_found statement", (a1.trace.toolCalls ?? []).some((c: any) => c.name === "final_answer" && c.ok === false), JSON.stringify((a1.trace.toolCalls ?? []).map((c: any) => [c.name, c.ok])));
-    check("A2 (K6b) after the repair the answer says what the documents show: no dental benefit is described in them", /do not describe a benefit for dental treatment/.test(a1.v) && !/couldn.t confirm an answer/.test(a1.v), a1.v);
-    check("A3 (K6b) and that this is NOT 'you have no dental cover'", /not the same as saying there is no such cover/.test(a1.v) && !/\b(?:you|she|Grace) (?:has|have|had) no dental (?:cover|coverage)/i.test(a1.v) && !/not covered|excluded/i.test(a1.v.replace(/not the same as saying it is excluded or not covered/gi, "")), a1.v);
-    check("A4 (K6b) the scope is named: the three documents checked", /Scheme X Group Insurance/.test(a1.v) && (a1.answer.absenceChecks?.[0]?.documents?.length ?? 0) === 3, JSON.stringify(a1.answer.absenceChecks));
-    check("A5 (K6b) returned = saved = reopened, and the checked scope (with source versions) is saved with the answer", same(a1) && !!a1.answer.absenceChecks?.[0]?.documents?.every((d: any) => d.policyId && d.fileHash), `${a1.shown}\n--\n${a1.saved}\n--\n${a1.reopened}`);
-    // A8-A10 (fx-live-2 review): what Sources shows under an absence answer, and what still establishes its scope
-    const cites = (x: any) => (x?.citations ?? []).map((c: any) => `${c.policyName} p${c.pageStart}: ${String(c.excerpt).slice(0, 60)}`);
-    check("A8 (K6b) no passage is cited under 'no dental benefit is described': the last page read of each document (an amount row, a footnote, a claim condition) says nothing about dental -- shown, saved and reopened", cites(a1.shownAnswer).length === 0 && cites(a1.answer).length === 0 && cites(a1.reopenedAnswer).length === 0, JSON.stringify([cites(a1.shownAnswer), cites(a1.answer), cites(a1.reopenedAnswer)]));
-    const chk0 = a1.answer.absenceChecks?.[0];
-    check("A9 (K6b) the scope evidence is kept instead: the three documents checked (id, name, file hash, revision) and the terms searched, saved with the answer and identical when reopened", chk0?.documents?.length === 3 && chk0.documents.every((d: any) => d.policyId && d.name && d.fileHash && d.rev != null) && (chk0.terms ?? []).length > 0 && JSON.stringify(a1.reopenedAnswer.absenceChecks) === JSON.stringify(a1.answer.absenceChecks), JSON.stringify(chk0));
-    const benefitSummary = FX.doc("BENEFIT_SUMMARY").id;
-    await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [benefitSummary]);
-    const afterDeleteA = visible((await reopen(a1.conv.id)).at(-1));
-    await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id=$1", [benefitSummary]);
-    check("A10 (K6b) without any citation the answer is still withdrawn when a document it was checked against is deleted (the saved scope, not a cited page, ties it), and whole again when it is active", !/do not describe a benefit for dental/.test(afterDeleteA) && visible((await reopen(a1.conv.id)).at(-1)) === a1.saved, afterDeleteA);
+    // A1-A5, A8-A10 run on the fully stored variant (expectation correction, Critic ruling 553c1e8: on the fixture's partial copies the
+    // absence they assert is unsupported; wording of every check unchanged). The partial fixture itself is A11-A13.
+    await fullyStored(async () => {
+      const a1 = await play(withContinuation("A/K6b", notFoundDental()), () => turn("A1 K6b recorded + repair", K6B_MSG));
+      check("A1 (K6b) the recorded uncertainty is sent back ONCE with the instruction to use a not_found statement", (a1.trace.toolCalls ?? []).some((c: any) => c.name === "final_answer" && c.ok === false), JSON.stringify((a1.trace.toolCalls ?? []).map((c: any) => [c.name, c.ok])));
+      check("A2 (K6b) after the repair the answer says what the documents show: no dental benefit is described in them", /do not describe a benefit for dental treatment/.test(a1.v) && !/couldn.t confirm an answer/.test(a1.v), a1.v);
+      check("A3 (K6b) and that this is NOT 'you have no dental cover'", /not the same as saying there is no such cover/.test(a1.v) && !/\b(?:you|she|Grace) (?:has|have|had) no dental (?:cover|coverage)/i.test(a1.v) && !/not covered|excluded/i.test(a1.v.replace(/not the same as saying it is excluded or not covered/gi, "")), a1.v);
+      check("A4 (K6b) the scope is named: the three documents checked", /Scheme X Group Insurance/.test(a1.v) && (a1.answer.absenceChecks?.[0]?.documents?.length ?? 0) === 3, JSON.stringify(a1.answer.absenceChecks));
+      check("A5 (K6b) returned = saved = reopened, and the checked scope (with source versions) is saved with the answer", same(a1) && !!a1.answer.absenceChecks?.[0]?.documents?.every((d: any) => d.policyId && d.fileHash), `${a1.shown}\n--\n${a1.saved}\n--\n${a1.reopened}`);
+      // A8-A10 (fx-live-2 review): what Sources shows under an absence answer, and what still establishes its scope
+      const cites = (x: any) => (x?.citations ?? []).map((c: any) => `${c.policyName} p${c.pageStart}: ${String(c.excerpt).slice(0, 60)}`);
+      check("A8 (K6b) no passage is cited under 'no dental benefit is described': the last page read of each document (an amount row, a footnote, a claim condition) says nothing about dental -- shown, saved and reopened", cites(a1.shownAnswer).length === 0 && cites(a1.answer).length === 0 && cites(a1.reopenedAnswer).length === 0, JSON.stringify([cites(a1.shownAnswer), cites(a1.answer), cites(a1.reopenedAnswer)]));
+      const chk0 = a1.answer.absenceChecks?.[0];
+      check("A9 (K6b) the scope evidence is kept instead: the three documents checked (id, name, file hash, revision) and the terms searched, saved with the answer and identical when reopened", chk0?.documents?.length === 3 && chk0.documents.every((d: any) => d.policyId && d.name && d.fileHash && d.rev != null) && (chk0.terms ?? []).length > 0 && JSON.stringify(a1.reopenedAnswer.absenceChecks) === JSON.stringify(a1.answer.absenceChecks), JSON.stringify(chk0));
+      const benefitSummary = FX.doc("BENEFIT_SUMMARY").id;
+      await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [benefitSummary]);
+      const afterDeleteA = visible((await reopen(a1.conv.id)).at(-1));
+      await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id=$1", [benefitSummary]);
+      check("A10 (K6b) without any citation the answer is still withdrawn when a document it was checked against is deleted (the saved scope, not a cited page, ties it), and whole again when it is active", !/do not describe a benefit for dental/.test(afterDeleteA) && visible((await reopen(a1.conv.id)).at(-1)) === a1.saved, afterDeleteA);
+    });
+
+    // A11-A13 (C1.1): the fixture as stored (Product Summary 4 of 37 pages; Benefit Summary of unknown length). After the refusal the model says
+    // what was read; the answer keeps that, states no absence, and is neither the "couldn't confirm" note nor the model-error reply.
+    const readSoFar = () => (): ScriptCall[] => [call("final_answer", { subject_id: G, sentences: [{ kind: "uncertainty", text: "Only part of Grace's documents could be checked here: her certificate in full, and some pages of the Scheme X Group Insurance Product Summary and Certificate of Insurance Part 2. The pages read do not mention dental treatment; the rest could not be checked, so this is not an answer about dental cover." }], next_steps: nextStepsOf("A/K6b") })];
+    const partial = await play(withContinuation("A/K6b", notFoundDental(), readSoFar()), () => turn("A11 K6b on the partial fixture", K6B_MSG));
+    check("A11 (K6b, partial fixture) no absence is stated over documents not read in full", !/do not describe a benefit for dental/.test(partial.v) && (partial.trace.toolCalls ?? []).some((c: any) => c.name === "final_answer" && c.ok === false && /not read in full/.test(String(c.error ?? ""))), partial.v + "\n" + JSON.stringify((partial.trace.toolCalls ?? []).map((c: any) => [c.name, c.ok, String(c.error ?? "").slice(0, 120)])));
+    check("A12 (K6b, partial fixture) the answer names what was read and that the rest could not be checked", /certificate/i.test(partial.v) && /could not be checked/.test(partial.v), partial.v);
+    check("A13 (K6b, partial fixture) the answer is not the 'couldn't confirm' note or the model-error reply; returned = saved = reopened", !/couldn.t confirm|can.t confirm|returned an error/.test(partial.v) && same(partial), `${partial.shown}\n--\n${partial.reopened}`);
 
     // A6: the model does not repair: fails closed (never an unverified absence, never 'no dental cover')
     const noRepair = await play(withContinuation("A/K6b", () => [call("final_answer", { subject_id: G, sentences: [{ kind: "uncertainty", text: "The uploaded documents I found for Grace do not establish cover for dental treatment; the Scheme X Group Insurance wording and certificate do not state a dental benefit, so I can’t confirm that her treatment would be paid.", evidence_ids: ["e22", "e23"] }] })]), () => turn("A6 K6b, model repeats the unchecked sentence", K6B_MSG));
@@ -94,7 +126,8 @@ async function main() {
     const fact = (recordedTerminal("A/K6a").arguments as any).sentences[0];
     const k6aFinal = (...more: Record<string, unknown>[]) => (): ScriptCall[] => [call("final_answer", { subject_id: G, sentences: [fact, ...more], next_steps: nextStepsOf("A/K6a") })];
     const silent = { kind: "not_found", text: "-", claim: "document_silent", topic: "what Group Living Care pays for cancer", terms: ["cancer"], scope_policy_ids: [CERT] };
-    const b1 = await play(withContinuation("A/K6a", k6aFinal(silent)), () => turn("B1 K6a recorded + repair (document_silent)", K6A_MSG));
+    // B1 runs on the fully stored variant (expectation correction, Critic ruling 553c1e8; check wording unchanged)
+    const b1 = await fullyStored(() => play(withContinuation("A/K6a", k6aFinal(silent)), () => turn("B1 K6a recorded + repair (document_silent)", K6A_MSG)));
     check("B1 (K6a) with the supported absence the amount is shown WITH its limitation: the dated Living Care sum insured, and that the certificate does not state what it pays for cancer", /S\$350,000/.test(b1.v) && /does not state what Group Living Care pays for cancer/.test(b1.v), b1.v);
 
     // B2: the model's own sentence (the recorded one, unchanged) is not repaired: the amount must not stand alone as the answer
@@ -121,7 +154,16 @@ async function main() {
     const c0 = await play(recordedTurns("A/K2"), () => turn("C0 K2 recorded", K2_MSG));
     check("C1 (K2) the household said it was sickness: the accident question is NOT asked again", !/accident|injury/i.test((c0.answer.questions ?? []).map((q: any) => q.text).join(" ")) && !(c0.answer.questions ?? []).length, JSON.stringify(c0.answer.questions));
     check("C2 (K2) the accident/injury requirement is quoted from the benefit's own wording, with its page, and the reported cause is said not to fit it", /Accidental Hospital Recuperation Benefit \(page 9\)/.test(c0.v) && /bodily injury as a result of an Accident/.test(c0.v) && /“she was sick”\) is an illness, not an accident/.test(c0.v) && /condition is not met/.test(c0.v), c0.v);
-    check("C3 (K2) the $250 amount (a bare '$') is not left looking like what is payable for a sickness", !/\$\s?250|\b250\b/.test(c0.v), c0.v);
+    // C3, expectation correction (PR #57 follow-up; Policy QC ruling 1, qc/FINDINGS-C1.md). The original check was
+    //   check("C3 (K2) the $250 amount (a bare '$') is not left looking like what is payable for a sickness", !/\$\s?250|\b250\b/.test(c0.v), c0.v);
+    // "no 250 anywhere" is stricter than the wording requires and hides a documented benefit. Now: the 250 may appear only as the benefit's
+    // printed terms with all their printed conditions and the right currency basis, never as an amount for this stay, and the answer says
+    // that on what was reported the accident condition is not met.
+    const with250 = c0.v.split(/\n|(?<=[.;])\s+(?=[A-Z])/).filter((x) => /\b250\b/.test(x));
+    const termsOk = with250.every((x) => /within 30 days/.test(x) && /bodily injury as a result of an Accident/.test(x) && /at least 24 hours/.test(x) && /same injury/.test(x) && /Core Scheme or Voluntary Scheme/.test(x));
+    const currencyOk = with250.every((x) => (/S\$\s?250/.test(x) ? /Product Summary/.test(x) : /bare “\$” sign/.test(x)));
+    const notForStay = with250.every((x) => !/(?:this|her) stay|(?:Grace|she) (?:can|will|would|could) (?:get|receive|claim)|payable for (?:this|her)/i.test(x));
+    check("C3 (K2) the 250 appears only as the benefit's printed terms with all their conditions (accident injury, 30 days, 24 hours, same injury, Core or Voluntary) and its currency basis (S$ only with the Product Summary, else the bare '$'), never as an amount for this stay; and the accident condition is said not met on what was reported", termsOk && currencyOk && notForStay && /accident condition is not met/.test(c0.v), JSON.stringify({ termsOk, currencyOk, notForStay }) + "\n" + c0.v);
     check("C4 (K2) returned = saved = reopened; the question is not pending for the next turn", same(c0) && !c0.trace.pending, `${c0.shown}\n--\n${c0.reopened}`);
     // C5: the model asks without statements -- the refusal says what to do, and the model's own final_answer gets the same explanation
     const noStmts = recordedTurns("A/K2"); const last = noStmts[0].steps.length - 1;

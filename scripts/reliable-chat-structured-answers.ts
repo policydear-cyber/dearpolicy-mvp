@@ -263,12 +263,20 @@ async function main() {
 
   // ===== a validated calculation keeps its COMPLETE conditions through validation, save, display and reopen
   {
+    // Expectation correction (PR #57 follow-up, C2): the illustration may end with the table's own printed condition, added by the
+    // QC Q1 repair ("; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.”").
+    // The pattern before this change ended at the not-a-payment clause or the footnotes: `...(?: and “[^”]+” \(marked [^)]+\))*)?\.$`.
+    // Still required: ONE sentence for the splitter, displayed and reopened whole. J2 and J4 below also require the clause where the table prints one.
     const calcTurns: [string, Turn][] = [["J2", j2], ["J3 turn 2", j3b], ["J3b turn 2", j3cb], ["J4", j4], ["J6", j6], ["SBa replay turn 2", sba2]];
     for (const [label, t] of calcTurns) {
       const ks = (t.answer.calculations ?? []) as any[];
-      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision(?:; the page prints (?:a footnote|footnotes) for that row: “[^”]+” \(marked [^)]+\)(?: and “[^”]+” \(marked [^)]+\))*)?\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
+      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision(?:; the page prints (?:a footnote|footnotes) for that row: “[^”]+” \(marked [^)]+\)(?: and “[^”]+” \(marked [^)]+\))*)?(?:; under the table it prints: “[^”]+”)?\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
       const shownWhole = ks.every((k) => lines(t.v).includes(k.sentence) && lines(t.shown).includes(k.sentence) && lines(t.reopened).includes(k.sentence));
       check(`complete conditions (${label}): every saved calculation is ONE complete conditional sentence (subject, case, percentage, base, document, not-a-payment) the splitter does not divide, and is displayed and reopened whole`, whole && shownWhole, JSON.stringify(ks.map((k) => k.sentence)));
+    }
+    for (const [label, t] of calcTurns.filter(([l]) => l === "J2" || l === "J4")) {
+      const pa = ((t.answer.calculations ?? []) as any[]).map((k) => String(k.sentence)).filter((x) => /Benefit Summary \(page 8\)/.test(x));
+      check(`table condition (${label}): the illustration from the page-8 table carries the condition printed under that table, inside its one sentence`, pa.length > 0 && pa.every((x) => /; under the table it prints: “This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme\.?”\.$/.test(x)), JSON.stringify(pa));
     }
     const Q = "If the Simple Fracture benefit applies to Daniel's case “Hip” (as you described: “Correction: it was his hip, not his tibia. Keep this as a hypothetical closed fracture.”), the conditional illustration is S$3,750: 75% of the Simple Fracture benefit limit of S$5,000, under the Group Insurance Product Summary (page 13); it is an illustration from the document's terms, not a payment or an insurer's decision.";
     check("quote-aware splitter: a multi-sentence household quotation inside a conditional sentence does not split it", sentencesOf(Q).length === 1, JSON.stringify(sentencesOf(Q)));

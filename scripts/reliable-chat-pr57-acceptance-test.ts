@@ -123,7 +123,10 @@ async function main() {
       check("GUARD", `R4 (${id}) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said`, /S\$1,250/.test(o.v) && /S\$120,000/.test(o.v) && /never a total|not to be added/.test(o.v) && !/S\$121,250/.test(o.v) && count(o.v, UNSETTLED).length >= 1, o.v);
     const k2 = out.K2[0].v;
     check("AC", "R5 (K2, v1 K2.3) the sickness answer says the certificate also lists Living Care cover that no stored page describes", /Living Care/.test(k2) && /(?:no (?:stored )?page|not|do(?:es)? not|don.t) (?:describe|say|show|state)|not described/i.test(k2), k2);
-    check("GUARD", "R6 (K2) no amount is given for the accident hospital benefit, nothing promises payment, no question is asked", !/S\$\s?250|\$\s?250/.test(k2) && !/will (?:be )?pa(?:y|id)/i.test(k2) && !(out.K2[0].answer.questions ?? []).length, k2);
+    // R6, expectation correction (Policy QC ruling 1, qc/FINDINGS-C1.md): was "no amount (no S$250 / $250) is given ... no question is asked".
+    // The 250 may appear only as printed terms with their conditions and currency basis, never as an amount for this stay.
+    const k2with250 = k2.split(/\n|(?<=[.;])\s+(?=[A-Z])/).filter((x) => /\b250\b/.test(x));
+    check("GUARD", "R6 (K2) any 250 is the benefit's printed terms with its conditions (accident injury, 30 days, 24 hours) and currency basis (S$ only with the Product Summary, else the bare '$'), never an amount for this stay; nothing promises payment; no question is asked", k2with250.every((x) => /within 30 days/.test(x) && /at least 24 hours/.test(x) && (/S\$\s?250/.test(x) ? /Product Summary/.test(x) : /bare “\$” sign/.test(x)) && !/(?:this|her) stay|(?:Grace|she) (?:can|will|would|could) (?:get|receive|claim)/i.test(x)) && !/will (?:be )?pa(?:y|id) (?:Grace|her|you)/i.test(k2) && !(out.K2[0].answer.questions ?? []).length, k2);
     const k6a = out.K6a[0].v;
     const amountSentence = sentences(k6a).find((s) => /S\$350,000/.test(s)) ?? "";
     check("AC", "R7 (K6a) the S$350,000 sentence itself carries the limitation that the documents do not show what Living Care pays for cancer", /cancer/i.test(amountSentence) && /(?:do(?:es)? not|doesn.t) (?:state|show|say|describe|establish)/i.test(amountSentence), amountSentence);
