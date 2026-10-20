@@ -303,3 +303,64 @@ Tests (Test engineer):
 - G1 negative: the certificate partial, OPMC matched by abbreviation, and a hit inside a benefit's own wording.
 - The accident-medical-expense control (condition 5).
 - G2: the wording when a search ran versus when none ran.
+
+---
+
+# Round 5: adversarial review of frozen C2 (`98ada99`), full diff from C0 `4956588`
+
+Scope, as DC asked: correction handling, household isolation, applicability, and fallback behaviour (including the "couldn't confirm" path, G1 and G2). C1 was already reviewed in round 3; this round covers C1-to-C2 in detail and re-checks C1 items against C2. Code reading only, no runs. Line numbers are on `98ada99`.
+
+task | SHA | status | evidence | blocker
+--- | --- | --- | --- | ---
+Adversarial review of C2 | 98ada99 | done | this section | A1, A2 and F1 before release
+
+## Correction handling
+
+**A1. Medium: "too / also / as well" now blocks real corrections.** `lib/rag2/loop/loop.ts:119` returns false before the explicit-name test whenever the message contains too, also or as well. So "Actually it was Daniel who broke his arm, not Grace. He also hurt his knee." is not a correction. Grace keeps the event and its illustrations, and Daniel's report starts empty. That is the very reassignment DC's instructions say must move. The block is also unnecessary: the possessive exclusion on line 122 (`(?!['’])`) already stops "wasn't Grace's fault". Fix: remove line 119, keeping the possessive exclusion. Test: the sentence above must reassign, and H1.6 must still not.
+
+C1 items re-checked on C2: reversible moves (`reassigned`), `supersededNow` and `movedThisTurn` are unchanged since round 3 and still sound.
+
+## Household isolation
+
+**A2. Medium: G1 lists another person's policies as "this person's certificate lists ...".** `absence-scope.ts:250-255` takes every confirmed certificate in scope and joins all their text. `products` is every line of the form "<NAME>(POLICY NO ...)". It does not check which person each row belongs to. A family certificate listing two members, or a library-scope check (no subject, so certificates of several people), gives "Desmond's certificate lists X, Y, Z", where Z is the spouse's policy. The "does not list OPMC" test also reads every certificate together. That fails safe for non-listing (any match suppresses G1), but not for what is said to be listed. Fix: G1 fires only for a subject-scope check, and reads only the rows that name this person (the certificate's person rows, as `person_row` bindings already do); otherwise return null.
+
+No other crossing found:
+- `stale-answers.ts` M4 is account-scoped, and filters members to active ones.
+- `partialAbsence` is per tool context.
+- `heldForAnother` and `saidAboutThem` are unchanged.
+
+## Applicability
+
+**A3. Medium: the medical-bill vocabulary would still miss a typical accident medical-expense wording.** `MEDICAL_BILL_TERMS` (`absence-scope.ts:233`) and the server's own GP check (`loop.ts:2138`, terms outpatient / clinic / general practitioner / consultation; "GP" itself is dropped by `tidyTerm`'s three-letter minimum) do not include "medical practitioner", "physician", "doctor", "charges incurred" or "reimburse". A wording such as "we will reimburse the reasonable charges for treatment by a Registered Medical Practitioner following an Accident" produces no hit. G1 then sets the OPMC line aside, and the server states "Desmond's documents do not describe a benefit for GP or outpatient treatment". That hides a documented accident benefit, which DC's contract calls a failure, and my round-4 condition 5 asked for this case to be covered. Fix:
+- add those terms;
+- before stating the absence on the GP path, check the person's benefit records for any accident benefit whose printed terms reimburse treatment or medical charges, since the records already exist;
+- add the fixture control from round 4, which is still missing from f550b5f's checks (a) to (d) as far as the C2 notes show.
+
+**A4. Low-Medium: G1 only recognises one certificate layout.** `absence-scope.ts:255` (`"<NAME>(POLICY NO"`) and the single "As of dd/mm/yyyy" date. On any other layout `products` is empty and G1 returns null, which is safe: it falls back to the refusal path. But the GP-bill repair would not help other households. Say this in the PR as a limit; do not widen it now.
+
+## Fallback behaviour
+
+**F1. Medium-High: a repeated refusal can quote the scheme's policy list as the answer.** When G1 does not fire (for example, because of A2's guard or A4's layout), `absence-scope.ts:200` picks the lines to quote. That is lines outside the policy list *or, if none, the hits themselves*. For the GP bill, the only hit is the scheme roster line naming "Outpatient Medicare Policy ("OPMC")". `quotePrinted` (`statement-render.ts:220` on a repeat, and `loop.ts:2142` on the GP path) then tells the household "The Benefit Summary (page 1) prints: '... and Outpatient Medicare Policy ("OPMC") ...'" in reply to "can he claim his GP bill". That reads as a pointer to cover, from reference wording, with no word that his certificate does not list it. DC's contract says reference wording is not personal proof of cover. Fix: never quote a line that `inPolicyList` identifies; if only such lines remain, say nothing from them, and let C2's "what was read" text or the G2 note carry the answer.
+
+**F2. Medium: the G2 note can say the pages print no benefit when they do.** `loop.ts:2144` adds "The pages I read do not print a benefit for the bill you mentioned" whenever `said` is false. `said` is false in two cases:
+- `checkNotFound` refused because the documents *do* print the terms, but `quotePrinted` returned null (no evidence ref could be built);
+- it refused for another reason, such as an unstored document.
+
+In the first case the note contradicts the documents. Emit the G2 note only when the check did not refuse for printed hits. Otherwise fall back to the original neutral wording without "not yet looked up", for example "I could not confirm from your documents what pays for the bill you mentioned".
+
+**F3. Low-Medium: a partial-scope sentence can attach to a different subject's reply.** `statement-render.ts:238` appends the saved `partialAbsence` text to any later final answer this turn that has no `not_found`, whatever that answer's subject is. If the model refused on Desmond and then answered about someone else, the partial sentence about Desmond is added to it. Fix: append only when the answer's subject equals `pa.subjectId`.
+
+**F4. Low: quoted lines skip the payout check, so must still pass the currency rule.** `compose.ts:1150` blanks quoted text before `payoutOrDecision`. That is right for the insurer's own "we will reimburse". But a quoted line can carry a bare "$500" (the ambulance wording). Confirm that the figure gate still treats it as currency-unresolved and never as S$, and add one test for it.
+
+## Still open from earlier rounds
+
+- **C1-3 (re-analysis rewrites pages in place):** not fixed, and `developer/C1.md:25-26` still gives the incomplete reason ("never rewritten in place"). It must be corrected in the integrated PR's open items.
+- The de-duplication of the repeated fracture wording is still not shown by any evidence category (replay limit).
+- All C2 evidence is scripted or recorded replay. C2 changes tool behaviour the model sees: the absence refusals, the quoted replacement on a repeat refusal, and the GP-path server statements. The real model's response to these is unshown, and a live check needs DC's authorisation.
+
+## Release view on C2
+
+Not release-ready.
+- **Fix before release:** F1 (reference wording quoted as if it answers a cover question), A2 (another person's policies named as this person's) and A3 (a documented accident medical benefit could be hidden behind a stated absence). Each is a small change at the place named.
+- **Fix in C2, or list accurately as open:** A1, F2 and F3.
+- Everything else reviewed in C2 holds: the table-condition boundary, the sickness wording, the Living Care sentence, read-in-full, and M4 without the rag2 import.
