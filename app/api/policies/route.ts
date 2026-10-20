@@ -8,6 +8,7 @@ import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type Doc
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
+import { notDismissedCondition } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest) {
     if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });
 
     await ensurePolicyMemberTierSchema();
+    // A name the household said is not in its family stays hidden while nobody is linked to it.
+    const notDismissed = await notDismissedCondition("pd");
     const policies = await createUserSupabaseClient(ctx.userId, async (client) => {
       const params: unknown[] = [ctx.householdId];
       let memberClause = "";
@@ -47,7 +50,8 @@ export async function GET(request: NextRequest) {
          COALESCE((SELECT json_agg(json_build_object('id',f.id,'name',f.display_name,'relationship',f.relationship,'source',pm.source,'planTier',pm.benefit_tier) ORDER BY f.display_name)
            FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND ${activePredicate("f")}),'[]'::json) AS linked_people,
          COALESCE((SELECT json_agg(json_build_object('name',pd.detected_name,'matchedFamilyMemberId',pd.matched_family_member_id) ORDER BY pd.detected_name)
-           FROM policy_detected_people pd WHERE pd.policy_id=p.id AND pd.account_id=p.account_id),'[]'::json) AS detected_people,
+           FROM policy_detected_people pd WHERE pd.policy_id=p.id AND pd.account_id=p.account_id
+             ${notDismissed ? `AND (pd.matched_family_member_id IS NOT NULL OR ${notDismissed})` : ""}),'[]'::json) AS detected_people,
          -- Round 5: the people the document names and the tier each is covered
          -- as (employee / spouse / child), for the "who does this cover" picker.
          CASE WHEN jsonb_typeof(p.extracted_json->'insuredPeople')='array' THEN

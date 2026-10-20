@@ -19,6 +19,8 @@ import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
 import { GET as listPolicies } from "@/app/api/policies/route";
+import { notDismissedCondition } from "@/lib/policies/name-dismissals";
+import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
 import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
@@ -54,6 +56,7 @@ async function main(){
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
   // Remembered removals ("who does this cover"), after is_household_member().
   await db.exec(await readFile(path.resolve("sql/policy-member-exclusions.sql"),"utf8"));
+  await db.exec(await readFile(path.resolve("sql/detected-name-dismissals.sql"),"utf8"));
   // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
   // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
   // so that column exists here too.
@@ -1311,6 +1314,56 @@ async function main(){
       assert.equal((await reopen())[0].invalidated,undefined);
       await db.query("DELETE FROM chat_conversations WHERE id=$1",[c.id]);
       await db.query("DELETE FROM policies WHERE id=$1",[cert]);
+    await test("\"Not in my family\" hides a name read from a document, survives a re-read, and never hides another household's names",async()=>{
+      const doc=uuid(701700),foreignDoc=uuid(701701),[daniel,grace]=[people[0].id,people[1].id];
+      const add=(id:string,acct:string,owner:string)=>db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,needs_review,review_reason) VALUES($1,$2,$3,'Example Insurer','Dismiss Plan','DIS-1','Hospital','personal_schedule',true,60,'ready',$4,$4,'scan_clean',true,'1 named insured person is not linked')",[id,acct,owner,id+".pdf"]);
+      await add(doc,account,daniel);await add(foreignDoc,foreign,foreignPerson);
+      const names=async(acct:string,policyId:string,rows:[string,string|null][])=>{
+        await db.query("DELETE FROM policy_detected_people WHERE policy_id=$1",[policyId]);
+        for(const [name,matched] of rows)await db.query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.9)",[acct,policyId,name,matched]);
+      };
+      await names(account,doc,[["Stranger  Lim",null],[people[1].display_name,grace],["Another Name",null]]);
+      await names(foreign,foreignDoc,[["Stranger Lim",null]]);
+      const post=(body:object)=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}));
+      const shown=async()=>((await (await listPolicies(new NextRequest("http://localhost/api/policies"))).json()).policies.find((x:{id:string})=>x.id===doc).detected_people as {name:string}[]).map(x=>x.name).sort();
+      assert.deepEqual(await shown(),["Another Name",people[1].display_name,"Stranger  Lim"].sort(),"Before: every name read is listed");
+
+      // The household says "Stranger Lim" is not in the family (any spacing or case).
+      const dismissed=await post({policyId:doc,detectedName:" stranger lim ",notFamily:true});
+      assert.equal(dismissed.status,200);
+      assert.deepEqual(await dismissed.json(),{ok:true,notFamily:true,remembered:true});
+      assert.deepEqual(await shown(),["Another Name",people[1].display_name].sort(),"The dismissed name is no longer listed");
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",notFamily:true})).status,200,"Saying it twice is fine");
+      // Dismissing the last unlinked name clears the document's review flag.
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      assert.deepEqual((await db.query<{needs_review:boolean;review_reason:string|null}>("SELECT needs_review,review_reason FROM policies WHERE id=$1",[doc])).rows[0],{needs_review:false,review_reason:null});
+
+      // Reading the document again rebuilds the names; the answer is kept.
+      await names(account,doc,[["Stranger Lim",null],[people[1].display_name,grace],["Another Name",null]]);
+      assert.deepEqual(await shown(),[people[1].display_name],"A re-read does not bring a dismissed name back");
+
+      // Refused: a name that isn't on the document, a name linked to someone, another household's document, and a mixed request.
+      assert.equal((await post({policyId:doc,detectedName:"Nobody Here",notFamily:true})).status,404);
+      assert.equal((await post({policyId:doc,detectedName:people[1].display_name,notFamily:true})).status,409);
+      assert.equal((await post({policyId:foreignDoc,detectedName:"Stranger Lim",notFamily:true})).status,404);
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",notFamily:true,familyMemberId:daniel})).status,400);
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim"})).status,400,"Without notFamily a person is still required");
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1 OR account_id=$2",[foreignDoc,foreign])).rows.length,0,"Nothing was written for the other household");
+
+      // The browser session cannot write a dismissal for another household's document, nor file one under another household.
+      await assert.rejects(createUserSupabaseClient(account,(c)=>c.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,foreign])));
+      await assert.rejects(createUserSupabaseClient(account,(c)=>c.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'stranger lim','Stranger Lim')",[foreignDoc,account])));
+      // Even a dismissal row filed under another household (written past RLS) hides nothing here, and this household's answers hide nothing there.
+      await db.query("INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'other key','x')",[doc,foreign]);
+      await names(account,doc,[["Stranger Lim",null],[people[1].display_name,grace],["Another Name",null],["Other Key",null]]);
+      assert.ok((await shown()).includes("Other Key"),"Another household's row never hides this household's name");
+      const foreignNames=await db.query<{n:number}>(`SELECT count(*)::int AS n FROM policy_detected_people pd WHERE pd.policy_id=$1 AND ${await notDismissedCondition("pd")}`,[foreignDoc]);
+      assert.equal(foreignNames.rows[0].n,1,"The other household's Stranger Lim is still listed for them");
+
+      // Linking the name to someone takes the dismissal back.
+      assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",familyMemberId:daniel,declared:true})).status,200);
+      assert.ok((await shown()).includes("Stranger Lim"),"The name is listed again once the household links it");
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[doc,foreignDoc]]);
     });
     await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
       const [daniel,grace]=[people[0].id,people[1].id];
