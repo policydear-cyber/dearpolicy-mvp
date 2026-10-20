@@ -1,8 +1,8 @@
-# PR #69 (out-of-date marking for reopened answers): test result at 27c78b3
+# PR #69 (out-of-date marking for reopened answers): test results
 
 | worker | task | SHA | status | evidence | blocker |
 | --- | --- | --- | --- | --- | --- |
-| Test engineer | DB suites plus a browser journey on a synthetic household | 27c78b3 (main 9a76490 as control) | **fail**: one finding | `pr69/` | none |
+| Test engineer | DB suites plus a browser journey on a synthetic household | 68183d0 (27c78b3 before the fix; main 9a76490 as control) | **pass** at 68183d0 (F69-1 fixed) | `pr69/` | none |
 
 Evidence category: scripted browser journey (anonymised actual-library household, scripted model, local PostgreSQL, no model call) plus the PGlite/PostgreSQL regression suites. No production data and no paid run.
 
@@ -36,3 +36,10 @@ Fix direction: for an invalidated answer, the history route (or the page) shows 
 ## Test added
 
 `e2e/tests/reliable-chat-stale-answers.spec.ts` and `e2e/support/playwright.reliable-chat-stale-answers.config.ts` (loop server, `E2E_RAG2_HOUSEHOLD=actuallib`, seed `--household actuallib`). The figure checks are `expect.soft` so the rest of the journey still reports.
+
+## Rerun at 68183d0 (F69-1 fix): pass
+
+- `system:test` 84/84, typecheck clean (`pr69/system-test-68183d0.txt`).
+- SR1 and SR2 2/2 (`pr69/browser-68183d0.log`). The reopened answer's text is now the notice. No old sentence and no figure are shown: SR1 has no "two different answers", and SR2 has no "conditional illustration" and no S$ figure. The control (Daniel) and ticking Grace again also pass.
+- The spec now also asserts the notice text and that the old sentence is gone.
+- UX note, not a failure: the notice and the alert below it say the same thing twice ("This earlier answer was replaced by the corrected answer below, ..." then "Replaced. This answer was replaced by the corrected answer below.").

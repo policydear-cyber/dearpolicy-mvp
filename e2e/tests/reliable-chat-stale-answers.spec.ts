@@ -76,6 +76,9 @@ test.describe.serial("reopened answers that no longer stand", () => {
     await expect(old.getByTestId("answer-invalidated")).toHaveAttribute("data-reason", "superseded", { timeout: 60_000 });
     await expect(old.getByTestId("answer-invalidated")).toContainText("Replaced. This answer was replaced by the corrected answer below.");
     console.log(`--- SR1 replaced answer as displayed:\n${await old.innerText()}`);
+    // F69-1 (27c78b3): the stored text of the old answer was still shown above the note. Its text is now the notice.
+    await expect(old).toContainText("This earlier answer was replaced by the corrected answer below");
+    await expect(old).not.toContainText("two different answers");
     expect.soft(await old.innerText(), "the replaced answer shows no figure").not.toMatch(FIGURE);
     const fixed = answerAfter(page, u2);
     await expect(fixed).toContainText("conditional illustration is S$3,750");
@@ -97,6 +100,8 @@ test.describe.serial("reopened answers that no longer stand", () => {
     await expect(grace.getByTestId("answer-invalidated")).toHaveAttribute("data-reason", "person_unlinked", { timeout: 60_000 });
     await expect(grace.getByTestId("answer-invalidated")).toContainText("Out of date. Someone this answer was about has since been removed from the document it relied on.");
     console.log(`--- SR2 out-of-date answer as displayed:\n${await grace.innerText()}`);
+    await expect(grace).toContainText("This answer was about someone who has since been removed from the document it relied on");
+    await expect(grace).not.toContainText("conditional illustration");
     expect.soft(await grace.innerText(), "the out-of-date answer shows no figure").not.toMatch(FIGURE);
     const daniel = answerAfter(page, u1);
     await expect(daniel.getByTestId("answer-invalidated"), "control: Daniel is still covered by the document").toHaveCount(0);
