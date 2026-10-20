@@ -51,7 +51,13 @@ export default function CoveragePage(){
     }catch{setError(true);return null;}
     finally{setLoaded(true);}
   };
-  useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "?member=<id>" (from a Family card) opens on that person.
+  useEffect(()=>{
+    let who="";
+    try{who=new URLSearchParams(window.location.search).get("member")??"";}catch{/* no filter */}
+    if(who)setMember(who);
+    void load(who);
+  },[]); // eslint-disable-line react-hooks/exhaustive-deps
   const readNow=async()=>{
     try{
       const res=await fetch("/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"read"})});
