@@ -1,13 +1,30 @@
 # PR #57 follow-up: release report (Developer)
 
 **Release decision: not release-ready.** The coordinator gives the integrated verdict once testing, evidence review and the UX pass
-on C5 report. Until then the PR stays a draft.
+on C6 report. Until then the PR stays a draft.
 
 ## Commits
 
-- Tested commit: **C5 `177c073427bab0acb231a34018208a8d0448100f`** (`CANDIDATE.md`), the last code round. C3 `1766863` was assessed
+- Tested commit: **C6 `f4937ef160a06420bf5e526df8d3ab979dc9f11b`** (`CANDIDATE.md`), the last code round, on top of the Test
+  engineer's C5 release run (`f7d115a`, `test/FINDINGS-C5.md`) and browser expectation changes (`f07f8a0`). Before it, C5 `177c073`. C3 `1766863` was assessed
   by the Test engineer (`test/FINDINGS-C3.md`, `b4e0ed0`); C4 and C5 add only the fixes for the C3 and C4 reviews. C0 is `4956588`.
-- PR head: C5 plus docs only. No product code after C5.
+- PR head: C6 plus docs only. No product code after C6.
+
+### C6 changes (the Test engineer's C5 findings)
+
+- Partial copy: "I checked Daniel’s documents for GP or outpatient treatment: the Scheme X Group Insurance Scheme in full, and the text
+  of the Scheme X Group Insurance (product summary) (pages 8, 12-13 and 37 of 37 pages) ... Those pages do not mention GP or outpatient
+  treatment. The text of the other pages was not stored, so they could not be checked, and I can't say either way whether there is such
+  cover." The page count is the uploaded file's own, so C5's "not in the copy that was uploaded" was wrong.
+- Critic R8-1: "whether that trip fits this event" only when a Destination line is printed; otherwise "whether this period of insurance
+  covers the date of the event".
+- Corrected hip turn (actuallib SA2): the S$450,000 row "Hip" of "Simple Fracture or Other Fracture due to Accident" is labelled as
+  neither kind; it now says "the benefit names Simple Fracture and Other Fracture alike, and this row is labelled as neither; these
+  documents do not define either kind, so the insurer decides how it applies", as a labelled row says on the first turn.
+
+Results on C6 (scripted, no spend): acceptance AC 34/40 (the same 6 open: R1, R2, R3, R7, R9, N5b), GUARD 49/49; fx-repairs 89/89;
+structured-answers 123/123 + 8/8, absence-scope 32/32, tools 38/38, applicability 36/36 + 2/2, death suites green, s52 replay 12/12,
+live-verify 5/5, env-contract and typecheck green.
 
 ### C5 changes (after the C4 reviews)
 
@@ -78,6 +95,7 @@ the Test engineer owns that check. s52 replay 11/12 as on C2 and C3.
 | --- | --- |
 | N5b / Critic C1-3: "Re-analyse" keeps the document's id and file hash but rewrites its pages, members and coverage in place, so a saved calculation or absence still stands afterwards | Medium, open. Fix: save a digest of the pages each answer read and compare on reopen (`developer/C1.md`). Not in C3 |
 | Death answer: the Term Life "Terminal Illness Benefit" line is added to a death answer | Low, open |
+| Critic R8-1 (annual schedule called a trip) | fixed in C6 |
 | Critic R7-2: a non-member row sharing the person's preferred name can be read as theirs in the scheme-listing sentence (a product name only, never an amount) | Low, open |
 | Critic R6-3: an exclusion sentence can be quoted as medical-expense wording | open |
 | Critic R6-4: "Policy Policy" in the scheme-listing sentence when a list entry already ends in "Policy" | open |
