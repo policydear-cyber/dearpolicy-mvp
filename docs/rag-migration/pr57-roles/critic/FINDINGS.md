@@ -2137,3 +2137,45 @@ S$1,250 up to S$120,000" is caught. Optional: treat "dollars" as a sign in `RANG
 
 **Still safe to merge only while switched off. Not ready to switch on:** fix R38-1 and R38-2 (both can still show a wrong claimable
 amount, R38-1 on the household's own documents). R38-3 is optional.
+
+---
+
+# Round 39: PR #71 (simple chat) at `0091db8`, re-check of round 38
+
+Method: same local probes as round 38 (`lib/simple-chat/verify.ts` run with tsx against the real household snapshot, kept
+out of Git, plus a synthetic household). No paid model calls.
+
+## Round 38 items
+
+- **R38-1 (wrong base for "% of sum insured"): fixed on the real documents.** "Arm, Elbow, Wrist or Ribs (Other Fracture) 20%"
+  for Desmond now uses S$600,000 and gives S$120,000. The S$400,000 cap, S$10,000 premium unit and S$50,000 maximum are now
+  kept as plain facts and never multiplied. For Charmaine the same row gives S$120,000 from S$600,000, which is her own
+  certificate line ("Ong Pei Lin Charmaine S$600,000") under the accident heading, so no cross-person base. A synthetic
+  "50% of Ben's S$300,000" asked for Ann is dropped.
+- **R38-2 (label number read as money): partly fixed.** "Plan 500" is now rejected. **R39-1 (Medium):** "Plan A 500" under a
+  "(S$)" column heading still becomes S$500, because `LABEL_BEFORE` only matches when the label word sits directly before the
+  number (`verify.ts`, `LABEL_BEFORE`). The same applies to "Class B 2", "Ward A1 300" and similar.
+- **R38-3 (range and both-pay wordings): partly fixed.** **R39-2 (Low-Medium):** these sentences still pass the sentence check:
+  "With the fracture and the ambulance she gets S$1,250 and S$200." / "Expect S$1,250 and, if she stays over, another S$200." /
+  "The most she can get is S$120,000." (an either/or shown as a maximum) / "Up to S$120,000 or S$1,250."
+
+## Is this becoming tuned to one household?
+
+Yes. Each round adds another word list (cover kinds, label words, "not a sum insured" words, range words, adding words) and
+another layout guess (headings above a row, person-named lines, column headings). Each list fixes the probes and the next
+wording gets through. This also drifts from DC's "no per-scenario rules" design.
+
+**Recommended simpler rule (safer):**
+1. The model's prose (bottom line, text, conditions, next steps) carries no money figures at all.
+2. Amounts appear only in server-built amount cards, each copied from a currency-signed figure inside the quoted source text.
+3. A percentage is worked out only when its base is printed in the same place ("20% of S$600,000" or a "Limit: S$X" heading
+   on the same page). That path is already passing.
+4. For "% of sum insured", show the percentage and the person's printed sum insured as two separate cited facts, not
+   multiplied, until a structured per-person source (for example `policy_coverages`) exists.
+
+This removes the range and adding word lists entirely, and a wrong total can no longer appear in a sentence.
+
+## Verdict on PR #71 at `0091db8`
+
+**Still safe to merge only while switched off. Not ready to switch on.** R38-1 is fixed. R39-1 can still show a wrong
+claimable amount. Rather than patching R39-1 and R39-2 with more word lists, adopt the simpler rule above.
