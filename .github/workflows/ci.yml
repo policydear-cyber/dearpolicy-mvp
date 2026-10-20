@@ -211,7 +211,7 @@ jobs:
         run: npm run reliable-chat:death-live-repairs-test
       - name: Reliable chat dj-live-3 answer completeness (replay and controls)
         run: npm run reliable-chat:dj-live-3-replay-test
-      - name: Reliable chat death cause and applicability (each benefit's own printed accident condition decides: an accident-only benefit is not offered for a reported death by illness and is named with its printed condition, an unknown cause is not assumed to be an accident, a correction from accident to illness withdraws the dependent illustration, Term Life is kept, narrow questions stay narrow, returned = saved = displayed)
+      - name: "Reliable chat death cause and applicability (each benefit's own printed accident condition decides: an accident-only benefit is not offered for a reported death by illness and is named with its printed condition, an unknown cause is not assumed to be an accident, a correction from accident to illness withdraws the dependent illustration, Term Life is kept, narrow questions stay narrow, returned = saved = displayed)"
         run: npm run reliable-chat:death-cause-test
       - name: Reliable chat death applicability (explicit supported / not applicable / unresolved result with source and reported-fact dependencies governs model statements, server completion, certificate summaries, repair and budget fallbacks; dj-live-2 replay; mutation-proven controls)
         run: npm run reliable-chat:death-applicability-test
