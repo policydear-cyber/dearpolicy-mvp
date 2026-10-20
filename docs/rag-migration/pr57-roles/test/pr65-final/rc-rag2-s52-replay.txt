@@ -1,0 +1,3 @@
+  ✘  1 [chromium] › e2e/tests/rag2-s52-replay.spec.ts:34:7 › R52A replay of s52-live-1: every saved line is displayed, and nothing substantive is displayed that is not saved (5.6s)
+    Error: expect(received).toBe(expected) // Object.is equality
+    > 59 |     if (id === "R52A") { expect(out[0].shown).toMatch(/notify Kestrel Life Ltd within 6 months/); expect(out[1].shown).toMatch(/notify Kestrel Life Ltd of a death within 6 months/); expect(out[1].shown).toMatch(/does not document travel cover for Japan/); expect(stepLists[1].visible.length).toBe(3); expect(out[1].shown).toMatch(/Contact the group personal accident insurer/); expect(out[1].shown).toMatch(/Ask the employer or scheme administrator for the certificate/); }

@@ -1,0 +1,4 @@
+  ✓  1 [chromium] › e2e/tests/v1-core-loop.spec.ts:285:7 › V1 core loop (phase B) › B. household B: its own policy plus the other-format copies, on a separate server as user B (30.4s)
+  -  2 [chromium] › e2e/tests/v1-core-loop.spec.ts:312:7 › V1 core loop (phase A) › A. family -> upload -> chat -> delete -> ask again -> reopen
+  1 passed (31.9s)
+playwright exit 0

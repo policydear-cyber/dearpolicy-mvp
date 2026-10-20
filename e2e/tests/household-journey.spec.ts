@@ -140,7 +140,9 @@ test.describe.serial("synthetic household journey", () => {
       await c.getByRole("button", { name: who, exact: true }).click();
       // The confirmation is shown with the library it changed (the library notice), not under the upload form.
       await expect(page.getByTestId("library-notice")).toContainText("Saved");
-      await expect(c.getByRole("button", { name: `${who} ✓` })).toBeVisible();
+      // PR #65: the tick is a mark beside the name (aria-hidden), so the chip's state is read from aria-pressed.
+      // Was: await expect(c.getByRole("button", { name: `${who} ✓` })).toBeVisible();
+      await expect(c.locator(".declare-owner button[aria-pressed=true]").filter({ hasText: who })).toBeVisible();
     }
     const linked = await policies(page);
     expect(linked.find((x) => x.id === ids.a)!.linked_people.map((l) => l.id)).toContain(ids[parent]);

@@ -118,6 +118,7 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     for (const m of (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family) ids[m.display_name] = m.id;
     await page.goto("/family");
     await page.locator("#fm-new-name").fill(`${PREFIX} Future Child`);
+    await page.locator("#fm-new-relationship").selectOption("child"); // PR #65: no relationship is pre-chosen any more
     await page.locator("#fm-new-dob").fill(future);
     await page.getByRole("button", { name: "+ Add person" }).click();
     // Refused either by the browser (the field's max is today) or by the page's own check.

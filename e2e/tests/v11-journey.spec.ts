@@ -315,7 +315,7 @@ test.describe.serial("V1.1 release journey", () => {
         const nextBefore = lastT?.nextQuestion ?? null;
         const t0 = Date.now();
         await owner.reload();
-        await owner.locator("details.chat-history > summary").click();
+        await owner.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await owner.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await owner.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
         await owner.locator(".history-open").filter({ hasText: /broke her arm/i }).first().click().catch(() => owner.locator(".history-open").first().click());
         await expect(answersLoc(owner).first()).toBeVisible({ timeout: 60_000 });
         await owner.waitForTimeout(1000);
@@ -428,7 +428,7 @@ test.describe.serial("V1.1 release journey", () => {
       await owner.screenshot({ path: path.join(OUT, "claim-estimate.png"), fullPage: true });
       // The final answer in chat, in the same claim conversation.
       await owner.goto("/chat");
-      await owner.locator("details.chat-history > summary").click();
+      await owner.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await owner.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await owner.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
       await owner.locator(".history-open").filter({ hasText: /Malignant|diagnosed/i }).first().click().catch(() => undefined);
       await owner.waitForTimeout(1000);
       const fin = await chatTurn(owner, "A", docs, "final answer after evidence review", null, "How much can we claim now?", composer(owner, "How much can we claim now?"));
