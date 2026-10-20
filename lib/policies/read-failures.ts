@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 /** Why a document's reading did not finish, kept per document so the Coverage
  * and Benefits pages can say which document is stuck and why, instead of
@@ -61,7 +62,7 @@ export async function readFailureNotes(accountId: string, policyIds: string[], k
   const out = new Map<string, ReadFailureNote>();
   if (!policyIds.length || !await readingCacheReady()) return out;
   const rows = (await query<{ id: string; note: Record<string, unknown> | null }>(
-    `SELECT id::text AS id, reading_cache->$3::text AS note FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND reading_cache ? $3::text`,
+    `SELECT id::text AS id, reading_cache->$3::text AS note FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND reading_cache ? $3::text AND ${activePredicate()}`,
     [accountId, policyIds, key]).catch(() => ({ rows: [] as { id: string; note: Record<string, unknown> | null }[] }))).rows;
   for (const r of rows) {
     if (!r.note) continue;
