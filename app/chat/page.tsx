@@ -94,6 +94,16 @@ function ChatContent(){
   const end=useRef<HTMLDivElement|null>(null);
   const latest=useRef<HTMLDivElement|null>(null);
   const composer=useRef<HTMLTextAreaElement|null>(null);
+  /** Document id -> file name, so each source row says which file it is. */
+  const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
+  useEffect(()=>{
+    let live=true;
+    fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(data=>{
+      if(!live||!data?.policies)return;
+      setDocumentFiles(Object.fromEntries((data.policies as {id:string;original_filename?:string|null}[]).filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
+    }).catch(()=>undefined);
+    return()=>{live=false;};
+  },[]);
   // Reading a real policy takes real time on a local GPU, so the indicator has
   // to keep moving and show what stage it is at rather than looking frozen.
   useEffect(()=>{
@@ -313,7 +323,7 @@ function ChatContent(){
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
-          {message.role==="assistant"?(message.content?<p className="answer-lead">{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
+          {message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
           {message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {/* dj-live-3: while a question is open, the supported practical steps are shown ahead of it (never collapsed behind it). */}
@@ -396,7 +406,7 @@ function ChatContent(){
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
           {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&!message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
-          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations}/></details>:null}
+          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
