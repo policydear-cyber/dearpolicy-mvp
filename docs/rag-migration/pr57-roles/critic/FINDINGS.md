@@ -730,3 +730,48 @@ its abbreviation. G1's must-not-fire gains the same check. Both err toward silen
 overseas-only line as the answer for a bill at home, presents another policy's wording as his cover, or says he lacks cover his
 certificate lists. The evidence is scripted reconstruction only (no live run; OpenAI configuration). The model-dependent parts are
 unshown, and so is whether DC's real scheme prints its panel GP under a "... POLICY" heading.
+
+---
+
+# Round 13: PR #65 (UI polish), head `72568be4f5ab814155914811cab3520d14c77fbb`, base main `ca6af69`
+
+Scope: `app/chat/page.tsx`, `app/policies/page.tsx`, `components/source-list.tsx`, `components/AppShell.tsx`, `app/globals.css`.
+Nothing under `lib/` changes. Read-only review; nothing run against a database or model.
+
+**1. "Try reading it again" (`app/policies/page.tsx:164-181`).** It posts `{ policyId }` to the existing
+`/api/policies/reprocess`.
+- **No cross-household reach.** The route resolves the policy with `id=$1 AND account_id=<household>` under the user's own client,
+  returns 404 otherwise, and re-checks the quarantine state (`route.ts:29-47`). The button adds no new server path; the household
+  could already call it through the locked-PDF form. Double taps are guarded (`retryingId`, and the route's `AlreadyProcessing`).
+- **R13-1. Low (C1-3 now one tap away).** Re-reading rewrites `policy_pages` in place with the same id and hash, and
+  `stale-answers.ts:56-69` withdraws a saved absence only on a hash change or scope growth. The button shows on any document with a
+  non-password `processing_error`. A document can have that error after some pages were stored. In that case a saved "what was
+  read" answer, or a citation into those pages, is not withdrawn when the re-read changes them. The partial-scope wording
+  understates ("could not be checked"), so it does not overclaim. No amount rests on an unreadable document's pages in any case I
+  traced. Accept under C1-3, or show the button only when the document has no stored page text.
+
+**2. One source row per document (`components/source-list.tsx`).** Nothing is hidden:
+- every distinct page is listed;
+- every distinct excerpt is kept, deduplicated only on identical text;
+- rows are keyed by `policyId`, so two people's certificates, or two versions of a product (different ids), stay separate rows.
+
+Citations carry no person, and a shared scheme booklet is one document, so one row is correct. This was an improvement: the old
+list showed no words at all.
+- **R13-2. Low:** the label, document date and "does not confirm cover today" flag come from the document's *first* citation. For
+  one document these should agree, but if a later citation alone carried `notConfirmedCurrent`, the flag would be lost. Take
+  `some(...)` for the flag.
+- **R13-3. Low:** excerpts over 320 characters are cut with "…" in the panel. A long passage's qualifier could fall past the cut.
+  The answer text itself keeps it, and "Open in Documents" reaches the page. Consider cutting at a sentence end, or not cutting.
+- If `policyId` were ever empty, the key falls back to `policyName`, and two same-named documents would merge with one "Open in
+  Documents" link. The type makes `policyId` required, so this is noted, not a finding.
+
+**3. Bold "bottom line" (`answer-lead`).** The class bolds the whole `message.content` paragraph that was already shown first. It
+moves no sentence and splits nothing from its qualifier: the server writes each amount's qualifier inside the same sentence
+(calculation and terms statements, round 6-9 checks). Details still render below as before. No way found for it to present a
+qualifier-less amount as the answer. If the content holds several statements, the whole block is bold, which is cosmetic.
+
+## Verdict on PR #65 at `72568be`
+
+**No blocker from the Critic.** It is presentation only: no change to answer text, citations, isolation or saved answers. R13-1 is
+an existing accepted risk (C1-3) made more reachable. R13-2 and R13-3 are small polish. The mobile e2e spec needs the Test
+engineer's update (Claims and Household are now under More), as the PR says.
