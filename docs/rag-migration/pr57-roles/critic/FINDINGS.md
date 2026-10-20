@@ -1589,3 +1589,37 @@ decides. So the risk is confined to turns without a claim, which are exactly the
 **Not ready to merge.** R26-1 can bind a conversation to the wrong person on ordinary messages, with no model step to catch it,
 and the PR can't be confirmed live before merge. Either tighten the matching as above, with tests for the four rows in the table,
 or keep the result as a hint that doesn't set the subject. Until then, set `DEARPOLICY_PREFETCH_PERSON=0` as the default.
+
+---
+
+# Round 27: PR #73 at `6e8a09d` (restarted from main `9a76490`)
+
+Scope: `git diff 9a76490 6e8a09d -- lib/`, which covers `prefetchMention`, the prefetch, the context-only handling in
+`loop.ts`, and `scripted-model.ts`. The repro is a scratch script that runs `prefetchMention` and `COMMON_WORD_NAMES`, copied
+verbatim, on 16 messages. No model calls.
+
+## R26 re-check
+
+| Finding | Status |
+|---|---|
+| R26-1 wrong person | **Closed.** The server's lookup no longer calls `setSubject`. Its result carries a note ("Use this person only if the question is about them; otherwise call resolve_person"). The person becomes the subject only when the model's next calls use that `subject_id` without calling `resolve_person` itself, which is what a model-made lookup leads to anyway. Matching needs the member's whole preferred name, capitalised. It skips common words and insurance terms (grace, will, may, min, …), possessives, "Name period/cover/…", and any other capitalised word inside a sentence. Script: "grace period", "Will my policy", "30 min", "Sarah, Grace's colleague", "Daniel's friend", "Daniel … in Japan", and lower or upper case names all give **no prefetch**. "Daniel broke his arm" and "Adrian Tan died last week" give Daniel and Adrian Tan. |
+| R26-2 every non-claim turn | **Closed.** It runs only when `state.history` is empty (the conversation's first message), and it is off by default (`DEARPOLICY_PREFETCH_PERSON=1` turns it on). |
+
+## R27-1 (Low): a non-member named as the first word of a sentence isn't caught
+
+The "other capitalised word" check skips the first word of each sentence (`slice(1)`). So "Sarah fell and Daniel took her to
+hospital" and "Sarah fell. Daniel took her to hospital" prefetch Daniel, although the event is Sarah's and she isn't a member.
+Because the result is now context only, the model still reads the message and is told to resolve someone else if needed, so this
+is a nudge, not a binding. To close it, also check a sentence's first word, skipping only ordinary sentence starters (My, The,
+What, Can, Is, How, Does, Do, When, Where, Why, Who, Please, Hi, Hello, Our, His, Her, If, After, Yesterday, Today, Last, And,
+But, So).
+
+## Verdict on PR #73 at `6e8a09d`
+
+**Ready to merge** from the Critic's side. Off by default, it changes nothing.
+
+**Switching it on by default:** I'd be comfortable once R27-1 is fixed (one line), because the lookup is now context only and
+fires only on a clean first message. Before switching it on, one short paid check with the real model, which DC has approved,
+should include "Sarah fell and Daniel took her to hospital" and one clean message. It should confirm two things: the model
+resolves Sarah itself in the first case, and the model-call count drops in the second. The saving is one model call (about 2.5 to
+3 seconds), and only on a conversation's first message.
