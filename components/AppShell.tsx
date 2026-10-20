@@ -16,6 +16,7 @@ const icon = {
   ask: <><path d="M12 4c4.4 0 8 3 8 6.8s-3.6 6.8-8 6.8c-.9 0-1.8-.1-2.6-.4L5 19l.9-3.4C4.7 14.4 4 12.7 4 10.8 4 7 7.6 4 12 4z" /></>,
   usage: <><path d="M12 3a9 9 0 1 0 9 9h-9z" /><path d="M14 3.2A9 9 0 0 1 20.8 10H14z" /></>,
   household: <><path d="M4 11 12 4l8 7" /><path d="M6 10v9h12v-9" /><path d="M10 19v-5h4v5" /></>,
+  more: <><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></>,
 };
 type IconName = keyof typeof icon;
 function NavIcon({ name }: { name: IconName }) {
@@ -26,22 +27,27 @@ function NavIcon({ name }: { name: IconName }) {
   );
 }
 
-const nav: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "Portfolio", icon: "home" },
+/** `tab` places an item in the phone's bottom bar (in that order, Ask in
+ * the middle where the thumb rests); every other item sits under "More".
+ * Eight tabs never fit a phone, and the ones that scrolled off the edge
+ * included Ask DearPolicy itself. */
+type NavItem = { href: string; label: string; icon: IconName; tab?: number; short?: string };
+const nav: NavItem[] = [
+  { href: "/", label: "Portfolio", icon: "home", tab: 1 },
   { href: "/family", label: "Family", icon: "family" },
-  { href: "/policies", label: "Documents", icon: "documents" },
+  { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
   { href: "/records", label: "Payments", icon: "payments" },
-  { href: "/ledger", label: "Coverage", icon: "ledger" },
+  { href: "/ledger", label: "Coverage", icon: "ledger", tab: 4 },
   { href: "/schedule", label: "Benefits", icon: "benefits" },
   { href: "/claims", label: "Claims", icon: "claims" },
-  { href: "/chat", label: "Ask DearPolicy", icon: "ask" },
+  { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask" },
   { href: "/household", label: "Household", icon: "household" },
 ];
 
 /** DearPolicy's operator area (diagnostics, extraction review, model usage
  * and cost). Never part of household navigation; the area itself refuses
  * anyone who is not an active DearPolicy staff account (app/operator/layout.tsx). */
-const operatorNav: { href: string; label: string; icon: IconName }[] = [
+const operatorNav: NavItem[] = [
   { href: "/operator", label: "Overview", icon: "usage" },
   { href: "/operator/documents", label: "Document processing", icon: "documents" },
   { href: "/operator/benefits", label: "Benefit extraction", icon: "benefits" },
@@ -130,25 +136,55 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // after a household is deleted get no app navigation: every link would
   // only bounce to sign-in or fail for want of a household.
   const noNav = signedOutPage || NO_NAV_PATHS.has(pathname);
-  const items = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : operatorArea ? operatorNav : nav;
+  const items: NavItem[] = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" }] : operatorArea ? operatorNav : nav;
+  const isActive = (href: string) => href === "/" || href === "/operator" ? pathname === href : pathname.startsWith(href);
+  // Only the household navigation is too long for a phone's bottom bar.
+  const tabbed = items.some((item) => item.tab);
+  const moreItems = tabbed ? items.filter((item) => !item.tab) : [];
+  const moreActive = moreItems.some((item) => isActive(item.href));
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => { setMoreOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMoreOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <aside className="sidebar">
         <Link className="brand" href="/" aria-label="DearPolicy home">
           <img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
         </Link>
-        <nav className={`nav${noNav ? " nav-empty" : ""}`} aria-hidden={noNav || undefined}>
+        <nav className={`nav${noNav ? " nav-empty" : ""}${tabbed ? " nav-tabbed" : ""}`} aria-hidden={noNav || undefined}>
           {reviewerArea && <div className="eyebrow">Reviewer area</div>}
           {operatorArea && <div className="eyebrow">Operator area</div>}
           {items.map((item) => {
-            const active = item.href === "/" || item.href === "/operator" ? pathname === item.href : pathname.startsWith(item.href);
+            const active = isActive(item.href);
             return (
-              <Link className={`nav-item ${active ? "active" : ""}`} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>
-                <span className="nav-icon"><NavIcon name={item.icon} /></span>{item.label}
+              <Link className={`nav-item${active ? " active" : ""}${item.tab ? " nav-tab" : " nav-more-item"}${item.href === "/chat" ? " nav-ask" : ""}`} style={item.tab ? { "--tab": item.tab } as React.CSSProperties : undefined} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>
+                <span className="nav-icon"><NavIcon name={item.icon} /></span>
+                {item.short ? <><span className="nav-label-full">{item.label}</span><span className="nav-label-short" aria-hidden="true">{item.short}</span></> : item.label}
               </Link>
             );
           })}
+          {tabbed && <button type="button" className={`nav-item nav-more-toggle${moreActive ? " active" : ""}`} aria-expanded={moreOpen} aria-controls="nav-more-sheet" onClick={() => setMoreOpen((open) => !open)}>
+            <span className="nav-icon"><NavIcon name="more" /></span>More
+          </button>}
         </nav>
+        {tabbed && moreOpen && <>
+          <div className="nav-more-backdrop" onClick={() => setMoreOpen(false)} aria-hidden="true" />
+          <div className="nav-more-sheet" id="nav-more-sheet" role="menu" aria-label="More pages">
+            {moreItems.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link role="menuitem" className={`nav-more-link${active ? " active" : ""}`} href={item.href} key={item.href} aria-current={active ? "page" : undefined} onClick={() => setMoreOpen(false)}>
+                  <span className="nav-icon"><NavIcon name={item.icon} /></span>{item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </>}
         <div className="sidebar-footer">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           {!signedOutPage && <SignOutButton />}

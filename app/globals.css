@@ -915,3 +915,28 @@ table { font-variant-numeric: tabular-nums; }
   .chat-page details > summary::-webkit-details-marker { display: none; }
   .chat-page details > summary::marker { content: ""; }
 }
+
+/* Phone navigation: five tabs (Portfolio, Documents, Ask, Coverage, More).
+   The rest of the household's pages open from "More", so Ask DearPolicy is
+   never pushed off the edge of the bar. Wide screens keep the full sidebar. */
+.nav-more-toggle, .nav-label-short, .nav-more-sheet, .nav-more-backdrop { display: none; }
+@media (max-width: 900px) {
+  .nav.nav-tabbed { overflow: visible; mask-image: none; -webkit-mask-image: none; position: relative; z-index: 2; background: var(--surface); }
+  .nav.nav-tabbed .nav-more-item { display: none; }
+  .nav.nav-tabbed .nav-item { flex: 1 1 0; min-width: 0; order: var(--tab, 5); }
+  .nav-more-toggle { display: grid; background: transparent; font-family: inherit; cursor: pointer; }
+  .nav.nav-tabbed .nav-label-full { display: none; }
+  .nav.nav-tabbed .nav-label-short { display: inline; }
+  .nav-ask .nav-icon { width: 34px; height: 26px; border-radius: 13px; background: var(--brand); color: #fff; }
+  .nav-ask .nav-icon svg { width: 18px; height: 18px; }
+  .nav-ask { color: var(--ink); font-weight: 650; }
+  .nav-more-backdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(20, 12, 8, .28); }
+  .nav-more-sheet { display: grid; position: fixed; z-index: 49; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); padding: 8px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-float); }
+  .nav-more-link { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px; border-radius: var(--r-md); color: var(--ink); font-size: var(--fs-md); font-weight: 500; }
+  .nav-more-link.active { background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; }
+  .nav-more-link .nav-icon { color: var(--brand-ink); }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .nav-more-sheet { animation: dp-sheet-in .16s var(--ease, ease-out); }
+}
+@keyframes dp-sheet-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
