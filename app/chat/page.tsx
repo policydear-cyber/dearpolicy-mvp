@@ -10,6 +10,7 @@ import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
 import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
+import { SourceList } from "@/components/source-list";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -92,6 +93,7 @@ function ChatContent(){
   const jobId=useRef<string|null>(null);
   const end=useRef<HTMLDivElement|null>(null);
   const latest=useRef<HTMLDivElement|null>(null);
+  const composer=useRef<HTMLTextAreaElement|null>(null);
   // Reading a real policy takes real time on a local GPU, so the indicator has
   // to keep moving and show what stage it is at rather than looking frozen.
   useEffect(()=>{
@@ -271,10 +273,21 @@ function ChatContent(){
   // at the bottom stays in view.
   useEffect(()=>{
     const behavior:ScrollBehavior=typeof window!=="undefined"&&window.matchMedia?.("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
+    if(!busy&&!messages.length)return;
     if(!busy&&messages[messages.length-1]?.role==="assistant"&&latest.current){latest.current.scrollIntoView({behavior,block:"start"});return;}
     end.current?.scrollIntoView({behavior,block:"end"});
   },[messages,busy]);
   async function ask(event:FormEvent){event.preventDefault();await sendText(question);}
+  /** Enter sends and Shift+Enter starts a new line, on a keyboard. On a
+   * touch screen Enter stays a new line: the Send button is right there. */
+  function sendOnEnter(event:React.KeyboardEvent<HTMLTextAreaElement>){
+    if(event.key!=="Enter"||event.shiftKey||event.nativeEvent.isComposing)return;
+    if(typeof window!=="undefined"&&window.matchMedia?.("(pointer: coarse)").matches)return;
+    event.preventDefault();void sendText(question);
+  }
+  // The box grows with what is typed (up to a limit), so a phone keeps most
+  // of the screen for the answer.
+  useEffect(()=>{const box=composer.current;if(!box)return;box.style.height="auto";box.style.height=Math.min(box.scrollHeight,240)+"px";},[question]);
   const active=family.find(m=>m.id===memberId);
 
   return <div className="page chat-page">
@@ -300,7 +313,7 @@ function ChatContent(){
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
-          {message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
+          {message.role==="assistant"?(message.content?<p className="answer-lead">{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
           {message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {/* dj-live-3: while a question is open, the supported practical steps are shown ahead of it (never collapsed behind it). */}
@@ -383,7 +396,7 @@ function ChatContent(){
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
           {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&!message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
-          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Your uploaded document"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}
+          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations}/></details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
@@ -400,11 +413,12 @@ function ChatContent(){
             <span style={progressDetail?{width:Math.max(4,Math.round((progressDetail.completed/Math.max(1,progressDetail.total))*100))+"%"}:undefined}/>
           </div>
           <small>Checking your policies · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
+          {elapsed>=12?<p className="thinking-note">Still working. DearPolicy is reading the pages that matter for this, which can take up to a minute when several documents apply.</p>:null}
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>
-    <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
-      <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
+    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask about a policy or tell me what happened…" rows={2}/>
+      <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")+(question.length>=MAX_QUESTION_LENGTH*0.8?" visible":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
     <p className="chat-disclaimer">Personal records confirm ownership. Matching policy wording supports benefit assessments.</p>
   </div>;

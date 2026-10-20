@@ -940,3 +940,30 @@ table { font-variant-numeric: tabular-nums; }
   .nav-more-sheet { animation: dp-sheet-in .16s var(--ease, ease-out); }
 }
 @keyframes dp-sheet-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Chat answers: the first paragraph is the answer's bottom line; sources are
+   one row per document, each opening to the words it was cited for. */
+.message.assistant .answer-lead { font-weight: 600; color: var(--ink); }
+.source-list { display: grid; gap: 6px; margin-top: 8px; }
+.citation.source-doc { display: block; }
+.citation.source-doc:not(details), .source-doc > summary { display: flex; justify-content: space-between; gap: 14px; }
+.citations .source-doc > summary { cursor: pointer; list-style: none; text-transform: none; letter-spacing: normal; font-size: var(--fs-xs); font-weight: 600; color: var(--ink); min-height: 0; }
+.source-doc b { white-space: nowrap; color: var(--brand-ink); }
+.source-doc > summary::-webkit-details-marker { display: none; }
+.source-doc .source-name { display: grid; gap: 2px; min-width: 0; }
+.source-doc .source-name small { font-size: var(--fs-xs); color: var(--muted); font-weight: 400; }
+.source-doc blockquote { margin: 8px 0 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--brand-tint-2); color: var(--ink-2); font-style: italic; line-height: 1.5; }
+.source-doc .source-date { display: block; margin-top: 6px; color: var(--muted); }
+.source-doc .source-open { display: inline-block; margin-top: 8px; color: var(--brand-ink); font-weight: 600; }
+.chat-page .source-doc > summary::before { content: none; }
+.thinking-note { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.5; }
+.chat-composer textarea { overflow-y: auto; }
+.chat-length { display: none; }
+.chat-length.visible { display: block; }
+@media (max-width: 620px) {
+  .chat-composer { grid-template-columns: 1fr auto; padding: 6px; gap: 6px; }
+  .chat-composer .button { width: auto; min-height: 44px; padding: 0 16px; }
+  .chat-composer textarea { min-height: 44px; padding: 10px; }
+}
+.document-card.focused { box-shadow: 0 0 0 3px var(--brand); transition: box-shadow var(--t-state) var(--ease); }
+.row-error-actions { margin-top: 8px; display: flex; gap: 8px; }

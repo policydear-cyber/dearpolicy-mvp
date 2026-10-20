@@ -7,11 +7,11 @@ import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-docu
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
- * state, raw processing errors, confidence scores or a Re-analyse button.
- * Those, with field corrections, are in the operator area
- * (/operator/documents). Processing failures are retried automatically; a
- * document that stays unreadable gets one plain sentence about what is
- * unavailable and what the person can do. */
+ * state, raw processing errors or confidence scores. Those, with field
+ * corrections, are in the operator area (/operator/documents). Processing
+ * failures are retried automatically; a document that stays unreadable gets
+ * one plain sentence about what is unavailable, a "Try reading it again"
+ * button, and what to do if that fails. */
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
 type LinkedPerson = { id: string; name: string; relationship: string; source: string; planTier?: string | null };
@@ -75,6 +75,7 @@ export default function PoliciesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -82,6 +83,19 @@ export default function PoliciesPage() {
   // document covers, unlocking), shown where the person is looking.
   const [libraryNotice, setLibraryNotice] = useState("");
   const [loaded, setLoaded] = useState(false);
+  // "Open in Documents" from a chat source lands here with #doc-<id>: once the
+  // library has loaded, bring that document into view and outline it.
+  useEffect(() => {
+    if (!loaded || typeof window === "undefined") return;
+    const id = window.location.hash.slice(1);
+    if (!id.startsWith("doc-")) return;
+    const card = document.getElementById(id);
+    if (!card) return;
+    card.scrollIntoView({ block: "center" });
+    card.classList.add("focused");
+    const timer = setTimeout(() => card.classList.remove("focused"), 2400);
+    return () => clearTimeout(timer);
+  }, [loaded]);
 
   async function refresh() {
     const [f, p] = await Promise.all([
@@ -141,6 +155,28 @@ export default function PoliciesPage() {
       setStatus(customerError(err, "The upload did not go through. Please try again."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Reads an unreadable document again from the PDF DearPolicy already
+   * kept: nothing is re-uploaded, and it is the same request the locked-PDF
+   * form uses, without a password. */
+  async function retryReading(policy: Policy) {
+    const label = policy.product_name ?? policy.original_filename;
+    setRetryingId(policy.id);
+    try {
+      const response = await fetch("/api/policies/reprocess", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ policyId: policy.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not start reading it again.");
+      setLibraryNotice(`Reading ${label} again…`);
+      await refresh();
+    } catch (err) {
+      setLibraryNotice(customerError(err, "Could not start reading it again. Please try later."));
+    } finally {
+      setRetryingId(null);
     }
   }
 
@@ -270,7 +306,7 @@ export default function PoliciesPage() {
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
         const pct = Math.max(0, Math.min(100, Number(policy.processing_progress ?? 0)));
-        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} data-policy-id={policy.id}>
+        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{policy.product_name ?? policy.original_filename}</strong><span>{policy.insurer ?? "Insurer pending"} · {processing ? stageLabel(policy.processing_stage, policy.processing_status) : roleLabel(policy.document_role)}</span></div>
@@ -302,11 +338,20 @@ export default function PoliciesPage() {
 
           {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
             ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
-            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{customerMessage(policy.processing_error, "Its benefits and amounts are not available for answers.")}</span><small>If you have a clearer copy or the original file, delete this one and upload that instead.</small></div>)}
+            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{unreadableReason(policy.processing_error)}</span><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></div>)}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
   </div>;
+}
+
+/** The stored reason a document could not be read, in household words. The
+ * stored messages name the operator's "Re-analyse" button; the household's
+ * card offers "Try reading it again" instead. */
+function unreadableReason(error: string | null): string {
+  return customerMessage(error, "Its benefits and amounts are not available for answers.")
+    .replace(/;?\s*use Re-analyse to try again\.?/i, ".")
+    .replace(/\.\.$/, ".");
 }
 
 /** A locked PDF already in the library: enter its password here and it is

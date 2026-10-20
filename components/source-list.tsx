@@ -1,0 +1,40 @@
+import type { ChatCitation } from "@/types";
+
+/** One row per document, not per passage: the same page cited by several
+ * statements is listed once, and a document's pages read as one line
+ * ("pages 8, 13"). Tapping a document shows the words it was cited for. */
+type SourceDoc = { key: string; policyId: string; name: string; insurer?: string; label?: string; pages: string[]; excerpts: string[]; documentDate?: string | null; notConfirmedCurrent?: boolean };
+
+const pageText = (c: ChatCitation) => c.pageStart == null ? null : c.pageEnd != null && c.pageEnd !== c.pageStart ? `${c.pageStart}–${c.pageEnd}` : String(c.pageStart);
+
+export function groupSources(citations: ChatCitation[]): SourceDoc[] {
+  const docs = new Map<string, SourceDoc>();
+  for (const c of citations) {
+    const key = c.policyId || c.policyName;
+    const doc = docs.get(key) ?? { key, policyId: c.policyId, name: c.policyName, insurer: c.insurer, label: c.evidenceLabel, pages: [], excerpts: [], documentDate: c.documentDate, notConfirmedCurrent: c.notConfirmedCurrent };
+    const page = pageText(c);
+    if (page && !doc.pages.includes(page)) doc.pages.push(page);
+    const excerpt = c.excerpt?.replace(/\s+/g, " ").trim();
+    if (excerpt && !doc.excerpts.includes(excerpt)) doc.excerpts.push(excerpt);
+    docs.set(key, doc);
+  }
+  for (const doc of docs.values()) doc.pages.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+  return [...docs.values()];
+}
+
+export function SourceList({ citations }: { citations: ChatCitation[] }) {
+  return <div className="source-list">{groupSources(citations).map((doc) => {
+    const pages = doc.pages.length ? `${doc.pages.length > 1 || doc.pages[0].includes("–") ? "pages" : "page"} ${doc.pages.join(", ")}` : "page not recorded";
+    const head = <>
+      <span className="source-name">{doc.insurer ? doc.insurer + " · " : ""}{doc.name}<small>{doc.label ?? "Your uploaded document"}</small></span>
+      <b>{pages}</b>
+    </>;
+    return doc.excerpts.length
+      ? <details className="citation source-doc" key={doc.key}><summary>{head}</summary>
+          {doc.excerpts.map((e, i) => <blockquote key={i}>“{e.length > 320 ? e.slice(0, 317) + "…" : e}”</blockquote>)}
+          {doc.notConfirmedCurrent ? <small className="source-date">{doc.documentDate ? `Dated ${doc.documentDate}. ` : ""}This does not confirm cover today.</small> : null}
+          <a className="source-open" href={`/policies#doc-${doc.policyId}`}>Open in Documents</a>
+        </details>
+      : <div className="citation source-doc" key={doc.key}>{head}</div>;
+  })}</div>;
+}
