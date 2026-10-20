@@ -451,3 +451,55 @@ listed only.
 After that, list as open: R6-3, R6-4, the reference-quote qualifier, superseded answers not marked, C1-3, travel trip dates, the
 F4 test, and no live run. All C3 evidence is scripted (OpenAI configuration). The Claude switch (PR #59) needs its own check.
 Nothing found in C3 states a wrong claimable amount.
+
+---
+
+# Round 7: final review of C4 `fbeed4af` (delta `17668630..fbeed4af`; product code in 3 files)
+
+Method: read the delta. Re-ran round 6's `decideNotFound` cases on C4 (stubbed store; no DB, no model, no spend), plus two A2
+cases. Ran the new travel-trip predicate (copied verbatim from `loop.ts:1648-1656`) on seven schedules. The rest of the full diff
+from `4956588` is unchanged since round 6.
+
+## Round-6 items on C4
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| R6-1 name matching | closed | "Daniel Lee Wei Ming" with the cell "Lee Wei Ming, Daniel" now gives the G1 answer (case 2) |
+| R6-2 term veto | closed | the label-style "Medical Expenses Benefit" refuses and is quoted again (case 3); the OPMC roster still lets G1 fire (case 1) |
+| A2 (spouse's products) | mostly holds; see R7-2 | a row naming another household member is dropped (case 7) |
+| R6-3 exclusion counted | open, as listed | case 4 unchanged |
+| R6-4 "Policy Policy" | open, cosmetic | case 1 |
+
+## New findings
+
+**R7-1. High: the travel suppression hides a matching trip's Accidental Death benefit.** `otherTrip` (`loop.ts:1648-1656`) drops a
+record from the death answer when the schedule's period has ended *before today*, or when the current message does not contain its
+printed destination word. Reproduced, each suppressing a S$100,000 benefit that does apply:
+- "Adrian died in a car accident in Japan on 5 March" on a Japan trip of 1-10 March 2026. Deaths are reported after the trip, and
+  `ended` compares with today (`new Date()`), not with the date of death or `input.asOf`.
+- "died in Tokyo" on a Japan schedule.
+- "Destination: Asia" or "Worldwide (excluding USA)" with "died in Japan".
+- The place was given in an earlier turn ("what happens now that Adrian has died?").
+
+At C3 these were shown (without trip dates, the Evidence Reviewer's point). At C4 they disappear with no sentence about the travel
+policy. That hides a documented benefit with a claimable amount: a regression in exactly the death-abroad journey. Fix: never drop
+the record. Keep the line and add the printed destination and period as its own qualifier ("for the trip to Indonesia, 1-10 March
+2025"). That fixes the reviewer's misleading amount without guessing applicability. If the Developer keeps a suppression, it must use
+the reported date of death and `asOf`, and treat region or worldwide destinations and an unknown place as "show with the qualifier".
+
+**R7-2. Low: a preferred name alone can claim a non-member's certificate row.** `namesMember` (`absence-scope.ts:291`) accepts the
+preferred name word-bounded anywhere in the row. A row "Lee Jun Hao, Daniel" for a son who is not entered as a member is read as
+Daniel's, so "Group Critical Illness" was listed as on Daniel's certificate (case 6). That is a product name only, with no amount,
+and dropped when the son is a member (case 7). Fix if cheap: accept a preferred-name-only match only when no other row under any
+heading also matches it, or require every word of the display name.
+
+**R7-3. Low (cosmetic):** the closed-fracture note can read "whether a open fracture is one" (`statement-render.ts:186`). The
+wording otherwise matches the record: it says what is undefined and that the insurer decides, with no new figure. The partial-copy
+wording (`absence-scope.ts:229-234`) is fine.
+
+## Release verdict on C4
+
+**Not release-ready: one blocker, R7-1.** It is small and local: keep the travel line with its printed trip qualifier instead of
+dropping it. R6-1 and R6-2 are closed. Nothing in C4 states a wrong claimable amount. The remaining items stay listed as open:
+R6-3, R6-4, R7-2, R7-3, the reference-quote qualifier, superseded answers not marked, C1-3, the F4 test, no live run, and the
+Claude switch unverified.
