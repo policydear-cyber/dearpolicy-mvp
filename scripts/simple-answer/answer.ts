@@ -56,6 +56,19 @@ export function buildRequest(household: Household, history: Turn[], question: st
 }
 export type SimpleRequest = ReturnType<typeof buildRequest>;
 
+/** The key for paid runs. The cloud environment reserves ANTHROPIC_API_KEY (sessions never receive it), so the
+ * experiment's own DEARPOLICY_ANTHROPIC_KEY comes first. Only the variable's name is ever reported, never its value. */
+export const KEY_VARIABLES = ["DEARPOLICY_ANTHROPIC_KEY", "ANTHROPIC_API_KEY"] as const;
+export function apiKeyFromEnv(env: Record<string, string | undefined> = process.env): { name: (typeof KEY_VARIABLES)[number]; key: string } {
+  for (const name of KEY_VARIABLES) {
+    const key = env[name]?.trim();
+    if (key) return { name, key };
+  }
+  throw new Error(`No API key: set ${KEY_VARIABLES.join(" or ")}`);
+}
+/** Always the public API: the harness sets ANTHROPIC_BASE_URL for its own use, and the SDK would otherwise follow it. */
+export const API_BASE_URL = "https://api.anthropic.com";
+
 /** Just the slice of the SDK the baseline uses, so the offline test can pass a stub. */
 export type ModelClient = { beta: { messages: { stream(params: SimpleRequest): { finalMessage(): Promise<Anthropic.Beta.BetaMessage> } } } };
 

@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { answerSimply, buildRequest, costUsd, renderLibrary, type ModelClient, type SimpleRequest } from "./answer";
+import { answerSimply, apiKeyFromEnv, buildRequest, costUsd, renderLibrary, type ModelClient, type SimpleRequest } from "./answer";
 import { readHousehold, type Household, type ReadOnlyQuery } from "./household";
 import { estimateRun, loadQuestions, recordedCurrent, runComparison, sideBySide } from "./compare";
 import { buildSnapshot, pagesDigest } from "./build-snapshot";
@@ -89,6 +89,11 @@ await check("answer: text, usage and cost come from the model reply", async () =
   assert.deepEqual(a.usage, { input: 50, cacheWrite: 10000, cacheRead: 0, output: 300 });
   assert.equal(a.costUsd, costUsd("claude-opus-5-5", a.usage));
   assert.ok(Math.abs(a.costUsd - (50 * 4 + 10000 * 8 + 300 * 20) / 1e6) < 1e-12);
+});
+await check("key: DEARPOLICY_ANTHROPIC_KEY first, then ANTHROPIC_API_KEY; the error names variables, never values", () => {
+  assert.deepEqual(apiKeyFromEnv({ DEARPOLICY_ANTHROPIC_KEY: "k1", ANTHROPIC_API_KEY: "k2" }), { name: "DEARPOLICY_ANTHROPIC_KEY", key: "k1" });
+  assert.deepEqual(apiKeyFromEnv({ DEARPOLICY_ANTHROPIC_KEY: " ", ANTHROPIC_API_KEY: "k2" }), { name: "ANTHROPIC_API_KEY", key: "k2" });
+  assert.throws(() => apiKeyFromEnv({}), /^Error: No API key: set DEARPOLICY_ANTHROPIC_KEY or ANTHROPIC_API_KEY$/);
 });
 await check("a refusal is shown as declined, not as an answer", async () => {
   const { client } = stub(() => "", { refuse: true });
@@ -190,6 +195,13 @@ await check("CLI refuses a cap above the authorised US$10", () => {
     { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" } });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /above the authorised US\$10/);
+});
+await check("CLI --paid with no key stops before any call", () => {
+  const hhPath = join(dir, "household.json");
+  const run = spawnSync(process.execPath, ["--import", "tsx", "scripts/simple-answer/compare.ts", "--questions", qPath, "--household-file", hhPath, "--paid", "--run-id", "nokey", "--max-usd", "1", "--out", join(dir, "out-nokey")],
+    { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", DEARPOLICY_ANTHROPIC_KEY: "" } });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /No API key: set DEARPOLICY_ANTHROPIC_KEY or ANTHROPIC_API_KEY/);
 });
 console.log(`${passed} checks passed`);
 }

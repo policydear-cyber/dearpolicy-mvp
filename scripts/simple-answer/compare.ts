@@ -14,7 +14,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { answerSimply, DEFAULT_MODEL, estimateTokens, MAX_OUTPUT_TOKENS, PRICES, renderLibrary, SYSTEM_PROMPT, costUsd, type ModelClient, type Turn } from "./answer";
+import { answerSimply, API_BASE_URL, apiKeyFromEnv, DEFAULT_MODEL, estimateTokens, MAX_OUTPUT_TOKENS, PRICES, renderLibrary, SYSTEM_PROMPT, costUsd, type ModelClient, type Turn } from "./answer";
 import { loadHouseholdFromDb, loadHouseholdFromFile, type Household } from "./household";
 
 /** DC's authorisation for the comparison run (decision card, 20 Oct 2026 12:15Z: "Opus, cap $10"). */
@@ -207,6 +207,9 @@ async function main(argv: string[]) {
   if (!runId || !(maxUsd > 0)) throw new Error("--paid needs --run-id and --max-usd");
   if (maxUsd > AUTHORISED_CAP_USD) throw new Error(`--max-usd ${maxUsd} is above the authorised US$${AUTHORISED_CAP_USD}; a higher cap needs a new authorisation and a code change`);
   if (estimate.worstCaseUsd > maxUsd) console.log(`Worst case US$${estimate.worstCaseUsd.toFixed(2)} exceeds the cap; the run stops once US$${maxUsd} is spent.`);
+  const { name: keyName, key } = apiKeyFromEnv();
+  console.log(`Using the key in ${keyName}; calling ${API_BASE_URL}.`);
+  const client = new Anthropic({ apiKey: key, baseURL: API_BASE_URL }) as unknown as ModelClient;
   const out = outsideRepo(arg(argv, "--out") ?? `/mnt/project-files/ux-live/release-set/${runId}`);
   if (existsSync(resolve(out, "results.json"))) throw new Error(`${out} already holds a run; use a new --run-id`);
   mkdirSync(out, { recursive: true });
@@ -220,7 +223,7 @@ async function main(argv: string[]) {
     : (() => { throw new Error(`Unknown --current ${currentArg}`); })();
   const startedAt = new Date().toISOString();
   try {
-    const result = await runComparison({ household, questions, client: new Anthropic() as unknown as ModelClient, current, model, maxUsd, onProgress: console.log });
+    const result = await runComparison({ household, questions, client, current, model, maxUsd, onProgress: console.log });
     const meta = { runId, startedAt, finishedAt: new Date().toISOString(), model, current: current.label, currentBuild: currentBuild ?? null, householdAccountId: household.accountId, estimate, spentUsd: result.spentUsd, stoppedEarly: result.stoppedEarly };
     writeFileSync(resolve(out, "results.json"), JSON.stringify({ meta, rows: result.rows }, null, 2));
     writeFileSync(resolve(out, "side-by-side.md"), sideBySide(result.rows, meta));
