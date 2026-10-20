@@ -585,3 +585,55 @@ List as accepted open items: R9-1, R6-3, R6-4, R7-2, the scheme-quote qualifier,
 
 Evidence limit, unchanged: all evidence is scripted or replay (OpenAI configuration), with no live run. The Claude switch (PR #59)
 is unverified. Shipping before a live check is DC's call.
+
+---
+
+# Round 10: PR #64 (live GP-bill fix), head `235d2623c45dc4ba4ebff56fdd461d362cad3bd7`, base main `ca6af69`
+
+Method: read the product diff (`absence-scope.ts` ranking, `loop.ts` G2 terms, `compose.ts` `sayBack`). Ran `decideNotFound` from
+`235d262` directly (store stubbed; no DB, no model, no spend) on the fixture certificate and BS page 1. I added the Developer's
+invented overseas page (`gp-bill-live-repro.ts` P20) and a panel GP page like P25, with its section heading naming the Outpatient
+Medicare Policy, the policy Daniel's certificate does not list.
+
+**R10-1. High: a panel GP line from a policy the certificate does not list is now quoted as the GP-bill answer, and G1's "his
+certificate does not list OPMC" sentence disappears.** In case A, the server quotes "Consultation at a panel GP clinic in Singapore: no
+charge to the Insured Person. Non-panel GP consultation: up to $30 per visit." for Daniel. That line is any hit outside the scheme's
+policy list, so G1 no longer fires (`absence-scope.ts:64`). Nothing in the answer says the wording comes from a scheme document, or
+that Daniel's certificate (as of 6 October 2022) lists Term Life, PA, Living Care and Living Care Plus but not Outpatient Medicare.
+In DC's real scheme, panel GP is most likely the OPMC's benefit; QC's ground truth says his certificate does not list it. The answer
+would then read as "free panel GP, $30 otherwise" beside an $800 bill. That is reference wording presented as personal cover, with an
+amount: next to the worst-bug class. The PR body says the reconstruction's invented page has no section owner, so this was not
+tested. Fix before merge: when a quoted line comes from a document that is not the person's confirmed certificate, keep the G1
+facts with it. Say what his certificate lists (dated), name the section or policy the quoted line sits under when its page heading
+names one, and say only the insurer can confirm it applies to him. If the section's policy is one the certificate does not list,
+say so plainly.
+
+**R10-2. Medium: ranking overseas-only lines last is not enough.**
+- Case B: when the only wording printed is the overseas clause, it is still quoted alone for a GP bill at home. That is the live
+  symptom, so ranking cannot stop it.
+- Case C: `ABROAD` also demotes a line that covers home, "Medical expenses incurred in Singapore or overseas are reimbursed under
+  Benefit G", behind the overseas-only clause.
+- The rank applies to every repeated refusal (`statement-render.ts`), not only the bill. A question about cover abroad gets its own
+  answer lines pushed behind unrelated ones.
+
+Fix: on the G2 bill path, unless the household's words place the bill abroad, do not quote a line limited to treatment abroad. Treat
+"outside Singapore" or "overseas" as a limit only when the line has no "Singapore or overseas" / "in Singapore" inclusion. If only
+such lines remain, say it in a sentence ("the only outpatient wording printed is for treatment outside Singapore"), never as the
+answer. Keep the ranking out of non-bill topics.
+
+**R10-3. Low: household isolation and person attribution.** The new terms do not widen scope: `scopeDocs` is unchanged, with the
+person's linked documents plus documents linked to nobody. A panel GP page in an *unlinked* document, such as a spouse's employer
+plan uploaded without a person, is still quoted for this person, with no "whose" wording. This is the existing open item (scheme or
+unlinked quotes carry no qualifier), now on the main GP path. The fix for R10-1 covers it.
+
+**R10-4. Low (cosmetic):** the line's own heading ("Panel GP Benefit") is quoted as the second line. The containment check only drops
+a heading that sits inside the chosen line, and an mixed-case heading ranks with sentences.
+
+**`sayBack`: fine.** Words with no subject are quoted ("You told me: “tripped on the kerb”"). Pronoun- and article-led words keep the
+old path. I found no regression.
+
+## Verdict on PR #64
+
+**Not ready to merge.** R10-1 is the blocker: as it stands, the PR can turn a scheme's panel GP wording for a policy Daniel does not
+hold into an apparent answer to his GP bill. Fix R10-2 in the same change; it is small. No paid run was made; this is a scripted
+reconstruction only.
