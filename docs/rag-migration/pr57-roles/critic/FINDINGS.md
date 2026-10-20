@@ -2340,3 +2340,24 @@ the same filter GET /api/policies uses (`app/api/policies/route.ts:56`). Read-on
 ## Verdict on PR #77 at `3a24587`
 
 **Ready to merge.** R44-1 is optional.
+
+---
+
+# Round 45: two quick commit checks
+
+**PR #71, c332676 (on top of 1a62deb): test-only, correct.** The commit touches only `scripts/simple-answer/chat-test.ts`.
+The rule it tests was already in `verify.ts` (either/or is drawn only when every grouped amount is on one row of one page
+*and* `new Set(person).size === 1`). The new test puts the same one-row pair on two real household members (Lim Ah Kow,
+Lim Mei Mei, both in HOUSE, so neither resolves to null by accident) and checks two separate cards, no group, and the
+"not a total" note. The single-person either/or case stays covered by the existing test "either/or only for one person's
+amounts on one row of one page" (same pair, same person). No implementation change, so legitimate single-person
+either/or answers are unaffected. Note (no action): two amounts with no named person on one row still group, which is
+fine because they come from one row of one document.
+
+**PR #77, b22e92d on top of 3a24587: test-only.** The range 3a24587..b22e92d (179737e, 852d776, 2e55195, b22e92d) touches
+only `e2e/**` specs and `docs/rag-migration/pr57-roles/test/EXPECTATION-CHANGES.md`; no app, lib or SQL file. The
+EXPECTATION-CHANGES table records each changed check with its "was" and "now", and says each original is kept in a comment
+beside the change. The new household-journey step 21-22 asserts the still-linked alert, "Go to Documents", no "Confirm
+delete", and the child still present, which matches round 44.
+
+**Verdict:** both fine. Nothing changes for #71's or #77's readiness.
