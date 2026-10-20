@@ -88,6 +88,8 @@ export function sayBack(words: string): string | null {
   let w = String(words ?? "").replace(/\s+/g, " ").trim().replace(/^(?:yes|yeah|yep|yup|no|nope)\b[,.!]?\s*/i, "").replace(/[.!;,\s]+$/, "");
   if (!w) return null;
   if (/^(?:i|i['’]m|i['’]ve|we|we['’]re|my|our|me|us)\b/i.test(w)) return `You told me: “${w}”.`;
+  // (live GP re-ask after PR #61: words with no subject of their own -- "tripped on the kerb" -- are quoted, never run on as "You told me tripped ...")
+  if (/^[a-z]/.test(w) && !/^(?:the|a|an|he|she|they|it|this|that|there|her|his|their|both)\b/.test(w)) return `You told me: “${w}”.`;
   if (/^(?:The|A|An|He|She|They|It|This|That|There|Her|His|Their|Both|Yes|No)\b/.test(w)) w = w[0].toLowerCase() + w.slice(1);
   // V1.2: a bare phrase ("Transverse fracture") is quoted, not run into the sentence.
   else if (/^[A-Z]/.test(w) && !/\b(?:is|was|were|are|had|has|have|broke|fell|got|went|did)\b/i.test(w)) return `You told me: “${w}”.`;

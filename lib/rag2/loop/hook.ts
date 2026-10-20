@@ -305,6 +305,9 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
   lap("rescueMs");
   await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message, priorUserTexts });
   lap("gateMs");
+  // Critic R17: what this turn showed (every branch, after the gate), so "what do I do now" repeats only the steps just shown.
+  const shownSubject = reply.kind === "final" || reply.kind === "ask" ? reply.composed?.subjectId ?? state.subjectId ?? null : state.subjectId ?? null;
+  trace.shown = { subjectId: shownSubject, nextSteps: out.corrections.length || lost.length ? [] : [...answer.nextSteps] };
   const visible = [answer.summary, ...answer.details, ...answer.questions.map((q) => q.text)].join(" ");
   state.history = [...state.history, { user: message, assistant: visible }].slice(-8);
   state.turns = [...state.turns, trace].slice(-12) as TraceTurn[];

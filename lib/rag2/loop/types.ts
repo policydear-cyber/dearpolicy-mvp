@@ -110,6 +110,8 @@ export type TraceTurn = {
   /** Pending question re-asked after a side question (interruption). */
   reasked?: string | null;
   corrections?: { key: string; from: unknown; to: unknown }[];
+  /** What the answer showed: who it was about and its next steps, as composed and checked (a later "what do i do now" repeats them). */
+  shown?: { subjectId: string | null; nextSteps: string[] };
 };
 export type RagLoopState = {
   v: 1; turn: number; seq: number;

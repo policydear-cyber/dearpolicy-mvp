@@ -1678,7 +1678,9 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
   const contactStepFor = async (subject: string, given: unknown): Promise<string | null> => {
     if (chatContract(env) !== "benefits" || !subject || !asksWhatToDo(input.message)) return null;
     if (Array.isArray(given) && given.some(isContactStep)) return null;
-    const asked = familiesOf(input.message);
+    // (live "what do i do now": a follow-up that names no event takes the event from this conversation's earlier messages)
+    // (Critic R14-3: the latest one that names an event -- never a mix of every event the conversation has been about)
+    const asked = [...userTexts].reverse().map((t) => familiesOf(t)).find((f) => f.size) ?? familiesOf("");
     if (!asked.size) return null;
     const recs = await recordsFor(ctx, subject).catch(() => [] as Awaited<ReturnType<typeof recordsFor>>);
     const cert = recs.find((r) => r.policy.personalProof && [...asked].some((f) => familiesOf(r.benefit).has(f) || productFamilies(r.benefit).has(f)));
@@ -2116,6 +2118,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     }
     // A reported stay or bill: the passage already retrieved that prints its benefit, quoted; else named as not looked up.
     let serverSaid = false;
+    const underQuote: { text: string; note: string }[] = [];
     const ADDR = { stay: /\b(?:hospital\w*|in-?patient|confine\w*|warded)\b/i, bill: /\b(?:medical expenses?|bills?|reimburs\w*)\b/i };
     for (const m of missing) {
       const kind = /hospital income \/ hospital cash/.test(m) ? "stay" : /medical expenses/.test(m) ? "bill" : null;
@@ -2137,12 +2140,24 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
         let said = false, refused = false;
         if (/\b(?:GP|outpatient|clinic|doctor|consultation|polyclinic|physician)\b/i.test(words)) {
           // (critic round 5 A3: the doctor's own words are searched too; a page that reimburses medical treatment refuses the absence)
-          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician"], subject_id: subject };
-          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: input.people.find((p) => p.id === subject)?.name ?? null, names: input.people.flatMap((p) => [p.name]) });
+          // (PR #64, Critic R10-2: where the household placed the bill decides whether a line that pays only abroad is quoted)
+          // (Critic R11-2: explicit words in this message only; anything else is "not said", which never quotes an abroad-only line as the answer)
+          const away = /\b(?:overseas|abroad|on holiday|travell?ing|on (?:a|his|her|their|our|my) trip)\b/i.test(input.message);
+          const home = /\bin Singapore\b|\bpolyclinic\b|\blocal (?:GP|clinic|doctor)\b/i.test(input.message);
+          const ask = { claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["outpatient", "clinic", "general practitioner", "consultation", "doctor", "physician", "panel gp", "gp clinic", "gp consultation"], subject_id: subject, bill_place: away && !home ? "abroad" : home && !away ? "home" : "unknown" };
+          const nf = await checkNotFound(input.accountId, ask, { subjectId: subject, who: short || null, names: input.people.flatMap((p) => [p.name]) });
           const server = nf.ok ? { kind: "not_found", text: nf.text, evidence_ids: [], subject_id: subject, check: nf.check } : nf.partial ? { kind: "not_found", text: nf.partial.text, evidence_ids: [], subject_id: subject, check: nf.partial.check } : null;
           refused = !nf.ok && !nf.partial;
           if (server) { const { check, ...st } = server; RENDERED.add(st); ABSENCE_OF.set(st, check); sentences.push(st); said = true; }
-          else if (!nf.ok && nf.printed?.length) { const q = quotePrinted(nf.printed, (ref, via) => evidenceIdOf(state, ref, via ?? "statement"), subject); if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; } }
+          else if (!nf.ok && (nf.printed?.length || nf.abroad)) {
+            // (PR #64: a line that pays only abroad, said apart when the household did not place the bill abroad; then the quote; then -- only
+            // if the quote survives composing (Critic R11-3) -- whose cover that line is not shown to be, directly under it)
+            const idOf = (ref: Parameters<typeof evidenceIdOf>[1], via?: string) => evidenceIdOf(state, ref, via ?? "statement");
+            const q = nf.printed?.length ? quotePrinted(nf.printed, idOf, subject) : null;
+            const a = nf.abroad ? quotePrinted([nf.abroad], idOf, subject) : null;
+            if (a && nf.abroad) { const line = a.text.replace(/^.*? prints: /, ""); const st = { kind: "fact", text: q ? `The ${nf.abroad.name} (page ${nf.abroad.page}) prints a benefit only for treatment outside Singapore, which applies only if the treatment was abroad: ${line}` : `The only line found for this is in the ${nf.abroad.name} (page ${nf.abroad.page}), and it pays only for treatment outside Singapore, so it applies only if the treatment was abroad: ${line}`, evidence_ids: a.evidence_ids, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; }
+            if (q) { const st = { kind: "fact", ...q, subject_id: subject }; RENDERED.add(st); QUOTED.add(st); sentences.push(st); said = true; if (nf.before || nf.after) underQuote.push({ text: st.text, note: [nf.before, nf.after].filter(Boolean).join(" ") }); }
+          }
         }
         // (critic round 5 F2: "do not print" only when no check refused -- a refusal means the documents print something for it, or were not read)
         if (!said) notes.push(refused ? `I could not confirm from your documents what pays for the bill you mentioned${words ? ` (“${words}”)` : ""}.` : `The pages I read do not print a benefit for the bill you mentioned${words ? ` (“${words}”)` : ""}.`);
@@ -2151,6 +2166,8 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
       else notes.push(`I haven't yet looked up what your documents pay for ${kind === "stay" ? "the hospital stay" : "the bill"} you mentioned${words ? ` (“${words}”)` : ""}, so that is still open.`);
     }
     const composed = sentences.length ? composeFinal({ sentences, subjectId: subject }, composeCtx()) : null;
+    // (the note goes first among the notes, so it reads directly under the server's quote -- and only when that quote was kept)
+    notes.unshift(...underQuote.filter((u) => composed?.sentences.some((x) => x.text.startsWith(u.text.slice(0, 60)))).map((u) => u.note));
     const merged: Composed | null = c0 && composed ? { ...c0, sentences: [...c0.sentences, ...composed.sentences.filter((x) => !c0.sentences.some((y) => y.text === x.text))], figureBindings: [...c0.figureBindings, ...composed.figureBindings], computations: [...c0.computations, ...composed.computations], calculations: [...c0.calculations, ...composed.calculations], calcs: [...c0.calcs, ...composed.calcs], evidenceIds: [...new Set([...c0.evidenceIds, ...composed.evidenceIds])], dropped: [...c0.dropped, ...composed.dropped], ...(c0.absenceChecks || composed.absenceChecks ? { absenceChecks: [...(c0.absenceChecks ?? []), ...(composed.absenceChecks ?? [])] } : {}), notes: c0.notes.filter((n) => !/your own account|claim form/i.test(n) && !(serverSaid && n === DROPPED_NOTE)) } : (composed ?? c0);
     // The grounded question: the one already open; else what the calculation still needs; else -- when the household's
     // reply to the question just asked does not visibly answer it -- that question again.
@@ -2570,7 +2587,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     (trace.adjusted ??= []).push("the reply ended without the absence refused for a partly stored scope: the server's statement of what was read was added");
     return { kind: "final", composed: { ...c0, sentences: [...c0.sentences, ...c.sentences], absenceChecks: [...(c0.absenceChecks ?? []), ...(c.absenceChecks ?? [])], notes: c0.notes.filter((n) => n !== DROPPED_NOTE) } };
   };
-  let done = await requirementQuestion(conditionQuestion(withInventory(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null)))));
+  /** Live finding (20 Oct, "what do i do now", turn 7): a household that asks what to do next, when nothing the reply said could be kept,
+   * gets the next steps the previous answer SHOWED (as composed and checked then: TraceTurn.shown), instead of "I couldn't confirm an
+   * answer to that". Only the immediately previous answer, only for the same person, and never when this turn corrected or withdrew it
+   * (Critic R14-1, R14-2). An open question is not repeated here: the answer ends with it as its question card (R14-4). */
+  const whatToDo = (r: LoopReply | null): LoopReply | null => {
+    if (chatContract(env) !== "benefits" || !r || r.kind !== "final" || !asksWhatToDo(input.message)) return r;
+    if (r.composed.sentences.length || r.composed.nextSteps.length || corrections.length || invalidated.length) return r;
+    // Critic R17-1/R17-3: only the answer shown just before this message (an ask card or a withdrawn answer in between shows nothing old).
+    const prev = state.turns.filter((t) => t.turn < state.turn).at(-1)?.shown;
+    const subject = r.composed.subjectId ?? state.subjectId;
+    if (!prev || !prev.nextSteps.length || !subject || prev.subjectId !== subject) return r;
+    (trace.adjusted ??= []).push(`the household asked what to do and the reply kept nothing: the previous answer's next steps were shown again (${prev.nextSteps.length})`);
+    return { ...r, composed: { ...r.composed, notes: [`Here ${prev.nextSteps.length > 1 ? "are the next steps" : "is the next step"} from my last answer.`, ...r.composed.notes.filter((n) => n !== DROPPED_NOTE)], nextSteps: prev.nextSteps } };
+  };
+  let done = await requirementQuestion(conditionQuestion(withInventory(whatToDo(await groundedFallback(withPartialAbsence((reply ?? beforeRepair) as LoopReply | null))))));
   // Actual-library findings: further model use is blocked (the turn's budget) while an evaluation's requirement is open:
   // the household gets the verified terms of that benefit and the outstanding question -- written by the server from the
   // requirement, never the generic limit text or a figure about something else.
