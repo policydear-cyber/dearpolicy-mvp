@@ -5,15 +5,15 @@
 - Account: the login DC supplied in the environment. It is DC's own household (real family records, plus one
   synthetic person "Alex Synthetictest"). DC allowed use of the main account in the thread root. Nothing was
   uploaded, edited, deleted or sent. No chat message was sent, so no model call was made.
-- People are written as D (self), C (spouse) and Alex (synthetic). Screenshots show real names and policy figures,
-  so they are kept in the private project folder (`ux-live/screenshots/`), not in git.
+- No real names, policy numbers, scheme names, file names or amounts from the account are recorded here. People are
+  "member A" (self), "spouse" and "synthetic member". Screenshots stay in the private project folder, not in git.
 - Evidence category: actual-library observation of the live UI. Nothing here is a scripted test or a chat test.
 
 ## Checklist from the earlier tester (PAYING-CUSTOMER-REVIEW.md)
 
 | Item | Live result |
 |---|---|
-| Portfolio shows "0 confirmed / Not found" despite a linked certificate | **Does not reproduce.** D and C (both on the linked certificate) show 4 confirmed categories with amounts (Death S$1,000,000, CI S$350,000, Early CI S$300,000, PA S$600,000). Alex (no documents) correctly shows 0 with an "Upload personal proof" to-do. |
+| Portfolio shows "0 confirmed / Not found" despite a linked certificate | **Does not reproduce.** Member A and spouse (both on the linked certificate) each show 4 confirmed categories with amounts. The synthetic member (no documents) correctly shows 0 with an "Upload personal proof" to-do. |
 | Mobile tab bar hides Ask DearPolicy | **Reproduces.** At 390 px only Portfolio…Coverage fit; Benefits, Claims, Ask DearPolicy and Household are off-screen. The chat page opens scrolled past its heading. |
 | Unreadable upload has no useful name or reason | **Reproduces, worse.** See finding 4. |
 | Enter sends? | No key handler in `app/chat/page.tsx` on main (code check, not tried in the browser to avoid a paid send). Enter adds a new line. |
@@ -23,22 +23,22 @@
 ## Findings, ranked
 
 1. **Critical (factual + usability). The saved live GP-bill answer gives the user nothing.** Reopened chat
-   "desmond tripped over the kerb…GP bill is $800": "You told me tripped over the kerb and fell. … I couldn't confirm an
+   "[member A] tripped over the kerb… GP bill [amount]": "You told me tripped over the kerb and fell. … I couldn't confirm an
    answer to that from your documents. I haven't yet looked up what your documents pay for the bill you mentioned."
    The user can't tell whether they can claim, the first line is ungrammatical, and the next step is generic. This is
    the reported G1/G2 failure; the fix is in PR #61, not in production. Smallest fix: ship the PR #61 fix.
 2. **Major, suspected factual (needs the Policy Evidence Reviewer). Coverage and Benefits rows that look mislabelled.**
-   On Coverage for D: "Death — the actual cost, up to S$2,000" and "Accidental permanent disablement — the actual
-   cost, up to S$10,000" under MINDEF & MHA (they read like funeral and medical-expense items); a "Hospitalisation"
-   group (Singlife) listing sports equipment S$2,000 and an adult family member visit S$5,000 (reads like travel
-   wording). On Benefits: a row titled "percent (20%) of the surface of the Life", and "Death Benefit S$5,000" next to a
-   S$1,000,000 death figure elsewhere. Every certificate row's source says "Your policy wording, page 1" while the
-   quoted snippet is a certificate row. An ordinary user could read S$2,000 as the death payout. Not verified against
+   On Coverage for member A, under the group scheme: a row "Death — the actual cost, up to [small amount]" and an
+   "Accidental permanent disablement — the actual cost, up to [amount]" row (they read like funeral and medical-expense
+   items); a "Hospitalisation" group listing sports-equipment and family-visit benefits (reads like travel wording). On
+   Benefits: a row titled "percent (20%) of the surface of the Life", and a small "Death Benefit" amount next to a much
+   larger death figure elsewhere. Every certificate row's source says "Your policy wording, page 1" while the quoted
+   snippet is a certificate row. An ordinary user could read the small amount as the death payout. Not verified against
    the PDFs by me.
 3. **Major. Mobile navigation hides the core feature.** Ask DearPolicy, Benefits, Claims and Household are off the
    right edge of the bottom bar with no scroll hint. Smallest fix: five tabs (Portfolio, Documents, Coverage, Ask,
    More).
-4. **Major. Unreadable upload tells the user to press a button that doesn't exist.** Card: "output_202609281146117.pdf ·
+4. **Major. Unreadable upload tells the user to press a button that doesn't exist.** Card: "[internal file name].pdf ·
    Insurer Pending · Document · Reference · Could Not Be Read … use Re-analyse to try again." The only button is
    Delete. No reason is shown. Smallest fix: add the Re-analyse button (or drop the sentence) and show the stored reason.
 5. **Major. "Current insurance cost S$0.00/month, ≈ S$0.00 per year from the latest payment evidence"** while there is
@@ -49,7 +49,7 @@
 7. **Major. Slow screens.** Page load to settled: 4–6 s on most pages, Benefits 9–11 s, Household 8–9 s. Sign-in 4–10 s.
    Switching person on the portfolio took ~4 s, and during that time the old person's tiles stay on screen with the new
    person's name highlighted (my first run read the wrong person's numbers for this reason).
-8. **Minor.** Documents named by internal file names ("817d6e8b-…pdf", "output_2026…pdf"). Records page shows
+8. **Minor.** Documents named by internal file names (a random ID or an "output_<timestamp>.pdf" name). Records page shows
    developer copy ("Photo and email-receipt OCR can be added before public beta."). The Benefits page is ~26,600 px tall
    on mobile and overflows by 11 px. The login page paints Email before Password.
 
