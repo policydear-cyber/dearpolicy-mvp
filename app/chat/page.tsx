@@ -306,7 +306,7 @@ function ChatContent(){
       <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.</p></div>
       <div className="chat-head-actions"><div className="auto-context"><strong>Automatic family context</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name, relationship, “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
-    <details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
+    <details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
