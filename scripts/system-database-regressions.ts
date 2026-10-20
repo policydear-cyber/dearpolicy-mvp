@@ -1257,6 +1257,54 @@ async function main(){
       assert.deepEqual(await links(cert),[grace,scheme].sort());
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,foreignCert]]);
     });
+    await test("Coverage and Benefits say which document is still waiting and which failed, and why, in safe words",async()=>{
+      // UX acceptance on ca6af69 (item 3): with every document Ready, both pages
+      // said "still being read" forever; a failed read looked like a waiting one.
+      const {ensureEvidenceSchema}=await import("@/lib/documents/evidence");
+      const {noteReadFailure,BENEFIT_READ_FAILURE_KEY}=await import("@/lib/policies/read-failures");
+      await ensureEvidenceSchema();
+      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
+      const [waiting,failed,resting]=[uuid(701700),uuid(701701),uuid(701702)];
+      for(const [id,name] of [[waiting,"Waiting Plan"],[failed,"Failed Plan"],[resting,"Resting Plan"]]){
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,'Hospital','policy_wording',60,'ready',$5,$5,'scan_clean')",[id,account,people[0].id,name,id+".pdf"]);
+        await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'Daily hospital cash SGD 100.')",[account,id]);
+        await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')",[id,people[0].id,account]);
+      }
+      const raw=new Error("Request timed out after 180000ms at platform.example (org-SECRET123)");
+      await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
+      await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
+      // Ledger notes as lib/ledger/extract.ts writes them: one due again, one resting.
+      const note=(minutes:number)=>JSON.stringify({ledger_read_failure:{attempts:1,reasonCode:"reader_unavailable",lastFailedAt:new Date().toISOString(),retryAfter:new Date(Date.now()+minutes*60_000).toISOString()}});
+      await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[failed,note(-1)]);
+      await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[resting,note(60)]);
+
+      const index=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
+      const byId=(list:{policyId:string}[])=>new Map(list.map(d=>[d.policyId,d as Record<string,unknown>]));
+      const benefits=byId(index.documents);
+      assert.equal(index.unread.length,3,"unread is unchanged for existing callers");
+      assert.equal(benefits.get(waiting)?.state,"waiting");
+      assert.equal(benefits.get(failed)?.state,"failed");
+      assert.equal(benefits.get(failed)?.reasonCode,"timeout");
+      assert.equal(benefits.get(failed)?.attempts,2);
+      assert.equal(benefits.get(failed)?.name,"Failed Plan","It names the document");
+      assert.doesNotMatch(JSON.stringify(index),/org-SECRET|platform\.example|180000/,"The raw error never reaches the household");
+
+      const ledger=await (await getLedger(new NextRequest("http://localhost/api/ledger"))).json();
+      const reading=byId(ledger.reading.documents);
+      assert.equal(reading.get(waiting)?.state,"waiting");
+      assert.equal(reading.get(failed)?.state,"failed","A failed read that is due again says failed, not still reading");
+      assert.equal(reading.get(resting)?.state,"backed_off");
+      assert.ok(reading.get(resting)?.retryAfter,"and says when it is tried again");
+      assert.match(String(reading.get(failed)?.reason),/unavailable/);
+
+      // Reading the document successfully clears its failure.
+      const read=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({policyId:failed})}));
+      assert.equal(read.status,200);
+      const after=byId((await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json()).documents);
+      assert.equal(after.has(failed),false);
+      assert.equal((await db.query<{n:unknown}>("SELECT reading_cache->'benefit_read_failure' AS n FROM policies WHERE id=$1",[failed])).rows[0].n,null);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[waiting,failed,resting]]);
+    });
     await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.

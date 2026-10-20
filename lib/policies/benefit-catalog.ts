@@ -1,4 +1,5 @@
 import { replacedFigures } from "./amendments";
+import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-failures";
 import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
@@ -1093,6 +1094,7 @@ export async function replaceBenefitCatalog(accountId:string,policyId:string,ben
   // said nothing" and "never read" look identical in the benefit table, and
   // confusing them makes a document ask to be read again forever.
   await query("UPDATE policies SET benefits_indexed_at=now() WHERE id=$1 AND account_id=$2",[policyId,accountId]);
+  await clearReadFailure(accountId,policyId,BENEFIT_READ_FAILURE_KEY);
   return benefits.filter(benefit=>!kept.has(benefitKey(benefit.benefitName))).length;
 }
 /** Two spellings of the same benefit name are the same benefit. */

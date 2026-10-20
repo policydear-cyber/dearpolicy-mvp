@@ -7,6 +7,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
+import { BENEFIT_READ_FAILURE_KEY,READ_FAILURE_REASON,noteReadFailure,readFailureNotes } from "@/lib/policies/read-failures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -55,12 +56,23 @@ async function conditionlessDocuments(accountId:string){
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
 }
+/** Where each unread document stands: waiting (not read yet) or failed (its
+ * last read failed; reasonCode/reason say why, in words safe to show). */
+async function readingStates(accountId:string,unread:Unread[]){
+  const notes=await readFailureNotes(accountId,unread.map(d=>d.id),BENEFIT_READ_FAILURE_KEY);
+  return unread.map(d=>{
+    const note=notes.get(d.id);
+    return {policyId:d.id,name:d.name,state:note?"failed" as const:"waiting" as const,reasonCode:note?.reasonCode??null,
+      reason:note?READ_FAILURE_REASON[note.reasonCode]:null,attempts:note?.attempts??0,lastFailedAt:note?.lastFailedAt??null};
+  });
+}
 export async function GET(request:NextRequest){
   try{
     await ensureBenefitSchema();
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     const all=new URL(request.url).searchParams.get("all")==="1";
-    return NextResponse.json({unread:await unreadDocuments(accountId),...(all?{all:await allDocuments(accountId)}:{}),
+    const unread=await unreadDocuments(accountId);
+    return NextResponse.json({unread,documents:await readingStates(accountId,unread),...(all?{all:await allDocuments(accountId)}:{}),
       reader:readingModelLabel()});
   }catch(error){
     const authResponse=routeErrorResponse(error);
@@ -93,10 +105,18 @@ export async function POST(request:NextRequest){
     if(!target)return NextResponse.json({done:true,remaining:0});
     const { catalogueDocument,documentPages }=await import("@/lib/policies/catalog-builder");
     const pages=await documentPages(accountId,target.id);
-    if(!pages.length)
+    if(!pages.length){
+      await noteReadFailure(accountId,target.id,BENEFIT_READ_FAILURE_KEY,new Error("no_pages"));
       return NextResponse.json({error:"This document has no stored pages yet. Use Re-analyse on the Documents page instead."},{status:409});
-    const stored=body.conditionsOnly?0
-      :await catalogueDocument({accountId,policyId:target.id,productName:target.product_name,pages});
+    }
+    let stored=0;
+    try{
+      stored=body.conditionsOnly?0
+        :await catalogueDocument({accountId,policyId:target.id,productName:target.product_name,pages});
+    }catch(error){
+      if(!body.conditionsOnly)await noteReadFailure(accountId,target.id,BENEFIT_READ_FAILURE_KEY,error);
+      throw error;
+    }
     // Rebuilding a document's rules rebuilds its conditions too: a benefit
     // table without its exclusions is the half-read state this replaced.
     let conditions=0;

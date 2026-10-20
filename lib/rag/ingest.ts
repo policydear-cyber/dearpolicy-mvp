@@ -876,6 +876,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
          WHERE id=$1 AND account_id=$2`,
         [args.policyId, args.accountId],
       ).catch(() => { /* Never let the note itself fail the upload. */ });
+      const { BENEFIT_READ_FAILURE_KEY, noteReadFailure } = await import("@/lib/policies/read-failures");
+      await noteReadFailure(args.accountId, args.policyId, BENEFIT_READ_FAILURE_KEY, error);
       console.warn("Benefit cataloguing failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
 
