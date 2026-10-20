@@ -37,21 +37,24 @@ export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfNam
 export const isToConfirm = (row: KindRow) => !!row.status && row.status !== "confirmed" && row.origin !== "wording" && row.origin !== "person";
 
 /** A main kind that is missing but has a narrower, related benefit under another kind: not listed as missing. */
-const RELATED: { kind: string; event: string; note: string }[] = [
-  { kind: "death", event: "accidental_death", note: "For death, only accidental death was found (under Accidents and injuries)." },
-  { kind: "hospital", event: "accident_medical_expense", note: "For medical costs, only accident medical expenses were found (under Accidents and injuries)." },
+const RELATED: { kind: string; event: string; note: string; guessNote: string }[] = [
+  { kind: "death", event: "accidental_death", note: "For death, only accidental death was found (under Accidents and injuries).",
+    guessNote: "For death, plans like this may include accidental death, but your documents don’t confirm it yet (under Accidents and injuries)." },
+  { kind: "hospital", event: "accident_medical_expense", note: "For medical costs, only accident medical expenses were found (under Accidents and injuries).",
+    guessNote: "For medical costs, plans like this may include accident medical expenses, but your documents don’t confirm it yet (under Accidents and injuries)." },
 ];
 
 /** The main kinds of cover not found for one person (in plain words), and a note for each that is only partly found.
  * `alsoFound` adds kinds found elsewhere, such as benefits listed only on Benefits. */
 export function coverGaps(rows: KindRow[], alsoFound: string[] = []): { missing: string[]; notes: string[] } {
   const found = new Set([...rows.map((r) => kindOfRow(r).id), ...alsoFound]);
-  const events = rows.map((r) => r.eventType);
   const missing: string[] = [], notes: string[] = [];
   for (const k of COVER_KINDS) {
     if (!k.core || found.has(k.id)) continue;
-    const related = RELATED.find((r) => r.kind === k.id && events.includes(r.event));
-    if (related) notes.push(related.note); else missing.push(k.gapLabel ?? k.label.toLowerCase());
+    const related = RELATED.find((r) => r.kind === k.id && rows.some((row) => row.eventType === r.event));
+    // A related benefit seeded only from the plan type is not "found": say it may be there.
+    if (!related) missing.push(k.gapLabel ?? k.label.toLowerCase());
+    else notes.push(rows.some((row) => row.eventType === related.event && !isToConfirm(row)) ? related.note : related.guessNote);
   }
   return { missing, notes };
 }

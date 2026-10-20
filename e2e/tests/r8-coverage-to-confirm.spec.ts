@@ -34,10 +34,10 @@ const policies = [PA, LIFE].map((id, i) => ({ id, product_name: i ? "Family Shie
   page_count: 4, processing_error: null, created_at: "2026-10-01T00:00:00Z", linked_people: [{ id: "m1", name: "Alex Tan", relationship: "self", source: "ai_name_match" }],
   detected_people: [], tier_options: [], named_tiers: [] }));
 
-async function mock(page: Page) {
+async function mock(page: Page, ledgerRows = rows) {
   await page.route("**/api/**", async (route) => {
     const p = new URL(route.request().url()).pathname;
-    if (p === "/api/ledger") return json(route, { rows, family, reading: { pending: 0, inProgress: false, documents: [] } });
+    if (p === "/api/ledger") return json(route, { rows: ledgerRows, family, reading: { pending: 0, inProgress: false, documents: [] } });
     if (p === "/api/benefits") return json(route, { benefits });
     if (p === "/api/family") return json(route, { family });
     if (p === "/api/policies") return json(route, { documentSafetyMode: "malware_scan", policies });
@@ -55,7 +55,9 @@ test("R32-1: Coverage never says Covered for a row the documents don't confirm",
   const fracture = alex.getByTestId("coverage-row").filter({ hasText: "Fracture" });
   await expect(fracture).toContainText("Plans like this usually include this. Your documents don’t confirm it or print an amount.");
   await expect(fracture).not.toContainText("Covered.");
-  await expect(alex.getByTestId("coverage-row").filter({ hasText: "Accidental death" }).getByTestId("coverage-to-confirm")).toBeVisible();
+  // R34-1: the schedule prints this sum, so the line says what is unread, not that nothing confirms it.
+  await expect(alex.getByTestId("coverage-row").filter({ hasText: "Accidental death" }).getByTestId("coverage-to-confirm"))
+    .toHaveText("To confirm: the schedule prints this amount, but its wording hasn’t been read to confirm what it pays for.");
   await expect(alex.locator(".coverage-kinds")).toContainText("Accidents and injuries (to confirm)");
   // The confirmed wording row still says Covered.
   await expect(alex.getByTestId("coverage-row").filter({ hasText: "Hospital and surgical benefit" })).toContainText("Covered.");
@@ -70,6 +72,14 @@ test("R32-2: a hospital benefit typed 'other', or found only on Benefits, is not
   const grace = page.getByTestId("coverage-person").filter({ hasText: "Grace Tan" });
   await expect(grace.getByTestId("coverage-gaps")).toContainText(/death cover/i);
   await expect(grace.getByTestId("coverage-gaps")).not.toContainText(/hospital/i);
+});
+
+test("R34-2: a guessed accident medical row does not say medical costs were found", async ({ page }) => {
+  await mock(page, rows.filter((r) => r.familyMemberId === "m1" && r.policyId === PA));
+  await page.goto("/ledger");
+  const gaps = page.getByTestId("coverage-person").filter({ hasText: "Alex Tan" }).getByTestId("coverage-gaps");
+  await expect(gaps).toContainText("plans like this may include accident medical expenses, but your documents don’t confirm it yet");
+  await expect(gaps).not.toContainText("were found");
 });
 
 test("R32-1: Family and Documents mark unconfirmed cover", async ({ page }) => {
