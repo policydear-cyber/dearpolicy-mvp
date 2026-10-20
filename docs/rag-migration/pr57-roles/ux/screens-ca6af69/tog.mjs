@@ -1,0 +1,14 @@
+import { chromium } from '/home/user/dearpolicy-mvp/node_modules/playwright/index.mjs';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+const reqs=[]; p.on('response', r=>{ if(r.request().method()!=='GET') reqs.push(r.request().method()+' '+r.url().replace('http://localhost:3300','')+' '+r.status()); });
+await p.goto('http://localhost:3300/policies',{waitUntil:'domcontentloaded'}); await p.waitForTimeout(4000);
+const tog = p.getByRole('button',{name:/Tan Hui Min Grace/}).first();
+console.log('before', await tog.innerText(), await tog.getAttribute('aria-pressed'), 'disabled', await tog.isDisabled());
+await tog.click(); await p.waitForTimeout(3000);
+console.log('after', await tog.innerText(), await tog.getAttribute('aria-pressed'));
+console.log(reqs.join('\n'));
+const msgs = await p.locator('[role=status],[role=alert],.toast,.notice').allInnerTexts(); console.log('status msgs', msgs);
+await p.reload({waitUntil:'domcontentloaded'}); await p.waitForTimeout(4000);
+console.log('after reload', await p.getByRole('button',{name:/Tan Hui Min Grace/}).first().innerText());
+await b.close();
