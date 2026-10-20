@@ -40,7 +40,11 @@ function rowKey(name: string) {
 const GENERIC_ROW = /^(?:(?:all|any)?others?\w*|balance|remaining|miscellaneous|misc)$/;
 /** What a row pays for, beyond its name: the traits it responds to and the ones it requires. A "Leg" row in a fracture
  * table and a "Leg" row in a dismemberment table share a name and nothing else. */
-const sameBenefitKey = (b: CatalogBenefit) => [rowKey(b.benefitName), [...(b.requires ?? [])].sort().join(","), [...b.traits].sort().join(",")].join("|");
+// Only the traits that separate benefits are compared: the catalog gives the same row its other traits by different
+// paths (keywords, or the reader's category: catalog-builder.ts readerTraits), so one printed by two documents differs there.
+const DISTINGUISHING = new Set(["death", "disability", "illness", "hospitalisation"]);
+const sameBenefitKey = (b: CatalogBenefit) => [rowKey(b.benefitName), [...(b.requires ?? [])].sort().join(","),
+  b.traits.filter((t) => DISTINGUISHING.has(t)).sort().join(",")].join("|");
 /** The event a row's own words name, or null when they name none ("Hip 75%"). */
 const namedEvent = (b: CatalogBenefit) => { const e = eventForBenefitName(`${b.benefitName} ${b.quote}`).event; return e === "other" ? null : e; };
 

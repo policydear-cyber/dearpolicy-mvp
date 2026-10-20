@@ -1497,6 +1497,11 @@ export function runSystemRegressions(){
     const generic=[row({id:"o1",policyId:"summary",benefitName:"Others",formulaKind:"fixed",formulaValue:500,quote:"Others 10%"}),
       row({id:"o2",policyId:"benefit-summary",benefitName:"Others",quote:"Others 10%",formulaValue:0.1})];
     assert.equal(amountAlternatives(scheme,generic,name).size,0,"\"Others\" says nothing about which benefit it is");
+    // Critic R31-2: one row printed by two documents, its traits given by different paths (keywords in one, the reader's
+    // category in the other), is still one benefit.
+    const twoPaths=[row({id:"k1",policyId:"summary",formulaKind:"fixed",formulaValue:2500,traits:["bodily_injury","accident"],quote:"Leg 50%"}),
+      row({id:"k2",policyId:"benefit-summary",traits:["accident","bodily_injury","medical_expense"],quote:"Leg 50%"})];
+    assert.equal(amountAlternatives(scheme,twoPaths,name).get("k1")?.options.length,2);
     // Control: the same fracture row printed by two documents still groups.
     const same=[row({id:"s1",policyId:"summary",formulaKind:"fixed",formulaValue:2500,quote:"Leg 50%"}),row({id:"s2",policyId:"benefit-summary",quote:"Leg 50%"})];
     assert.equal(amountAlternatives(scheme,same,name).get("s1")?.options.length,2);
@@ -1509,6 +1514,13 @@ export function runSystemRegressions(){
     const liability={planName:"Travel",sourcePage:1,benefitName:"If you are liable for accidental death, injury or damage to other people",eventType:"accidental_death" as const,
       paysKind:"lump_sum" as const,amount:500000,quote:"If you are liable for accidental death, injury or damage to other people S$500,000"};
     assert.equal(rowSupported(liability,page),false,"liability to other people is still not the person's accidental death");
+    // Critic R31-1: a liability quote the model labelled "Accidental Death" is still liability to other people.
+    const labelled={planName:"Travel",sourcePage:1,benefitName:"Accidental Death",eventType:"accidental_death" as const,paysKind:"lump_sum" as const,amount:500000,
+      quote:"Legal liability for accidental death or bodily injury to third parties S$500,000"};
+    const thirdPartyPage="Accidental Death\nLegal liability for accidental death or bodily injury to third parties S$500,000";
+    assert.equal(rowSupported(labelled,thirdPartyPage),false,"the quote's third-party liability is not the person's own death cover");
+    assert.equal(rowSupported({...death,quote:"Accidental Death 100% of Sum Insured. We are not liable to pay for death caused by war."},
+      "Accidental Death 100% of Sum Insured. We are not liable to pay for death caused by war."),true,"\"not liable to pay\" is still an exclusion");
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under

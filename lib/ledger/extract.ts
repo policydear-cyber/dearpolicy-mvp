@@ -16,7 +16,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalText } from "@/lib/chat/facts";
-import { EVENTS,THIRD_PARTY_LIABILITY,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { EVENTS,THIRD_PARTY_LIABILITY,THIRD_PARTY_SENSE,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { ensureLedgerSchema } from "@/lib/ledger/store";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
@@ -110,9 +110,10 @@ export function rowSupported(row:ExtractedRow,pageText:string){
   // One plan column's figure is not the person's figure, and "Not covered" pays nothing.
   if(row.amount!=null&&rowFiguresDependOnPlan(part))return false;
   const names=[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)).join(" ");
-  // Liability to other people is never the insured person's own death or injury benefit. Only the
-  // row's own name says so: a quote's "the Company shall not be liable for ..." is an exclusion, not the benefit.
-  if(THIRD_PARTY_LIABILITY.test(names)&&row.eventType!=="other")return false;
+  // Liability to other people is never the insured person's own death or injury benefit. The row's own name says so
+  // in any wording; the printed quote only in the third-party sense, since its "the Company shall not be liable for
+  // ..." is an exclusion of the person's own cover (and the model's label may not mention liability at all).
+  if((THIRD_PARTY_LIABILITY.test(names)||THIRD_PARTY_SENSE.test(part))&&row.eventType!=="other")return false;
   return eventSupported(row.eventType,[names,part].join(" "));
 }
 function numbersOnPage(row:ExtractedRow,text:string){
