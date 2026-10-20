@@ -6,7 +6,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
-import { addLedgerRow,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
+import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
 import { ledgerReadDocuments,ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
@@ -34,7 +34,9 @@ export async function GET(request:NextRequest){
     const member=url.searchParams.get("familyMemberId");
     const people=(await family(accountId)).rows;
     const rows=await ledgerFor(accountId,people);
-    const shown=rows.filter(r=>!member||r.familyMemberId===member).map(r=>shape(r,people));
+    // Either/or amounts travel with each member row as one group, never as one picked figure.
+    const alternatives=await ledgerAlternatives(accountId,people).catch(()=>new Map());
+    const shown=rows.filter(r=>!member||r.familyMemberId===member).map(r=>({...shape(r,people),alternatives:alternatives.get(r.id)??null}));
     const summary={
       total:shown.length,
       confirmed:shown.filter(r=>r.status==="confirmed").length,

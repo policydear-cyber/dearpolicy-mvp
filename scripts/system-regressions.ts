@@ -17,7 +17,8 @@ import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCove
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
-import { applyImpliedScaleLimit,corroborateInferredRules,holdNonMonotonicBands,impliedScaleLimit } from "@/lib/insurance/scale-limit";
+import { applyImpliedScaleLimit,corroborateInferredRules,holdNonMonotonicBands,impliedScaleLimit,resolveStoredRules } from "@/lib/insurance/scale-limit";
+import { amountAlternatives,ALTERNATIVES_NOTE } from "@/lib/policies/amount-alternatives";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1417,6 +1418,61 @@ export function runSystemRegressions(){
     // Nothing to corroborate means nothing is changed.
     assert.equal(impliedScaleLimit([share("Hip",0.75)]),null);
     assert.equal(impliedScaleLimit([share("Hip",0.75),amount("Hip",3_750)]),null,"a single pair is not agreement");
+  });
+  test("A fracture row printed as a share of a fixed limit and as a share of the sum insured is two alternatives, never one pick or a total",()=>{
+    // Policy Evidence Reviewer, 20 Oct (mnt/project-files/ux-live/release-set/reviewer-confirmations.md): the product
+    // summary's table is "Compensation (% of S$5,000)" (wrist 25%, hip 75%) and the benefit summary's is "Compensation
+    // Schedule (% of Sum Insured)" (wrist 20%, hip 75%). The second heading PRINTS its base, so it is not rewritten to a
+    // share of the S$5,000 limit implied by the first document (the Benefits page showed the wrist as S$1,000), and the
+    // two readings are alternatives the insurer decides between.
+    const headingNote=(p:number)=>"DearPolicy read this as "+p+"% of the sum insured, from the heading of the schedule this row sits in.";
+    const row=(over:Partial<CatalogBenefit>):CatalogBenefit=>({id:String(over.id),policyId:"doc",productName:"Group Personal Accident",
+      benefitName:"x",traits:["bodily_injury","accident"],requires:["accident"],formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,
+      offsetDays:null,maximumDays:null,sourcePage:1,quote:"",conditions:[],requirements:[],needsReview:false,...over});
+    const fixedLimit=(id:string,name:string,percent:number)=>row({id,benefitName:name,policyId:"summary",sourcePage:13,formulaKind:"fixed",
+      formulaValue:50*percent,quote:name+" "+percent+"%",conditions:["DearPolicy read this as "+percent+"% of the S$5,000 limit stated in the heading of this schedule."]});
+    // The real stored shape: read from the heading (basisInferred), the heading printing "% of Sum Insured".
+    const statedBase=(id:string,name:string,percent:number,inferred=true)=>row({id,benefitName:name,policyId:"benefit-summary",sourcePage:8,formulaKind:"sum_insured",
+      formulaValue:percent/100,basisInferred:inferred,needsConfirmation:inferred,quote:name+" "+percent+"%",conditions:[headingNote(percent)]});
+    const catalog=[
+      fixedLimit("ps-hip","Hip",75),statedBase("bs-hip","Hip",75),
+      fixedLimit("ps-wrist","Arm , Elbow, Wrist or Ribs",25),statedBase("bs-wrist","Arm, Elbow, Wrist or Ribs (Other Fracture)",20),
+      fixedLimit("ps-ankle","Jaw, Pelvis, Leg^, Ankle or Knee",50),statedBase("bs-ankle","Jaw, Pelvis, Leg, Ankle or Knee (Other Fracture)",50),
+      fixedLimit("ps-neck","Neck, Skull or Spine (Full Break)",100),statedBase("bs-neck","Neck, Skull or Spine (Full Break)",100,false),
+      // A dismemberment row really is a share of the sum insured.
+      row({id:"bs-eye",benefitName:"Sight in one eye, except perception of light",policyId:"benefit-summary",sourcePage:6,formulaKind:"sum_insured",formulaValue:0.5,basisInferred:true,conditions:[headingNote(50)]}),
+    ];
+    const resolved=resolveStoredRules(catalog);
+    const byId=(id:string)=>resolved.find(b=>b.id===id)!;
+    // Negative control: the stated-base rows are not rewritten to a fixed S$3,750 / S$1,000, and the dismemberment row stays.
+    for(const id of ["bs-hip","bs-wrist","bs-ankle","bs-neck","bs-eye"])assert.equal(byId(id).formulaKind,"sum_insured",id+" keeps the base its own heading prints");
+    assert.equal(byId("bs-hip").formulaValue,0.75);
+    assert.equal(byId("bs-wrist").formulaValue,0.2);
+    assert.doesNotMatch(byId("bs-wrist").conditions.join(" "),/not of the plan's sum insured|does not say what the percentage is of/);
+    const scheme:PolicyContract={...contract,coverages:[
+      coverage({id:"gtl",category:"Group Term Life",amount:1_000_000,productName:"Group Term Life"}),
+      coverage({id:"gpa",category:"Group Personal Accident",amount:600_000,productName:"Group Personal Accident"}),
+    ]};
+    const groups=amountAlternatives(scheme,resolved,id=>id==="summary"?"Product Summary":"Benefit Summary");
+    const figures=(id:string)=>groups.get(id)?.options.map(o=>o.amountText).sort();
+    assert.deepEqual(figures("bs-hip"),["S$3,750","S$450,000"].sort(),"hip: 75% of S$5,000 or 75% of S$600,000");
+    assert.deepEqual(figures("bs-wrist"),["S$1,250","S$120,000"].sort(),"wrist: 25% of S$5,000 or 20% of S$600,000");
+    assert.deepEqual(figures("ps-wrist"),figures("bs-wrist"),"the same group on every member row");
+    assert.equal(groups.get("ps-wrist")?.groupId,groups.get("bs-wrist")?.groupId);
+    assert.deepEqual(figures("bs-ankle"),["S$2,500","S$300,000"].sort(),"ankle: 50% of S$5,000 or 50% of S$600,000");
+    assert.deepEqual(figures("bs-neck"),["S$5,000","S$600,000"].sort(),"a stated base that was never heading-inferred groups the same way");
+    // No single pick, no total, and the insurer decides.
+    const wrist=groups.get("bs-wrist")!;
+    assert.equal(wrist.options.length,2);
+    assert.equal(wrist.note,ALTERNATIVES_NOTE);
+    assert.match(wrist.note,/never added together; the insurer decides/);
+    const shown=JSON.stringify([...groups.values()]);
+    assert.doesNotMatch(shown,/121,250|453,750|302,500|S\$1,000(?![,\d])/);
+    assert.match(wrist.options.find(o=>o.rowId==="bs-wrist")!.basis,/20% of the S\$600,000 Group Personal Accident sum insured/);
+    assert.match(wrist.options.find(o=>o.rowId==="ps-wrist")!.basis,/25% of the S\$5,000 limit/);
+    assert.equal(groups.has("bs-eye"),false,"a row stated once has no alternatives");
+    // One option that cannot be worked out (no sum insured to take the share of) drops the whole group.
+    assert.equal(amountAlternatives({...scheme,coverages:[]},resolved,()=>"x").size,0);
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under

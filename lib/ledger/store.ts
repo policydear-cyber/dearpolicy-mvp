@@ -19,6 +19,7 @@ import { statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 
 export type LedgerRow={
@@ -326,4 +327,31 @@ export async function ledgerFor(accountId:string,people:ClaimPerson[]):Promise<L
     if(Number(all.rows[0]?.n??0)===0){await seedLedger(accountId);rows=await loadLedger(accountId,ids);}
   }
   return rows;
+}
+
+/** Either/or amounts for ledger rows (lib/policies/amount-alternatives.ts): the same benefit worked out two ways for one
+ * person. A ledger keeps one row per event, so the other way is usually not a row of its own; the group names it by its
+ * benefit ("benefit:<id>") and by its ledger row where there is one. Keyed by ledger row id. */
+export async function ledgerAlternatives(accountId:string,people:ClaimPerson[]):Promise<Map<string,AmountAlternatives>>{
+  const out=new Map<string,AmountAlternatives>();
+  const seeded=(await query<{id:string;seed_key:string;family_member_id:string}>(
+    "SELECT id::text,seed_key,family_member_id::text FROM coverage_rules WHERE account_id=$1 AND seed_key LIKE 'benefit:%' AND status<>'rejected'",[accountId]).catch(()=>({rows:[]}))).rows;
+  if(!seeded.length)return out;
+  const ledgerRowFor=new Map(seeded.map(r=>[split(r.seed_key)+"|"+r.family_member_id,r.id]));
+  const inventory=await loadPolicyInventory(accountId,people);
+  const documentIds=[...new Set(inventory.contracts.flatMap(c=>[...c.documents,...c.references].map(d=>d.id)))];
+  if(!documentIds.length)return out;
+  const catalog=await loadBenefitCatalog(accountId,documentIds).catch(()=>[] as CatalogBenefit[]);
+  const names=new Map(inventory.contracts.flatMap(c=>[...c.documents,...c.references]).map(d=>[d.id,d.product_name??d.original_filename]));
+  for(const contract of inventory.contracts){
+    const docs=new Set([...contract.documents,...contract.references].map(d=>d.id));
+    const groups=amountAlternatives(contract,catalog.filter(b=>docs.has(b.policyId)),id=>names.get(id)??"Your document");
+    for(const [benefitId,group] of groups){
+      const rowId=ledgerRowFor.get(benefitId+"|"+contract.ownerId);
+      if(!rowId)continue;
+      out.set(rowId,{...group,options:group.options.map(o=>({...o,rowId:ledgerRowFor.get(o.rowId+"|"+contract.ownerId)??"benefit:"+o.rowId}))});
+    }
+  }
+  return out;
+  function split(seedKey:string){return seedKey.split("|")[0].slice("benefit:".length);}
 }
