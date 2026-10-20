@@ -45,7 +45,7 @@ so I repeated the chat journeys only. The GP-bill fix (G1, G2) has no browser sc
 
 Top issue 1 (S$120,000 / S$300,000 / S$450,000 "Other Fracture" alternative for a stated closed fracture), top issue 2
 (sources not openable and duplicated), top issue 3 (dense prose), the unmarked superseded answer, the unreadable-upload
-card and the family/library count mismatch. Booklet-library journeys SA2, SA3, SA5 and SA6 give the same figures as on
+card and the family/library count mismatch. actuallib-household journeys (not the `booklet` household; earlier mislabelled) SA2, SA3, SA5 and SA6 give the same figures as on
 main.
 
 ## Policy Evidence Reviewer answers (relayed by the coordinator; EVIDENCE.md sections 6-7 @ ca3742d)

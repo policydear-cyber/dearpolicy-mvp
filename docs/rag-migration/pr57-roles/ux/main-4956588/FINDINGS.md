@@ -29,7 +29,7 @@ Role: User Experience Acceptance Agent. Date: 2026-10-20. Tested commit: `495658
 
 ### 1. A closed fracture shows a "could be S$120,000 / S$300,000 / S$450,000" alternative next to S$1,250 to S$3,750 (critical, pending fact check)
 
-- Steps: fracture household, "grace fell down and broke her arm" (`fr1.txt`, `shots/fr1-t1.jpg`). Booklet library,
+- Steps: fracture household, "grace fell down and broke her arm" (`fr1.txt`, `shots/fr1-t1.jpg`). actuallib household (synthetic; its library includes a benefits booklet; earlier labelled "Booklet library" in error),
   "Daniel fractured his tibia… closed fracture" then "Correction: it was his hip" (`SA2x.txt`, `SA3x.txt`, `SA4.txt`).
 - On screen: two "conditional illustrations" side by side. One is S$1,250 (arm), S$2,500 (leg) or S$3,750 (hip) from the
   Simple Fracture table. The other is S$120,000, S$300,000 or S$450,000, a percentage of a S$600,000 personal accident sum
@@ -111,7 +111,7 @@ Each finding is labelled as factual (F), usability (U) or visual preference (V).
 
 ## Questions for the Policy Evidence Reviewer (route via coordinator)
 
-1. Fracture and actuallib/booklet households: do any documents define "Other Fracture" (for example compound or open)? If
+1. Fracture and actuallib households (I did not run the separate `booklet` household): do any documents define "Other Fracture" (for example compound or open)? If
    so, should a stated closed fracture get the S$120,000 / S$300,000 / S$450,000 alternative at all?
 2. Is the S$600,000 Group Personal Accident sum insured printed for **both** Daniel and Grace in the fracture household?
    In actuallib, Grace's is S$100,000.
