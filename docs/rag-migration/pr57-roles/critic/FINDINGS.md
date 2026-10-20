@@ -503,3 +503,55 @@ wording (`absence-scope.ts:229-234`) is fine.
 dropping it. R6-1 and R6-2 are closed. Nothing in C4 states a wrong claimable amount. The remaining items stay listed as open:
 R6-3, R6-4, R7-2, R7-3, the reference-quote qualifier, superseded answers not marked, C1-3, the F4 test, no live run, and the
 Claude switch unverified.
+
+---
+
+# Round 8: final review of C5 `177c0734` (delta `fbeed4af..177c0734`; product code in 3 files)
+
+## R7-1: closed
+
+C4's `otherTrip` suppression is removed. `loop.ts` at C5 is byte-identical to C3 (same blob hash). No death benefit is dropped for
+a trip any more. The travel amount is now said with what its own page prints: `tripLimits` (`statement-render.ts:78-90`) appends
+the "Insured Person", "Period of Insurance" and "Destination" lines verbatim, each cited by an exact span (`evidenceAt`), and says the
+insurer confirms whether the trip fits. That meets the contract: the qualifier is kept and the benefit is not hidden.
+
+## Other C5 changes
+
+- The partial-copy wording is definite only when the stored distinct pages are fewer than a known page count
+  (`absence-scope.ts:233`). Correct.
+- "an open fracture" (R7-3): closed.
+
+## New finding
+
+**R8-1. Low-Medium (wording; no amount changes): the "trip" sentence also fires on annual schedules.** `tripLimits` runs for any
+record whose source page has a line starting "Period of Insurance:" *or* "Destination:". Annual schedules print a period too.
+The repo's own Tan household PA schedule prints "Period of Insurance: 01/03/2026 to 28/02/2027"
+(`scripts/fixtures/reliable-chat/tan.ts:24`). A benefit sourced from such a page gets "... the period of insurance
+“01/03/2026 to 28/02/2027”; whether that trip fits this event is for the insurer to confirm". That reads as if a Personal Accident
+benefit depended on a trip. The quoted period itself is useful. Fix (one condition): say "trip" only when a Destination line is
+printed; otherwise "whether this period covers the date of the event is for the insurer to confirm". The Test engineer should check
+whether any Tan expectation now sees the added sentence.
+
+## Full diff `4956588..177c0734`
+
+Nothing new. Every product-code change since round 5 is covered by rounds 6-8. The round-6 cases (R6-1, R6-2) depend only on
+`absence-scope.ts`, whose only C5 change is the partial-copy wording, so they stand as reproduced on C4.
+
+## Final release verdict (Critic) on C5
+
+**No Critic blocker remains.** Nothing found in C5 states a wrong claimable amount, hides a documented benefit, or crosses
+between people.
+
+C5 is release-ready from the code review, provided the PR lists these as open, accepted items:
+- R8-1 (trip wording on annual schedules; recommended as a quick follow-up);
+- R6-3 (exclusion sentences counted as medical-expense wording);
+- R6-4 ("Policy Policy");
+- R7-2 (a non-member's row sharing a preferred name);
+- quoted scheme wording without a "not proof of cover" qualifier;
+- superseded answers not marked after a correction (fix before public launch);
+- C1-3 (re-analysis in place);
+- no test for F4.
+
+Evidence limit, unchanged: all evidence is scripted or replay on the OpenAI configuration. The model-facing changes (absence
+refusals, server quotes, the GP fallback) have had no live run. A live check needs DC's authorisation, and the Claude switch
+(PR #59) needs its own check. Whether to ship before that live check is DC's call.
