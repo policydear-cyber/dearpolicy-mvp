@@ -391,3 +391,33 @@ Low items, none blocking:
 - Still model-dependent from earlier rounds: no panel/non-panel question, and the conditional accident benefits (ambulance S$500, hospital stay S$250, fracture alternatives) are not added by the server.
 
 **Verdict:** every statement traced is supported, and nothing supported is newly omitted. **Unsupported shown:** none found. **Not available:** whether DC's real library prints these pages, which policy they belong to, and whether his real certificate lists it.
+
+## 15. PR #70 (draft, Developer): `bottomLine` and `statements[]` against `EXPECTED-STATEMENTS.md`, head `0cd6a495edcad796ac1b98f5ec6e58f69837f770`
+
+| worker | task | SHA | status | evidence | blocker |
+| --- | --- | --- | --- | --- | --- |
+| Policy Evidence Reviewer | compare statements and bottom line per journey with qc/EXPECTED-STATEMENTS.md | `0cd6a49` | done | E1: the Developer's `answer-shape-output.txt` (Scripted, fracture household); E2-E5: code trace of `answer-statements.ts`, `statement-render.ts` `structure()`, `monetary-boundary.ts` `reconcileStatements` | no `node_modules` here, so E2-E5 were not run; no model call |
+
+### Per journey
+
+| journey | unsupported | missing condition / footnote | wrong person, currency or basis | dropped |
+| --- | --- | --- | --- | --- |
+| **E1 fracture** (output) | none | "only if caused by an Accident" on both cards (known). Otherwise matches: S$1,250 card carries the `#` thumb/finger/palm note and no Core/Voluntary note; S$120,000 card carries the Other Fracture note and the Core/Voluntary condition | none: Grace, S$600,000, as of 2022-10-06, S$ stated. After the correction: Daniel, his own row (e37), Grace's figures withdrawn | low: the S$120,000 card names only "Certificate of Insurance Part 2 p.8" as its source; the certificate row that sets the base appears only in `citationIds` |
+| **E1 turn 2** (X-ray: yes) | none: same figures, no new question, no X-ray requirement | as above | none | none |
+| **E2 GP bill** (trace) | none expected: the G1/G2 and quoted lines are plain-text statements, so their wording is unchanged from PR #64 (section 14) | none new | none | **bottom line likely dropped.** `reconcileStatements` keeps a bottom line only if every number in it is on an amount card, and it counts dates and page numbers as numbers. The not-found statement names "6 October 2022", so the bottom line becomes null, or falls back to "If you go ahead, start here: ..." The expected bottom line ("none of his listed cover prints a GP benefit; not the same as not covered") is lost. Needs a run to confirm |
+| **E3 death abroad** (trace, livelib) | the travel S$100,000 becomes an **amount card for Adrian**. Its card carries the trip person, period and destination as conditions (right), and "whether that trip fits this event is for the insurer to confirm". For a death on 5 Oct 2026 in Japan, the printed period (ended 17/03/2025) and destination contradict it. E3 says it must not be shown as an amount that may apply. This is the C5 wording now promoted to a card | Repatriation keeps its condition (right). Term Life card has no claim step (the 6-month notice stays a separate paragraph) | none | **bottom line**: the cards are `benefit_terms`, so no amount bottom line is built. The next step "notify ... within 6 months" contains a digit and is skipped. The expected "three death benefits may apply, separately, never added" is not produced. Accidental Death 100% of S$600,000 stays plain text (no loss) |
+| **E4 travel** (trace, livelib) | **bottom line misleading** when the answer has one paragraph: `bottomLine()` gives "For Adrian, accidental death: S$100,000, if its conditions are met, and only the insurer can confirm it applies to this event". The period, destination and "the period ended 17 Mar 2025" are on the card but not in the bottom line, so the one-line outcome reads as live cover. Contract: never remove a qualifier and leave a misleading amount | none on the card | none | none |
+| **E5 conflicting documents** (trace, actuallib hip) | none | none: the S$450,000 card gets the Core/Voluntary condition (row notes) and the "labelled as neither" note; S$3,750 carries none. Both are grouped either_or, and the bottom line reads "either S$3,750 or S$450,000 ... alternatives, not a total, only the insurer decides" | none: Daniel, 75% of S$600,000, as of 2024-04-01 | none |
+
+### Cross-journey findings
+
+1. **Medium, either_or grouping is answer-wide.** `buildStatements` puts *every* calculation card into group g1 when any two-document note exists. "Daniel broke his hip and his arm" would get "either S$3,750, S$450,000, S$1,250 or S$120,000" in its bottom line. That is wrong: the hip and the arm are separate injuries, and only each pair is either-or. Group only the two illustrations the relation note names.
+2. **Medium, reference wording carded as personal (K2, seen in output).** "Accidental Hospital Recuperation Benefit: 250 ... for Grace" comes from the Benefit Summary, which is not personal. The verdict "its accident condition is not met for this stay" is a separate statement. A card shown on its own reads as a possible payout for a sickness stay, which is the risk ruled on in C1. Put the not-met verdict on the card as a condition, or leave the card's person empty for reference terms. K2 also gets no bottom line, although "on what you told me, the accident condition is not met" is the expected outcome.
+3. **Low, dates count as figures for the bottom line.** Dates and page numbers count as figures in the bottom line check. Every outcome sentence that names a date is dropped, and the answer falls back to the next step: cancer (K6a) shows "If you go ahead, start here: ..." instead of "Group Living Care S$350,000 listed as of 6 Oct 2022; what it pays is not uploaded". Count only money figures, as `structure()` does.
+4. Correct and worth keeping: the figure-in = figure-out check, cards that never drop a condition's own amount, currency NOT stated for the bare "$250", and citations narrowed to the rows shown (the disappearance-at-sea citation is gone).
+
+**Verdict on 0cd6a49:**
+- No wrong amount, person, currency or basis on any card I traced.
+- Fracture matches the expected statements apart from the known accident condition.
+- Not ready as the shown answer yet. A misleading travel bottom line and the travel card in a death answer (both synthetic), plus answer-wide either_or, would mislead once the page shows only cards and the bottom line. Bottom lines are also missing on GP bill, death and sickness.
+- E2 to E5 need the Developer's repro run on fracture-household GP, livelib death and travel, and actuallib hip to confirm.
