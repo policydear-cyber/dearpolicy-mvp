@@ -1623,3 +1623,22 @@ fires only on a clean first message. Before switching it on, one short paid chec
 should include "Sarah fell and Daniel took her to hospital" and one clean message. It should confirm two things: the model
 resolves Sarah itself in the first case, and the model-call count drops in the second. The saving is one model call (about 2.5 to
 3 seconds), and only on a conversation's first message.
+
+---
+
+# Round 28: PR #73 at `69e9065` (R27-1 fix, on by default)
+
+**R27-1 is closed.** A capitalised first word now counts as another name unless it is in `SENTENCE_STARTS`. I re-ran the 16
+messages from round 27 plus 5 more, with the PR's own code copied verbatim:
+
+- "Sarah fell and Daniel took her to hospital" and "Sarah fell. Daniel took her to hospital" now give no prefetch.
+- "Daniel broke his arm", "Yesterday Daniel broke his arm" and "My son Daniel broke his arm" still give Daniel.
+- Every round-26 trap still gives no one.
+
+The default is now on for hosted models, and `DEARPOLICY_PREFETCH_PERSON=0` turns it off.
+
+**Verdict: ready to merge**, with the production checks after deploy as agreed with the coordinator:
+
+- use real member names;
+- read the outcome from the trace;
+- have a deploy slot ready for the switch-off, because turning it off with the env flag needs a redeploy.
