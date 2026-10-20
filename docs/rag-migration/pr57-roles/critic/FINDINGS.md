@@ -1205,3 +1205,73 @@ R14 and R17 are all closed, and I found no regressions. The rest of the diff is 
 
 **Ready to merge** from the Critic's side. GitHub Actions is billing-blocked, so the local check results are the Test engineer's to
 confirm. The merge is DC's call.
+
+---
+
+# Round 21: PR #67 merge and deploy-safety check at `37777de`
+
+Scope: `git diff 0b56452 37777de`. That covers the `coverage-assignments.ts` save and restore, `member-exclusions.ts`,
+`sql/policy-member-exclusions.sql`, the exclusion checks in `linking.ts` and `ingest.ts`, `read-failures.ts` with the Benefits and
+Ledger reading states, and the runbook entry. Read only.
+
+## R16 re-check
+
+| Finding | Status at `37777de` |
+|---|---|
+| R16-1 re-tick restores cover | **Fixed for documents that name the person.** `rebuildForAddedPeople` re-runs `syncInsuredPersonToMember` from the stored reading, with no model call, and resets `ledger_read_at`, so the ledger re-reads and adds rows. For a generic booklet that names nobody, only the ledger rows come back, which matches how they were made. It runs after the save with errors logged and not surfaced, so a failure leaves the person ticked with their cover rebuilt on the next ledger read (R21-3). |
+| R16-3 atomic save | **Fixed.** Links, coverage rows, premiums, detected names, ledger rows, the remembered removal and the upload-profile move all run in one `withServiceTransaction`, every statement scoped by `account_id` and `policy_id`. The ids are authorised through the RLS client first. |
+| R16-4 a re-read or an in-flight read undoing the removal | **Fixed once the migration is applied.** Every automatic link writer skips a remembered pair: name match (`syncInsuredPersonToMember` returns early, before links or coverages), upload profile (`ingest.ts`) and matching wording (`linking.ts`). A read already running when the save lands is covered too, because the check happens at write time. Matching wording no longer overwrites a `user_declared` tick. Before the migration, behaviour is as on main, so a re-read can bring the person back. |
+| R16-5 "covers nobody" copy | **Fixed.** It now says to add them on the Family page first, or delete the document. |
+| R16-2 saved answers not marked | **Still open.** Not in scope here. Fix before public launch, together with "superseded answers unmarked". |
+
+## Deploy safety: code deployed before the migration
+
+- **Every reader of the new table checks first.** `exclusionsReady()` checks `to_regclass` and caches only `true`. Without the
+  table, `notExcludedClause` returns "", `isExcluded` returns false, and `saveDocumentCoverage` skips both exclusion statements.
+  Nothing queries the absent table, so Documents, link-person, re-reads and the chat cannot 500 on it.
+- **The reading-state additions are guarded too.** `readFailureNotes`, `noteReadFailure` and `clearReadFailure` check the
+  `reading_cache` column and swallow their own errors. `reading_cache` already exists in production, written by the ledger since
+  before this PR. So Coverage (`/api/ledger`) and Benefits (`/api/benefits/index`) only gain a `documents` field.
+- **No half-done removal.** The whole save is one transaction, with or without the table.
+- **Result:** deploying code first is safe. Removals made before the table exists are simply not remembered, which is main's
+  behaviour.
+
+## The migration
+
+- **Additive:** it creates one table and two indexes, and changes no existing table, column or row.
+- **Idempotent:** it uses `IF NOT EXISTS`, `DROP POLICY IF EXISTS` and then `CREATE POLICY`.
+- **RLS-scoped:** RLS is enabled with the same `is_household_member(account_id)` policies as `policy_members`, `anon` is revoked,
+  and the table is in `table-inventory.ts`.
+- **Reversible:** `DROP TABLE`, and the runbook gives the checks.
+
+## R21-1 (Low): the exclusion check doesn't compare households
+
+`notExcludedClause` matches on `policy_id` and `family_member_id` only. The RLS insert check is `is_household_member(account_id)`
+only. A signed-in member of household A who knew household B's document and person UUIDs could write a row with A's
+`account_id` through a browser grant. That row would stop B's automatic re-link. The UUIDs are random and never exposed across
+households, so this is not exploitable in practice, but it is cheap to close:
+
+- add `AND x.account_id = <the document's account>` to the clause;
+- add a `WITH CHECK` requiring that `policy_id` and `family_member_id` belong to `account_id`.
+
+This is a follow-up, not a blocker.
+
+## R21-2 (Low): rolling back needs a restart
+
+`exclusionsReady()` caches `true`. If the table is dropped as a rollback, warm servers keep querying it, and link-person saves and
+re-reads error until restarted. Add "redeploy, or restart the functions, after DROP TABLE" to the runbook's rollback line. The
+reverse case is handled: a warm server picks up a newly applied table, because `false` is not cached.
+
+## R21-3 (Low): a failed restore is silent
+
+When `rebuildForAddedPeople` fails, it only logs. The person shows as ticked, and their coverage rows wait for the next ledger
+read or a re-analysis. That is acceptable for now, and it should go on the list of things to show on screen later.
+
+## Verdict on PR #67 at `37777de`
+
+**Ready to merge** from the Critic's side. R16-1, R16-3, R16-4 and R16-5 are fixed, and R16-2 is still open for before launch.
+
+**Safe order:** either order works without errors. The better order is to **apply `sql/policy-member-exclusions.sql` first**
+(staging, then production, with DC's explicit yes, using the runbook's psql line and checks), then merge and deploy. That way
+remembered removals work from the first deploy. Merging first is also safe: removals made before the migration are simply not
+remembered, as on main. The migration and the merge are both DC's call.
