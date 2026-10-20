@@ -1,0 +1,13 @@
+import { chromium } from '/home/user/dearpolicy-mvp/node_modules/playwright/index.mjs';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: { width: 1366, height: 900 } });
+await p.goto('http://localhost:3300/chat',{waitUntil:'networkidle'});
+const ta = p.locator('textarea');
+console.log('placeholder:', await ta.getAttribute('placeholder'));
+await ta.fill('first line'); await ta.press('Shift+Enter'); await ta.type('second line');
+console.log('after shift+enter:', JSON.stringify(await ta.inputValue()));
+await ta.press('Enter'); await p.waitForTimeout(6000);
+console.log('after enter value:', JSON.stringify(await ta.inputValue()), 'bubble?', (await p.innerText('main')).includes('first line'));
+await p.screenshot({path:'enter-desktop.png'});
+const hint = await p.locator('form.chat-composer').innerText(); console.log('composer text:', JSON.stringify(hint));
+await b.close();
