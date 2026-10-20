@@ -80,3 +80,23 @@ Not done by the server (depends on the model): QC's expected answer also names t
 the 24-hour hospital stay, fracture) and that Living Care is not described. The server adds neither; a live run is needed to see
 whether the model states them. The quoted "$" amount inside a printed line is annotated by the existing currency-silence rule
 ("printed with a “$” sign"), which changes the quote's text.
+
+## C3 (`1766863`): Critic round 5 and UX regressions
+
+- **F1**: a scheme's own list of its group policies is never quoted as medical-expense wording (only the person's documents' other lines).
+- **A2**: the scheme-listing case reads only the product headings followed by a row for this person (their full name in the row) and
+  only those rows' dates.
+- **A3**: "doctor", "physician", "medical practitioner" and "charges / fees / bills / costs" near a medical word count as medical-expense
+  wording; any such line in the person's documents refuses the absence and is quoted instead.
+- **F2**: after a refused check the GP note says "I could not confirm from your documents what pays for the bill you mentioned", never
+  that the pages do not print one.
+- **F3**: the partial-scope statement is added only when it is about the answer's own subject.
+- **F4** (confirmed, no change): a quoted line with a bare "$" is still marked "printed with a “$” sign; the document does not say which
+  currency" (GP replay: the quoted medical-expenses line "up to 2,000 (printed with a “$” sign ...)").
+- **A1**: the "too / also" block was removed from person corrections; only an explicit correction moves facts.
+- **UX FX-K4B**: a cited reason from another benefit's section is now caught before the question card is built (the card asked about the
+  X-ray because a shifted replay id pointed at the mobility-aid passage). The correction line is back in turn 2.
+- **UX FX-K6B**: the server's partial-scope statement replaces "I couldn't confirm an answer to that from your documents".
+
+Results on C3 (scripted, no spend): GP group AC 12/12, GUARD 16/16; full acceptance AC 20/26 (same 6 open: R1, R2, R3, R7, R9, N5b),
+GUARD 41/41.
