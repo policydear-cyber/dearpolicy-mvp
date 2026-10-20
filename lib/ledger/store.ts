@@ -19,7 +19,8 @@ import { statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
-import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { amountAlternatives,type AmountAlternatives } from "@/lib/policies/amount-alternatives";
+import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,rowFiguresDependOnPlan,type EventType,type PaysKind } from "@/lib/ledger/events";
 
 export type LedgerRow={
   id:string;familyMemberId:string;policyId:string|null;planName:string;insurer:string|null;
@@ -129,21 +130,32 @@ function planLabel(contract:PolicyContract,productName:string|null,category?:str
   if(category&&category.toLowerCase()!==base.toLowerCase()&&!base.toLowerCase().includes(category.toLowerCase()))return base+" · "+category;
   return base;
 }
+const PLAN_COLUMNS_NOTE="The document prints a different figure for each plan, and which plan is yours is not shown, so no figure is taken from it.";
 function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
   const out:Seed[]=[];
+  // A row read once per plan column whose plan was not narrowed to this person's (selectTierRows keeps every column when
+  // their plan is unknown) is one benefit with several figures: it is seeded once, without a figure.
+  const rowKey=(b:CatalogBenefit)=>b.policyId+"|"+b.benefitName.toLowerCase()+"|"+(b.sourcePage??"");
+  const columns=new Map<string,Set<string>>();
+  for(const b of benefits)if(b.tier)columns.set(rowKey(b),new Set([...(columns.get(rowKey(b))??[]),b.tier]));
+  const seen=new Set<string>();
   for(const benefit of benefits){
+    // "Not covered" is a schedule term, not something the plan pays.
+    if(benefit.rowKind==="not_covered")continue;
+    const perPlan=(columns.get(rowKey(benefit))?.size??0)>1||(!benefit.tier&&rowFiguresDependOnPlan(benefit.quote));
+    if(perPlan){if(seen.has(rowKey(benefit)))continue;seen.add(rowKey(benefit));}
     const {event,detail}=eventForBenefitName(benefit.benefitName);
     const coverage=coverageForBenefit(contract,benefit);
     // A rule whose currency is written nowhere is not seeded: the ledger
     // cannot store an amount without labelling it, and SGD is never assumed.
     const currency=statedCurrencyCode(benefit.currency??coverage?.currency);
     if(!currency)continue;
-    const kind:PaysKind=benefit.formulaKind==="sum_insured"?"percent_of_sum":benefit.formulaKind==="fixed"?"lump_sum":benefit.formulaKind==="expense_cap"?"reimbursement_cap":benefit.formulaKind==="daily"?"per_day":"stated";
+    const kind:PaysKind=perPlan?"stated":benefit.formulaKind==="sum_insured"?"percent_of_sum":benefit.formulaKind==="fixed"?"lump_sum":benefit.formulaKind==="expense_cap"?"reimbursement_cap":benefit.formulaKind==="daily"?"per_day":"stated";
     out.push({familyMemberId:contract.ownerId,policyId:benefit.policyId,planName:planLabel(contract,benefit.productName),insurer:contract.insurer,
       eventType:event,detail:detail??(event==="other"?benefit.benefitName:null),cause:causeForBenefit(benefit.benefitName,benefit.requires??[]),paysKind:kind,
       amount:kind==="stated"?null:benefit.formulaValue,currency,sumBasis:kind==="percent_of_sum"?(coverage?.amount??null):null,
       offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays,
-      conditions:[...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean).slice(0,6),
+      conditions:[...(perPlan?[PLAN_COLUMNS_NOTE]:[]),...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean).slice(0,6),
       note:benefit.benefitName,sourcePage:benefit.sourcePage,quote:benefit.quote,origin:"wording",inferred:!!benefit.basisInferred,
       // The same trust rule the benefit catalogue itself uses: a rule needs a
       // person's confirmation only when its basis was inferred (read from a
@@ -175,6 +187,17 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
     }
   }
   return out;
+}
+const ACCIDENT_EVENTS=new Set(["accidental_death","fracture","dismemberment","accidental_disablement","accident_medical_expense"]);
+/** The cover a ledger row's "percentage of the sum insured" applies to, or null when that cannot be told. */
+export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:string;detail:string|null;cause:string|null;note:string|null}){
+  const label=EVENTS[row.event_type as EventType]?.label??row.event_type;
+  const name=[row.note,row.detail,label].filter(Boolean).join(" · ");
+  const accident=row.cause==="accident"||ACCIDENT_EVENTS.has(row.event_type);
+  const stub:CatalogBenefit={id:"ledger-row",policyId:"",productName:null,benefitName:name,traits:[],requires:accident?["accident"]:[],
+    formulaKind:"sum_insured",formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,sourcePage:null,quote:"",
+    conditions:[],requirements:[],needsReview:false};
+  return coverageForBenefit({...contract,coverages:contract.coverages.filter(c=>c.amount!=null&&c.amount>0)},stub);
 }
 /** Adds ledger rows for everything read so far that is not in the ledger yet. */
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
@@ -219,16 +242,17 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // A rule read from the wording ("100% of the Sum Insured") and the sum on
   // the certificate live in different documents of the same contract. Join
   // them here, once, so the row carries its own figure.
-  const unbased=await query<{id:string;policy_id:string|null;plan_name:string;family_member_id:string}>(
-    "SELECT id,policy_id,plan_name,family_member_id FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NULL AND policy_id IS NOT NULL",[accountId]);
+  const unbased=await query<{id:string;policy_id:string|null;plan_name:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null}>(
+    "SELECT id,policy_id,plan_name,family_member_id,event_type,detail,cause,note FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NULL AND policy_id IS NOT NULL",[accountId]);
   for(const row of unbased.rows){
     const contract=contracts.find(c=>c.ownerId===row.family_member_id&&[...c.documents,...c.references].some(d=>d.id===row.policy_id));
     if(!contract)continue;
-    const priced=contract.coverages.filter(c=>c.amount!=null&&c.amount>0);
-    const words=row.plan_name.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
-    const match=priced.find(c=>words.some(w=>(c.productName??"").toLowerCase().includes(w)||c.category.toLowerCase().includes(w)))??(priced.length===1?priced[0]:null);
+    // The cover the row pays under, chosen by what it pays on (an accident-scale row belongs to the accident cover, a death
+    // row to the life cover), the same join the Benefits page and the chat make. A group scheme lists every cover under
+    // one scheme name, so a name match ("shares a word with the plan") picked whichever cover came first.
+    const match=coverageForLedgerRow(contract,row);
     // A join made here, not a person's edit: updated_at is left alone, so a re-read still replaces the row.
-    if(match?.amount!=null)await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
+    if(match?.amount!=null&&match.amount>0)await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
   }
   // Round 10: one lookup for the keys already in the ledger and one insert for
   // the rest, instead of a lookup and an insert per seed (two queries for each
@@ -303,4 +327,31 @@ export async function ledgerFor(accountId:string,people:ClaimPerson[]):Promise<L
     if(Number(all.rows[0]?.n??0)===0){await seedLedger(accountId);rows=await loadLedger(accountId,ids);}
   }
   return rows;
+}
+
+/** Either/or amounts for ledger rows (lib/policies/amount-alternatives.ts): the same benefit worked out two ways for one
+ * person. A ledger keeps one row per event, so the other way is usually not a row of its own; the group names it by its
+ * benefit ("benefit:<id>") and by its ledger row where there is one. Keyed by ledger row id. */
+export async function ledgerAlternatives(accountId:string,people:ClaimPerson[]):Promise<Map<string,AmountAlternatives>>{
+  const out=new Map<string,AmountAlternatives>();
+  const seeded=(await query<{id:string;seed_key:string;family_member_id:string}>(
+    "SELECT id::text,seed_key,family_member_id::text FROM coverage_rules WHERE account_id=$1 AND seed_key LIKE 'benefit:%' AND status<>'rejected'",[accountId]).catch(()=>({rows:[]}))).rows;
+  if(!seeded.length)return out;
+  const ledgerRowFor=new Map(seeded.map(r=>[split(r.seed_key)+"|"+r.family_member_id,r.id]));
+  const inventory=await loadPolicyInventory(accountId,people);
+  const documentIds=[...new Set(inventory.contracts.flatMap(c=>[...c.documents,...c.references].map(d=>d.id)))];
+  if(!documentIds.length)return out;
+  const catalog=await loadBenefitCatalog(accountId,documentIds).catch(()=>[] as CatalogBenefit[]);
+  const names=new Map(inventory.contracts.flatMap(c=>[...c.documents,...c.references]).map(d=>[d.id,d.product_name??d.original_filename]));
+  for(const contract of inventory.contracts){
+    const docs=new Set([...contract.documents,...contract.references].map(d=>d.id));
+    const groups=amountAlternatives(contract,catalog.filter(b=>docs.has(b.policyId)),id=>names.get(id)??"Your document");
+    for(const [benefitId,group] of groups){
+      const rowId=ledgerRowFor.get(benefitId+"|"+contract.ownerId);
+      if(!rowId)continue;
+      out.set(rowId,{...group,options:group.options.map(o=>({...o,rowId:ledgerRowFor.get(o.rowId+"|"+contract.ownerId)??"benefit:"+o.rowId}))});
+    }
+  }
+  return out;
+  function split(seedKey:string){return seedKey.split("|")[0].slice("benefit:".length);}
 }

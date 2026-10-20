@@ -21,6 +21,7 @@ import { POST as linkPerson } from "@/app/api/policies/link-person/route";
 import { GET as listPolicies } from "@/app/api/policies/route";
 import { searchPassages } from "@/lib/rag2/search";
 import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { seedLedger } from "@/lib/ledger/store";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
@@ -1759,6 +1760,76 @@ async function main(){
       const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
+    });
+    await test("Coverage works a percentage out from the cover it pays under, and takes no plan column's figure or liability row as the person's",async()=>{
+      // Live release set (20 Oct): the Coverage page showed an accident-scale row (sight in one eye) as a percentage of the
+      // S$1,000,000 term life cover, while the Benefits page used the S$600,000 personal accident cover. A group scheme's
+      // certificate lists every cover under one scheme name, so joining a wording row to "a cover whose name shares a
+      // word" picked whichever came first.
+      const member=people[2].id,cert=uuid(702000);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Example Group Scheme','EGS-1','G-EGS','Group Insurance','certificate',true,95,'ready','egs.pdf','egs.pdf','scan_clean')",[cert,account,member]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[cert,member,account]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,'Group Term Life',1000000,'SGD','Example Group Scheme',1,'Group Term Life SGD 1,000,000',true)",[account,cert,member]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,'Group Personal Accident',600000,'SGD','Example Group Scheme',1,'Group Personal Accident SGD 600,000',true)",[account,cert,member]);
+      const row=async(eventType:string,cause:string|null,note:string)=>(await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,cause,pays_kind,amount,currency,note,origin,status) VALUES($1,$2,$3,'Example Group Scheme',$4,$5,$6,'percent_of_sum',0.5,'SGD',$5,'wording','confirmed') RETURNING id",[account,member,cert,eventType,note,cause])).rows[0].id;
+      const eye=await row("dismemberment","accident","Loss of sight in one eye");
+      const death=await row("death",null,"Death");
+      await seedLedger(account);
+      const basis=async(id:string)=>Number((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[id])).rows[0].sum_basis);
+      assert.equal(await basis(eye),600000,"An accident-scale row is a percentage of the personal accident cover");
+      assert.equal(await basis(death),1000000,"A death row is a percentage of the life cover");
+
+      // Live release set (20 Oct): a travel wording's third-party liability row ("if you are liable for accidental death,
+      // injury or damage to other people", one figure per plan column) showed as the person's own "Accidental death
+      // S$500,000", and a "Not covered" schedule term showed as a S$500 lump sum.
+      const benefit=(name:string,kind:string,value:number,quote:string,rowKind:string|null=null)=>db.query(
+        "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,row_kind) VALUES($1,$2,'Example Group Scheme',$3,ARRAY[]::text[],$4,$5,'SGD',7,$6,'[]'::jsonb,'[]'::jsonb,false,$7)",
+        [account,cert,name,kind,value,quote,rowKind]);
+      await benefit("If you are liable for accidental death, injury or damage to other people","fixed",500000,"If you are liable for accidental death, injury or damage to other people S$500,000 S$750,000 S$1,000,000");
+      await benefit("Sports equipment","fixed",500,"Sports equipment Not covered S$500 S$1,000","not_covered");
+      await benefit("Trip cancellation","fixed",7500,"If you have to cancel your entire trip S$7,500 S$10,000 S$15,000");
+      await seedLedger(account);
+      const seeded=(await db.query<{event_type:string;pays_kind:string;amount:string|null;note:string|null}>(
+        "SELECT event_type,pays_kind,amount::text,note FROM coverage_rules WHERE policy_id=$1 AND origin<>'person' AND note IS NOT NULL",[cert])).rows;
+      const liability=seeded.find(r=>/liable/.test(r.note??""));
+      assert.ok(liability,"The liability row is still listed");
+      assert.equal(liability!.event_type,"other","Liability to other people is not the person's accidental death");
+      assert.equal(liability!.amount,null,"One plan column's figure is not the person's");
+      assert.equal(seeded.some(r=>/Sports equipment/.test(r.note??"")&&r.amount!=null),false,"A \"Not covered\" row carries no amount");
+      assert.equal(seeded.find(r=>/Trip cancellation/.test(r.note??""))?.amount??null,null,"A per-plan cancellation limit is not given as the person's");
+      assert.equal(seeded.some(r=>r.event_type==="accidental_death"&&Number(r.amount)===500000),false);
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=$1",[cert]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=$1",[cert]);
+
+      // Either/or amounts (reviewer, 20 Oct): the wrist as 25% of a fixed S$5,000 limit in one table and 20% of the
+      // S$600,000 accident cover ("% of Sum Insured" printed in the heading) in another. Both pages send the two as one
+      // group on the member row -- never one picked figure (the Benefits page showed S$1,000), never a total.
+      // The two tables are in two documents (the product summary and the benefit summary).
+      const productSummary=uuid(702001);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Example Group Scheme','EGS-1','G-EGS','Group Insurance','product_summary',false,40,'ready','egs-ps.pdf','egs-ps.pdf','scan_clean')",[productSummary,account,member]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[productSummary,member,account]);
+      const ids=(await db.query<{id:string}>(
+        `INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES
+         ($1,$3,'Example Group Scheme','Arm , Elbow, Wrist or Ribs',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','["DearPolicy read this as 25% of the S$5,000 limit stated in the heading of this schedule."]'::jsonb,'[]'::jsonb,true,true),
+         ($1,$2,'Example Group Scheme','Arm, Elbow, Wrist or Ribs (Other Fracture)',ARRAY['bodily_injury','accident']::text[],ARRAY['accident']::text[],'sum_insured',0.2,'SGD',8,'Arm, Elbow, Wrist or Ribs (Other Fracture) 20%','["DearPolicy read this as 20% of the sum insured, from the heading of the schedule this row sits in."]'::jsonb,'[]'::jsonb,true,true)
+         RETURNING id::text`,[account,cert,productSummary])).rows.map(r=>r.id);
+      const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as {id:string;alternatives:{groupId:string;note:string;options:{rowId:string;amountText:string}[]}|null}[];
+      const wristRows=listed.filter(b=>ids.includes(b.id));
+      assert.equal(wristRows.length,2);
+      for(const b of wristRows){
+        assert.deepEqual(b.alternatives?.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort(),"Benefits: both readings on each member row");
+        assert.match(b.alternatives!.note,/never added together; the insurer decides/);
+      }
+      assert.equal(wristRows[0].alternatives!.groupId,wristRows[1].alternatives!.groupId);
+      assert.doesNotMatch(JSON.stringify(listed),/S\$1,000(?![,\d])|121,250/,"No S$1,000 reading and no total");
+      await seedLedger(account);
+      const ledger=(await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).json()).rows as {policyId:string|null;alternatives:{options:{amountText:string}[]}|null}[];
+      const grouped=ledger.filter(r=>(r.policyId===cert||r.policyId===productSummary)&&r.alternatives);
+      assert.ok(grouped.length>=1,"Coverage: the wrist row carries the group");
+      for(const r of grouped)assert.deepEqual(r.alternatives!.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort());
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary]]);
     });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);

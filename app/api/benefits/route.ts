@@ -10,6 +10,7 @@ import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
+import { amountAlternatives } from "@/lib/policies/amount-alternatives";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -105,6 +106,19 @@ export async function GET(request:NextRequest){
     };
     const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name));
     const resolved=new Map(repairStoredRules(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
+    // Either/or amounts: the same row worked out two ways for one person (a share of a fixed limit in one table, a share
+    // of the sum insured in another). Sent as one group on every member row, never as one picked figure, and only when
+    // every person the row is shown for gets the same options.
+    const documentNames=new Map(usableRows.map(row=>[row.policy_id,row.document_product??row.original_filename]));
+    const groupsByContract=(inventory?.contracts??[]).map(contract=>{
+      const docs=new Set([...contract.documents,...contract.references].map(d=>d.id));
+      return {docs,groups:amountAlternatives(contract,[...resolved.values()].filter(b=>docs.has(b.policyId)),id=>documentNames.get(id)??"Your document")};
+    });
+    const alternativesFor=(row:Row)=>{
+      const found=groupsByContract.filter(c=>c.docs.has(row.policy_id)).map(c=>c.groups.get(row.id)??null);
+      if(!found.length||found.some(g=>!g))return null;
+      return new Set(found.map(g=>JSON.stringify(g!.options))).size===1?found[0]:null;
+    };
     const benefits=usableRows.map(row=>{
       const stub=resolved.get(row.id)!;
       const formula={
@@ -144,6 +158,7 @@ export async function GET(request:NextRequest){
         // A booklet nobody has claimed yet has no owner. Saying so is more
         // useful than printing an empty cell.
         owners:row.owner_names??[],
+        alternatives:alternativesFor(row),
       };
     });
     // The other half of every document: what these covers do NOT pay. Shown on
