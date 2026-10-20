@@ -143,8 +143,15 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     const card = page.locator(".document-card").filter({ hasText: "Group Insurance Programme" }).first();
     await expect(card).toBeVisible({ timeout: 60_000 });
     const picker = card.getByTestId("covers-picker");
+    // Once anyone is linked the picker is one "Covers …" line with a Change button; open it before using the chips.
+    const openPicker = async () => {
+      const change = picker.getByRole("button", { name: "Change" });
+      if (await change.isVisible().catch(() => false)) await change.click();
+      await expect(picker.locator(".declare-owner")).toBeVisible({ timeout: 30_000 });
+    };
     if (await picker.isVisible().catch(() => false)) {
       for (const name of Object.values(PEOPLE)) {
+        await openPicker();
         const button = picker.locator(".declare-owner button").filter({ hasText: name });
         if ((await button.getAttribute("aria-pressed")) !== "true") {
           await button.click({ timeout: 30_000 });
@@ -152,6 +159,7 @@ test.describe("round 5: the exploratory findings, fixed", () => {
         }
       }
       for (const [tier, name] of [["Employee", PEOPLE.employee], ["Spouse", PEOPLE.spouse], ["Child", PEOPLE.child]] as const) {
+        await openPicker();
         const select = picker.getByLabel(`${name}’s cover`);
         await select.selectOption(tier, { timeout: 30_000 });
         await expect(page.getByTestId("library-notice")).toContainText(`${name} (${tier})`, { timeout: 30_000 });
@@ -163,6 +171,7 @@ test.describe("round 5: the exploratory findings, fixed", () => {
       // Unticking one person removes only that person (a link the household made).
       const childLink = (await policies(page)).find((p) => p.original_filename === booklet.name)?.linked_people.find((l) => l.name === PEOPLE.child);
       if (childLink?.source === "user_declared") {
+      await openPicker();
       await picker.locator(".declare-owner button").filter({ hasText: PEOPLE.child }).click();
       await expect(picker.locator(".declare-owner button").filter({ hasText: PEOPLE.child })).toHaveAttribute("aria-pressed", "false", { timeout: 30_000 });
       expect((await policies(page)).find((p) => p.original_filename === booklet.name)!.linked_people.map((l) => l.name).sort()).toEqual([PEOPLE.spouse, PEOPLE.employee].sort());
