@@ -994,3 +994,27 @@ table { font-variant-numeric: tabular-nums; }
 .password-field input { flex: 1 1 auto; min-width: 0; }
 .not-found { max-width: 560px; padding-top: 72px; }
 .not-found-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* Short answers (answers that arrive with checked statements). */
+.answer-cards { display: grid; gap: 10px; }
+.answer-bottom-line { font-size: var(--fs-lg, 1.1rem); font-weight: 650; line-height: 1.4; color: var(--ink); margin: 0; }
+.answer-point { margin: 0; }
+.answer-point.caution { background: var(--warn-tint); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); }
+.answer-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 4px; }
+.answer-card-amount { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.answer-card-amount strong { font-size: 1.35rem; font-weight: 750; color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+.answer-card-amount small { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
+.message-body .answer-card p { margin: 0; }
+.answer-card-text { font-weight: 600; color: var(--ink); }
+.answer-card-basis { font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-card-conditions { margin: 2px 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.answer-chip { font-size: var(--fs-xs); border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 3px 10px; color: var(--brand-ink); font-weight: 600; }
+.answer-chip.muted { color: var(--ink-2); font-weight: 500; }
+.answer-where { border-top: 1px solid var(--line); padding-top: 8px; }
+.answer-where summary { cursor: pointer; color: var(--brand-ink); font-weight: 650; }
+.answer-where-item { border-left: 3px solid var(--brand-tint-2); padding: 2px 0 2px 10px; margin-top: 10px; font-size: var(--fs-sm); color: var(--ink-2); }
+.message-body .answer-where-item p { margin: 0 0 4px; }
+.answer-where-item blockquote { margin: 4px 0 0; font-style: italic; }
+.answer-cards-foot { font-size: var(--fs-xs); color: var(--muted); margin: 0; }
+.answer-where-all { margin-top: 12px; font-size: var(--fs-sm); }
