@@ -1409,3 +1409,53 @@ enough.
 safe. But R23-1 and R23-2 are blockers. PR #65 is ready to merge, and its page switches the cards on as soon as this PR sends
 `statements[]`. The two would then show withdrawn amounts under out-of-date notes (R23-1) and frame an independent amount as an
 alternative (R23-2). Both are small, local fixes. R23-3 should go in the same push.
+
+---
+
+# Round 24: PR #70 re-check at `c685b92`
+
+Scope: `git diff 0cd6a49 c685b92 -- lib/`, which covers `stale-answers.ts`, `monetary-boundary.ts`, `answer-statements.ts`,
+`statement-render.ts` and `evidence.ts`. I also read the Developer's repro output `answer-shape-output.txt`. Read only.
+
+## R23 re-check
+
+| Finding | Status |
+|---|---|
+| R23-1 out-of-date answers keep cards | **Fixed twice over.** `invalidatedAnswer` sets `statements: []` and `bottomLine: null`, and `reconcileStatements` empties both for any `answer.invalidated` on return, save and reopen. That also covers the PR #69 reasons. |
+| R23-2 either-or takes every amount | **Fixed.** The group is set only on calculations the two-document relation note re-rendered (`alt`). The "either A or B" bottom line is used only when the group is every amount on the answer. Otherwise the bottom line is the neutral "N amounts that may apply, each with its own conditions". The repro unit check confirms a third amount stays ungrouped. |
+| R23-3 citations of a shortened paragraph | **Fixed.** Evidence is kept when a sentence of the paragraph (40 characters or more) is inside a composed sentence. |
+| R23-4 excerpt run-on | **Fixed.** It continues into one short line only (six words or fewer, and only if that line ends the sentence). |
+
+## The other changes
+
+- **Accident condition (Evidence Reviewer E1):** read from the benefit's own lead-in on the table's page. It is added to the
+  sentence and to `conditions[]` only when the page prints it. The figure checks cover it, because it states no number.
+- **Ruled-out amounts as plain text:** an amount whose printed period has ended, or that another paragraph says does not apply,
+  is sent as its whole sentence, not a card. This only moves amounts toward plain text, which is the safe direction.
+- **Short labels:** the card's text is now a label ("Simple Fracture · Arm, Elbow, Wrist or Ribs"). The "only if … applies" and
+  "not a payment or an insurer's decision" wording moved into `conditions[]`, which the page renders on the card. Nothing is lost.
+- **Bottom line:** a printed amount on its own is never the outcome. The figure check now counts only amounts and percentages, so
+  a page number or date no longer fails it.
+
+## R24-1 (Medium, one line): the bottom-line count leaves out amounts shown as plain text
+
+"Your documents print {count} amounts that may apply" counts only amount cards. In the death answer the Developer named, Term Life
+S$1,000,000 is sent as plain text, so the bottom line says "two amounts" while the answer prints three. A headline that
+undercounts the household's benefits partly hides one. Fix: when any plain-text paragraph that is not ruled out states an amount,
+leave out the number ("Your documents print amounts that may apply …"), or count those paragraphs too.
+
+## R24-2 (Low): two relation notes for one person share a group id
+
+The group id is `alt:${subjectId}`. If one answer has two different benefits, each with its own two-document relation, all four
+illustrations share one group. The bottom line would then say "either A, B, C or D". Add the benefit (or the pair of policy ids)
+to the id.
+
+## Open, not the Critic's to close
+
+The hosted-model path has not been run (it needs a paid run with DC's yes). The cards follow the composed prose, and every
+check runs on the server whichever model writes, so the risk is in what the model writes, not in the fields.
+
+## Verdict on PR #70 at `c685b92`
+
+**Ready to merge once R24-1 is fixed** (one line). R23-1 to R23-4 are fixed, with tests for the two blockers, and the new changes
+only move amounts toward safer display. R24-2 can follow. PR #65 can merge in either order with this one after that.
