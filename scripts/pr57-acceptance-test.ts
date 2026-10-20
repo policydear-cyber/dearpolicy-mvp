@@ -256,6 +256,31 @@ async function main() {
     } finally { await h.db.query("UPDATE policy_pages SET text=$2 WHERE policy_id=$1 AND page_number=1", [CERT, page.text]); }
   }
 
+  // ================================================================================================ N: negative controls (project instructions, 20 Oct)
+  // Wrong person, wrong product, wrong version, wrong percentage base, and supported information surviving verification.
+  // A correction followed by a new scenario is reliable-chat:fx-repairs-test G6/G6b; not duplicated here.
+  if (only("N")) {
+    const finalFor = (stmtSubject: string, next: string[]): ScriptTurn => ({ steps: [
+      ...fractureTurn(G, "broke her arm", "fell down", null).steps.slice(0, 3),
+      (v) => [call("final_answer", { subject_id: stmtSubject, sentences: resultIds(v).map((r) => ({ kind: "calculation", text: "-", result_id: r, subject_id: stmtSubject })), next_steps: next })],
+    ] });
+    const ok = await play([finalFor(G, ["contact:" + CERT])], () => turn("N0 Grace fracture", "grace fell down and broke her arm"));
+    check("GUARD", "N1 (percentage base) S$1,250 is 25% of the fixed S$5,000 limit and S$120,000 is 20% of Grace's S$600,000; neither base is swapped (no S$150,000, no S$1,000)", /25% of the Simple Fracture benefit limit of S\$5,000/.test(ok.v) && /20% of Grace's sum insured of S\$600,000/.test(ok.v) && !/S\$150,000|S\$1,000(?!,)/.test(ok.v), ok.v);
+    check("GUARD", "N2 (supported information survives verification) the date, the '#' footnote and the insurer contact step all reach the saved and reopened answer", same(ok) && /6 October 2022/.test(ok.v) && /thumb, finger and palm are not covered/.test(ok.v) && /Contact Aldermoor Life Ltd/.test(ok.v), ok.v);
+    const wrong = await play([finalFor(DAN, ["contact:" + CERT])], () => turn("N3 Grace's results stated as Daniel's", "grace fell down and broke her arm"));
+    check("GUARD", "N3 (wrong person) Grace's calculations stated with Daniel as their subject are not shown as Daniel's", !/Daniel[^.\n]*S\$(?:1,250|120,000)|S\$(?:1,250|120,000)[^.\n]*Daniel/.test(wrong.v), wrong.v);
+    const other = FX.DOCS.find((d) => d.account === FX.OTHER_ACCOUNT)?.id ?? "7d000000-0000-4000-8000-000000000998";
+    const prod = await play([finalFor(G, ["contact:" + other])], () => turn("N4 contact step for a product that is not Grace's", "grace fell down and broke her arm"));
+    check("GUARD", "N4 (wrong product) a contact step naming a document that is not in Grace's library names no insurer", !/Contact /.test(prod.v), prod.v);
+    await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
+    const gone = visible((await reopen(ok.conv.id)).at(-1));
+    await h.db.query("UPDATE policies SET file_hash='sha256:fx-benefit-summary-v2', lifecycle_state='active' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
+    const replaced = visible((await reopen(ok.conv.id)).at(-1));
+    await h.db.query("UPDATE policies SET file_hash='sha256:fx-benefit-summary' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
+    check("GUARD", "N5 (version) with the Benefit Summary deleted, or replaced by another version (new file hash), the reopened answer no longer shows its S$120,000", !/S\$120,000/.test(gone) && !/S\$120,000/.test(replaced), `deleted:\n${gone}\n--replaced:\n${replaced}`);
+    check("GUARD", "N6 and with the original version restored the reopened answer is whole again", visible((await reopen(ok.conv.id)).at(-1)) === ok.saved);
+  }
+
   const t = tally;
   console.log(`\nAC ${t.AC.pass} passed, ${t.AC.fail} failed | GUARD ${t.GUARD.pass} passed, ${t.GUARD.fail} failed | INFO ${t.INFO.pass} same, ${t.INFO.fail} differ`);
   if (h.networkCalls.length) { console.log(`network calls attempted (all refused): ${h.networkCalls.length}`); }
