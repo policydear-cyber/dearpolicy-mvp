@@ -49,10 +49,10 @@ type Structured = { bottomLine?: string | null; statements?: Stmt[] };
 const carried = (s: Stmt) => [...(s.conditions ?? []), s.basis ?? "", s.source?.footnote?.text ?? "", s.source?.note ?? "", s.group?.note ?? ""].join("\n");
 const said = (s: Stmt) => [s.text ?? "", carried(s)].join("\n");
 const amountOf = (s: Stmt) => (s.amount?.text ?? "").replace(/\s+/g, "");
-export type Row = { label: string; amount: string; person: RegExp | null; currencyResolved: boolean; /** other acceptable printings, each with its currency state */ alt?: [string, boolean][]; must: [string, RegExp][]; mustNot?: [string, RegExp][]; asOf?: string | null; page?: number; basis?: RegExp };
-export type Expect = { bottom: [string, RegExp][]; bottomNot?: [string, RegExp][]; rows: Row[]; optionalRows?: Row[]; noAmounts?: [string, RegExp][]; anywhereNot?: [string, RegExp][] };
+export type Row = { label: string; amount: string; person: RegExp | null; currencyResolved: boolean; /** other acceptable printings, each with its currency state */ alt?: [string, boolean][]; must: [string, RegExp][]; mustNot?: [string, RegExp][]; /** the card's first condition (the event it depends on) */ first?: [string, RegExp]; asOf?: string | null; page?: number; basis?: RegExp };
+export type Expect = { bottom: [string, RegExp][]; bottomNot?: [string, RegExp][]; rows: Row[]; optionalRows?: Row[]; noAmounts?: [string, RegExp][]; anywhereNot?: [string, RegExp][]; /** plain text the answer must show (prose, bottom line or statement text), not as an amount card */ plain?: [string, RegExp][] };
 /** Every failure, as one line each; empty means the structured answer meets the reference. */
-export function judge(a: Structured, e: Expect): string[] {
+export function judge(a: Structured, e: Expect, prose = ""): string[] {
   const out: string[] = [];
   const bl = typeof a.bottomLine === "string" ? a.bottomLine.trim() : "";
   const st = Array.isArray(a.statements) ? a.statements : [];
@@ -67,6 +67,7 @@ export function judge(a: Structured, e: Expect): string[] {
     if (s.amount?.currencyResolved !== want) out.push(`${r.label}: currencyResolved ${s.amount?.currencyResolved}, expected ${want}`);
     for (const [n, re] of r.must) if (!re.test(carried(s))) out.push(`${r.label}: does not carry "${n}"`);
     for (const [n, re] of r.mustNot ?? []) if (re.test(said(s))) out.push(`${r.label}: carries "${n}", which is not this row's`);
+    if (r.first && !r.first[1].test((s.conditions ?? [])[0] ?? "")) out.push(`${r.label}: first condition is "${(s.conditions ?? [])[0] ?? ""}", not "${r.first[0]}"`);
     if (r.basis && !r.basis.test(s.basis ?? "")) out.push(`${r.label}: basis "${s.basis ?? ""}" lacks ${r.basis}`);
     if (r.asOf !== undefined && (s.asOf ?? null) !== r.asOf) out.push(`${r.label}: asOf ${s.asOf ?? null}, expected ${r.asOf}`);
     if (r.page !== undefined && s.source?.page !== r.page) out.push(`${r.label}: source page ${s.source?.page}, expected ${r.page}`);
@@ -82,6 +83,7 @@ export function judge(a: Structured, e: Expect): string[] {
   for (const [n, re] of e.noAmounts ?? []) for (const s of st) if (re.test(amountOf(s))) out.push(`a statement gives ${n} as an amount (${s.amount?.text})`);
   const all = [bl, ...st.map(said)].join("\n");
   for (const [n, re] of e.anywhereNot ?? []) if (re.test(all)) out.push(`says: ${n}`);
+  for (const [n, re] of e.plain ?? []) if (!re.test([prose, all].join("\n"))) out.push(`does not show (plain text): ${n}`);
   return out;
 }
 const structured = (a: any): Structured => ({ bottomLine: a?.bottomLine ?? null, statements: a?.statements ?? [] });
@@ -114,7 +116,7 @@ async function journey(hh: unknown, turns: { msg: string; turn: ScriptTurn }[]):
   } finally { installLoopModel(null); }
 }
 const verdict = (id: string, title: string, o: Out, e: Expect) => {
-  const f = judge(structured(o.answer), e);
+  const f = judge(structured(o.answer), e, o.prose);
   check("AC", `${id} ${title}: bottomLine and statements[] meet the reference`, f.length === 0, f.join("\n"));
   check("AC", `${id} returned = saved = reopened (bottomLine and statements[]), and not empty`, o.returned === o.saved && o.saved === o.reopened && !!structured(o.answer).bottomLine && (structured(o.answer).statements ?? []).length > 0, `returned ${o.returned.slice(0, 200)}\nsaved ${o.saved.slice(0, 200)}\nreopened ${o.reopened.slice(0, 200)}`);
 };
@@ -163,6 +165,34 @@ async function main() {
   const gpQualifiers: [string, RegExp][] = [["GP or outpatient", /GP|outpatient/i], ["not the same as not covered", /not the same as saying|doesn.t mean|does not mean/i]];
   const gpNot: [string, RegExp][] = [["not covered / excluded", /(?<!not the same as saying (?:he )?(?:is |isn.t )?)\b(?:is not covered|isn.t covered|not covered|excluded)\b/i]];
   const gpAnywhereNot: [string, RegExp][] = [["Living Care pages describe no GP benefit (no such page)", /Living Care[^.]*(?:describ|print)\w*[^.]*no\b[^.]*GP/i], ["\"haven't looked up\" after a search", /haven.t (?:yet )?looked up|have not (?:yet )?looked up/i], ["$770 or any amount from $800", /\$\s?770\b|S\$\s?800/], PROMISE];
+  // Section 18 of qc/EVIDENCE.md (62633ba) ruled on these cards; the expectations it changed keep their original in a comment.
+  // Original: the bottom line only had to name Outpatient Medicare (/Outpatient Medicare/i).
+  const OPMC: [string, RegExp] = ["Outpatient Medicare: the scheme has it, his certificate does not list it", /Outpatient Medicare[^.]*(?:certificate|Part 1)[^.]*(?:does not|doesn.t|not) (?:list|show|include)|(?:certificate|Part 1)[^.]*(?:does not|doesn.t) (?:list|show|include)[^.]*Outpatient Medicare/i];
+  const NO_OUTPATIENT: [string, RegExp] = ["\"no outpatient cover\"", /\bno (?:outpatient|GP) (?:cover|benefit|policy)|(?:does not|doesn.t) have (?:any )?(?:outpatient|GP) (?:cover|benefit)|not covered for (?:outpatient|GP)/i];
+  const AS_GP_AMOUNT: [string, RegExp] = ["the accident benefits counted as amounts that may apply to the GP bill", /amounts? (?:that )?(?:may|might|could) apply|(?:towards?|for|against|pays?|covers?|covering|reimburses?) (?:the |his |this )?(?:\$\s?800 )?GP (?:bill|visit|consultation)/i];
+  const E2a: Expect = {
+    bottom: [...gpQualifiers, ["his certificate's date (6 Oct 2022)", /6 Oct(?:ober)? 2022|2022-10-06/], OPMC, ["the accident benefits only as \"only if\" alternatives", /only if/i]],
+    bottomNot: [...gpNot, NO_OUTPATIENT, AS_GP_AMOUNT],
+    rows: [
+      // PS p13 prints S$500; BS p8 prints a bare "$500", which stays unresolved when only BS is cited (the reference's currency rule).
+      { label: "E2a row 1 (Ambulance Cost)", amount: "S$500", alt: [["$500", false]], person: /Daniel/, currencyResolved: true, first: ["only if a ground ambulance took him to hospital after the accident", /only if[^.]*ambulance[^.]*hospital/i], must: [["only if a ground ambulance took him to hospital", /ambulance/i], ACCIDENT, ["per event / per incident", /per (?:event|incident)/i], CORE_VOL], mustNot: [AS_GP_AMOUNT] },
+      // Original: amount "S$250" only, and only "30 days", "24 hours" and Core/Voluntary required.
+      { label: "E2a row 2 (Accidental Hospital Recuperation)", amount: "S$250", alt: [["$250", false]], person: /Daniel/, currencyResolved: true, first: ["only if he was then admitted to hospital for at least 24 hours", /only if[^.]*(?:admitted|hospital)[^.]*24 (?:continuous )?hours/i], must: [["within 30 days of the accident", /30 days/i], ["at least 24 continuous hours in hospital", /24 (?:continuous )?hours/i], ["on a Registered Medical Practitioner's recommendation, not convalescent rest", /convalescen/i], ["one-time per hospitalisation", /one[- ]time|once per/i], ["no payment for later stays from the same injury", /subsequent hospitali[sz]ation/i], CORE_VOL], mustNot: [AS_GP_AMOUNT] },
+    ],
+    optionalRows: fractureRows(/Daniel/, "E2a row 3"),
+    noAmounts: [["an amount for the GP bill ($800 or derived)", /800|770/]],
+    anywhereNot: [...gpAnywhereNot, NO_OUTPATIENT],
+  };
+  // Original rows 4 and 5 were amount cards: "$30" (person null, panel vs non-panel, per visit, whose cover is not printed, page 25)
+  // and "$1,000" (person null, outside Singapore, per Accident, page 20). Section 18: neither may be a card, only quoted scheme wording,
+  // because a card carries a person and the invented pages name none.
+  const E2b: Expect = {
+    bottom: gpQualifiers, bottomNot: [...gpNot, NO_OUTPATIENT, AS_GP_AMOUNT],
+    rows: [],
+    noAmounts: [["$770 or an amount from $800", /770|800/], ["the panel GP $30 as a card", /^S?\$30$/], ["the overseas $1,000 as a card", /^S?\$1,000$/]],
+    plain: [["the panel GP line quoted (30 per visit)", /\b30\b[^.\n]*per visit/i], ["that the page does not say whose cover it is", /(?:does not|doesn.t) (?:say|name|print|show)[^.]*(?:whose|which policy|person)/i], ["the overseas line, outside Singapore only", /outside Singapore/i]],
+    anywhereNot: [...gpAnywhereNot, NO_OUTPATIENT, ["\"his certificate does not list it\" for the panel GP row", /certificate (?:does not|doesn.t) list[^.]*panel/i]],
+  };
   if (only("E2")) {
     // E2a: stored pages only. A model that searched, found no GP benefit, and kept the documented accident benefits visible.
     const gpA: ScriptTurn = { steps: [
@@ -178,44 +208,42 @@ async function main() {
         ], next_steps: ["contact:" + CERT_FX] })];
       }),
     ] };
-    const E2a: Expect = {
-      bottom: [...gpQualifiers, ["his certificate's date (6 Oct 2022)", /6 Oct(?:ober)? 2022|2022-10-06/], ["Outpatient Medicare is on the scheme, not on his certificate", /Outpatient Medicare/i]],
-      bottomNot: gpNot,
-      rows: [
-        // PS p13 prints S$500; BS p8 prints a bare "$500", which stays unresolved when only BS is cited (the reference's currency rule).
-        { label: "E2a row 1 (Ambulance Cost)", amount: "S$500", alt: [["$500", false]], person: /Daniel/, currencyResolved: true, must: [["only if a ground ambulance took him to hospital", /ambulance/i], ACCIDENT, CORE_VOL] },
-        { label: "E2a row 2 (Accidental Hospital Recuperation)", amount: "S$250", person: /Daniel/, currencyResolved: true, must: [["within 30 days of the accident", /30 days/i], ["at least 24 continuous hours in hospital", /24 (?:continuous )?hours/i], CORE_VOL] },
-      ],
-      optionalRows: fractureRows(/Daniel/, "E2a row 3"),
-      noAmounts: [["an amount for the GP bill ($800 or derived)", /800|770/]],
-      anywhereNot: gpAnywhereNot,
-    };
     const a = await journey(FX, [{ msg: GP_MSG.unsaid, turn: gpA }]);
     setup("E2a", "the GP answer completes, keeps $800 as written, and shows the ambulance (500) and recuperation (S$250) terms", !/returned an error|couldn.t confirm/i.test(a[0].prose) && !/S\$\s?800/.test(a[0].prose) && /\b500\b/.test(a[0].prose) && /S\$250/.test(a[0].prose), a[0].prose);
     verdict("E2a", "GP bill, stored pages only", a[0], E2a);
 
     // E2b: the invented PS p20 and p25 (PR #64), the PR #64 model moves.
-    const E2b: Expect = {
-      bottom: gpQualifiers, bottomNot: gpNot,
-      rows: [
-        { label: "E2b row 4 (Panel GP, PS p25)", amount: "$30", person: null, currencyResolved: false, must: [["panel vs non-panel GP", /non-panel|panel GP/i], ["per visit", /per visit/i], ["whose cover is not printed", /(?:does not|doesn.t) (?:say|name|print)[^.]*(?:whose|which policy|person)/i]], page: 25 },
-        { label: "E2b row 5 (Emergency outpatient overseas, PS p20)", amount: "$1,000", person: null, currencyResolved: false, must: [["only outside Singapore", /outside Singapore/i], ["per Accident", /per Accident/i]], page: 20 },
-      ],
-      noAmounts: [["$770 or an amount from $800", /770|800/]],
-      anywhereNot: [...gpAnywhereNot, ["\"his certificate does not list it\" for the panel GP row", /certificate (?:does not|doesn.t) list[^.]*panel/i]],
-    };
     const b = await journey(GP_HH, [{ msg: GP_MSG.unsaid, turn: gpTurn() }]);
     setup("E2b", "the GP answer quotes the panel GP line (30 per visit, bare $)", /\b30\b[^.]*per visit/.test(b[0].prose), b[0].prose);
     verdict("E2b", "GP bill with the panel GP and overseas pages", b[0], E2b);
     // Row 5 is for treatment outside Singapore only: a visit stated as in Singapore gets no $1,000 statement.
     const c = await journey(GP_HH, [{ msg: GP_MSG.home, turn: gpTurn() }]);
     const cs = (structured(c[0].answer).statements ?? []) as Stmt[];
-    check("AC", "E2b' a GP visit stated as in Singapore: structured answer present, and no $1,000 overseas statement", cs.length > 0 && !cs.some((s) => /1,000/.test(amountOf(s))), JSON.stringify(cs.map((s) => s.amount?.text)));
+    // Original: only "no $1,000 statement". Section 18: the overseas line is quoted only when the message names no place or an overseas one.
+    const cAll = [c[0].prose, structured(c[0].answer).bottomLine ?? "", ...cs.map(said)].join("\n");
+    check("AC", "E2b' a GP visit stated as in Singapore: structured answer present, no $1,000 overseas statement, and the overseas line not quoted", cs.length > 0 && !cs.some((s) => /1,000/.test(amountOf(s))) && !/1,000/.test(cAll), JSON.stringify(cs.map((s) => s.amount?.text)) + "\n" + cAll);
   }
 
   // ================================================================================================ E3 death abroad, E4 travel (livelib)
   const AD = LH.M.adrian.id;
   const pbBenefit = (v: ScriptView, policy: string, re: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "person_benefits") for (const d of o.result?.data?.documents ?? []) if (d.policy_id === policy) for (const b of d.benefits ?? []) if (re.test(b.benefit) && b.benefit_id) return b.benefit_id as string; return ""; };
+  const NOTIFY: [string, RegExp] = ["notify within 6 months (Term Life's step)", /6 months|six months/i];
+  const EXCL: [string, RegExp] = ["the war / self-injury exclusions (the accident policy's)", /\bwar\b|self-injur|invasion/i];
+  const WORLD: [string, RegExp] = ["the worldwide territorial limit (the accident policy's)", /worldwide|territorial/i];
+  const E3: Expect = {
+    bottom: [["Adrian", /Adrian/], ["separate policies, never added", /separate|never added|not added/i], INSURER, ["certificate date (6 Oct 2022)", /6 Oct(?:ober)? 2022|2022-10-06/]],
+    bottomNot: [PROMISE],
+    rows: [
+      { label: "E3 row 1 (Group Term Life)", amount: "S$1,000,000", person: /Adrian/, currencyResolved: true, must: [["notify within 6 months", /6 months/i], ["with the death certificate", /death certificate/i]], mustNot: [EXCL, WORLD], asOf: "2022-10-06" },
+      // Original exclusions regex: /war|self-injur/i (matched "toward" and "award").
+      { label: "E3 row 2 (Accidental Death, 100% of GPA)", amount: "S$600,000", person: /Adrian/, currencyResolved: true, must: [ACCIDENT, ["worldwide territorial limit", /worldwide/i], ["exclusions (war, self-injury)", /\bwar\b|self-injur/i]], mustNot: [NOTIFY], asOf: "2022-10-06", basis: /100%[^.]*S\$600,000|S\$600,000[^.]*100%/ },
+      // Original: amount "S$2,000" only. Section 18: WORD p3 prints a bare "$2,000"; S$ only with SUMMARY p9 cited.
+      { label: "E3 row 3 (Repatriation)", amount: "S$2,000", alt: [["$2,000", false]], person: /Adrian/, currencyResolved: true, must: [["death outside Singapore", /outside Singapore/i], ACCIDENT, ["reimbursement, up to", /up to|reimburs/i]], mustNot: [NOTIFY] },
+    ],
+    optionalRows: [{ label: "E3 travel S$100,000 (if named at all)", amount: "S$100,000", person: /Adrian/, currencyResolved: true, must: [["its period (10-17 Mar 2025)", /10\/03\/2025|10 Mar(?:ch)? 2025/], ["Indonesia", /Indonesia/], ["why it does not fit", /does not (?:fit|apply|cover the date)|outside (?:its|the) period|before/i]] }],
+    noAmounts: [["a total (S$1,602,000)", /1,602,000/], ["Daily Hospital Cash S$40", /^S\$40\b/], ["Living Care Plus S$300,000 as payable", /300,000/]],
+    anywhereNot: [["a total (S$1,602,000)", /1,602,000/], PROMISE],
+  };
   if (only("E3")) {
     const E3_MSG = "Adrian died in a car accident in Japan. The accident happened on 3 October 2026 and he died on 5 October 2026. Please tell me which death benefits may apply and what I should do next.";
     const deathTurn: ScriptTurn = { steps: [
@@ -228,18 +256,6 @@ async function main() {
         { kind: "benefit_terms", benefit_id: pbBenefit(v, LH.doc("SUMMARY").id, /Repatriation of Mortal Remains/), subject_id: AD },
       ], next_steps: ["contact:" + LH.doc("CERT").id] })],
     ] };
-    const E3: Expect = {
-      bottom: [["Adrian", /Adrian/], ["separate policies, never added", /separate|never added|not added/i], INSURER, ["certificate date (6 Oct 2022)", /6 Oct(?:ober)? 2022|2022-10-06/]],
-      bottomNot: [PROMISE],
-      rows: [
-        { label: "E3 row 1 (Group Term Life)", amount: "S$1,000,000", person: /Adrian/, currencyResolved: true, must: [["notify within 6 months", /6 months/i], ["with the death certificate", /death certificate/i]], asOf: "2022-10-06" },
-        { label: "E3 row 2 (Accidental Death, 100% of GPA)", amount: "S$600,000", person: /Adrian/, currencyResolved: true, must: [ACCIDENT, ["worldwide territorial limit", /worldwide/i], ["exclusions (war, self-injury)", /war|self-injur/i]], asOf: "2022-10-06", basis: /100%[^.]*S\$600,000|S\$600,000[^.]*100%/ },
-        { label: "E3 row 3 (Repatriation)", amount: "S$2,000", person: /Adrian/, currencyResolved: true, must: [["death outside Singapore", /outside Singapore/i], ACCIDENT, ["reimbursement, up to", /up to|reimburs/i]] },
-      ],
-      optionalRows: [{ label: "E3 travel S$100,000 (if named at all)", amount: "S$100,000", person: /Adrian/, currencyResolved: true, must: [["its period (10-17 Mar 2025)", /10\/03\/2025|10 Mar(?:ch)? 2025/], ["Indonesia", /Indonesia/], ["why it does not fit", /does not (?:fit|apply|cover the date)|outside (?:its|the) period|before/i]] }],
-      noAmounts: [["a total (S$1,602,000)", /1,602,000/], ["Daily Hospital Cash S$40", /^S\$40\b/], ["Living Care Plus S$300,000 as payable", /300,000/]],
-      anywhereNot: [["a total (S$1,602,000)", /1,602,000/], PROMISE],
-    };
     const o = await journey(LH, [{ msg: E3_MSG, turn: deathTurn }]);
     setup("E3", "the answer shows S$1,000,000, S$600,000 and S$2,000", /S\$1,000,000/.test(o[0].prose) && /S\$600,000/.test(o[0].prose) && /S\$2,000/.test(o[0].prose), o[0].prose);
     verdict("E3", "death abroad", o[0], E3);
@@ -314,6 +330,43 @@ async function main() {
       ["N10 no fields at all (today's answer shape)", {}],
     ];
     for (const [name, s] of bad) check("GUARD", `${name}: the checker rejects it`, judge(s, E1).length > 0, "accepted");
+
+    // Section 18 rules (GP-bill and death-abroad cards): an answer written to the ruling passes, each breach is rejected.
+    const cite = (page: number) => ({ policyName: "Product Summary", page, citationIds: ["rag2:e" + page] });
+    const gpGood: Structured = {
+      bottomLine: "The uploaded pages do not show a GP or outpatient benefit for Daniel's $800 bill, which is not the same as saying he is not covered. The scheme also has an Outpatient Medicare policy, which his certificate (6 Oct 2022) does not list. The accident benefits below matter only if an ambulance took him to hospital or he was admitted.",
+      statements: [
+        { kind: "benefit_terms", personName: "Daniel", amount: { text: "S$500", currencyResolved: true }, conditions: ["Only if, after the accident, a ground ambulance took him to hospital", "Per event", "Can only be claimed under either the Core Scheme or Voluntary Scheme"], asOf: null, source: cite(13) },
+        { kind: "benefit_terms", personName: "Daniel", amount: { text: "S$250", currencyResolved: true }, conditions: ["Only if he was then admitted to hospital for at least 24 hours", "Within 30 days following bodily injury as a result of an Accident", "Confined as a resident patient for a continuous period of at least 24 hours on a Registered Medical Practitioner's recommendation, not for convalescent rest", "One-time per hospitalisation", "Subsequent hospitalisation resulting from the same injury will not be payable", "Can only be claimed under either the Core Scheme or Voluntary Scheme"], asOf: null, source: cite(13) },
+      ],
+    };
+    const gpProse = "Product Summary p25 prints: Panel GP $30 per visit. The page does not say whose cover this is. Product Summary p20 prints $1,000 per Accident for emergency outpatient treatment outside Singapore.";
+    const deathGood: Structured = {
+      bottomLine: "Adrian's documents show three separate policies that may apply, never added together, as of his certificate dated 6 Oct 2022; the insurer decides.",
+      statements: [
+        { kind: "benefit_terms", personName: "Adrian", amount: { text: "S$1,000,000", currencyResolved: true }, conditions: ["Notify the insurer within 6 months, with the death certificate"], asOf: "2022-10-06", source: cite(1) },
+        { kind: "calculation", personName: "Adrian", amount: { text: "S$600,000", currencyResolved: true }, basis: "100% of Adrian's S$600,000 Group Personal Accident sum insured", conditions: ["Only if death was caused by an accident", "Territorial Limits: worldwide, 24 hours a day", "Exclusions include war, civil war and deliberate self-injury"], asOf: "2022-10-06", source: cite(9) },
+        { kind: "benefit_terms", personName: "Adrian", amount: { text: "S$2,000", currencyResolved: true }, conditions: ["Only if death occurs outside Singapore as a result of an Accident", "Reimburses the reasonable cost of returning the remains to Singapore, up to S$2,000"], asOf: null, source: cite(9) },
+      ],
+    };
+    const plainGP: Structured = { bottomLine: gpGood.bottomLine, statements: [{ kind: "fact", text: "Panel GP $30 per visit (Product Summary p25); the page does not say whose cover this is.", amount: null, source: cite(25) }] };
+    const m = (base: Structured, f: (s: Structured) => void) => { const c = JSON.parse(JSON.stringify(base)) as Structured; f(c); return c; };
+    const goods: [string, Structured, Expect, string][] = [["N0a a GP answer written to section 18 (E2a)", gpGood, E2a, ""], ["N0b a GP answer quoting the panel GP and overseas lines as plain text (E2b)", plainGP, E2b, gpProse], ["N0c a death-abroad answer written to section 18 (E3)", deathGood, E3, ""]];
+    for (const [name, s, e, pr] of goods) check("GUARD", `${name} passes the checker`, judge(s, e, pr).length === 0, judge(s, e, pr).join("\n"));
+    const bad18: [string, Structured, Expect, string][] = [
+      ["N11 the ambulance card's \"only if\" event not first", m(gpGood, (s) => { s.statements![0].conditions!.push(s.statements![0].conditions!.shift()!); }), E2a, ""],
+      ["N12 the recuperation card without \"subsequent hospitalisation\"", m(gpGood, (s) => { s.statements![1].conditions = s.statements![1].conditions!.filter((c) => !/Subsequent/.test(c)); }), E2a, ""],
+      ["N13 a GP bottom line saying \"he has no outpatient cover\"", m(gpGood, (s) => { s.bottomLine = s.bottomLine!.replace("The scheme also has an Outpatient Medicare policy, which his certificate (6 Oct 2022) does not list.", "He has no outpatient cover; his certificate is dated 6 Oct 2022."); }), E2a, ""],
+      ["N14 a GP bottom line counting the cards as amounts that may apply", m(gpGood, (s) => { s.bottomLine += " Your documents print amounts that may apply: S$500 and S$250."; }), E2a, ""],
+      ["N15 the recuperation card presented as paying the GP bill", m(gpGood, (s) => { s.statements![1].conditions!.push("Can be claimed towards the GP bill"); }), E2a, ""],
+      ["N16 the panel GP $30 as an amount card", m(plainGP, (s) => { s.statements!.push({ kind: "benefit_terms", personName: null, amount: { text: "$30", currencyResolved: false }, conditions: ["Panel GP, per visit"], source: cite(25) }); }), E2b, gpProse],
+      ["N17 the overseas $1,000 as an amount card", m(plainGP, (s) => { s.statements!.push({ kind: "benefit_terms", personName: null, amount: { text: "$1,000", currencyResolved: false }, conditions: ["Only outside Singapore, per Accident"], source: cite(20) }); }), E2b, gpProse],
+      ["N18 the war / self-injury exclusions on the Term Life card", m(deathGood, (s) => { s.statements![0].conditions!.push("Exclusions include war and deliberate self-injury"); }), E3, ""],
+      ["N19 \"notify within 6 months\" on the accidental death card", m(deathGood, (s) => { s.statements![1].conditions!.push("Notify the insurer within 6 months"); }), E3, ""],
+      ["N20 \"notify within 6 months\" on the repatriation card", m(deathGood, (s) => { s.statements![2].conditions!.push("Notify within 6 months with the death certificate"); }), E3, ""],
+      ["N21 the worldwide limit on the Term Life card", m(deathGood, (s) => { s.statements![0].conditions!.push("Territorial Limits: worldwide"); }), E3, ""],
+    ];
+    for (const [name, s, e, pr] of bad18) check("GUARD", `${name}: the checker rejects it`, judge(s, e, pr).length > 0, "accepted");
   }
 
   console.log(`\nAC ${tally.AC.pass} passed, ${tally.AC.fail} failed | GUARD ${tally.GUARD.pass} passed, ${tally.GUARD.fail} failed`);

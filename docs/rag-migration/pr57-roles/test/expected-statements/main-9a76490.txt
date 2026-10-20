@@ -39,8 +39,14 @@ FAIL [AC] E2b returned = saved = reopened (bottomLine and statements[]), and not
      returned {"statements":[]}
      saved {"statements":[]}
      reopened {"statements":[]}
-FAIL [AC] E2b' a GP visit stated as in Singapore: structured answer present, and no $1,000 overseas statement
+FAIL [AC] E2b' a GP visit stated as in Singapore: structured answer present, no $1,000 overseas statement, and the overseas line not quoted
      []
+     You told me: “tripped on the kerb”.
+     You told me his GP bill is $800.
+     The Scheme X Group Insurance (product summary) (page 25) prints: “Consultation at a panel GP clinic in Singapore: no charge to the Insured Person. Non-panel GP consultation: up to 30 (printed with a “$” sign; the document does not say which currency) per visit”.
+     Daniel’s certificate lists Group Term Life, Group Personal Accident, Group Living Care and Group Living Care Plus (as of 6 October 2022). The Scheme X Group Insurance (certificate summary) (page 1) names the scheme’s Outpatient Medicare Policy (OPMC), which that certificate does not list. The Scheme X Group Insurance (product summary) (page 25) prints that line under “Panel GP Benefit” in “SECTION 6: CLINICAL BENEFITS”, and it does not say whose cover it is. Only the insurer or the scheme administrator can confirm whether it applies to Daniel.
+     Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+     
 PASS [GUARD] E3 setup: the answer shows S$1,000,000, S$600,000 and S$2,000 (today's prose; the script reaches the rows)
 FAIL [AC] E3 death abroad: bottomLine and statements[] meet the reference
      no bottomLine
@@ -76,5 +82,19 @@ PASS [GUARD] N7 a bottom line that promises payment: the checker rejects it
 PASS [GUARD] N8 the condition only in the prose sentence (fullText), not on the card: the checker rejects it
 PASS [GUARD] N9 a statement missing (row 1): the checker rejects it
 PASS [GUARD] N10 no fields at all (today's answer shape): the checker rejects it
+PASS [GUARD] N0a a GP answer written to section 18 (E2a) passes the checker
+PASS [GUARD] N0b a GP answer quoting the panel GP and overseas lines as plain text (E2b) passes the checker
+PASS [GUARD] N0c a death-abroad answer written to section 18 (E3) passes the checker
+PASS [GUARD] N11 the ambulance card's "only if" event not first: the checker rejects it
+PASS [GUARD] N12 the recuperation card without "subsequent hospitalisation": the checker rejects it
+PASS [GUARD] N13 a GP bottom line saying "he has no outpatient cover": the checker rejects it
+PASS [GUARD] N14 a GP bottom line counting the cards as amounts that may apply: the checker rejects it
+PASS [GUARD] N15 the recuperation card presented as paying the GP bill: the checker rejects it
+PASS [GUARD] N16 the panel GP $30 as an amount card: the checker rejects it
+PASS [GUARD] N17 the overseas $1,000 as an amount card: the checker rejects it
+PASS [GUARD] N18 the war / self-injury exclusions on the Term Life card: the checker rejects it
+PASS [GUARD] N19 "notify within 6 months" on the accidental death card: the checker rejects it
+PASS [GUARD] N20 "notify within 6 months" on the repatriation card: the checker rejects it
+PASS [GUARD] N21 the worldwide limit on the Term Life card: the checker rejects it
 
-AC 0 passed, 16 failed | GUARD 18 passed, 0 failed
+AC 0 passed, 16 failed | GUARD 32 passed, 0 failed
