@@ -911,3 +911,94 @@ or prints "dollars". Use "The document does not say which currency" unless the s
 **Safe to merge as a dormant change; not safe to switch on.** No server path sends `statements[]` today, so PR #65 changes no live
 answer. R15-1 to R15-4 must be fixed before the Developer's answer-fields change lands. R15-1 to R15-3 are UI fixes. R15-4 belongs
 to the Developer.
+
+---
+
+# Round 16: removing a person from a document (PR #67 head `0b56452`)
+
+Scope: `app/api/policies/link-person/route.ts`, the `assignments` branch, read against `lib/chat/stale-answers.ts`,
+`sql/schema.sql` and the readers of `policy_coverages`. This was read only, with nothing run.
+
+## What holds
+
+- **No other household is touched.** Both ids are checked against the caller's household before any write. Every delete or
+  update filters on `account_id`, `policy_id` and the removed member ids, and the user-table writes run through the RLS client.
+- **The document itself is not deleted or changed,** apart from moving the upload profile.
+- **Nobody still ticked is touched.** The policy-members delete excludes everyone in `ids` and leaves
+  `scheme_reference_match` links alone.
+- **The household's own records survive.** `coverage_rules` keeps rows where `origin='person'`. `premium_records` has no
+  origin column, but its `source_document_id` is only ever written by ingest and linking (`lib/rag/ingest.ts:694-727`,
+  `lib/policies/linking.ts:142`), never by `/api/premiums`. So the delete only reaches rows read from the document.
+- **Rows read for kept people are untouched.**
+
+## R16-1 (High, introduced here): re-ticking the person does not bring their cover back
+
+Removing a person deletes their `policy_coverages`, `premium_records` and `coverage_rules` rows for this document. It also
+clears the detected-name match. Ticking them again only inserts a `user_declared` link (route.ts, insert loop). Nothing re-reads
+their rows. So after a mis-tap and an undo, the person is shown as covered, but:
+
+- the Coverage page and dashboard (`app/api/coverage`, `app/api/dashboard`) show none of their cover from this document;
+- `policy-answer.ts` and `registry-answers.ts` find no premium or coverage row for them.
+
+The chat's rag2 path still reads the pages, so the loop answers are less affected. On main, removal didn't work at all, so this
+loss is new. Hiding a documented benefit is a failure. Fix: when a person is linked again, rebuild their rows from the stored
+reading (the `syncInsuredPersonToMember` path, or a targeted re-read). At minimum, the save response and the screen should say
+"re-analyse to restore their cover details".
+
+## R16-2 (High): saved answers that relied on the removed person are not withdrawn or marked
+
+`invalidateAnswersWithDeletedPolicies` (stale-answers.ts:48-) withdraws an answer only in three cases:
+
+- a cited document is deleted;
+- the file hash changed;
+- an absence scope grew.
+
+A smaller scope is not one of them. So an answer saved before the removal still reopens with no "out of date" note. For example,
+"Grace's fracture illustration is S$1,250 from this document" stays as it was. An answer still being written when the save lands
+is saved under the old links too. This is the same family as the accepted "superseded answers unmarked" item, so fix it before
+public launch: mark answers whose `claimItems` or citations pair this document with a person no longer linked to it.
+
+## R16-3 (Medium): two of the writes are outside the save's transaction
+
+The `policy_coverages` delete and the upload-profile move run with the server `query` after the user transaction has committed
+(route.ts, after `createUserSupabaseClient`). If either fails, the route returns 500 "Link failed", but the links are already
+gone. That leaves half a removal:
+
+- If the coverage delete fails, the Coverage page and the registry answers keep the person's cover from this document.
+- If the profile move fails, `policies.family_member_id` stays on the removed person, and `searchableDocs` and `benefits.ts`
+  still treat them as covered. The chat keeps answering for them from this document, which is the exact bug this PR fixes.
+
+Fix: run both on one connection in one transaction, or make the move idempotent and retry it. At minimum, return the removal
+as partial so the screen doesn't show "Saved".
+
+## R16-4 (Medium): a document read already running can undo the removal
+
+The PR notes that a re-analysis rebuilds name-matched links. It does not cover the case where a read is already running when
+the household saves. The ingest job then re-inserts the `ai_name_match` link, the coverages and the detected match after the
+save. The person comes back while the screen says "Saved". Fix: refuse the save, or queue it, while `processing_status` is not
+`ready`. The stored exclusion the PR offers as a decision would fix both this and the later re-read case.
+
+## R16-5 (Low): refusing "covers nobody" is right, but the message points to deleting
+
+Refusing an empty list is needed while `policies.family_member_id` is NOT NULL and the chat treats the upload profile as
+covered. Reference wording is unaffected, because its links are `scheme_reference_match` and are not shown. The one real case is
+a document for someone outside the family profiles, for example a parent not yet added. There the 409 says to delete it. Better
+wording: "Add the person it covers in Family first, or delete it if it isn't your family's."
+
+## Answers to the coordinator's questions
+
+- Can the clearing delete or change another person's or household's records, or the document? No (see "What holds").
+- Is it scoped to this document and person only? Yes.
+- Are saved answers withdrawn or marked? No (R16-2).
+- Is there a race with an in-flight read? Yes (R16-4).
+- Does "covers nobody" block a legitimate case? Only a document for someone not yet added, and the message could say so (R16-5).
+- Is it reversible by re-linking? The link is, but the person's cover details are not until a re-analysis (R16-1).
+- Also: two writes sit outside the transaction (R16-3).
+
+## Verdict on PR #67 at `0b56452`
+
+**No blocker on scope or safety. Fix R16-1 before merging, or ship it with a screen note.** The scoping is sound, and the PR fixes
+a critical bug on main. But R16-1 means that undoing a mis-tap silently drops the person's cover details from the Coverage page
+and dashboard. The cheapest acceptable fix is to rebuild that person's rows when they are linked again. Failing that, show the
+note "re-analyse to restore". R16-2 and R16-3 should follow before public launch. R16-4 can wait for the stored-exclusion
+decision. The `r5:ux-test` source check that pins the old behaviour is the Test engineer's to update.
