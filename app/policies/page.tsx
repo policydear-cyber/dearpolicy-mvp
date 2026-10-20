@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError, customerMessage } from "@/components/customer-text";
@@ -136,7 +137,7 @@ export default function PoliciesPage() {
     if (previousActiveCount.current > 0 && activeCount === 0) {
       const failed = policies.filter((p) => p.processing_status === "failed").length;
       setStatusIsError(!!failed);
-      setStatus(failed ? "Finished. One document could not be read — see below." : "Your documents are ready. Your portfolio has been updated.");
+      setStatus(failed ? `Finished. ${failed === 1 ? "One document" : `${failed} documents`} could not be read — see below.` : "Your documents are ready. Your portfolio has been updated.");
     }
     previousActiveCount.current = activeCount;
   }, [activeCount, policies]);
@@ -289,12 +290,12 @@ export default function PoliciesPage() {
     <section className="upload-panel">
       <form onSubmit={upload} className="upload-form">
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks the names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
-        <div className="field"><label htmlFor="up-file">Insurance document <span>(up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
+        <div className="field"><label htmlFor="up-file">Insurance document <span>(a PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
         <div className="field"><label htmlFor="up-password">PDF password <span>(if protected)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
       </form>
       <div className="note">The password is used only for this processing job and is not stored. Link a reference document, such as a product summary or policy wording, to the people it applies to.</div>
-      {status && <div className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}</div>}
+      {status && <div className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
     </section>
 
     <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>

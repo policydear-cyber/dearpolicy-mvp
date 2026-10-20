@@ -165,6 +165,9 @@ table { font-variant-numeric: tabular-nums; }
 .field label span { font-weight: 400; color: var(--muted); }
 .field select, .field input, .chat-composer textarea, .detected-row select { width: 100%; background: var(--surface); border: 1px solid var(--input-line); border-radius: var(--r-sm); padding: 10px 12px; min-height: 44px; color: var(--ink); outline: none; transition: border-color var(--t-hover) var(--ease), box-shadow var(--t-hover) var(--ease); }
 .field input[type=file] { padding: 8px 10px; }
+/* The file picker is the first thing a new user taps: a full-width, finger-sized button. */
+.upload-form input[type=file] { min-height: 52px; width: 100%; }
+.upload-form input[type=file]::file-selector-button { min-height: 36px; padding: 6px 14px; margin-right: 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .field select:focus, .field input:focus, .chat-composer textarea:focus, .detected-row select:focus { border-color: var(--brand); box-shadow: var(--focus); }
 .alert { border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 20px; display: grid; gap: 4px; font-size: var(--fs-sm); line-height: 1.5; }
 .alert.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
@@ -429,6 +432,9 @@ table { font-variant-numeric: tabular-nums; }
 .typing { color: var(--muted); }
 .chat-composer { position: sticky; bottom: 16px; margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; box-shadow: var(--shadow-float); }
 .chat-composer textarea { resize: vertical; border: 0; box-shadow: none !important; padding: 10px; min-height: 64px; background: transparent; }
+.chat-empty > p strong { color: var(--ink); }
+@media (max-width: 620px) { .chat-empty { margin-top: 12px; } .chat-empty .big-mark { display: none; } }
+.chat-empty > p.chat-library-note { font-size: var(--fs-sm); color: var(--ink-2); background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; }
 .chat-disclaimer { text-align: center; color: var(--muted); font-size: var(--fs-xs); margin-top: 10px; }
 .chat-value-strip { margin: 14px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .chat-value-strip span { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; }

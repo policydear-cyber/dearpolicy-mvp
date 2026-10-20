@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent,Suspense,useEffect,useRef,useState } from "react";
+import Link from "next/link";
+import { FormEvent,Suspense,useCallback,useEffect,useRef,useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
@@ -56,18 +57,30 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
 
 class ConflictError extends Error{}
 
-/** Starter questions that fit THIS household: its own people, never
- * another family's names or products. */
-function examplePrompts(family:Member[]):string[]{
-  const self=family.find(m=>m.relationship==="self")??family[0];
-  const other=family.find(m=>m!==self);
-  if(!self)return ["What policies does my family have?","What does my hospital plan cover?","When do my policies renew?","A family member was admitted to hospital. What can we claim?"];
-  return [
-    "What policies does my family have?",
-    `What is ${self.display_name} covered for?`,
-    other?`${other.display_name} broke an arm. What can we claim?`:`${self.display_name} was admitted to hospital. What can be claimed?`,
-    "When do our policies renew?",
-  ];
+/** What the household's library is like right now, so an empty chat says what a first question will be answered from:
+ * nothing uploaded yet, documents still being read, or documents that could not be read. */
+type Library={total:number;reading:number;failed:{id:string;name:string}[]};
+const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
+type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;processing_status?:string;quarantine_status?:string};
+function libraryOf(policies:LibraryPolicy[]):Library{
+  return {total:policies.length,
+    reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:p.product_name||p.original_filename||"Untitled document"}))};
+}
+
+/** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
+ * answer can draw on today. */
+function ChatWelcome({library}:{library:Library|null}){
+  return <div className="chat-empty" data-testid="chat-welcome"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
+    {library&&library.total===0?<>
+      <p><strong>Upload a policy first.</strong> DearPolicy answers only from the documents you upload, so there is nothing to answer from yet.</p>
+      <Link className="button primary" href="/policies">Upload a document</Link>
+    </>:<>
+      <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what. DearPolicy answers from your uploaded documents and shows the page each answer comes from.</p>
+      {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
+      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
+    </>}
+  </div>;
 }
 
 function ChatContent(){
@@ -97,14 +110,22 @@ function ChatContent(){
   const composer=useRef<HTMLTextAreaElement|null>(null);
   /** Document id -> file name, so each source row says which file it is. */
   const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
-  useEffect(()=>{
-    let live=true;
-    fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(data=>{
-      if(!live||!data?.policies)return;
-      setDocumentFiles(Object.fromEntries((data.policies as {id:string;original_filename?:string|null}[]).filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
-    }).catch(()=>undefined);
-    return()=>{live=false;};
+  const [library,setLibrary]=useState<Library|null>(null);
+  const loadLibrary=useCallback(async()=>{
+    const data=await fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);
+    if(!data?.policies)return null;
+    const policies=data.policies as LibraryPolicy[];
+    setDocumentFiles(Object.fromEntries(policies.filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
+    const next=libraryOf(policies);setLibrary(next);return next;
   },[]);
+  // While documents are being read, the welcome checks again now and then (for up to ten minutes), so it never says
+  // "still being read" about a document that is ready.
+  useEffect(()=>{
+    let live=true,checks=0,timer:ReturnType<typeof setTimeout>|undefined;
+    const tick=async()=>{const next=await loadLibrary();if(live&&next&&next.reading>0&&++checks<100)timer=setTimeout(()=>void tick(),6000);};
+    void tick();
+    return()=>{live=false;if(timer)clearTimeout(timer);};
+  },[loadLibrary]);
   // Reading a real policy takes real time on a local GPU, so the indicator has
   // to keep moving and show what stage it is at rather than looking frozen.
   useEffect(()=>{
@@ -303,10 +324,11 @@ function ChatContent(){
 
   return <div className="page chat-page">
     <header className="chat-header">
-      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.</p></div>
-      <div className="chat-head-actions"><div className="auto-context"><strong>Automatic family context</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name, relationship, “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
+      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask anything, in your own words. Answers come only from the documents you uploaded.</p></div>
+      <div className="chat-head-actions"><div className="auto-context"><strong>Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
-    <details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
+    {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
+    {history.length||historyCursor?<details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
@@ -315,12 +337,9 @@ function ChatContent(){
       </li>)}</ul>}
       {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}
       {historyError?<p role="alert">{historyError}</p>:null}
-    </details>
+    </details>:null}
     <div className="chat-window" aria-live="polite">
-      {!messages.length&&!busy?<div className="chat-empty"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
-        <p>Just say who and what happened. DearPolicy resolves the person, follows the conversation, and checks that person’s uploaded policies.</p>
-        <div className="prompt-grid">{examplePrompts(family).map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
-      </div>:null}
+      {!messages.length&&!busy?<ChatWelcome library={library}/>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
@@ -433,10 +452,10 @@ function ChatContent(){
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>
-    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask about a policy or tell me what happened…" rows={2}/>
+    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask anything about your policies…" rows={2}/>
       <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")+(question.length>=MAX_QUESTION_LENGTH*0.8?" visible":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
-    <p className="chat-disclaimer">Personal records confirm ownership. Matching policy wording supports benefit assessments.</p>
+    <p className="chat-disclaimer">DearPolicy answers only from your uploaded documents. Your insurer decides any claim.</p>
   </div>;
 }
 export default function ChatPage(){return <Suspense fallback={<div className="page">Loading…</div>}><ChatContent/></Suspense>;}
