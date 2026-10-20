@@ -138,6 +138,18 @@ async function main() {
     assert.ok(!statesMoney(answer.bottomLine!));
   });
 
+  // Test engineer negative control: the same one-row pair split between two people is two people's amounts, not either/or.
+  await check("either/or is never drawn across two people, even on one row", () => {
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "Dental pays S$300 or S$800.", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "S$300 for dental.", person: "Lim Ah Kow", document: "D1", quote: "Dental cover\tS$300", amount: "S$300", alternativeGroup: "d" }),
+      st({ kind: "amount", text: "S$800 for crowns.", person: "Lim Mei Mei", document: "D1", quote: "S$800 for crowns", amount: "S$800", alternativeGroup: "d" }),
+    ] });
+    const cards = answer.statements!.filter((s) => s.amount);
+    assert.equal(cards.length, 2);
+    assert.ok(cards.every((s) => !s.group), "no either/or group across two people");
+    assert.ok(answer.statements!.some((s) => s.kind === "uncertainty" && /not a total/.test(s.text)), "said not to be a total");
+  });
+
   await check("an amount not printed in its quote, a range as one amount, or an unfound quote is left out and said so", () => {
     const { answer, report } = verifyAnswer(HOUSE, { bottomLine: "Here is the cover.", nextSteps: [], question: null, statements: [
       st({ kind: "amount", text: "Hip pays S$4,000.", person: "Ah Kow", document: "D1", quote: "Hip\t75%", amount: "S$4,000" }),
