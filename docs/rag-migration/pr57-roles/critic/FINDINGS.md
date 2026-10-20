@@ -2081,3 +2081,59 @@ the rag2 path or let the simple chat handle B2.
 
 **Ready to merge.** It's correct for B2 and conservative when the documents don't match exactly. R37-1 is accepted. R37-2 is a
 direction question for the coordinator.
+
+# Round 38: PR #71 simple chat at `a4b529f` (R36 fixes)
+
+Read `git diff d17b033 a4b529f`. I re-ran the round-36 probes and new ones offline: crafted inputs plus the real snapshot loaded in
+the scratchpad, never committed. No model calls.
+
+Fixed:
+- R36-1 for the reported cases: "S$25" from "25%" and "S$30" from "30 days" are now dropped.
+- R36-2 for a row under a "% of S$5,000" / "Limit: S$5,000" heading: the base must be the nearest one above the quoted row on its
+  page. 25% of S$600,000 for the PS p13 row is dropped and the percentage is kept as a fact.
+- R36-3 for the reported cases: "S$1,250-2,000", "S$1,250 to 2,000", "plus", "in total" and "121,250 dollars" are all dropped.
+- R36-4: `UNTRUSTED_DOCUMENT_NOTICE` is in the prompt, and `<`/`>` are escaped in every page, attribute and member name. Quotes
+  are unescaped before matching.
+- R36-5: `context.chatPath` decides the run path, so a flag change mid-turn can't mix the paths.
+
+New probes on the real snapshot, BS p8 row "Arm, Elbow, Wrist or Ribs (Other Fracture) 20%" (heading "% of Sum Insured"), person
+Desmond:
+
+| percentOf base | Result |
+|---|---|
+| S$600,000 (his real GPA sum insured, on the certificate) | dropped, kept as the 20% fact |
+| S$400,000 (PS p5 "100% Sum Insured (up to S$400,000)", an advance-payment cap) | **shown: S$80,000** |
+| S$10,000 (PS p28 "monthly premium rate for every S$10,000 Sum Insured") | **shown: S$2,000** |
+| S$50,000 (BS p10 "Comatose State … maximum of $50,000") | **shown: S$10,000** |
+
+Synthetic: amount "S$500", quote "Plan 500 Hospital cash S$100 per day" → **shown: S$500**.
+
+## R38-1 (High, before switching on): the "% of Sum Insured" path accepts any figure on a line that says "sum insured"
+
+`printedSumInsured` accepts the base if *any* line containing "sum insured", in a same-product document linked to the person, prints
+that value. Caps ("up to S$400,000"), premium units ("every S$10,000 Sum Insured") and other benefits' maximums ("maximum of $50,000")
+all qualify, so a wrong base produces a wrong worked-out amount. Meanwhile the true S$600,000 fails: the certificate's product name
+"… SCHEME" doesn't equal "… Group Insurance", and its table doesn't print "sum insured" on the value's line. Fix: accept only the
+person's own sum insured for that plan, as a value, not a cap, rate or maximum. Either reject lines with `%`, "up to", "maximum",
+"max", "per", "every", "for each" or "premium" before the figure, or (better) take it from the person's certificate coverage row
+for the matching benefit, e.g. the app's `policy_coverages` amount for that person and product. Otherwise drop, as it does now.
+Add the four rows above as tests.
+
+## R38-2 (Medium-High, before switching on): a bare 3+ digit number in the quote still counts as money
+
+`checkAmount` uses `moneyValuesIn(excerpt)`, which includes `bareMoneyNumbers`: any unsigned 3+ digit number not followed by a unit.
+"Plan 500", "Class 101", "Section 210" or a table code then becomes an amount ("S$500" was shown). Fix: for `checkAmount`, require a
+currency-signed figure in the excerpt, or a bare number on a page whose column header prints the currency ("(S$)"). In both places,
+exclude numbers right after Plan, Class, Type, Code, Section, Clause, Ward, Room, Tier, Option or No.
+
+## R38-3 (Low): range and both-pay wording the regexes don't see
+
+These are kept when both figures are allowed amounts: "1,250 to 120,000 dollars" (no sign on either side), "At least S$1,250 and as
+much as S$120,000", and "Both pay, so S$1,250 and S$120,000 for her" (which misstates an either/or as both payable). "Anywhere from
+S$1,250 up to S$120,000" is caught. Optional: treat "dollars" as a sign in `RANGE`, add "as much as" / "at least … and", and drop
+"both pay" / "each pay" sentences when the amounts are in an either/or group.
+
+## Verdict on PR #71 at `a4b529f`
+
+**Still safe to merge only while switched off. Not ready to switch on:** fix R38-1 and R38-2 (both can still show a wrong claimable
+amount, R38-1 on the household's own documents). R38-3 is optional.
