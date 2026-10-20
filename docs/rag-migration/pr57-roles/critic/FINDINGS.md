@@ -555,3 +555,33 @@ C5 is release-ready from the code review, provided the PR lists these as open, a
 Evidence limit, unchanged: all evidence is scripted or replay on the OpenAI configuration. The model-facing changes (absence
 refusals, server quotes, the GP fallback) have had no live run. A live check needs DC's authorisation, and the Claude switch
 (PR #59) needs its own check. Whether to ship before that live check is DC's call.
+
+---
+
+# Round 9: final review of C6 `f4937ef1` (delta `177c0734..f4937ef1`; product code in 2 files)
+
+- **R8-1: closed.** "whether that trip fits this event" is said only when a Destination line is printed. A schedule that prints only
+  a period gets "whether this period of insurance covers the date of the event" (`statement-render.ts:90`).
+- **Partial-copy wording: correct.** "the text of the X (pages 1-4 and 8 of 37 pages) ... The text of the other pages was not stored"
+  matches what the check knows (pages counted from the stored rows; no claim about the upload itself). The refusal problem the
+  model sees is unchanged.
+- **Corrected hip note: no figure changes; one wording risk.**
+
+**R9-1. Low-Medium (wording only; no amount changes).** The new `bothKinds` note (`statement-render.ts:212`) says "these documents do
+not define either kind". It is gated on the *same policy's* records having no definitions, and `definitions` are read only from a
+record's own document (`benefit-records.ts:48-50,151-155`). Suppose a household's policy wording defines Simple Fracture while the
+table sits in a separate summary document. The note then claims all the documents are silent, though one defines it. It errs toward
+"the insurer decides", so no claim is overstated, but the absence statement can be false. Fix (one word): say "this document does
+not define either kind", or check every record in scope for a Simple/Other Fracture definition. The existing tagged note
+("these documents do not define which fractures count as ...") has the same ungated wording since C4; the same fix covers it.
+
+## Final release verdict (Critic) on C6
+
+**No Critic blocker remains.** Nothing in C6 states a wrong claimable amount, hides a documented benefit, or crosses between people.
+The full-diff position of round 8 stands: `loop.ts` and the G1 / absence logic are unchanged except the wording above.
+
+List as accepted open items: R9-1, R6-3, R6-4, R7-2, the scheme-quote qualifier, superseded answers not marked after a correction
+(fix before public launch), C1-3, and the F4 test.
+
+Evidence limit, unchanged: all evidence is scripted or replay (OpenAI configuration), with no live run. The Claude switch (PR #59)
+is unverified. Shipping before a live check is DC's call.
