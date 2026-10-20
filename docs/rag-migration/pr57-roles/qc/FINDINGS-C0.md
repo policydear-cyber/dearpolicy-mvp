@@ -60,3 +60,8 @@ No wrong claimable amount was found. Every figure in `answers.json` matches the 
 
 When the coordinator relays C1, reassess these scenarios on that exact commit: re-read the fixture pages if changed, re-check every figure,
 and re-run this comparison against whatever answers the Test engineer produces at C1.
+
+C1 checklist (the project's answer contract, relayed by the coordinator 2026-10-20): every benefit statement tied to the right person,
+product, document role, version and date, row, conditions, footnotes, amount, currency and base; missing information is never stated as
+an exclusion; an answer that unnecessarily hides a documented benefit fails like an unsupported amount. Under that contract Q1 (the
+omitted BS p8 condition) and Q2 (the Living Care / Living Care Plus listing left out of K2) count as failures to re-check, not only usefulness gaps.
