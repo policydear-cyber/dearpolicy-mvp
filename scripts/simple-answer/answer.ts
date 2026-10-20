@@ -18,7 +18,8 @@ export function renderDocument(doc: HouseholdDocument, index: number): string {
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
-    attr("linked_people", doc.linkedPeople.join(", ")) + attr("superseded", doc.supersededAt) + ">";
+    attr("linked_people", doc.linkedPeople.join(", ")) + attr("superseded", doc.supersededAt) +
+    (doc.processingStatus && doc.processingStatus !== "ready" ? attr("reading_status", doc.processingStatus) : "") + ">";
   const pages = doc.pages.length
     ? doc.pages.map((p) => `<page n="${p.page}">\n${p.text}\n</page>`).join("\n")
     : "<no_readable_text/>";

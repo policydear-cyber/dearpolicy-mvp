@@ -2,12 +2,13 @@
  * only: no network, no database, no spend.  node --import tsx scripts/simple-answer/offline-test.ts */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { answerSimply, buildRequest, costUsd, renderLibrary, type ModelClient, type SimpleRequest } from "./answer";
 import { readHousehold, type Household, type ReadOnlyQuery } from "./household";
 import { estimateRun, loadQuestions, recordedCurrent, runComparison, sideBySide } from "./compare";
+import { buildSnapshot, pagesDigest } from "./build-snapshot";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222";
 const P1 = "aaaaaaaa-0000-4000-8000-000000000001", P2 = "aaaaaaaa-0000-4000-8000-000000000002", P3 = "bbbbbbbb-0000-4000-8000-000000000003";
@@ -106,6 +107,35 @@ const questions = loadQuestions(qPath);
 
 await check("question set: turns or a single question, ids kept", () => {
   assert.deepEqual(questions.map((q) => [q.id, q.turns.length]), [["gp", 2], ["travel", 1]]);
+});
+await check("release-set format: chat <id> continues that conversation, chat new starts one", () => {
+  const p = join(dir, "release.json");
+  writeFileSync(p, JSON.stringify([
+    { id: "B1", chat: "new", message: "wife broke her wrist", category: "scenario" },
+    { id: "A1", chat: "new", message: "what is charmaine covered for" },
+    { id: "C1", chat: "B1", message: "how much could she get" },
+    { id: "C2", chat: "C1", message: "what do i do now" },
+  ]));
+  const qs = loadQuestions(p);
+  assert.deepEqual(qs.map((q) => [q.id, q.turns, q.turnIds]), [
+    ["B1", ["wife broke her wrist", "how much could she get", "what do i do now"], ["B1", "C1", "C2"]],
+    ["A1", ["what is charmaine covered for"], ["A1"]],
+  ]);
+  writeFileSync(p, JSON.stringify([{ id: "C1", chat: "B9", message: "x" }]));
+  assert.throws(() => loadQuestions(p), /not an earlier question/);
+});
+await check("snapshot builds only when every document matches its database digest", () => {
+  const snap = join(dir, "snap");
+  mkdirSync(snap, { recursive: true });
+  const docs = household.documents.map(({ pages, ...d }) => ({ ...d, pages: pages.length, digest: pagesDigest(pages) }));
+  writeFileSync(join(snap, "meta.json"), JSON.stringify({ accountId: household.accountId, members: household.members, documents: docs }));
+  for (const d of household.documents) writeFileSync(join(snap, `pages-${d.policyId}.json`), JSON.stringify(d.pages));
+  assert.deepEqual(buildSnapshot(snap), household);
+  // Postgres: md5(string_agg(md5(text), '' ORDER BY page_number)); md5(md5('a')||md5('b')) = this value.
+  assert.equal(pagesDigest([{ page: 2, text: "b" }, { page: 1, text: "a" }]), "3bc22fb7aaebe9c8c5d7de312b876bb8");
+  const changed = household.documents[1].pages.map((p) => ({ ...p, text: p.text.replace("80%", "60%") }));
+  writeFileSync(join(snap, `pages-${household.documents[1].policyId}.json`), JSON.stringify(changed));
+  assert.throws(() => buildSnapshot(snap), /does not match the database digest/);
 });
 await check("comparison: both answers side by side, follow-up sees the earlier turn", async () => {
   const { client, seen } = stub((req, n) => `baseline answer ${n} to: ${String(req.messages.at(-1)!.content)}`);

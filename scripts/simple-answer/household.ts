@@ -22,6 +22,8 @@ export type HouseholdDocument = {
   uploadedFor: string | null;
   linkedPeople: string[];
   supersededAt: string | null;
+  /** The app's reading status, e.g. "ready" or "failed". */
+  processingStatus?: string | null;
   pages: HouseholdPage[];
 };
 export type Household = {
@@ -51,7 +53,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery): Prom
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
-            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, f.display_name AS uploaded_for
+            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, f.display_name AS uploaded_for
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
     [accountId]);
@@ -75,7 +77,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery): Prom
       insurer: text(d.insurer), productName: text(d.product_name), policyNumber: text(d.policy_number),
       documentType: text(d.policy_type), documentRole: text(d.document_role),
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
-      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at),
+      uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text) })),
     })),

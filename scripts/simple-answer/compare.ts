@@ -20,18 +20,32 @@ import { loadHouseholdFromDb, loadHouseholdFromFile, type Household } from "./ho
 /** DC's authorisation for the comparison run (decision card, 20 Oct 2026 12:15Z: "Opus, cap $10"). */
 export const AUTHORISED_CAP_USD = 10;
 
-export type Question = { id: string; turns: string[]; person?: string; notes?: string };
+export type Question = { id: string; turns: string[]; turnIds?: string[]; person?: string; notes?: string };
+type RawQuestion = { id?: string; turns?: string[]; question?: string; message?: string; chat?: string; person?: string; notes?: string; category?: string };
+/** Accepts {questions:[...]} or a bare array. An item is {id, turns:[...]}, {id, question}, or the release set's
+ * {id, message, chat}: chat "new" starts a conversation, chat "<earlier id>" continues that item's conversation. */
 export function loadQuestions(path: string): Question[] {
   const raw = JSON.parse(readFileSync(path, "utf8"));
-  const list: unknown[] = Array.isArray(raw) ? raw : raw?.questions;
+  const list: RawQuestion[] = Array.isArray(raw) ? raw : raw?.questions;
   if (!Array.isArray(list) || !list.length) throw new Error(`${path} has no questions`);
-  const out = list.map((q, i) => {
-    const item = q as { id?: string; turns?: string[]; question?: string; person?: string; notes?: string };
-    const turns = Array.isArray(item.turns) ? item.turns : item.question ? [item.question] : [];
-    if (!turns.length || turns.some((t) => typeof t !== "string" || !t.trim())) throw new Error(`Question ${i + 1} has no text`);
-    return { id: item.id ?? `q${String(i + 1).padStart(2, "0")}`, turns, person: item.person, notes: item.notes };
+  const out: Question[] = [], byId = new Map<string, Question>();
+  list.forEach((item, i) => {
+    const id = item.id ?? `q${String(i + 1).padStart(2, "0")}`;
+    if (byId.has(id)) throw new Error("Question ids must be unique");
+    const turns = Array.isArray(item.turns) ? item.turns : [item.question ?? item.message ?? ""];
+    if (!turns.length || turns.some((t) => typeof t !== "string" || !t.trim())) throw new Error(`Question ${id} has no text`);
+    if (item.chat && item.chat !== "new") {
+      const root = byId.get(item.chat);
+      if (!root) throw new Error(`Question ${id} continues ${item.chat}, which is not an earlier question`);
+      root.turns.push(...turns);
+      root.turnIds!.push(...turns.map(() => id));
+      byId.set(id, root);
+      return;
+    }
+    const q: Question = { id, turns: [...turns], turnIds: turns.map(() => id), person: item.person, notes: item.notes ?? item.category };
+    out.push(q);
+    byId.set(id, q);
   });
-  if (new Set(out.map((q) => q.id)).size !== out.length) throw new Error("Question ids must be unique");
   return out;
 }
 
@@ -110,7 +124,7 @@ export async function liveCurrent(storageState: string, base = "https://dearpoli
 
 export type RowResult = {
   id: string; person?: string; notes?: string;
-  turns: { question: string; baseline: { answer: string; ms: number; costUsd: number; usage: unknown; stopReason: string | null } | { error: string }; current: CurrentAnswer | null }[];
+  turns: { id?: string; question: string; baseline: { answer: string; ms: number; costUsd: number; usage: unknown; stopReason: string | null } | { error: string }; current: CurrentAnswer | null }[];
 };
 
 export async function runComparison(opts: {
@@ -133,10 +147,10 @@ export async function runComparison(opts: {
         spent += a.costUsd;
         // The estimate is a character heuristic; once a real count is back, admit later calls on whichever is larger.
         prefix = Math.max(prefix, a.usage.input + a.usage.cacheWrite + a.usage.cacheRead - fresh);
-        row.turns.push({ question: turn, baseline: { answer: a.text, ms: a.ms, costUsd: a.costUsd, usage: a.usage, stopReason: a.stopReason }, current: null });
+        row.turns.push({ id: q.turnIds?.[row.turns.length], question: turn, baseline: { answer: a.text, ms: a.ms, costUsd: a.costUsd, usage: a.usage, stopReason: a.stopReason }, current: null });
         history.push({ role: "user", text: turn }, { role: "assistant", text: a.text });
       } catch (error) {
-        row.turns.push({ question: turn, baseline: { error: String(error) }, current: null });
+        row.turns.push({ id: q.turnIds?.[row.turns.length], question: turn, baseline: { error: String(error) }, current: null });
         break; // a later turn without the earlier answer would not be the same conversation
       }
     }
@@ -159,7 +173,7 @@ export function sideBySide(rows: RowResult[], meta: Record<string, unknown>): st
       const bm = "error" in t.baseline ? "" : ` · ${(t.baseline.ms / 1000).toFixed(1)} s · US$${t.baseline.costUsd.toFixed(4)}`;
       const c = t.current ? (t.current.error ? `ERROR: ${t.current.error}\n\n${t.current.answer}` : t.current.answer) : "(not asked)";
       const cm = t.current?.ms != null ? ` · ${(t.current.ms / 1000).toFixed(1)} s` : "";
-      lines.push(`### Turn ${i + 1}: ${t.question}`, "", `**Simple baseline**${bm}`, "", b, "", `**Current pipeline**${cm}`, "", c, "",
+      lines.push(`### ${t.id && t.id !== r.id ? `${t.id} (turn ${i + 1})` : `Turn ${i + 1}`}: ${t.question}`, "", `**Simple baseline**${bm}`, "", b, "", `**Current pipeline**${cm}`, "", c, "",
         "Grade (baseline / current): correct person ☐☐ · amounts and conditions right ☐☐ · nothing unsupported ☐☐ · useful ☐☐", "");
     });
   }
