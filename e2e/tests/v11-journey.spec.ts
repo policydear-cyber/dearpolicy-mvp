@@ -263,6 +263,9 @@ test.describe.serial("V1.1 release journey", () => {
       if (!linked && r.p) {
         await owner.goto("/policies");
         const card = owner.locator(".document-card").filter({ hasText: r.p.product_name ?? r.p.original_filename }).first();
+        // PR #77: open the one-line "Covers" picker first ("Choose" when nobody is linked yet). Was: the chips were shown open.
+        const opener = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+        if (await opener.isVisible().catch(() => false)) await opener.click();
         const declare = card.locator(".declare-owner button").filter({ hasText: PEOPLE[d.person!].fullName });
         const match = card.locator(".detected-row select").first();
         if (await declare.count()) { await declare.first().click(); ownerAction = "declared owner in the page"; }

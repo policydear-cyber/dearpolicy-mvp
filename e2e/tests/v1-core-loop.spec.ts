@@ -149,6 +149,9 @@ async function uploadAndWait(page: Page, f: Fixture, profileLabel: string | null
       const linked = p.linked_people.some((l) => l.name.toLowerCase().includes(ownerName.toLowerCase().split(" ")[0]));
       if (!linked) {
         // Reference document or unmatched name: assign through the UI, as a person would.
+        // PR #77: open the one-line "Covers" picker first ("Choose" when nobody is linked yet). Was: the chips were shown open.
+        const opener = cardLoc.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+        if (await opener.isVisible().catch(() => false)) await opener.click();
         const declare = cardLoc.locator(".declare-owner button").filter({ hasText: new RegExp(`^${ownerName.split(" ")[0]}`, "i") });
         const matchSel = cardLoc.locator(".detected-row select").first();
         if (await declare.count()) { await declare.first().click(); ownerAction = "declared owner (reference document)"; }

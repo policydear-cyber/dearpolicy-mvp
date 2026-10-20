@@ -185,6 +185,8 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     for (const who of [self, child]) ids[who] = family.find((f) => f.display_name === who)!.id;
     // Edit the child's preferred name; the Save button reports the save.
     const childCard = owner.locator(".profile-card").filter({ has: owner.locator(`input[value="${child}"]`) });
+    // PR #77 (family page): the fields are folded behind "Edit details". Original: filled "Preferred name" directly.
+    await childCard.getByRole("button", { name: "Edit details" }).click();
     await childCard.getByLabel("Preferred name").fill("Syn Child");
     await childCard.getByRole("button", { name: "Save" }).click();
     await expect(childCard.getByRole("button", { name: "Saved" })).toBeVisible();
@@ -553,8 +555,11 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await owner.goto("/family");
     const childCard = () => owner.locator(".profile-card").filter({ has: owner.locator(`input[value="${child}"]`) });
     await childCard().getByRole("button", { name: `Delete ${child}` }).click();
-    await childCard().getByRole("button", { name: `Confirm delete ${child}` }).click();
-    await expect(owner.locator(".profile-add-panel [role=status]")).toContainText("has linked documents or activity");
+    // PR #77 (family page): a person still linked to a document is sent to Documents instead of being offered a delete that fails.
+    // Original: clicked `Confirm delete ${child}` and expected the status "has linked documents or activity".
+    await expect(childCard().getByRole("alert")).toContainText(new RegExp(`${child} is still linked to (?:a document|\\d+ documents)`));
+    await expect(childCard().getByRole("link", { name: "Go to Documents" })).toHaveAttribute("href", "/policies");
+    await expect(childCard().getByRole("button", { name: `Confirm delete ${child}` })).toHaveCount(0);
     expect(((await api<{ family: { id: string }[] }>(owner, "/api/family")).body.family ?? []).map((f) => f.id)).toContain(ids[child]);
     // Remove the child's document first, then the profile.
     await owner.goto("/policies");

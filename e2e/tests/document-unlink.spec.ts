@@ -49,7 +49,8 @@ test.describe.serial("removing a person from a document", () => {
     await page.goto("/policies");
     const card = page.locator(".document-card").filter({ hasText: doc.product_name ?? file }).first();
     await expect(card).toBeVisible({ timeout: 60_000 });
-    const change = card.getByTestId("covers-picker").getByRole("button", { name: "Change" });
+    // PR #77: the picker is one line for every document until opened; "Choose" when nobody is linked yet, "Change" otherwise. Was: { name: "Change" } only.
+    const change = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
     if (await change.isVisible().catch(() => false)) await change.click();
     return card.locator(".declare-owner button").filter({ hasText: who }).first();
   }
