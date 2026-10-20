@@ -2295,3 +2295,22 @@ and "See pp. 113 to 115." is dropped because the second page number has no "page
 
 **Safe to merge. Ready to switch on once R42-1 is fixed** (a few lines in `labelledNumbersRead`), apart from the one paid
 smoke test. Everything else from rounds 36 to 41 holds.
+
+---
+
+# Round 43: PR #71 (simple chat) at `1a62deb`, re-check of round 42
+
+Local tsx probe with a synthetic certificate printing "S$600,000", "S$1,250", "Claims hotline: 6333 1234", "Policy no. 1250"
+and "Policy no.: 778899". No paid model calls.
+
+- **R42-1: fixed.** Now dropped: "Call 1250…", "Call 600000…", "Quote policy no. 1250…" (even though the page prints
+  "Policy no. 1250", the same value is printed as S$1,250), "Claim no. 600000…", "Call 6333" (partial number) and
+  "Call 778899" (a policy number used under a phone label). Kept: "Quote policy no. 778899 when you call."
+- **R43-1 (Low, usefulness):** when the cited quote has more digits right after the phone number ("Claims hotline: 6333
+  1234 / 24 hours a day"), the label pattern's `[\d\s-]*` runs across the line break and reads "6333123424", so "Call on
+  6333 1234 to claim" is dropped. It fails safe. Stopping the number at a line break or before a space followed by a word
+  would fix it. Optional.
+
+## Verdict on PR #71 at `1a62deb`
+
+**Ready to switch on, apart from the one paid smoke test.** Safe to merge. R43-1 is optional.
