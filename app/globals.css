@@ -968,3 +968,10 @@ table { font-variant-numeric: tabular-nums; }
 .document-card.focused { box-shadow: 0 0 0 3px var(--brand); transition: box-shadow var(--t-state) var(--ease); }
 .row-error-actions { margin-top: 8px; display: flex; gap: 8px; }
 .summary-unknown { font-size: var(--fs-lg, 1.25rem); color: var(--ink-2); }
+.upload-status.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
+.upload-status.error strong { font-weight: 700; }
+.unread-documents.stalled { border-color: var(--critical-line); background: var(--critical-tint); }
+@media (max-width: 620px) { .trust-strip { display: none; } }
+.field-hint { font-size: var(--fs-xs); color: var(--muted); margin: 4px 0 0; min-height: 0; }
+.field-hint:empty { display: none; }
+.field-hint.invalid { color: var(--critical); }

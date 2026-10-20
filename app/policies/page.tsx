@@ -53,6 +53,10 @@ function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.proces
 const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
+/** What a household calls a document: its product, else its file name, never blank. */
+function documentName(policy: Pick<Policy, "product_name" | "original_filename">) {
+  return policy.product_name?.trim() || policy.original_filename?.trim() || "Untitled document";
+}
 function roleLabel(role: string | null) { return (role ?? "document").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
 function stageLabel(_stage: string | null, status: string) {
   if (status === "failed") return "Could not be read";
@@ -71,6 +75,9 @@ export default function PoliciesPage() {
   const [file, setFile] = useState<File | null>(null);
   const [pdfPassword, setPdfPassword] = useState("");
   const [status, setStatus] = useState("");
+  // An upload that failed or was refused is shown as an error, never in the
+  // same box (and colour) as a successful one.
+  const [statusIsError, setStatusIsError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -128,6 +135,7 @@ export default function PoliciesPage() {
   useEffect(() => {
     if (previousActiveCount.current > 0 && activeCount === 0) {
       const failed = policies.filter((p) => p.processing_status === "failed").length;
+      setStatusIsError(!!failed);
       setStatus(failed ? "Finished. One document could not be read — see below." : "Your documents are ready. Your portfolio has been updated.");
     }
     previousActiveCount.current = activeCount;
@@ -137,6 +145,7 @@ export default function PoliciesPage() {
     e.preventDefault();
     if (!file) return;
     setBusy(true);
+    setStatusIsError(false);
     setStatus("Uploading document…");
     try {
       // Straight to secure storage (components/upload-document.ts): large
@@ -152,7 +161,8 @@ export default function PoliciesPage() {
       if (fileInput.current) fileInput.current.value = "";
       await refresh();
     } catch (err) {
-      setStatus(customerError(err, "The upload did not go through. Please try again."));
+      setStatusIsError(true);
+      setStatus(customerError(err, "The upload did not go through. Please try again.").replace(/\s--\s/g, " — "));
     } finally {
       setBusy(false);
     }
@@ -164,7 +174,7 @@ export default function PoliciesPage() {
    * re-reading a partly stored document rewrites its pages in place, and
    * answers saved from them are not withdrawn (open item C1-3). */
   async function retryReading(policy: Policy) {
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     setRetryingId(policy.id);
     try {
       const response = await fetch("/api/policies/reprocess", {
@@ -185,7 +195,7 @@ export default function PoliciesPage() {
   /** Give the password for a locked PDF that is already in the library:
    * it is read again with that password; nothing is re-uploaded. */
   async function unlock(policy: Policy, password: string) {
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     const response = await fetch("/api/policies/reprocess", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ policyId: policy.id, pdfPassword: password }),
@@ -200,7 +210,7 @@ export default function PoliciesPage() {
   // the employee, spouse and children), each with the cover tier they hold
   // when the booklet has tiers.
   async function saveCoverage(policy: Policy, assignments: { familyMemberId: string; planTier: string | null }[]) {
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     const response = await fetch("/api/policies/link-person", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ policyId: policy.id, assignments }),
@@ -239,7 +249,7 @@ export default function PoliciesPage() {
     // (isProcessing()'s raw check) indefinitely, with no other way for the
     // person to remove it. See isQuarantineHeld()/isScanRejected() above.
     if (isProcessing(policy) && !isQuarantineHeld(policy) && !isScanRejected(policy)) return;
-    const label = policy.product_name ?? policy.original_filename;
+    const label = documentName(policy);
     // A native confirm() blocks the tab's whole event loop until dismissed --
     // an inline arm-then-confirm click (see the Delete button below) avoids
     // that while still requiring a deliberate second click first.
@@ -269,9 +279,8 @@ export default function PoliciesPage() {
   };
 
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">DearPolicy decides what is personal proof, what is legal/reference wording, who is actually insured and which facts are safe to show on the portfolio.</p></div></header>
+    <header className="page-header compact"><div><div className="eyebrow">INSURANCE LIBRARY</div><h1>Upload whatever your insurer sent you.</h1><p className="lead">Upload any policy, certificate, schedule or summary. DearPolicy reads it and works out who it covers.</p></div></header>
 
-    <section className="trust-strip"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
     {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This page updates on its own. You can keep using the app.</small></div></div>}
@@ -279,14 +288,16 @@ export default function PoliciesPage() {
 
     <section className="upload-panel">
       <form onSubmit={upload} className="upload-form">
-        <div className="field"><label htmlFor="up-profile">Profile hint <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure — let DearPolicy detect names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
+        <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks the names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         <div className="field"><label htmlFor="up-file">Insurance document <span>(up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
         <div className="field"><label htmlFor="up-password">PDF password <span>(if protected)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
       </form>
       <div className="note">The password is used only for this processing job and is not stored. Reference documents do not need to be assigned to a family member.</div>
-      {status && <div className="upload-status">{status}</div>}
+      {status && <div className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}</div>}
     </section>
+
+    <section className="trust-strip" aria-label="What DearPolicy does with an upload"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     <section className="section">
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
@@ -311,11 +322,11 @@ export default function PoliciesPage() {
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{policy.product_name ?? policy.original_filename}</strong><span>{policy.insurer ?? "Insurer not known yet"} · {processing ? stageLabel(policy.processing_stage, policy.processing_status) : roleLabel(policy.document_role)}</span></div>
-            <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? "Reading" : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
+            <div className="document-title"><strong>{documentName(policy)}</strong><span>{processing ? "Usually ready in under a minute" : `${policy.insurer ?? "Insurer not known yet"} · ${roleLabel(policy.document_role)}`}</span></div>
+            {!processing && <div className={`document-authority ${policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>}
           </div>
 
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{!processing && <span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
 
