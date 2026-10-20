@@ -975,3 +975,18 @@ table { font-variant-numeric: tabular-nums; }
 .field-hint { font-size: var(--fs-xs); color: var(--muted); margin: 4px 0 0; min-height: 0; }
 .field-hint:empty { display: none; }
 .field-hint.invalid { color: var(--critical); }
+/* "Who does this document cover?": one line once answered, people as
+   check chips (not primary buttons), and "Saved" beside the control. */
+.covers-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-sm); }
+.covers-summary > span:first-child { flex: 1 1 12rem; min-width: 0; }
+.covers-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.chip-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 14px 6px 8px; border-radius: 999px; border: 1px solid var(--input-line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.chip-toggle .chip-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--input-line); display: grid; place-items: center; font-size: 13px; line-height: 1; }
+.chip-toggle.on { border-color: var(--brand); background: var(--brand-tint); }
+.chip-toggle.on .chip-check { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip-toggle small { color: var(--muted); }
+.chip-toggle:focus-visible { outline: none; box-shadow: var(--focus); }
+.covers-note { font-size: var(--fs-xs); color: var(--muted); margin: 6px 0 0; }
+.covers-saved { font-size: var(--fs-xs); color: var(--good-text); font-weight: 600; }
+@media (pointer: coarse), (max-width: 760px) { .chip-toggle { min-height: 44px; } }
+.covers-plan-missing { color: var(--warn-text); }

@@ -414,10 +414,11 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   const covered = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
   const current = () => covered.map((p) => ({ familyMemberId: p.id, planTier: p.planTier ?? null }));
   async function save(next: { familyMemberId: string; planTier: string | null }[]) {
     setBusy(true); setError("");
-    try { await onSave(next); }
+    try { await onSave(next); setSaved(true); }
     catch (err) { setError(customerError(err, "Could not save that. Please try again in a moment.")); }
     finally { setBusy(false); }
   }
@@ -430,26 +431,39 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   function setTier(memberId: string, tier: string) {
     void save(current().map((a) => a.familyMemberId === memberId ? { ...a, planTier: tier || null } : a));
   }
+  const [open, setOpen] = useState(covered.length === 0);
+  useEffect(() => { if (!saved) return; const t = setTimeout(() => setSaved(false), 2500); return () => clearTimeout(t); }, [saved]);
+  const summary = covered.map((p) => p.planTier ? `${p.name} (${p.planTier})` : p.name).join(", ");
+  const planMissing = tiers.length > 0 && covered.some((p) => !p.planTier);
+  // Collapsed to one line once someone is linked; opened by "Change", or
+  // open from the start when nobody is linked yet (that is the next step).
+  if (!open) return <div className="covers-summary" data-testid="covers-picker">
+    <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
+    {saved && <span className="covers-saved" role="status">Saved</span>}
+    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>Change</button>
+  </div>;
   return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
     <strong>Who does this document cover?</strong>
-    <p>{named.length ? `It names ${named.map((n) => n.name).join(", ")}. ` : ""}Press everyone in your family it covers{tiers.length ? ", then choose the cover each person has" : ""} — one person or several. DearPolicy then uses its benefits when answering questions about them. Amounts printed here stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
-    <div className="declare-owner" role="group" aria-label="Family members this document covers">{family.map((m) => {
+    <p>Tap everyone it covers. DearPolicy then uses it when you ask about them.{named.length ? ` It names ${named.map((n) => n.name).join(", ")}.` : ""}</p>
+    <div className="declare-owner covers-chips" role="group" aria-label="Family members this document covers">{family.map((m) => {
       const on = covered.some((p) => p.id === m.id);
-      return <button key={m.id} type="button" className={`button ${on ? "primary" : "secondary"}`} aria-pressed={on} disabled={busy} onClick={() => toggle(m)}>
-        {on ? `${m.display_name} \u2713` : m.display_name}{!on && namedFor(m) ? " · named" : ""}
+      return <button key={m.id} type="button" className={`chip-toggle${on ? " on" : ""}`} aria-pressed={on} disabled={busy} onClick={() => { setSaved(false); toggle(m); }}>
+        <span className="chip-check" aria-hidden="true">{on ? "\u2713" : ""}</span>{m.display_name}{!on && namedFor(m) ? <small> · named in it</small> : null}
       </button>;
     })}</div>
     {tiers.length > 0 && covered.length > 0 && <div className="covers-list">{covered.map((p) => (
       <div className="covers-row" key={p.id}>
-        <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover</label>
-        <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => setTier(p.id, e.target.value)}>
-          <option value="">Choose…</option>
+        <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover (which plan?)</label>
+        <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => { setSaved(false); setTier(p.id, e.target.value); }}>
+          <option value="">Not sure</option>
           {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
       </div>
     ))}</div>}
+    <p className="covers-note">Amounts in it stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
     {error && <small role="alert" className="row-error">{error}</small>}
     {referenceLinks.length > 0 && <small>Also available as matching wording for {referenceLinks.join(", ")}.</small>}
+    <div className="covers-actions">{covered.length > 0 && <button type="button" className="mini-button" onClick={() => setOpen(false)} disabled={busy}>Done</button>}{busy ? <span className="covers-saved" role="status">Saving…</span> : saved && !error ? <span className="covers-saved" role="status">Saved</span> : null}</div>
   </div></div>;
 }
 
