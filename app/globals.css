@@ -1039,3 +1039,14 @@ div.answer-point { display: grid; gap: 4px; }
   .text-link { min-height: 44px; }
   .filter-pills button, .schedule-filters button { min-height: 44px; }
 }
+/* A card's document chip opens its source detail: the chip stays small, its tap area is 44px. */
+.answer-chip-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0; margin: -10px 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.answer-chip-button .answer-chip { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+.answer-chip-button:hover .answer-chip { border-color: var(--brand); }
+.answer-where-item:focus { outline: none; box-shadow: var(--focus); border-radius: var(--r-sm); }
+/* Either/or amounts: one block, joined by "or", never read as a total. */
+.answer-either { border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 10px; display: grid; gap: 0; background: var(--surface-2); }
+.answer-either-note { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--ink-2); }
+.answer-either-note b { color: var(--ink); margin-right: 4px; }
+.answer-either-or { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.answer-either-or::before, .answer-either-or::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); }
