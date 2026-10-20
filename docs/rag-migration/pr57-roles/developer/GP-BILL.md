@@ -100,3 +100,50 @@ whether the model states them. The quoted "$" amount inside a printed line is an
 
 Results on C3 (scripted, no spend): GP group AC 12/12, GUARD 16/16; full acceptance AC 20/26 (same 6 open: R1, R2, R3, R7, R9, N5b),
 GUARD 41/41.
+
+## Live re-ask after PR #61 (main `ca6af69`, ~08:24): why the fix did not show
+
+Reconstructed in `gp-bill-live-repro.ts` (anonymised fixture plus two invented Product Summary pages: an overseas emergency
+outpatient clause on page 20, a panel GP benefit on page 25; no production data read). It reproduces all three live symptoms.
+
+- **"You told me tripped on the kerb."**: `sayBack` (compose.ts) ran words with no subject of their own straight after "You told
+  me". Predates PR #61. Now quoted: “You told me: “tripped on the kerb”.”
+- **The overseas clause**: the G2 path did run. Its absence check was refused (the library prints "outpatient"), and the server quoted
+  the first two printed lines in page order: the overseas clause and its own heading. Nothing ranked a line limited to treatment abroad
+  after the others. Now: lines limited to treatment outside Singapore / overseas / abroad go last, bare all-capitals headings just before
+  them, and a line already inside another chosen line of the same page is not quoted twice.
+- **No panel GP benefit**: "GP" (two letters) is dropped by the term filter, so a panel GP line was never searched for by name, and the
+  overseas lines filled both quote slots. G2 now also searches "panel gp", "gp clinic" and "gp consultation".
+
+Reconstruction after the fix: the answer quotes the panel GP line (page 25), not the overseas clause. Not done by the server: asking
+whether a panel GP was seen (depends on the model).
+
+### PR #64 second commit: Policy Evidence Reviewer 12.1-12.2, Critic R10-1 to R10-4
+
+- **Whose cover (12.1, R10-1, R10-3)**: when a quoted line is not from the person's own confirmed certificate and its page does not name
+  them, the server's note after the quote says what their certificate lists (dated), any scheme policy the scheme's list names that the
+  certificate does not list (G1's facts, kept), the heading the line sits under (and that the certificate does not list it, when the heading
+  names a policy), and that only the insurer or the scheme administrator can confirm whether it applies to them.
+- **Where the bill was (12.2, R10-2)**: G2 passes the place the household gave (abroad, home, or not said). A line that pays only for
+  treatment abroad ("in Singapore or overseas" is not abroad-only) is quoted only when the bill was placed abroad. Otherwise it is said
+  apart, as applying only if the treatment was abroad (when the place was not said, or when nothing else is printed). The ranking runs only
+  on this bill path, not on other refusals.
+- **Headings (R10-4)**: a short heading ("Panel GP Benefit") is not quoted beside a line of its own.
+- The "$30 per visit" stays inside the quote, marked as printed with a bare "$"; nothing ties it to the $800 bill and nothing is computed.
+
+`gp-bill-live-repro.ts` now runs three cases: place not said, the bill in Bangkok, and the panel GP line under an "OUTPATIENT MEDICARE
+POLICY" heading. The original fixture (`gp-bill-reconstruction.ts` variant C) is unchanged: G1 still states the certificate and OPMC.
+
+### PR #64 third commit: Critic round 11 (R11-1 to R11-4), Evidence Reviewer 13
+
+- **R11-1**: "which that certificate does not list" is said only when none of the products on the person's own rows shares a distinctive
+  word with the policy name (Group / Policy / Plan / Benefit / Insurance / Scheme ignored) or is its abbreviation. A section heading
+  gives a policy name only from an explicit "... POLICY" phrase, and only when the scheme's own list gives its abbreviation; otherwise
+  nothing is said about listing. G1's scheme sentence uses the same word check. Cases E ("GROUP OUTPATIENT MEDICARE") and E2
+  ("GROUP OPMC") on Daniel's rows: no "does not list".
+- **R11-2**: a bill is abroad only on explicit words in the current message (overseas, abroad, on holiday, travelling, a trip);
+  "a GP in Tampines" and "fell in Grace's room" are "not said".
+- **R11-3**: the whose-cover note is the first note, directly under the server's quote, and only when that quote survived composing.
+- **R11-4**: "The only line found for this is in the X (page N), and it pays only for treatment outside Singapore, ..."; never
+  "Policy Policy" (G1's sentence too, R6-4).
+- **Evidence Reviewer 13**: the note names the benefit printed just above the line ("under “Panel GP Benefit”") and its section.
