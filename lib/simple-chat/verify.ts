@@ -185,15 +185,28 @@ function withoutMoney(text: string, dropped: string[], keep: (s: string) => stri
 }
 /** A next step may keep a helpline, policy, certificate or claim number, or a page, when it is labelled as one and the
  * documents cited in this answer print it (R41-2): the number is read past, and the rest of the sentence still may not
- * state money. */
-const LABELLED = /\b(?:phone|hotline|helpline|call|tel\.?|telephone|fax|(?:policy|certificate|claim)\s*(?:no\.?|number|#))\s*(?:on|at|is)?\s*:?\s*(\+?\d[\d\s-]*\d)|\b(?:p\.|pp\.|page)\s*(\d+)/gi;
+ * state money. The cited excerpt must print that whole number directly after the same kind of label, and never as a
+ * figure with a currency sign (R42-1): "Call 1250" does not stand on a page that prints "S$1,250". */
+const LABEL = String.raw`\b(phone|hotline|helpline|call|tel\.?|telephone|fax|(?:policy|certificate|claim)\s*(?:no\.?|number|#))\s*(?:on|at|is)?\s*:?\s*(\+?\d[\d\s-]*\d)`;
+const PAGES = String.raw`\b(?:p\.|pp\.|pages?)\s*(\d+)(?:\s*(?:to|-|–|and)\s*(\d+))?`;
+const LABELLED = new RegExp(`${LABEL}|${PAGES}`, "gi");
+const labelKind = (label: string) => { const l = label.toLowerCase(); return /^(?:policy|certificate|claim)/.test(l) ? l.match(/^\w+/)![0] : "phone"; };
+const digitsOf = (s: string) => s.replace(/\D/g, "");
 function labelledNumbersRead(citations: ChatCitation[]): (s: string) => string {
-  const printed = citations.map((c) => (c.excerpt ?? "").replace(/\D/g, ""));
+  const printed = new Set<string>();
+  for (const c of citations) {
+    const excerpt = c.excerpt ?? "";
+    const money = moneyFiguresIn(excerpt).map((f) => f.value);
+    for (const m of excerpt.matchAll(new RegExp(LABEL, "gi"))) {
+      const digits = digitsOf(m[2]);
+      if (!money.some((v) => sameValue(v, Number(digits)))) printed.add(`${labelKind(m[1])}:${digits}`);
+    }
+  }
   const pages = new Set(citations.flatMap((c) => [c.pageStart, c.pageEnd]).filter((n): n is number => typeof n === "number"));
-  return (s) => s.replace(LABELLED, (whole, num?: string, page?: string) => {
-    if (page) return pages.has(Number(page)) ? " " : whole;
-    const digits = (num ?? "").replace(/\D/g, "");
-    return digits.length >= 3 && printed.some((p) => p.includes(digits)) ? " " : whole;
+  return (s) => s.replace(LABELLED, (whole, label?: string, num?: string, page?: string, page2?: string) => {
+    if (page) return pages.has(Number(page)) && (page2 == null || pages.has(Number(page2))) ? " " : whole;
+    const digits = digitsOf(num ?? "");
+    return digits.length >= 3 && printed.has(`${labelKind(label ?? "")}:${digits}`) ? " " : whole;
   });
 }
 

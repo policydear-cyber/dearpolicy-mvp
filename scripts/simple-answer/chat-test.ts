@@ -356,6 +356,27 @@ async function main() {
     assert.deepEqual(paged.nextSteps, ["See the fracture table on page 13 for the list.", "Check p. 113 of the wording."]);
   });
 
+  // Critic round 42 probes.
+  await check("R42-1: a labelled number stands only as a whole number after the same kind of label, never a printed amount", () => {
+    const fees = { ...HOUSE.documents[0], policyId: "aaaaaaaa-0000-0000-0000-000000000009", name: "Fees.pdf", productName: "Test Fees", pages: [{ page: 1, text: "Ambulance fee S$1,250 per accident\nSum insured S$600,000\nClaims hotline 1800 123 4567, Policy No. 12345678" }] };
+    const house = { ...HOUSE, documents: [...HOUSE.documents, fees] };
+    const { answer } = verifyAnswer(house, { bottomLine: "", question: null, statements: [
+      st({ kind: "fact", text: "The ambulance fee is covered.", document: "D3", quote: "Ambulance fee S$1,250 per accident" }),
+      st({ kind: "fact", text: "There is a sum insured.", document: "D3", quote: "Sum insured S$600,000" }),
+      st({ kind: "fact", text: "Claims go through the hotline.", document: "D3", quote: "Claims hotline 1800 123 4567, Policy No. 12345678" }),
+    ], nextSteps: ["Call 1250 to claim the ambulance fee.", "Call 600000 about your sum insured.", "Quote policy no. 1250 for the ambulance.", "Claim no. 600000 applies.",
+      "Call 12345678 to claim.", "Quote policy no. 1800 when you call.", "Call 123 4567 now.", "Call the claims hotline on 1800 123 4567.", "Quote policy no. 12345678 when you call."] });
+    assert.deepEqual(answer.nextSteps, ["Call the claims hotline on 1800 123 4567.", "Quote policy no. 12345678 when you call."]);
+  });
+
+  await check("R42-2: \"pp. X to Y\" keeps both pages when both are cited", () => {
+    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", question: null, statements: [
+      st({ kind: "fact", text: "Accidental death is covered.", document: "D1", quote: "Death due to Accident" }),
+      st({ kind: "fact", text: "The fracture table.", document: "D1", quote: "Simple Fracture due to Accident" }),
+    ], nextSteps: ["See pp. 12 to 13 for the benefits.", "See pp. 12 to 113 for the rest."] });
+    assert.deepEqual(answer.nextSteps, ["See pp. 12 to 13 for the benefits."]);
+  });
+
   await check("ledger usage counts cache writes at twice the input price", () => {
     assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }), { input: 1210, output: 5, cached: 1000 });
   });
