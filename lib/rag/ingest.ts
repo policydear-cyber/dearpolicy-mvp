@@ -618,7 +618,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const { notExcludedClause } = await import("@/lib/policies/member-exclusions");
       await query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
-         SELECT $1::uuid,$2::uuid,$3::uuid,'upload_hint',0.70 WHERE true${await notExcludedClause("$1::uuid", "$2::uuid")}
+         SELECT $1::uuid,$2::uuid,$3::uuid,'upload_hint',0.70 WHERE true${await notExcludedClause("$3::uuid", "$1::uuid", "$2::uuid")}
          ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
         [args.policyId, args.familyMemberId, args.accountId],
       );

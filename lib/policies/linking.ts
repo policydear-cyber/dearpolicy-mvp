@@ -65,8 +65,8 @@ const SAME_POLICY_NUMBER = (a: string, b: string) =>
 
 export async function linkRelatedReferenceDocuments(accountId: string, policyId: string, groupPolicyNumber?: string | null) {
   // A person the household removed from a document is never matched back onto it.
-  const toRef = await notExcludedClause("ref.id", "pm.family_member_id");
-  const toCurrent = await notExcludedClause("current.id", "pm.family_member_id");
+  const toRef = await notExcludedClause("$1", "ref.id", "pm.family_member_id");
+  const toCurrent = await notExcludedClause("$1", "current.id", "pm.family_member_id");
   // Match reference material conservatively: same group-policy number is strongest; exact insurer + product name is the fallback.
   await query(
     `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
