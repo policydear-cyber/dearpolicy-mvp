@@ -55,3 +55,28 @@ No. Proposed repair, for the Critic before any change:
 
 To confirm which variant the live model took, the saved trace of that one conversation (tool calls and drop reasons) would
 need to be read in production, read-only. That needs DC's permission.
+
+## Implemented in C2 (`98ada99`), after Critic round 4 and Policy QC's ruling
+
+- **G1** (`absence-scope.ts`): a hit sitting in a scheme document's own list of its group policies (a sentence naming three or more
+  policies with their abbreviations) is set aside only when the person's certificate is read in full, lists neither the policy's full
+  name nor its abbreviation, prints one "As of" date, and no medical-expense wording ("medical expenses", "medical reimbursement",
+  "medical treatment", "outpatient", "clinic", "general practitioner", "consultation", ...) is printed anywhere else in the scope. The
+  server then says what the certificate lists (dated), that the scheme document names that policy, which the certificate does not list,
+  and that the insurer or administrator confirms current cover; the absence (or what was read of a partly stored scope) follows as
+  before. No exclusion claim; the Part 1 applicability clause is not quoted. Any other hit refuses as before.
+- **Repeat refusal**: when the model sends the same refused absence again, the server replaces it with the lines the documents print,
+  quoted and cited (medical-expense wording first). Inside such a quote the insurer's own words ("we will reimburse") are not read as
+  the answer calling an amount a payout.
+- **G2** (`loop.ts` grounded fallback): after a search for the bill ran this turn, a GP / clinic / outpatient bill is checked by the
+  server itself (absence with G1, partial, or the printed lines); any other bill gets "The pages I read do not print a benefit for the
+  bill you mentioned (“...”)" instead of "I haven't yet looked up". The household's words are quoted unchanged.
+
+Results on `98ada99` (scripted, no spend): GP group AC 9/9, GUARD 13/13; full acceptance AC 20/26 (the 6 open are the known R1, R2,
+R3, R7, R9 and N5b), GUARD 41/41; fx-repairs 89/89, absence-scope 32/32, structured-answers 123/123 + 8/8, tools 38/38, env-contract
+green.
+
+Not done by the server (depends on the model): QC's expected answer also names the conditional accident benefits (ambulance to hospital,
+the 24-hour hospital stay, fracture) and that Living Care is not described. The server adds neither; a live run is needed to see
+whether the model states them. The quoted "$" amount inside a printed line is annotated by the existing currency-silence rule
+("printed with a “$” sign"), which changes the quote's text.

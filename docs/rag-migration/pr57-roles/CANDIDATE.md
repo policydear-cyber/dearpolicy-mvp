@@ -10,6 +10,7 @@ Integration branch: `claude/pr57-followup-pgaq7d`
 | --- | --- | --- | --- |
 | C0 | `4956588a4e2cae948809e34d78d3b728a99a96ed` | 2026-10-20 | `main` head: merge of PR #57 (after PR #58). Verified equal to `origin/main` before the branch was created. |
 | C1 | `8c63250cec7acb4e21fb41655a057f7ffc8ee65b` | 2026-10-20 | Developer's repair after the Critic's verdict (product code, types, `.env.example`), on top of the Test engineer's acceptance checks `a63040b`. Later commits on the branch may change only tests, fixtures and docs; any product-code change needs a new candidate. See `developer/C1.md` |
+| C2 | `98ada990d0a792f7a7b8c2e1931704a07409d33d` | 2026-10-20 | Developer's C1 follow-ups (absence over partly stored documents `edee1f9`, `d456512`) and the GP-bill repair G1/G2 (`98ada99`, after Critic round 4 and Policy QC's GP-bill ruling), on top of the Test engineer's GP checks `f550b5f`. Same rule as C1: later commits may change only tests, fixtures and docs. See `developer/GP-BILL.md` |
 
 ## Ownership
 
