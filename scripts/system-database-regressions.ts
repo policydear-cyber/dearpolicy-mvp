@@ -19,7 +19,7 @@ import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
 import { GET as listPolicies } from "@/app/api/policies/route";
-import { notDismissedCondition } from "@/lib/policies/name-dismissals";
+import { nameKey,nameKeySql,notDismissedCondition,recountedReview } from "@/lib/policies/name-dismissals";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
 import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
@@ -1338,6 +1338,27 @@ async function main(){
       // Dismissing the last unlinked name clears the document's review flag.
       assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
       assert.deepEqual((await db.query<{needs_review:boolean;review_reason:string|null}>("SELECT needs_review,review_reason FROM policies WHERE id=$1",[doc])).rows[0],{needs_review:false,review_reason:null});
+
+      // Critic R30-2: a reason the reading wrote ("check this is the right person") is kept when the names are recounted.
+      const check="The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: X. Check this is the right person";
+      await db.query("UPDATE policies SET needs_review=true,review_reason=$2 WHERE id=$1",[doc,"2 named insured people are not linked to a family profile; "+check]);
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      assert.deepEqual((await db.query<{needs_review:boolean;review_reason:string|null}>("SELECT needs_review,review_reason FROM policies WHERE id=$1",[doc])).rows[0],{needs_review:true,review_reason:check},
+        "Only the unlinked-names part is recounted; the reading's own reason stays");
+      assert.deepEqual(recountedReview("1 named insured person is not linked; 3 extracted coverage items could not be source-verified; "+check,0,1),
+        {needsReview:true,reason:"1 coverage item could not be source-verified; "+check});
+      assert.deepEqual(recountedReview("1 named insured person is not linked",0,0),{needsReview:false,reason:null});
+      // Critic R30-3: the answer is saved even when recounting the flag afterwards fails; the request does not say it failed.
+      await db.query("UPDATE policies SET needs_review=false,review_reason=NULL WHERE id=$1",[doc]);
+      await db.query("ALTER TABLE policy_coverages RENAME TO policy_coverages_away");
+      try{
+        const saved=await post({policyId:doc,detectedName:"Another Name",notFamily:false});
+        assert.equal(saved.status,200,"A failed recount after the save is not a failed request");
+      }finally{await db.query("ALTER TABLE policy_coverages_away RENAME TO policy_coverages");}
+      assert.equal((await db.query("SELECT 1 FROM policy_name_dismissals WHERE policy_id=$1 AND name_key='another name'",[doc])).rows.length,0,"The undo was saved");
+      assert.equal((await post({policyId:doc,detectedName:"Another Name",notFamily:true})).status,200);
+      // The SQL and JS name keys agree.
+      assert.equal((await db.query<{k:string}>(`SELECT ${nameKeySql("$1")} AS k`,["  Jane\t  TAN "])).rows[0].k,nameKey("  Jane\t  TAN "));
 
       // Reading the document again rebuilds the names; the answer is kept.
       await names(account,doc,[["Stranger Lim",null],[people[1].display_name,grace],["Another Name",null]]);

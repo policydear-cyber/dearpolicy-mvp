@@ -31,3 +31,31 @@ export async function notDismissedClause(alias = "pd"): Promise<string> {
   const condition = await notDismissedCondition(alias);
   return condition ? ` AND ${condition}` : "";
 }
+
+/** nameKeySql() in JS, for names already in hand. */
+export function nameKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** The name keys a household dismissed on one document (empty before the table exists). */
+export async function dismissedNameKeys(accountId: string, policyId: string): Promise<Set<string>> {
+  if (!await dismissalsReady()) return new Set();
+  const r = await query<{ name_key: string }>("SELECT name_key FROM policy_name_dismissals WHERE account_id=$1 AND policy_id=$2", [accountId, policyId]);
+  return new Set(r.rows.map((row) => row.name_key));
+}
+
+/** The parts of a document's review reason that come from names left unlinked and coverage left unverified; every
+ * other part (a "check this is the right person" from reading, an unreadable-page note) belongs to whoever wrote it. */
+const RECOUNTED_REASON = /named insured (?:person is|people are) not linked|coverage items? could not be source-verified/;
+
+/** A document's review flag and reason after its unlinked names and unverified items are counted again: those two
+ * parts are replaced, every other part is kept as it was. */
+export function recountedReview(previous: string | null, unmatched: number, unverified: number): { needsReview: boolean; reason: string | null } {
+  const kept = (previous ?? "").split("; ").map((part) => part.trim()).filter((part) => part && !RECOUNTED_REASON.test(part));
+  const counted = [
+    unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked` : null,
+    unverified ? `${unverified} coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
+  ].filter((part): part is string => !!part);
+  const parts = [...counted, ...kept];
+  return { needsReview: parts.length > 0, reason: parts.length ? parts.join("; ") : null };
+}

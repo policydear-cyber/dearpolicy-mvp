@@ -8,7 +8,7 @@ import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { rebuildForAddedPeople, saveDocumentCoverage } from "@/lib/policies/coverage-assignments";
 import { exclusionsReady } from "@/lib/policies/member-exclusions";
-import { dismissalsReady, nameKeySql, notDismissedClause } from "@/lib/policies/name-dismissals";
+import { dismissalsReady, nameKeySql, notDismissedClause, recountedReview } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, normalizePlanTier, tierOptionsForDocument } from "@/lib/policies/member-tier";
 
 export const runtime = "nodejs";
@@ -46,7 +46,9 @@ class NameLinked extends Error {}
 /** Review state is server-derived and server-written (browser sessions cannot
  * update policies' verification columns), so it runs on the service connection
  * after the household's own transaction has authorised and saved the change.
- * A name the household said is not theirs is not waiting to be linked. */
+ * A name the household said is not theirs is not waiting to be linked. Only the
+ * unlinked-name and unverified-item parts of the reason are recounted; a reason
+ * the reading wrote ("check this is the right person") is kept. */
 async function refreshReviewState(accountId: string, policyId: string, unmatchedClause: string) {
   const unmatched = await query<{ count: number }>(
     `SELECT count(*)::int AS count FROM policy_detected_people pd WHERE pd.account_id=$1 AND pd.policy_id=$2 AND pd.matched_family_member_id IS NULL${unmatchedClause}`,
@@ -56,9 +58,9 @@ async function refreshReviewState(accountId: string, policyId: string, unmatched
     `SELECT count(*)::int AS count FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND evidence_verified=false`,
     [accountId, policyId],
   );
-  const u = Number(unmatched.rows[0]?.count ?? 0), e = Number(unverified.rows[0]?.count ?? 0);
-  const reason = [u ? `${u} named insured ${u === 1 ? "person is" : "people are"} not linked` : null, e ? `${e} coverage item${e === 1 ? "" : "s"} could not be source-verified` : null].filter(Boolean).join("; ");
-  await query(`UPDATE policies SET needs_review=$1,review_reason=$2 WHERE id=$3 AND account_id=$4`, [u > 0 || e > 0, reason || null, policyId, accountId]);
+  const current = await query<{ review_reason: string | null }>(`SELECT review_reason FROM policies WHERE id=$1 AND account_id=$2`, [policyId, accountId]);
+  const review = recountedReview(current.rows[0]?.review_reason ?? null, Number(unmatched.rows[0]?.count ?? 0), Number(unverified.rows[0]?.count ?? 0));
+  await query(`UPDATE policies SET needs_review=$1,review_reason=$2 WHERE id=$3 AND account_id=$4`, [review.needsReview, review.reason, policyId, accountId]);
 }
 
 export async function POST(request: NextRequest) {
@@ -188,7 +190,9 @@ export async function POST(request: NextRequest) {
     if ("notFoundExtraction" in result) return NextResponse.json({ error: "Policy extraction not found" }, { status: 404 });
     if ("refresh" in result) {
       const { refresh: _refresh, ...shown } = result;
-      await refreshReviewState(ctx.householdId, body.policyId, unmatchedClause);
+      // The household's change is already saved; a failed recount leaves the old flag, not a failed request.
+      await refreshReviewState(ctx.householdId, body.policyId, unmatchedClause)
+        .catch((error) => console.warn("Refreshing the review flag failed:", error instanceof Error ? error.message : error));
       return NextResponse.json(shown);
     }
     return NextResponse.json(result);
