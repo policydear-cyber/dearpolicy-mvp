@@ -58,7 +58,7 @@ async function refreshReviewState(accountId: string, policyId: string, unmatched
     `SELECT count(*)::int AS count FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND evidence_verified=false`,
     [accountId, policyId],
   );
-  const current = await query<{ review_reason: string | null }>(`SELECT review_reason FROM policies WHERE id=$1 AND account_id=$2`, [policyId, accountId]);
+  const current = await query<{ review_reason: string | null }>(`SELECT review_reason FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [policyId, accountId]);
   const review = recountedReview(current.rows[0]?.review_reason ?? null, Number(unmatched.rows[0]?.count ?? 0), Number(unverified.rows[0]?.count ?? 0));
   await query(`UPDATE policies SET needs_review=$1,review_reason=$2 WHERE id=$3 AND account_id=$4`, [review.needsReview, review.reason, policyId, accountId]);
 }
