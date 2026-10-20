@@ -106,21 +106,8 @@ async function tripLimits(r: BenefitRecord, d: Deps): Promise<{ text: string; ev
     at += line.length + 1;
   }
   if (!out.some((x) => /period|destination/i.test(x.label))) return null;
-  // (Evidence Reviewer 16: WHY a trip does not fit, when the page and the household's own words show it -- the period ended before today,
-  // the household said it happened recently, and where it happened is not the printed destination. Said from what they told us; the
-  // claim decision stays the insurer's.)
-  const facts = (d.state.claim?.subjectId === r.memberId ? d.state.claim?.facts : d.state.otherClaims?.[r.memberId ?? ""]?.facts) ?? {};
-  const words = Object.values(facts).filter((f) => f && (f.source ?? "user_reported") === "user_reported").map((f) => `${f.words} ${typeof f.value === "string" ? f.value : ""}`).concat(d.ctx.topicText ?? "").join(" ");
-  const end = /\bto\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(out.find((x) => /period/i.test(x.label))?.value ?? "");
-  const ended = end && Date.UTC(+end[3], +end[2] - 1, +end[1]) < Date.now() ? fmtDate(`${end[3]}-${end[2].padStart(2, "0")}-${end[1].padStart(2, "0")}`) : null;
-  const recent = /\b(?:last (?:week|night|month)|yesterday|today|this (?:week|morning)|days? ago|recently|just)\b/i.test(words);
-  const dest = out.find((x) => /destination/i.test(x.label))?.value.trim() ?? null;
-  const place = /\bin ([A-Z][a-z]+(?: [A-Z][a-z]+)?)\b/.exec(words)?.[1] ?? null;
-  const elsewhere = dest && place && !dest.toLowerCase().includes(place.toLowerCase()) && !place.toLowerCase().includes(dest.toLowerCase()) ? place : null;
-  const why = [ended ? `its period of insurance ended on ${ended}${recent ? ", before the event you described" : ""}` : null, elsewhere ? `you said it happened in ${elsewhere}, not ${dest}` : null].filter((x): x is string => !!x);
-  const verdict = why.length && (elsewhere || (ended && recent)) ? ` On what you have told me, this trip's cover does not fit this event: ${listOf(why)}; any claim decision is the insurer's.` : why.length ? ` ${listOf(why).replace(/^./, (c) => c.toUpperCase())}; whether it covers this event is for the insurer to confirm.` : null;
   // (C6, Critic R8-1: "trip" only when a Destination line is printed -- an annual schedule prints only its period)
-  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}${verdict ? `.${verdict}` : `; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`}`, evidence: out.map((x) => x.ev) };
+  return { text: ` The schedule prints this cover for ${listOf(out.map((x) => `${x.label.toLowerCase() === "insured person" ? "the insured person" : x.label.toLowerCase() === "period of insurance" ? "the period of insurance" : "the destination"} “${x.value}”`))}; ${out.some((x) => /destination/i.test(x.label)) ? "whether that trip fits this event" : "whether this period of insurance covers the date of the event"} is for the insurer to confirm.`, evidence: out.map((x) => x.ev) };
 }
 export async function renderTerms(r: BenefitRecord, d: Deps): Promise<{ text: string; evidence_ids: string[]; value_ids: string[] }> {
   const w = await renderTermsBody(r, d);
