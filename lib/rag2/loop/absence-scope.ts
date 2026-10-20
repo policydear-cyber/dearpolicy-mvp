@@ -152,7 +152,9 @@ export function scopeDocs(src: AbsenceSource, opts: { policyIds: string[] | null
   return { docs: src.docs, scope: "library", problem: src.docs.length ? null : "the household has no readable documents to check" };
 }
 
-export type NotFoundResult = { ok: true; text: string; check: AbsenceCheck } | { ok: false; problem: string };
+export type NotFoundResult = { ok: true; text: string; check: AbsenceCheck } | { ok: false; problem: string;
+  /** PR #57 follow-up: refused ONLY because part of the scope was not stored -- what the pages that were read show, written by the server. */
+  partial?: { text: string; check: AbsenceCheck } };
 /** The whole decision, over data already loaded (pure): whether the statement may be said, and as what sentence. */
 export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, ctx: { subjectId: string | null; who: string | null; names: string[] }): NotFoundResult {
   const named = Array.isArray(s.scope_policy_ids) ? (s.scope_policy_ids as unknown[]).map(String).filter(Boolean) : [];
@@ -190,7 +192,17 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
     const have = new Set(ps.map((p) => p.page));
     return ps.some((p) => !p.text.trim()) || d.pageCount == null || Array.from({ length: d.pageCount }, (_, i) => i + 1).some((n) => !have.has(n));
   });
-  if (partial.length) return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked` };
+  if (partial.length) {
+    // (the server says what was read -- documents in full, and which pages of the rest -- and that the rest could not be checked; never an absence)
+    const check: AbsenceCheck = { claim, topic: t.topic, terms: st.terms, subjectId: subjectId ?? null, scope: scope.scope,
+      documents: scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", fileHash: d.fileHash ?? null, rev: d.rev ?? null, pages: (pagesOf.get(d.id) ?? []).length })) };
+    const ranges = (ns: number[]) => { const out: string[] = []; for (let i = 0; i < ns.length; i++) { let j = i; while (j + 1 < ns.length && ns[j + 1] === ns[j] + 1) j++; out.push(i === j ? `${ns[i]}` : `${ns[i]}-${ns[j]}`); i = j; } return out.join(", "); };
+    const full = scope.docs.filter((d) => !partial.includes(d)).map((d) => labels.get(d.id) ?? "document");
+    const part = partial.map((d) => { const ns = [...new Set((pagesOf.get(d.id) ?? []).filter((p) => p.text.trim()).map((p) => p.page))].sort((a, b) => a - b); return `the ${labels.get(d.id) ?? "document"} (page${ns.length > 1 ? "s" : ""} ${ranges(ns)}${d.pageCount != null ? ` of ${d.pageCount}` : ""})`; });
+    const whose = scope.scope === "subject" && ctx.who ? `${ctx.who}’s documents` : "the documents";
+    const text = `Only part of ${whose} could be checked for ${t.topic}: ${full.length ? `the ${shortList(full)} in full, and ` : ""}${part.length > 1 ? part.slice(0, -1).join(", ") + " and " + part.at(-1) : part[0]}. The pages that were read do not mention ${t.topic}; the rest is not stored and could not be checked, so this is not an answer about whether there is such cover.`;
+    return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked`, partial: { text, check } };
+  }
   const check: AbsenceCheck = {
     claim, topic: t.topic, terms: st.terms, subjectId: subjectId ?? null, scope: scope.scope,
     documents: scope.docs.map((d) => ({ policyId: d.id, name: labels.get(d.id) ?? "document", fileHash: d.fileHash ?? null, rev: d.rev ?? null, pages: (pagesOf.get(d.id) ?? []).length })),

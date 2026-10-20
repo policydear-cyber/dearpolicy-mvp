@@ -192,7 +192,7 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       const subject = typeof s.subject_id === "string" && s.subject_id ? s.subject_id : typeof args.subject_id === "string" && args.subject_id ? args.subject_id : d.state.subjectId ?? null;
       const members = await loadMembers(d.ctx.accountId);
       const r = await checkNotFound(d.ctx.accountId, s, { subjectId: subject, who: d.nameOf(subject) ?? null, names: members.flatMap((m) => [m.displayName, m.preferredName ?? ""]).filter(Boolean) });
-      if (!r.ok) { problems.push(`statement ${i + 1}: ${r.problem}`); continue; }
+      if (!r.ok) { if (r.partial) d.ctx.partialAbsence = { ...r.partial, subjectId: r.partial.check.subjectId, used: false }; problems.push(`statement ${i + 1}: ${r.problem}`); continue; }
       s.text = r.text; if (r.check.subjectId) s.subject_id = r.check.subjectId; RENDERED.add(s); ABSENCE_OF.set(s, r.check);
       // fx-live-2 review: NO passage is cited for an absence. The household sees which documents were checked in the sentence itself, and
       // the evidence for the scope is the saved check (ChatAnswer.absenceChecks: each document's id, name, file hash and revision, and the
@@ -201,6 +201,13 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
       // it under Sources made a dental answer cite a S$300,000 row.
       s.evidence_ids = [];
     }
+  }
+  // PR #57 follow-up: an absence refused earlier this turn only because part of its scope was not stored is answered with what WAS read,
+  // written by the server (absence-scope.ts), when the reply that follows states no absence of its own -- never the "couldn't confirm" note.
+  const pa = d.ctx.partialAbsence;
+  if (list && pa && !pa.used && !problems.length && !list.some((s) => s && typeof s === "object" && s.kind === "not_found")) {
+    const n = { kind: "not_found", text: pa.text, evidence_ids: [], subject_id: pa.subjectId } as Record<string, unknown>;
+    RENDERED.add(n); ABSENCE_OF.set(n, pa.check); list.push(n); pa.used = true;
   }
   let relationAsked = false;
   // Two documents of one scheme printing a percentage table for the same kind of event, each with its own base: said once,
