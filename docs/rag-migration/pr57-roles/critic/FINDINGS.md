@@ -1337,3 +1337,75 @@ within the open session.
 deleted when an answer was only corrected or a person removed. The logic is scoped correctly, marks no valid answer about another
 person, and shows no withdrawn figure after a reload. R22-2 and R22-3 can follow. Within them, marking the earlier answer in the
 same open chat is the one that matters most before public launch.
+
+---
+
+# Round 23: PR #70 (answer fields) at `0cd6a49`
+
+Scope: `answer-statements.ts`, `reconcileStatements` in `monetary-boundary.ts`, the `structure()` drafts in
+`statement-render.ts`, the `hook.ts` and `workflow.ts` wiring, `excerptOf` and `sentenceEnd` in `evidence.ts`, and `types`.
+These were read against `lib/chat/stale-answers.ts` and the history route on main `9a76490`. Read only.
+
+## What holds
+
+- **R15-4: fixed.** `reconcileStatements` runs after the figure gate on return (via `buildStatements` in hook.ts), again after
+  the save-time gate in `saveTurn`, and on reopen inside `enforceLiveChatMonetaryBoundary` (`sanitizeStoredAnswer`).
+  - A statement keeps its fields only when its `fullText` is exactly a paragraph that is still shown, its fields state no number
+    the paragraph doesn't, every amount in the paragraph is on the card, an amount names its person, and no scan-unclear figure is
+    in it.
+  - Anything the gate or boundary changed falls back to that paragraph's plain text.
+  - It is pure and idempotent, so returned = saved = reopened.
+- **The plain-text fallback never drops a condition.** The fallback statement is the whole paragraph.
+- **R19-1: fixed for calculations.** The card's short text keeps "If the … applies to Grace's case “…”". The undefined-kind
+  note and the row notes, including the thumb/finger/palm footnote, are in `conditions[]`. Printed benefit terms keep their quoted
+  printed conditions, and trip limits are added to conditions.
+- **R18-4: fixed for server bottom lines.** Every generated bottom line names who decides ("only the insurer decides …"), and
+  `reconcileStatements` drops a bottom line that has no hedge or that states a figure not on a kept amount card.
+- **personName after a correction: no finding.** `personName` is the record's own member at render time (`r.memberName`, the
+  calculation's `who`), not the conversation subject. A correction re-renders for the new person, and PR #69 marks the old
+  answer.
+
+## R23-1 (High, blocker together with PR #65): invalidated answers keep their statements and bottom line
+
+`invalidatedAnswer` (stale-answers.ts) clears summary, details, claim items, citations, limits and, after PR #69, calculations. It
+does not clear `statements` or `bottomLine`. The history route runs `sanitizeStoredAnswer` (and with it `reconcileStatements`)
+before `invalidateAnswersWithDeletedPolicies`. So a reopened answer marked out of date because its document was deleted, its
+person was removed, or it was superseded still carries the old amount cards and the bottom line, for example "Grace's documents
+print either S$1,250 or S$120,000 …". The PR #65 page renders cards whenever `statements` is non-empty, so the withdrawn amounts
+reappear under the out-of-date note. Fix: `invalidatedAnswer` sets `statements: []` and `bottomLine: null`. Running
+`reconcileStatements` afterwards is not enough, because a figure-free bottom line such as "If you go ahead, start here: …"
+passes its checks.
+
+## R23-2 (High): an either-or group takes in every calculated amount, not just the two alternatives
+
+`buildStatements` groups all `kind === "calculation"` amounts once any uncertainty statement names two documents
+(`alternatives = statements.filter(s => s.amount && s.kind === "calculation")`). Example: an answer shows the two fracture
+alternatives plus a third calculated amount for a different benefit, such as a hospital-income illustration for the same
+event. All three get the group, and the bottom line says "Grace's documents print either S$1,250, S$120,000 or S$X for this
+(alternatives, not a total), and only the insurer decides which applies". That tells the household the third amount replaces the
+others, when it may be paid in addition. Fix: group only the calculations the relation note itself rendered. `renderStatements`
+already loops over exactly those (`rendered` / `outs` for the two policies), so record their result ids on the drafts, or key the
+group by those two policy ids and benefit. Leave every other amount ungrouped, and leave the "either" bottom line off when other
+amounts exist (use the "several amounts" line instead).
+
+## R23-3 (Medium): narrowing citations can drop the source of a paragraph the gate shortened
+
+`evidenceOf` keeps a composed sentence's evidence only when the paragraph still contains that sentence's text exactly (after
+squashing spaces). When `rescueRejected` replaces a rejected figure sentence with its figure-free part, the paragraph no longer
+contains the original text. Its evidence is then filtered out of `answer.citations`, even though the shortened paragraph still
+rests on it. The household sees a claim with no source. Fix: also keep evidence for a paragraph that is contained in a composed
+sentence (`squash(s.text).includes(p)`), or carry the evidence ids through `rescueRejected`.
+
+## R23-4 (Low): the excerpt run-on can pull in an unrelated line
+
+`sentenceEnd` continues through up to three following lines that start in lower case and are not table lines. A line that ends
+in a letter and is followed by an unrelated lower-case line, such as a wrapped heading fragment, would join it. This is for
+display only and never chooses support. Stopping at a line that starts with a footnote marker or a numbered clause would be
+enough.
+
+## Verdict on PR #70 at `0cd6a49`
+
+**Not ready to merge.** The money-check wiring (R15-4) and conditions on cards (R19-1, R18-4) are done well, and the fallback is
+safe. But R23-1 and R23-2 are blockers. PR #65 is ready to merge, and its page switches the cards on as soon as this PR sends
+`statements[]`. The two would then show withdrawn amounts under out-of-date notes (R23-1) and frame an independent amount as an
+alternative (R23-2). Both are small, local fixes. R23-3 should go in the same push.
