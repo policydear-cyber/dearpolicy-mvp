@@ -162,3 +162,18 @@ agree.
 
 Next after those: mobile tab bar hides Ask DearPolicy; the unreadable upload's missing Re-analyse button; S$0.00
 insurance cost.
+
+# Part 3: GP-bill re-ask after the PR #61 merge (2026-10-20, 08:23Z)
+
+- PR #61 merged as ca6af69 at 08:03:59Z. The deployment couldn't be confirmed directly: Vercel access is refused and
+  the site has no version marker. Login and `/api/health` were fine; the login page cache restarted at about 08:06Z.
+- One paid call (DC: "always yes"), new chat, no error, 49.6 s to complete, first feedback 0.09 s.
+- **Result: worse than turn 8 an hour earlier, and still not useful.** It opened with "The documents do not establish
+  whether [member A]'s GP was a panel/preferred GP or whether he is enrolled in this outpatient benefit", repeated the
+  user's words ungrammatically ("You told me tripped on the kerb."), and quoted the **Overseas** Emergency Outpatient
+  clause (treatment "outside Singapore"), which doesn't fit the event. It didn't state the panel and non-panel GP benefit
+  that turn 8 found, and it didn't ask the panel-or-non-panel question. Sources list the GP benefit pages (16, 33),
+  but the text doesn't use them. The reopened answer matched what was returned.
+- Neither PR #61's new server sentence for an unpaid bill ("I could not confirm from your documents what pays for the
+  bill…" / "The pages I read do not print a benefit for the bill…") nor the old one appeared, so the wording can't
+  tell us which build answered. One sample can't separate a deployment change from the model's normal variation.
