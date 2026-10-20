@@ -18,6 +18,8 @@ import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
 import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
+import { GET as listPolicies } from "@/app/api/policies/route";
+import { searchPassages } from "@/lib/rag2/search";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
 import type { Interpretation } from "@/lib/chat/facts";
@@ -1196,6 +1198,64 @@ async function main(){
       const data=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);
       await db.query("DELETE FROM policies WHERE id=$1",[foreignOrphan]);
+    });
+    await test("Removing a person from a document unlinks them, stops their answers using it, and touches only this household",async()=>{
+      // UX acceptance on ca6af69 (critical): pressing a ticked person on a
+      // reference certificate said "Saved" but the link stayed, because the
+      // save only ever removed links the household had added by hand.
+      const cert=uuid(701600),foreignCert=uuid(701601);
+      const [daniel,grace,scheme]=[people[0].id,people[1].id,people[2].id];
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,file_hash) VALUES($1,$2,$3,'Example Insurer','Unlink Scheme Benefit Summary','UNLINK-1','Group Insurance','certificate',false,60,'ready','unlink.pdf','unlink.pdf','scan_clean','sha256:unlink')",[cert,account,daniel]);
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'Hospital and surgical benefit. Daily room and board SGD 300.')",[account,cert]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$4,'ai_name_match',0.95),($1,$3,$4,'ai_name_match',0.95),($1,$5,$4,'scheme_reference_match',0.9)",[cert,daniel,grace,account,scheme]);
+      await db.query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.95)",[account,cert,people[1].display_name,grace]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency) VALUES($1,$2,$3,'Hospitalisation',300,'SGD'),($1,$2,$4,'Hospitalisation',300,'SGD')",[account,cert,daniel,grace]);
+      await db.query("INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,pays_kind,amount,currency,origin) VALUES($1,$2,$3,'Unlink Scheme','hospital_stay','per_day',300,'SGD','wording'),($1,$2,$3,'Unlink Scheme','hospital_stay','per_day',100,'SGD','person')",[account,grace,cert]);
+      // Another household's copy of the same scheme, linked to its own person.
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Unlink Scheme Benefit Summary','UNLINK-1','Group Insurance','certificate',false,60,'ready','other.pdf','other.pdf','scan_clean')",[foreignCert,foreign,foreignPerson]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'ai_name_match')",[foreignCert,foreignPerson,foreign]);
+      const save=(policyId:string,ids:string[])=>linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId,assignments:ids.map(familyMemberId=>({familyMemberId,planTier:null}))})}));
+      const links=async(policyId:string)=>(await db.query<{family_member_id:string}>("SELECT family_member_id::text FROM policy_members WHERE policy_id=$1 ORDER BY family_member_id",[policyId])).rows.map(r=>r.family_member_id);
+      const searched=async(member:string)=>(await searchPassages({accountId:account,query:"hospital room and board",subjectId:member})).searchedPolicyIds.includes(cert);
+      assert.equal(await searched(grace),true,"Before: Grace's questions read the certificate");
+
+      // The household removes Grace (the picker sends everyone still ticked).
+      const removed=await save(cert,[daniel]);
+      assert.equal(removed.status,200);
+      const body=await removed.json();
+      assert.deepEqual(await links(cert),[daniel,scheme].sort(),"Grace's link is gone; the matching-wording link the picker never showed is kept");
+      assert.equal(await searched(grace),false,"Grace's answers stop using the certificate");
+      assert.deepEqual(body.removed,[grace]);
+      assert.deepEqual(body.linked,[daniel],"The response says who the document now covers");
+      assert.equal(await searched(daniel),true,"Daniel's still do");
+      assert.equal((await db.query("SELECT 1 FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[cert,grace])).rows.length,0,"Her cover read from it is gone");
+      assert.equal((await db.query("SELECT 1 FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[cert,daniel])).rows.length,1);
+      assert.deepEqual((await db.query<{origin:string}>("SELECT origin FROM coverage_rules WHERE policy_id=$1 AND family_member_id=$2",[cert,grace])).rows.map(r=>r.origin),["person"],"Ledger rows read from the document go; the household's own entry stays");
+      assert.equal((await db.query<{matched_family_member_id:string|null}>("SELECT matched_family_member_id FROM policy_detected_people WHERE policy_id=$1",[cert])).rows[0].matched_family_member_id,null);
+      // Reloading the library shows the same thing the confirmation said.
+      const listed=(await (await listPolicies(new NextRequest("http://localhost/api/policies"))).json()).policies.find((x:{id:string})=>x.id===cert);
+      assert.deepEqual(listed.linked_people.filter((x:{source:string})=>x.source!=="scheme_reference_match").map((x:{id:string})=>x.id),[daniel]);
+
+      // Removing the upload profile's person moves the profile to someone still covered,
+      // because the chat treats the upload profile as covered by the document.
+      assert.equal((await save(cert,[grace])).status,200);
+      assert.deepEqual(await links(cert),[grace,scheme].sort());
+      assert.equal((await db.query<{family_member_id:string}>("SELECT family_member_id::text FROM policies WHERE id=$1",[cert])).rows[0].family_member_id,grace);
+      assert.equal(await searched(daniel),false,"Daniel's answers stop using it, upload profile included");
+
+      // Covering nobody is refused with a reason, and changes nothing.
+      const empty=await save(cert,[]);
+      assert.equal(empty.status,409);
+      assert.match((await empty.json()).error,/at least one person/);
+      assert.deepEqual(await links(cert),[grace,scheme].sort());
+
+      // Another household's document or person is refused and left untouched.
+      assert.equal((await save(foreignCert,[daniel])).status,404);
+      assert.equal((await save(cert,[foreignPerson])).status,404);
+      assert.deepEqual(await links(foreignCert),[foreignPerson]);
+      assert.deepEqual(await links(cert),[grace,scheme].sort());
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,foreignCert]]);
     });
     await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
       const fixture=await seedReviewFixture(1);

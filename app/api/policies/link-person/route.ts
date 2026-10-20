@@ -20,11 +20,12 @@ const Schema = z.object({
 });
 
 /** Round 5 (item 3): set everyone a document covers in one request, each
- * with the cover tier they hold when the document has tiers. People the
- * household declared (or picked as the upload's profile hint) and left out
- * now are unlinked; people the
- * document itself named (matched links) are never removed here, only their
- * tier is updated. */
+ * with the cover tier they hold when the document has tiers. Everyone the
+ * picker shows as covered and the household left out now is unlinked,
+ * whatever made the link (a name the reading matched, the upload profile, an
+ * older build's backfill): the household's word is what the picker promises
+ * to save. Links to matching wording (scheme_reference_match) are not shown
+ * as covered by the picker, so they are left alone. */
 const AssignmentsSchema = z.object({
   policyId: z.string().uuid(),
   assignments: z.array(z.object({ familyMemberId: z.string().uuid(), planTier: z.string().max(60).nullable().optional() })).max(30),
@@ -32,6 +33,10 @@ const AssignmentsSchema = z.object({
 
 class PolicyNotFound extends Error {}
 class FamilyMemberNotFound extends Error {}
+class NobodyLeft extends Error {}
+
+/** Links the "who does this cover" picker does not show as covered. */
+const NOT_SHOWN_AS_COVERED = ["scheme_reference_match"];
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,19 +46,21 @@ export async function POST(request: NextRequest) {
       const assignCtx = await requireHouseholdContext(request);
       await ensurePolicyMemberTierSchema();
       const assigned = await createUserSupabaseClient(assignCtx.userId, async (client) => {
-        const policyRow = await client.query<{ id: string; extracted_json: PolicyExtraction | null; group_policy_number: string | null; policy_type: string | null }>(
-          `SELECT id, extracted_json, group_policy_number, policy_type FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
+        const policyRow = await client.query<{ id: string; family_member_id: string; extracted_json: PolicyExtraction | null; group_policy_number: string | null; policy_type: string | null }>(
+          `SELECT id, family_member_id, extracted_json, group_policy_number, policy_type FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
           [assignment.policyId, assignCtx.householdId],
         );
         if (!policyRow.rows[0]) throw new PolicyNotFound();
         const ids = [...new Set(assignment.assignments.map((a) => a.familyMemberId))];
-        if (ids.length) {
-          const members = await client.query<{ id: string }>(
-            `SELECT id FROM family_members WHERE id=ANY($1::uuid[]) AND account_id=$2 AND ${activePredicate()}`,
-            [ids, assignCtx.householdId],
-          );
-          if (members.rows.length !== ids.length) throw new FamilyMemberNotFound();
-        }
+        // policies.family_member_id (the upload profile) is required, and the
+        // chat treats that person as covered by the document, so a document
+        // cannot be left covering nobody: it would still answer for them.
+        if (!ids.length) throw new NobodyLeft();
+        const members = await client.query<{ id: string }>(
+          `SELECT id FROM family_members WHERE id=ANY($1::uuid[]) AND account_id=$2 AND ${activePredicate()}`,
+          [ids, assignCtx.householdId],
+        );
+        if (members.rows.length !== ids.length) throw new FamilyMemberNotFound();
         const people = policyRow.rows[0].extracted_json?.insuredPeople;
         const tableTiers = (await loadTableTiers(client, assignCtx.householdId, [assignment.policyId])).get(assignment.policyId) ?? [];
         const offered = tierOptionsForDocument({ hints: Array.isArray(people) ? people.map((p) => p?.relationshipHint) : [], groupPolicyNumber: policyRow.rows[0].group_policy_number, policyType: policyRow.rows[0].policy_type, tableTiers });
@@ -66,13 +73,38 @@ export async function POST(request: NextRequest) {
             [assignment.policyId, id, assignCtx.householdId, tier],
           );
         }
-        await client.query(
-          `DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('user_declared','upload_hint') AND NOT (family_member_id=ANY($3::uuid[]))`,
-          [assignment.policyId, assignCtx.householdId, ids],
-        );
-        return ids.length;
+        const removed = (await client.query<{ family_member_id: string }>(
+          `DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND NOT (source=ANY($4::text[])) AND NOT (family_member_id=ANY($3::uuid[]))
+           RETURNING family_member_id::text AS family_member_id`,
+          [assignment.policyId, assignCtx.householdId, ids, NOT_SHOWN_AS_COVERED],
+        )).rows.map((r) => r.family_member_id);
+        if (removed.length) {
+          // What was read from this document for the people just removed goes
+          // with the link, so no screen or answer keeps using their cover. The
+          // household's own ledger entries (origin 'person') are kept;
+          // policy_coverages is cleared below (server-written).
+          await client.query(`DELETE FROM premium_records WHERE account_id=$1 AND source_document_id=$2 AND family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, removed]);
+          await client.query(`UPDATE policy_detected_people SET matched_family_member_id=NULL WHERE account_id=$1 AND policy_id=$2 AND matched_family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, removed]);
+          if ((await client.query<{ t: string | null }>("SELECT to_regclass('public.coverage_rules')::text AS t")).rows[0]?.t) {
+            await client.query(`DELETE FROM coverage_rules WHERE account_id=$1 AND policy_id=$2 AND family_member_id=ANY($3::uuid[]) AND origin<>'person'`, [assignCtx.householdId, assignment.policyId, removed]);
+          }
+        }
+        const linked = (await client.query<{ family_member_id: string }>(
+          `SELECT family_member_id::text AS family_member_id FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND NOT (source=ANY($3::text[])) ORDER BY family_member_id`,
+          [assignment.policyId, assignCtx.householdId, NOT_SHOWN_AS_COVERED],
+        )).rows.map((r) => r.family_member_id);
+        return { assigned: ids.length, removed, linked, moveOwnerTo: ids.includes(policyRow.rows[0].family_member_id) ? null : ids[0] };
       });
-      return NextResponse.json({ ok: true, assigned });
+      // Server-written columns, after the household's change has committed
+      // (both ids were authorised against this household above).
+      if (assigned.removed.length) {
+        await query(`DELETE FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND family_member_id=ANY($3::uuid[])`, [assignCtx.householdId, assignment.policyId, assigned.removed]);
+      }
+      // The upload profile moves to someone the document still covers.
+      if (assigned.moveOwnerTo) {
+        await query(`UPDATE policies SET family_member_id=$3,updated_at=now() WHERE id=$1 AND account_id=$2`, [assignment.policyId, assignCtx.householdId, assigned.moveOwnerTo]);
+      }
+      return NextResponse.json({ ok: true, assigned: assigned.assigned, removed: assigned.removed, linked: assigned.linked });
     }
     const body = Schema.parse(raw);
     const ctx = await requireHouseholdContext(request);
@@ -140,6 +172,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
     if (error instanceof PolicyNotFound) return NextResponse.json({ error: "Document not found" }, { status: 404 });
     if (error instanceof FamilyMemberNotFound) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    if (error instanceof NobodyLeft) return NextResponse.json({ error: "A document has to cover at least one person. Choose who it covers, or delete it if it isn't your family's." }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Link failed" }, { status: 500 });
     return authResponse;
