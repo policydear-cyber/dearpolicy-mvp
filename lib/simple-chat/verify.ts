@@ -76,6 +76,8 @@ const sameValue = (a: number, b: number) => CENT(a) === CENT(b);
 const numbersIn = (text: string) => [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => Number(m[0].replace(/,/g, ""))).filter(Number.isFinite);
 /** What follows a number that is a count, a rate or a percentage, never money (R36-1: "25%", "30 days"). */
 const NOT_MONEY_AFTER = /^\s*(?:%|per\s?cent|percent|days?|nights?|weeks?|months?|years?|yrs?|times|x\b|hours?|visits?|sessions?|children|child|persons?|cm|mm|kg|km|years? old)/i;
+/** A number right after one of these words is a label, never money (R38-2: "Plan 500"). */
+const LABEL_BEFORE = /\b(?:page|no\.?|number|plan|class|code|section|clause|ward|tier|item|row|level|grade|ref\.?|policy)\s*#?\s*$/i;
 /** Numbers printed without a currency sign that can be money: with thousands separators, or of 3+ digits, or followed by
  * "dollars" / "SGD" -- never a percentage, a count, a year or a page number. */
 export function bareMoneyNumbers(text: string): number[] {
@@ -84,7 +86,7 @@ export function bareMoneyNumbers(text: string): number[] {
     const raw = m[0].replace(/,$/, ""), at = m.index ?? 0, after = text.slice(at + raw.length);
     const before = text.slice(Math.max(0, at - 6), at);
     if (/(?:S|US|HK|A|NZ|SG)?\$\s?$|(?:SGD|USD|RM)\s?$/i.test(before)) continue; // a money figure, read by moneyFiguresIn
-    if (NOT_MONEY_AFTER.test(after) || /page\s*$|no\.?\s*$/i.test(before)) continue;
+    if (NOT_MONEY_AFTER.test(after) || LABEL_BEFORE.test(text.slice(Math.max(0, at - 12), at))) continue;
     const value = Number(raw.replace(/,/g, ""));
     if (!Number.isFinite(value)) continue;
     const dollars = /^\s*(?:dollars?|SGD)\b/i.test(after);
@@ -125,15 +127,41 @@ function rowBase(pageText: string, end: number): { value: number; raw: string } 
   if (si && (!best || (si.index ?? 0) > best.at)) return "sum_insured";
   return best ? { value: best.value, raw: best.raw } : null;
 }
-/** Whether `value` is printed as this person's sum insured for the same plan (a line naming "sum insured" in a document of
- * that plan that is linked to the person, or the quote's own document when it is linked to nobody). */
-function printedSumInsured(household: Household, doc: HouseholdDocument, person: string | null, value: number): boolean {
-  const plan = (doc.productName ?? "").trim().toLowerCase();
-  const docs = household.documents.filter((d) => d === doc || (plan && (d.productName ?? "").trim().toLowerCase() === plan));
-  return docs.some((d) => {
-    const forPerson = person ? d.linkedPeople.some((p) => baseName(p) === person) : d.linkedPeople.length <= 1;
-    return forPerson && d.pages.some((p) => p.text.split("\n").some((line) => /sum\s*insured/i.test(line) && moneyValuesIn(line).some((n) => sameValue(n, value))));
-  });
+/** The kinds of cover a certificate lists, as its section headings and a benefit's own wording name them. */
+const COVER_KINDS: [string, RegExp][] = [["accident", /accident/i], ["living care", /living\s*care/i], ["critical illness", /critical\s*illness/i], ["disability", /disabilit/i], ["hospital", /hospital/i], ["life", /\blife\b/i]];
+/** The kind of cover a quoted row belongs to: the kind word printed nearest above it on its page. */
+function coverKindAbove(pageText: string, end: number): string | null {
+  const above = pageText.slice(0, end);
+  let best: { at: number; kind: string } | null = null;
+  for (const [kind, re] of COVER_KINDS) for (const m of above.matchAll(new RegExp(re.source, "gi"))) if (!best || (m.index ?? 0) > best.at) best = { at: m.index ?? 0, kind };
+  return best?.kind ?? null;
+}
+/** A line that states a limit, a rate or a premium, never a person's sum insured. */
+const NOT_SUM_INSURED = /%|per\s?cent|\bup to\b|\bmax(?:imum)?\b|\bper\b|\bevery\b|\bpremium|\blimit\b|\bminimum\b|\bpayable\b/i;
+/** Whether `value` is this person's own sum insured for this kind of cover (R38-1): a coverage row that names the person and
+ * prints one amount, under a section heading of that kind, in a document linked to them. Every such row must agree; two
+ * different sums for the same kind (two plans) settle nothing, and no row means no worked-out amount. */
+function personSumInsured(household: Household, person: string | null, kind: string | null, value: number): boolean {
+  if (!person || !kind) return false;
+  const kindRe = COVER_KINDS.find(([k]) => k === kind)![1];
+  const want = tokens(person);
+  const sums = new Set<number>();
+  for (const d of household.documents) {
+    if (!d.linkedPeople.some((p) => baseName(p) === person) || d.supersededAt) continue;
+    for (const page of d.pages) {
+      let heading = "";
+      for (const line of page.text.split("\n")) {
+        const figures = moneyFiguresIn(line);
+        const names = new Set(tokens(line));
+        if (!figures.length) { if (line.trim() && !want.every((w) => names.has(w))) heading = line; continue; }
+        if (figures.length !== 1 || !want.every((w) => names.has(w)) || NOT_SUM_INSURED.test(line)) continue;
+        // The heading must be of this kind and of no other ("GROUP LIVING CARE" is not life cover).
+        const kinds = COVER_KINDS.filter(([, re]) => re.test(heading)).map(([k]) => k);
+        if (kinds.length === 1 && kindRe.test(heading)) sums.add(CENT(figures[0].value));
+      }
+    }
+  }
+  return sums.size === 1 && sums.has(CENT(value));
 }
 
 /** The amount a statement may show, or why it may not. */
@@ -147,7 +175,7 @@ function checkAmount(st: ModelStatement, found: Found, household: Household, per
     const page = doc.pages.find((p) => p.page === found.page)!;
     const printed = rowBase(page.text, found.offset + found.excerpt.replace(/…$/, "").length);
     if (printed === "sum_insured") {
-      if (!printedSumInsured(household, doc, person, base)) return { ok: false, why: "the sum is not printed as this person's sum insured for this plan" };
+      if (!personSumInsured(household, person, coverKindAbove(page.text, found.offset), base)) return { ok: false, why: "the sum is not this person's own sum insured for this cover" };
     } else if (!printed || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
     const cur = currencyOf(printed === "sum_insured" ? st.percentOf.baseAmount : printed.raw, printed === "sum_insured" ? doc.pages.map((p) => p.text).join("\n") : page.text);
     const value = Math.round(base * pct) / 100;
@@ -161,7 +189,11 @@ function checkAmount(st: ModelStatement, found: Found, household: Household, per
   const value = figures[0]?.value ?? plain[0];
   if (value == null) return { ok: false, why: "no amount given" };
   // Only money in the quote counts: a percentage, a day count, an age or a page number is never an amount (R36-1).
-  if (!moneyValuesIn(found.excerpt).some((n) => sameValue(n, value))) return { ok: false, why: "the amount is not printed as money in the quoted words" };
+  // An unsigned number counts only under a "(S$)" / "(SGD)" column heading above it on the page (R38-2).
+  const page = doc.pages.find((p) => p.page === found.page)!;
+  const column = /\(\s*(?:S\$|SGD|US\$|\$)\s*\)/i.test(page.text.slice(0, found.offset));
+  const printedMoney = [...moneyFiguresIn(found.excerpt).map((f) => f.value), ...(column ? bareMoneyNumbers(found.excerpt) : [])];
+  if (!printedMoney.some((n) => sameValue(n, value))) return { ok: false, why: "the amount is not printed as money in the quoted words" };
   const cur = currencyOf(raw, found.excerpt);
   return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
 }
@@ -181,9 +213,9 @@ export function matchMember(household: Household, person: string | null): string
 // ------------------------------------------------------------------ sentences that add or stretch amounts
 const M = String.raw`(?:(?:SGD|USD|MYR)\s?|(?:S|SG|US|HK|A|NZ)?\$\s?|RM\s?)\d[\d,]*(?:\.\d+)?`, N = String.raw`\d[\d,]*(?:\.\d+)?`;
 /** A range with at least one money figure in it: "S$1,250 to S$2,000", "S$1,250-2,000", "1,250 to S$2,000", "between ... and ...". */
-const RANGE = new RegExp(`${M}\\s*(?:-|–|—|to|or up to)\\s*(?:${M}|${N})|${N}\\s*(?:-|–|—|to)\\s*${M}|\\bbetween\\b[^.;]*\\d[^.;]*\\band\\b[^.;]*\\d|\\bfrom\\b[^.;]*${M}[^.;]*\\bto\\b[^.;]*\\d`, "i");
+const RANGE = new RegExp(`${M}\\s*(?:-|–|—|to|or up to)\\s*(?:${M}|${N})|${N}\\s*(?:-|–|—|to)\\s*${M}|\\bbetween\\b[^.;]*\\d[^.;]*\\band\\b[^.;]*\\d|\\bfrom\\b[^.;]*${M}[^.;]*\\bto\\b[^.;]*\\d|${N}\\s*(?:-|–|—|to)\\s*${N}\\s*(?:dollars?|SGD)\\b|\\bat least\\b[^.;]*\\d[^.;]*\\b(?:as much as|up to|at most|as high as)\\b[^.;]*\\d`, "i");
 /** Words that add amounts together. */
-const ADDING = /\bplus\b|\bin total\b|\btotal(?:s|ling| of)?\b|\btogether\b|\baltogether\b|\bcombined\b|\badds? up\b|\bsum of\b|\bin all\b|\boverall\b/i;
+const ADDING = /\bplus\b|\bin total\b|\btotal(?:s|ling| of)?\b|\btogether\b|\baltogether\b|\bcombined\b|\badds? up\b|\bsum of\b|\bin all\b|\boverall\b|\bboth (?:pay|are paid|apply|payable)\b|\bon top of\b|\bin addition to\b|\bas well as\b|\band also\b/i;
 /** Whether `value` is the sum of two or more of the given amounts. */
 function isSumOf(value: number, amounts: number[]): boolean {
   const xs = amounts.slice(0, 14).map(CENT), target = CENT(value);
