@@ -17,10 +17,11 @@
  *   M2  Critic M2: an absence over a document with an unreadable (empty) page is refused
  *   M3  Critic M3: the topic's own word is searched even when the product name contains it
  *   M4  Critic M4: a saved "not described" answer is withdrawn when a document is added to its scope
+ *   N   negative controls: wrong person, product, version and percentage base; supported information surviving verification
  *   Q3  Policy QC Q3: a person correction where the two people's sums insured differ recalculates from the new person's own row
  *
- *   node --import tsx scripts/pr57-acceptance-test.ts                 (--show prints every answer; an argument, not an environment variable)
- *   node --import tsx scripts/pr57-acceptance-test.ts --only=R,H1      (named groups only)
+ *   node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts                 (--show prints every answer; an argument, not an environment variable)
+ *   node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts --only=R,H1      (named groups only)
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -174,15 +175,17 @@ async function main() {
 
   // ================================================================================================ M1: the row's own footnote excludes the reported part
   if (only("M1")) {
+    const evals: string[] = [];
     const toe = (words: string) => play([{ steps: [
       () => [call("resolve_person", { mention: "grace" })],
       () => [call("note_facts", { facts: [{ key: "how_it_happened", value: "fell down", words: "fell down" }, { key: "injury", value: words, words }], subject_id: G }), call("person_benefits", { topic: "fracture after a fall", subject_id: G })],
       (v) => [call("evaluate_benefit", { case: "Leg, Ankle or Knee", purpose: "claim", fact_keys: ["injury"], benefit_id: benefitIdOf(v, /^Simple Fracture$/i), subject_id: G, assumption_words: words })],
-      (v) => [call("final_answer", { subject_id: G, sentences: resultIds(v).map((r) => ({ kind: "calculation", text: "-", result_id: r, subject_id: G })) })],
+      (v) => { evals.push(JSON.stringify(v.find("evaluate_benefit")?.result ?? null)); const r = resultIds(v); return [call("final_answer", { subject_id: G, sentences: r.length ? r.map((x) => ({ kind: "calculation", text: "-", result_id: x, subject_id: G })) : [{ kind: "uncertainty", text: "The documents do not give an amount for this injury on that row." }] })]; },
     ] }], () => turn(`M1 ${words}`, `grace fell down and ${words}`));
     const t = await toe("broke her toe");
     const line = t.v.split("\n").find((x) => /S\$2,500/.test(x)) ?? "";
-    check("AC", "M1.1 'broke her toe' mapped by the model to the 'Leg, Ankle or Knee^' row: no S$2,500 is given beside that row's own 'toe and foot are not covered' footnote", !(/S\$2,500/.test(line) && NOTE_TOE.test(line)), t.v);
+    check("GUARD", "M1.0 (setup, the test can fail) the toe turn completes with a final answer", t.trace.outcome === "final_answer", `${t.trace.outcome}\n${t.v}`);
+    check("GUARD", "M1.1 (Critic M1, not reproduced on C0: the server reads the reported 'toe' and returns unlisted_case) 'broke her toe' mapped by the model to the 'Leg, Ankle or Knee^' row: no S$2,500 is given beside that row's own 'toe and foot are not covered' footnote", t.trace.outcome === "final_answer" && !(/S\$2,500/.test(line) && NOTE_TOE.test(line)), `${t.v}\nevaluate_benefit: ${evals[0]?.slice(0, 600)}`);
     const l = await toe("broke her ankle");
     check("GUARD", "M1.2 (control) 'broke her ankle' on the same row still gets S$2,500 (the footnote names toe and foot, not ankle)", /S\$2,500/.test(l.v), l.v);
   }
@@ -277,7 +280,8 @@ async function main() {
     await h.db.query("UPDATE policies SET file_hash='sha256:fx-benefit-summary-v2', lifecycle_state='active' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
     const replaced = visible((await reopen(ok.conv.id)).at(-1));
     await h.db.query("UPDATE policies SET file_hash='sha256:fx-benefit-summary' WHERE id=$1", [FX.doc("BENEFIT_SUMMARY").id]);
-    check("GUARD", "N5 (version) with the Benefit Summary deleted, or replaced by another version (new file hash), the reopened answer no longer shows its S$120,000", !/S\$120,000/.test(gone) && !/S\$120,000/.test(replaced), `deleted:\n${gone}\n--replaced:\n${replaced}`);
+    check("GUARD", "N5a (version) with the Benefit Summary deleted, the reopened answer no longer shows its S$120,000", !/S\$120,000/.test(gone), gone);
+    check("AC", "N5b (version) with the Benefit Summary's stored file hash changed in place (another version of the file), the reopened calculation answer no longer shows its S$120,000 (on C0 only absence answers compare file hashes: lib/chat/stale-answers.ts)", !/S\$120,000/.test(replaced), replaced);
     check("GUARD", "N6 and with the original version restored the reopened answer is whole again", visible((await reopen(ok.conv.id)).at(-1)) === ok.saved);
   }
 

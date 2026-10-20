@@ -9,7 +9,7 @@ Every check runs offline: scripted model or recorded tool calls, PGlite, network
 
 A repaired candidate (C1) is accepted by these checks when:
 
-1. every **AC** check in `scripts/pr57-acceptance-test.ts` passes (each fails on C0, see `FINDINGS-C0.md`);
+1. every **AC** check in `scripts/reliable-chat-pr57-acceptance-test.ts` passes (each fails on C0, see `FINDINGS-C0.md`);
 2. every **GUARD** check in it still passes (controls so a repair cannot over-correct);
 3. the command-level checks below hold;
 4. no suite that is green on C0 turns red (name-by-name comparison of `run-suites.sh` output on C0 and C1).
@@ -17,8 +17,8 @@ A repaired candidate (C1) is accepted by these checks when:
 ## The script
 
 ```
-node --import tsx scripts/pr57-acceptance-test.ts            # all groups; exit 1 if any AC or GUARD fails
-node --import tsx scripts/pr57-acceptance-test.ts --only=R    # one group; --show prints every answer
+node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts            # all groups; exit 1 if any AC or GUARD fails
+node --import tsx scripts/reliable-chat-pr57-acceptance-test.ts --only=R    # one group; --show prints every answer
 ```
 
 | group | source of the ask | AC (must flip FAIL to PASS) | GUARD (must stay PASS) |
@@ -26,11 +26,11 @@ node --import tsx scripts/pr57-acceptance-test.ts --only=R    # one group; --sho
 | R | handoff open item 3 (usefulness gaps) | R1, R2 repetition of "which applies" (K3t1, K4b); R3 "different bases" said twice; R5 v1 K2.3 other listed cover; R7 K6a limitation in the amount's own sentence; R9 K6c "the policy definition" | R4 both alternatives, never a total; R6 no S$250 for sickness; R8 S$350,000 dated, never "will pay"; R10 dental cites no passage; R11 returned = saved = reopened |
 | H1 | Critic H1 | H1.1 to H1.3: "Daniel broke his arm too." plus "It was not serious." / "I mean, ..." / "rather than" moves nothing from Grace | H1.4 plain "too" moves nothing; H1.5 a real correction is still made once |
 | H2 | Critic H2 | H2.1 "felt sick and fainted, hitting her head": no "not met", the S$250 terms stay with the printed accident condition | H2.2 plain accident unchanged; H2.3 returned = saved = reopened |
-| M1 | Critic M1 | M1.1 "broke her toe" mapped to the Leg^ row gets no S$2,500 beside "toe and foot are not covered" | M1.2 "broke her ankle" on that row still S$2,500 |
+| M1 | Critic M1 | (none: not reproduced on C0) | M1.0 the turn completes; M1.1 "broke her toe" mapped to the Leg^ row gets no S$2,500 (C0 returns `unlisted_case`); M1.2 "broke her ankle" on that row still S$2,500 |
 | M2 | Critic M2 | an empty stored page in a scoped document refuses the absence | M0 setup |
 | M3 | Critic M3 | product name "Scheme X Dental Plan" does not stop "dental" being searched | M3.1 same page without the rename refuses |
 | M4 | Critic M4 | a new document for Grace printing a dental benefit withdraws the saved absence on reopen | |
-| N | project instructions (20 Oct) | (none) | N1 percentage base not swapped; N2 date, footnote and contact step survive verification and reopen; N3 wrong person; N4 wrong product (contact step for a document outside the library); N5 version (deleted or new file hash withdraws); N6 restored version whole. A correction followed by a new scenario is `reliable-chat:fx-repairs-test` G6/G6b |
+| N | project instructions (20 Oct) | N5b a calculation answer is withdrawn when a document it rests on gets a new file hash | N1 percentage base not swapped; N2 date, footnote and contact step survive verification and reopen; N3 wrong person; N4 wrong product (contact step for a document outside the library); N5a deleted document withdraws; N6 restored version whole. A correction followed by a new scenario is `reliable-chat:fx-repairs-test` G6/G6b |
 | Q3 | Policy QC Q3 | (none: passes on C0, see findings) | Q3.1 to Q3.4 correction with Daniel at S$400,000 gives S$80,000, nothing carried |
 
 **Limit of group R.** It replays fx-live-2's recorded model tool calls (`responses.jsonl`) through the tree under test. It shows what the code does with the model's recorded statements. If C1 repairs a gap through the prompt or a tool description, group R cannot show it: that needs a live run, which needs DC's authorisation and ledger room. If C1 changes a tool contract so the recorded calls no longer replay, the R checks fail for that reason; the INFO lines (R0) and `--show` say which.
