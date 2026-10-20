@@ -25,7 +25,7 @@
  */
 import { flagUnclearFigures } from "@/lib/documents/messy";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
-import type { ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
+import type { AnswerStatement, ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
 
 export const POLICY_STATED_LIMIT_LABEL = "Policy-stated coverage limit" as const;
 export const POLICY_STATED_LIMIT_NOTICE = "This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.";
@@ -294,7 +294,48 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
   answer.details = answer.details.map(flagUnclearFigures);
   answer.nextSteps = answer.nextSteps.map(flagUnclearFigures);
   answer.claimItems = answer.claimItems.map((item) => ({ ...item, reason: flagUnclearFigures(item.reason), conditions: item.conditions.map(flagUnclearFigures) }));
+  reconcileStatements(answer);
   return answer;
+}
+
+const numbersIn = (t: string | null | undefined) => [...(t ?? "").matchAll(/\d[\d,]*(?:\.\d+)?/g)].map((m) => m[0].replace(/,/g, "").replace(/\.0+$/, ""));
+const amountsIn = (t: string | null | undefined) => [...(t ?? "").matchAll(MONEY_PATTERN)].flatMap((m) => numbersIn(m[0]));
+const STATEMENT_KINDS = new Set<AnswerStatement["kind"]>(["calculation", "benefit_terms", "fact", "uncertainty", "not_found"]);
+/** A bottom line that states an outcome carries its own qualifier in the same sentence. */
+const HEDGED = /\b(?:if|may|might|only|whether|not|insurer decides|insurer (?:can|will) (?:confirm|decide))\b|n['’]t\b/i;
+/** Answer shape: the statements are the answer's prose as fields, and never more than it. Every shown paragraph (summary, then each
+ * detail) is exactly one statement, whose fullText IS that paragraph: a statement whose paragraph was changed or left out by the figure gate
+ * or this boundary is sent as that paragraph's plain text, and a paragraph with no statement gets a plain one. A structured statement keeps
+ * its fields only when they state no number its paragraph does not, every amount the paragraph prints is still on it (an amount is never
+ * separated from its conditions), an amount names its person, and no scan-unclear figure is in it. The bottom line is kept only when every
+ * figure it states is on a kept amount statement and it carries its own qualifier. Pure and idempotent: the same on return, save and
+ * reopen (sanitizeStoredAnswer), so returned = saved = reopened. */
+export function reconcileStatements(answer: ChatAnswer): void {
+  if (!Array.isArray(answer.statements)) { if (answer.bottomLine !== undefined) answer.bottomLine = null; return; }
+  const paragraphs = [answer.summary, ...answer.details].filter((p) => typeof p === "string" && p.trim());
+  const byFull = new Map<string, AnswerStatement>();
+  for (const st of answer.statements) if (st && typeof st === "object" && typeof st.fullText === "string" && !byFull.has(st.fullText)) byFull.set(st.fullText, st);
+  const cited = new Set((answer.citations ?? []).map((c) => c.chunkId));
+  const out: AnswerStatement[] = paragraphs.map((p, i) => {
+    const st = byFull.get(p);
+    const plain: AnswerStatement = { id: `s${i + 1}`, kind: st && (st.kind === "uncertainty" || st.kind === "not_found") ? st.kind : "fact", text: p, fullText: p, conditions: [] };
+    if (!st || !STATEMENT_KINDS.has(st.kind) || typeof st.text !== "string" || !st.text.trim()) return plain;
+    const conditions = Array.isArray(st.conditions) ? st.conditions.filter((c): c is string => typeof c === "string" && !!c.trim()) : [];
+    const amount = st.amount && typeof st.amount.text === "string" ? { text: st.amount.text, currencyResolved: !!st.amount.currencyResolved, illustration: !!st.amount.illustration } : null;
+    const fields = [st.text, st.basis ?? "", amount?.text ?? "", ...conditions];
+    const have = numbersIn(p), said = fields.flatMap(numbersIn);
+    if (said.some((n) => !have.includes(n)) || amountsIn(p).some((n) => !said.includes(n))) return plain;
+    if (amount && !(typeof st.personName === "string" && st.personName.trim())) return plain;
+    if (fields.some((f) => flagUnclearFigures(f) !== f)) return plain;
+    const source = st.source && typeof st.source.policyName === "string" ? { policyName: st.source.policyName, page: typeof st.source.page === "number" ? st.source.page : null, rowLabel: st.source.rowLabel ?? null, footnote: st.source.footnote && typeof st.source.footnote.text === "string" ? { marker: String(st.source.footnote.marker ?? ""), text: st.source.footnote.text } : null, note: st.source.note ?? null, citationIds: (Array.isArray(st.source.citationIds) ? st.source.citationIds : []).filter((id) => cited.has(id)) } : null;
+    const group = amount && st.group && st.group.kind === "either_or" && typeof st.group.id === "string" && typeof st.group.note === "string" && !numbersIn(st.group.note).length ? { id: st.group.id, kind: "either_or" as const, note: st.group.note } : null;
+    return { id: `s${i + 1}`, kind: st.kind, text: st.text, fullText: p, personName: st.personName ?? null, amount, basis: st.basis ?? null, conditions, asOf: st.asOf ?? null, source, ...(group ? { group } : {}) };
+  });
+  for (const st of out) if (st.group && out.filter((x) => x.group?.id === st.group!.id).length < 2) delete st.group;
+  answer.statements = out;
+  const b = typeof answer.bottomLine === "string" ? answer.bottomLine.trim() : "";
+  const onCards = out.filter((st) => st.amount).flatMap((st) => [st.text, st.basis ?? "", st.amount!.text, ...st.conditions].flatMap(numbersIn));
+  answer.bottomLine = b && HEDGED.test(b) && flagUnclearFigures(b) === b && numbersIn(b).every((n) => onCards.includes(n)) ? b : null;
 }
 
 /** Read-side boundary for answers persisted before this boundary existed

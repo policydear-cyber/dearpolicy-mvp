@@ -22,7 +22,7 @@ import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/co
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { claimFactsFromSubject,ensureClaimRecordSchema,recordClaim,recordClaimProgress } from "@/lib/claims/record";
 import { computeIndicativeEstimate } from "@/lib/claims/indicative-assessment";
-import { enforceLiveChatMonetaryBoundary, isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "./monetary-boundary";
+import { enforceLiveChatMonetaryBoundary, reconcileStatements, isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "./monetary-boundary";
 import { explicitCurrency } from "./policy-analysis";
 import { formatMoney } from "@/lib/format/currency";
 import { benefitFitsEvent,collapseSharedConditions,applyClaimInterviewTurn,applyFactFinding,applyIndicativeEstimateAnswer,isClaimMoneyQuestion,applyInjuryFactFindingTurn,benefitCategories,claimEventName,finalizeClaimAnswer,joinOr,nextClaimInterviewQuestion,PERMANENT_LOSS,primaryClaimCategory,questionOptions } from "./fact-finding-chat";
@@ -106,6 +106,8 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   await attachProvenance(args.answer,args.conversation.account_id);
   const figureProblems=await verifyAnswerFigures(args.answer,{accountId:args.conversation.account_id,userText:args.message});
   if(figureProblems.length)((globalThis as {__dpVerifyDebug?:boolean}).__dpVerifyDebug?(m:string)=>process.stderr.write(m+"\n"):console.warn)("[figure-gate] "+JSON.stringify({problems:figureProblems.map(p=>({where:p.where,reason:p.reason}))}));
+  // Answer shape: the statements follow what the gate kept (a paragraph it changed is sent as plain text).
+  reconcileStatements(args.answer);
   return storeTurn(args);
 };
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress,SubjectFacts } from "./types";

@@ -1,0 +1,140 @@
+
+=== FR1 turn 1: grace fell down and broke her arm
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies.
+  [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
+  [calculation] If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000.
+      amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
+      condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
+      source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
+  [calculation] If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000.
+      amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
+      condition: The row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies.
+      condition: This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.
+      source: Certificate of Insurance Part 2 p.8 row “Arm, Elbow, Wrist or Ribs (Other Fracture)” cites ["rag2:e2","rag2:e14","rag2:e22"]
+  [uncertainty] Neither document says whether one amends, replaces or adds to the other.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14","rag2:e33","rag2:e34","rag2:e35"]
+  CITE rag2:e5 p.13: "Simple Fracture Benefit Limit: S$5,000"
+  CITE rag2:e20 p.13: "Arm , Elbow, Wrist or Ribs\t25%"
+  CITE rag2:e21 p.13: "For the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered"
+  CITE rag2:e2 p.1: "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022"
+  CITE rag2:e14 p.8: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+  CITE rag2:e22 p.8: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+  CITE rag2:e33 p.37: "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+  CITE rag2:e34 p.37: "Information is accurate as at July 2021."
+  CITE rag2:e35 p.1: "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+
+=== FR1 turn 2: Was Grace’s fracture confirmed by X-ray and certified by a registered medical practitioner: yes
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies; the next step is to contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+  [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
+  [calculation] If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000.
+      amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
+      condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
+      source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
+  [calculation] If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000.
+      amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
+      condition: The row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies.
+      condition: This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.
+      source: Certificate of Insurance Part 2 p.8 row “Arm, Elbow, Wrist or Ribs (Other Fracture)” cites ["rag2:e2","rag2:e14","rag2:e22"]
+  [uncertainty] Neither document says whether one amends, replaces or adds to the other.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14","rag2:e33","rag2:e34","rag2:e35"]
+  CITE rag2:e5 p.13: "Simple Fracture Benefit Limit: S$5,000"
+  CITE rag2:e20 p.13: "Arm , Elbow, Wrist or Ribs\t25%"
+  CITE rag2:e21 p.13: "For the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered"
+  CITE rag2:e2 p.1: "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022"
+  CITE rag2:e14 p.8: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+  CITE rag2:e22 p.8: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+  CITE rag2:e33 p.37: "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+  CITE rag2:e34 p.37: "Information is accurate as at July 2021."
+  CITE rag2:e35 p.1: "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+
+=== FX-K6B turn 1: Does Grace's cover pay for dental treatment?
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: (none)
+  [not_found] I checked Grace’s documents for dental treatment: the Scheme X Group Insurance Scheme in full, and the text of the Scheme X Group Insurance (product summary) (pages 8, 12-13 and 37 of 37 pages) and the Scheme X Group Insurance (certificate summary) (pages 1, 3, 5 and 7-9). Those pages do not mention dental treatment. The rest of their text was not stored, so it could not be checked, and I can't say either way whether there is such cover.
+
+=== FX-K6A turn 1: What does Grace's Group Living Care pay if she is diagnosed with cancer?
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: If you go ahead, start here: Contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask what it needs for a claim.
+  [fact] Grace’s certificate lists Group Living Care of S$350,000 as of 6 October 2022; this is the amount shown on that date, not confirmation of cover now.
+  [not_found] The Scheme X Group Insurance Scheme does not state what Group Living Care pays for cancer. That is not the same as saying it is excluded or not covered: it only means this document does not show it, and only the insurer can confirm it.
+  CITE rag2:e3 p.1: "S****822B\tTan Hui Min Grace\tS$350,000\tAs of 06/10/2022"
+
+=== FX-K2 turn 1: Grace was hospitalised for three days last week because she was sick. Does her accident cover pay anything?
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: (none)
+  [benefit_terms] Accidental Hospital Recuperation Benefit: 250.
+      amount 250 (currency NOT stated) for Grace
+      condition: In addition to the specific exclusions listed below
+      condition: if within 30 days following bodily injury as a result of an Accident
+      condition: it is medically necessary due to the said injury (whether directly or indirectly necessary) of the Insured Person to be confined as a resident patient in a Hospital for a continuous period of at least 24 hours on the recommendation of a Registered Medical Practitioner but not for the purpose of convalescent rest
+      condition: Subsequent hospitalisation resulting from the same injury will not be payable.
+      condition: This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.
+      source: Scheme X Group Insurance p.9 cites ["rag2:e13"]
+  [fact] Accidental Hospital Recuperation Benefit (page 9) is printed with an accident condition (“if within 30 days following bodily injury as a result of an Accident”). The cause you reported (“she was sick”) is an illness, not an accident, so on what you have told me its accident condition is not met and its printed terms are not an amount for this stay; any claim decision is the insurer's.
+  [fact] Grace's certificate also lists Group Living Care and Group Living Care Plus (listed as of 6 October 2022).
+  CITE rag2:e13 p.9: "In addition to the specific exclusions listed below, if within 30 days following bodily injury as a result of an Accident, it is medically necessary\ndue to the said injury (whether directly or indirectly necessary) of 
+  CITE rag2:e3 p.1: "S****822B\tTan Hui Min Grace\tS$350,000\tAs of 06/10/2022"
+  CITE rag2:e4 p.1: "S****822B\tTan Hui Min Grace\tS$300,000\tAs of 06/10/2022"
+
+=== FX-K4B turn 1: grace fell down and broke her arm
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: Grace's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies.
+  [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
+  [calculation] If the Simple Fracture benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000.
+      amount S$1,250 (currency stated, illustration) for Grace; basis 25% of the Simple Fracture benefit limit of S$5,000
+      condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
+      source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
+  [calculation] If the Simple Fracture or Other Fracture due to Accident benefit applies to Grace's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000.
+      amount S$120,000 (currency stated, illustration) for Grace; basis 20% of Grace's sum insured of S$600,000; as of 2022-10-06
+      condition: The row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies.
+      condition: This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.
+      source: Certificate of Insurance Part 2 p.8 row “Arm, Elbow, Wrist or Ribs (Other Fracture)” cites ["rag2:e2","rag2:e14","rag2:e22"]
+  [uncertainty] Neither document says whether one amends, replaces or adds to the other.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14","rag2:e33","rag2:e34","rag2:e35"]
+  CITE rag2:e5 p.13: "Simple Fracture Benefit Limit: S$5,000"
+  CITE rag2:e20 p.13: "Arm , Elbow, Wrist or Ribs\t25%"
+  CITE rag2:e21 p.13: "For the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered"
+  CITE rag2:e2 p.1: "S****822B\tTan Hui Min Grace\tS$600,000\tAs of 06/10/2022"
+  CITE rag2:e14 p.8: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+  CITE rag2:e22 p.8: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+  CITE rag2:e33 p.37: "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+  CITE rag2:e34 p.37: "Information is accurate as at July 2021."
+  CITE rag2:e35 p.1: "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+
+=== FX-K4B turn 2: Actually it was Daniel who broke his arm, not Grace.
+  returned = saved = reopened: true   statements cover every paragraph: true
+  BOTTOM LINE: Daniel's documents print either S$1,250 or S$120,000 for this (alternatives, not a total), and only the insurer decides which applies; the next step is to contact Aldermoor Life Ltd (through the employer or scheme administrator, for this group scheme) about the Scheme X Group Insurance Scheme to ask which of the two schedules applies to this event, and what it needs for a claim.
+  [fact] Updated: this is about Daniel, not Grace. The earlier estimates I worked out for Grace from the injury no longer apply, because they were worked out for Grace's policy, not Daniel's.
+  [uncertainty] The documents give two different answers and don't say which one applies. They are alternatives, not a total.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14"]
+  [calculation] If the Simple Fracture benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$1,250: 25% of the Simple Fracture benefit limit of S$5,000.
+      amount S$1,250 (currency stated, illustration) for Daniel; basis 25% of the Simple Fracture benefit limit of S$5,000
+      condition: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered.
+      source: Product Summary p.13 row “Arm, Elbow, Wrist or Ribs” footnote #: For the avoidance of doubt, any fractures of thumb, finger and palm are not covered cites ["rag2:e5","rag2:e20","rag2:e21"]
+  [calculation] If the Simple Fracture or Other Fracture due to Accident benefit applies to Daniel's case “Arm, Elbow, Wrist or Ribs”, the conditional illustration is S$120,000: 20% of Daniel's sum insured of S$600,000.
+      amount S$120,000 (currency stated, illustration) for Daniel; basis 20% of Daniel's sum insured of S$600,000; as of 2022-10-06
+      condition: The row the document labels “Other Fracture”; these documents do not define which fractures count as Other Fracture, so the insurer decides whether it applies.
+      condition: This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.
+      source: Certificate of Insurance Part 2 p.8 row “Arm, Elbow, Wrist or Ribs (Other Fracture)” cites ["rag2:e37","rag2:e14","rag2:e22"]
+  [uncertainty] Neither document says whether one amends, replaces or adds to the other.
+      source: Product Summary and Certificate of Insurance Part 2 cites ["rag2:e20","rag2:e5","rag2:e14","rag2:e33","rag2:e34","rag2:e35"]
+  CITE rag2:e5 p.13: "Simple Fracture Benefit Limit: S$5,000"
+  CITE rag2:e20 p.13: "Arm , Elbow, Wrist or Ribs\t25%"
+  CITE rag2:e21 p.13: "For the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered"
+  CITE rag2:e37 p.1: "S****411A\tLee Wei Ming, Daniel\tS$600,000\tAs of 06/10/2022"
+  CITE rag2:e14 p.8: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%"
+  CITE rag2:e22 p.8: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."
+  CITE rag2:e33 p.37: "The above is a summary of the plan offered. The precise terms and conditions of the\nplan are set out in the certificate of insurance."
+  CITE rag2:e34 p.37: "Information is accurate as at July 2021."
+  CITE rag2:e35 p.1: "2) Status of this Certificate of Insurance\nThis Certificate is not a contract of insurance."
+
+UNIT excerpt runs to the end of its sentence (and a table row stays one row): true ("For the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered")
+UNIT a card that leaves out a condition's amount (S$100) is sent as plain text, and an unqualified bottom line is dropped: true
+UNIT a card stating an amount its paragraph does not is sent as plain text: true
+
+all consistent

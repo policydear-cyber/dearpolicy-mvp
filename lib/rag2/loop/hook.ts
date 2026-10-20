@@ -9,12 +9,14 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { getConversation, historyToken, openConversation, ChatConflict } from "@/lib/chat/store";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
+import { buildStatements } from "./answer-statements";
+import { excerptOf } from "@/lib/rag2/evidence";
 import { FIGURE_LEFT_OUT_NOTE, sentencesOf, verifyAnswerFigures, type FigureProblem } from "@/lib/chat/answer-verification";
 import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, LATER_DATE_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, peopleFromLabels, LATER_DATE_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -133,7 +135,8 @@ const show = (v: unknown) => String(v).replace(/_/g, " ");
 export function preciseExcerpt(r: RagLoopState["evidence"][string]): string {
   if (!r.support) return r.passage.text;
   const ctx = r.context ?? [];
-  return [...ctx.filter((c) => c.role !== "footnote").map((c) => c.text), r.support.text, ...ctx.filter((c) => c.role === "footnote").map((c) => c.text)].join("\n");
+  // (answer shape: a shown span runs on to the end of its sentence when the passage holds the rest -- a footnote wrapped onto the next line)
+  return [...ctx.filter((c) => c.role !== "footnote").map((c) => c.text), excerptOf(r.support.text, r.passage.text), ...ctx.filter((c) => c.role === "footnote").map((c) => c.text)].join("\n");
 }
 
 async function citationsFor(accountId: string, state: RagLoopState, ids: string[]): Promise<ChatCitation[]> {
@@ -237,6 +240,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
       answer.nextSteps = c.nextSteps;
       if (c.absenceChecks?.length) { answer.absenceChecks = c.absenceChecks; answer.libraryNames = [...new Set([...(answer.libraryNames ?? []), ...c.absenceChecks.flatMap((x) => x.documents.map((d) => d.name))])]; }
     }
+    // (answer shape: what the shown statements and the question's own clause rest on -- never every passage read this turn)
     answer.citations = await citationsFor(request.accountId, state, [...new Set([...(c?.evidenceIds ?? []), ...trace.evidenceChosen])]);
   } else if (unknownPeople.length && !resolvedSomeone) {
     // Agent P (task 4): the person asked about is not among this household's members. Said plainly, with nothing
@@ -305,6 +309,10 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
   lap("rescueMs");
   await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message, priorUserTexts });
   lap("gateMs");
+  // Answer shape: citations only from what is shown, then the shown paragraphs as statements with a bottom line (answer-statements.ts).
+  if (shownComposed) {
+    buildStatements(answer, shownComposed, out.tools.structured, peopleFromLabels(context.family.map(label)), reply.kind === "ask" && reply.pending.kind === "fact" ? reply.pending.evidenceIds ?? [] : []);
+  }
   // Critic R17: what this turn showed (every branch, after the gate), so "what do I do now" repeats only the steps just shown.
   const shownSubject = reply.kind === "final" || reply.kind === "ask" ? reply.composed?.subjectId ?? state.subjectId ?? null : state.subjectId ?? null;
   trace.shown = { subjectId: shownSubject, nextSteps: out.corrections.length || lost.length ? [] : [...answer.nextSteps] };

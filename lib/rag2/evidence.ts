@@ -163,6 +163,30 @@ const FOOT_MARK = /(?:[*†‡§¶]+|[¹²³⁴⁵⁶⁷⁸⁹]|\((?:\d{1,2}|[a-
 const hasFigure = (t: string) => /\d/.test(t);
 const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{3,}|\d+(?:[.,]\d+)*/g) ?? []).map((w) => /^\d/.test(w) ? w.replace(/,/g, "") : w.replace(/(?:es|s|e)$/, "")));
 
+/** Answer shape (UX tester: the Simple Fracture footnote was cited as "... thumb, finger and palm are not"): where a SHOWN excerpt's line
+ * runs on -- it ends mid-sentence (a letter or a comma, not a figure, percentage or stop) and the next line is not a table line and starts
+ * in lower case ("covered.") -- it continues through those lines to the end of its sentence (at most three more lines). Used for what is
+ * displayed (a footnote's context line, excerptOf), never to choose the supporting span. Returns the end offset. */
+export function sentenceEnd(lines: Line[], at: number): number {
+  let end = lines[at].start + lines[at].text.trimEnd().length;
+  for (let i = at + 1, n = 0; i < lines.length && n < 3; i++, n++) {
+    const said = lines.slice(at, i).map((l) => l.text).join(" ").trimEnd();
+    if (!/[A-Za-z,]$/.test(said)) break;
+    const next = lines[i];
+    if (!next.text.trim() || isTableLine(next.text) || !/^\s*[a-z]/.test(next.text)) break;
+    end = next.start + next.text.trimEnd().length;
+  }
+  return end;
+}
+/** The excerpt shown for a span: the span, run on to the end of its sentence within `text` (sentenceEnd). */
+export function excerptOf(span: string, text: string): string {
+  const at = text.indexOf(span);
+  if (at < 0 || !span.trim()) return span;
+  const lines = linesOf(text);
+  const i = lines.findIndex((l) => l.start <= at + span.length && l.end >= at + span.length);
+  if (i < 0 || lines[i].start + lines[i].text.trimEnd().length !== at + span.trimEnd().length) return span;
+  return text.slice(at, sentenceEnd(lines, i));
+}
 /** Candidate supporting units of a passage: each table line whole, each prose line cut into sentences. */
 function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
   const out: EvidenceSpan[] = [];
@@ -274,8 +298,8 @@ export function contextFor(support: EvidenceSpan, pages: Map<number, string>): E
   const mark = support.text.match(new RegExp("\\S(" + FOOT_MARK.source + ")(?=\\s|$)"));
   if (mark) {
     const m = mark[1];
-    const foot = lines.find((l) => l.start !== lines[at]?.start && l.text.trimStart().startsWith(m));
-    if (foot) out.push(span(foot, support.onPage, "footnote"));
+    const fi = lines.findIndex((l) => l.start !== lines[at]?.start && l.text.trimStart().startsWith(m));
+    if (fi >= 0) { const f = span(lines[fi], support.onPage, "footnote"), to = sentenceEnd(lines, fi); out.push({ ...f, end: to, text: text.slice(f.start, to) }); }
   }
   return out;
 }

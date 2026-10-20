@@ -328,6 +328,25 @@ export type CalculationRecord = {
   unitTerms?:UnitTerms;
 };
 
+/** Answer shape (UX "shorter answers", 20 Oct 2026): one statement of the answer as fields, so the page can show a short card and put the
+ * source detail one tap away without trimming prose. `text` is a short form of a verified statement: it states no figure the verified
+ * statement does not, and the amount's own conditions stay in `conditions` on the same statement. `fullText` is the verified sentence as
+ * shown in summary/details (kept until the page reads these fields). */
+export type AnswerStatement = {
+  id: string;
+  kind: "calculation" | "benefit_terms" | "fact" | "uncertainty" | "not_found";
+  text: string;
+  fullText: string;
+  personName?: string | null;
+  amount?: { text: string; currencyResolved: boolean; illustration: boolean } | null;
+  basis?: string | null;
+  conditions: string[];
+  asOf?: string | null;
+  source?: { policyName: string; page: number | null; rowLabel?: string | null; footnote?: { marker: string; text: string } | null; note?: string | null; citationIds: string[] } | null;
+  /** Amounts that are alternatives, never a total (two documents print different terms for the same event): the same id on each, kind
+   * "either_or", and the plain note saying so. */
+  group?: { id: string; kind: "either_or"; note: string } | null;
+};
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -386,6 +405,11 @@ export type ChatAnswer = {
    * names, not figures: "Claim S$5,000 receipt.pdf could not be read" states no amount, so the figure gate does not
    * read money inside them (lib/chat/answer-verification.ts). Set only by the server from the library lookup. */
   libraryNames?:string[];
+  /** Answer shape: the plain outcome in one or two sentences (who, what is or is not shown, the amount with its condition, a conflict
+   * between documents, or the next step), built only from the statements below or the next steps. Absent when there is no such outcome. */
+  bottomLine?: string | null;
+  /** Answer shape: the answer's statements as fields (see AnswerStatement), in the order shown. */
+  statements?: AnswerStatement[];
   /** fx-live-1: for each "not found in these documents" statement the server wrote, what it checked -- the claim, the topic and
    * search terms, and the documents read (id, name, file hash, version): saved with the answer, so a reopened answer is withdrawn
    * when a document it was checked against is deleted or replaced (lib/chat/stale-answers.ts). Set only by the server. */
