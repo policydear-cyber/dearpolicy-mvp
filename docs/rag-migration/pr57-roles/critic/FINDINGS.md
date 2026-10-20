@@ -364,3 +364,90 @@ Not release-ready.
 - **Fix before release:** F1 (reference wording quoted as if it answers a cover question), A2 (another person's policies named as this person's) and A3 (a documented accident medical benefit could be hidden behind a stated absence). Each is a small change at the place named.
 - **Fix in C2, or list accurately as open:** A1, F2 and F3.
 - Everything else reviewed in C2 holds: the table-condition boundary, the sickness wording, the Living Care sentence, read-in-full, and M4 without the rag2 import.
+
+---
+
+# Round 6: final adversarial review of C3 `17668630` (full diff `4956588..17668630`, delta `98ada99..17668630`)
+
+Method: read the C3 product delta (`absence-scope.ts`, `loop.ts`, `statement-render.ts`, `event-relations.ts`) and the
+Developer's `RELEASE-REPORT.md` / corrected `C1.md` (`427d1d4`). Ran `decideNotFound` from C3 and from C2 directly (a scratch copy
+with the store import stubbed; no DB, no model, no spend) on the fracture fixture's certificate (`CERT_P1`) and Benefit Summary
+page 1 (`BS_P1`, the OPMC roster), plus one extra page per case. Ran `isPersonCorrection` from C3 on 12 messages. Line numbers
+are on C3.
+
+## New findings
+
+**R6-1. High (for the GP-bill repair; no wrong amount): G1 now fires only when the member's display name equals the certificate
+cell exactly.** `absence-scope.ts:125` builds the row matcher from `displayName` alone, as a whole tab-delimited cell. The fracture
+fixture passes because its member is named `"Lee Wei Ming, Daniel"`, the same as the cell (`fracture-conversation.ts:21`). The
+repo's own other households show the usual shape: member `"Daniel Lee Wei Ming"`, preferred name `"Daniel"`, certificate cell
+`"Lee Wei Ming, Daniel"` (`actual-lib.ts:34` vs `:142`, `booklet.ts:31` vs `:46`). Reproduced: with the display name
+`"Daniel Lee Wei Ming"`, C2 says the G1 answer, but C3 refuses with `printed=[]`. On the GP path the household then gets "I could not
+confirm from your documents what pays for the bill you mentioned" (`loop.ts:2149`), which is DC's original complaint. That is
+safe, but the release report's line "DC's GP-bill question gets an answer" holds only where the names happen to match. DC's real
+member name versus his certificate cell is unchecked, because the production read was blocked. Fix (small): match rows the way the
+table selector already does (`tables.ts:604-609`: display name or preferred name, word-bounded, at least 3 letters). Then drop a row
+that also matches another household member's name, which keeps A2 closed. Add a GP variant where the member name is in app order.
+
+**R6-2. Medium-High: the A3 change narrowed round-4 condition 5, so a documented medical-expense benefit can again be hidden behind
+a stated absence.** C2 vetoed G1 when any medical-bill term ("medical expenses", ...) was printed outside the policy list. C3
+replaces that with `medicalExpenseSentences` (`absence-scope.ts:95`), which needs a payment verb in the same sentence. A page that
+prints the benefit as a label and a limit ("G. Medical Expenses Benefit / Up to $2,000 per Accident for medical expenses incurred
+following an Accident") has no "reimburse/pay". Reproduced: C2 refuses and quotes both lines. C3 lets G1 fire and states "Daniel's
+documents ... do not describe a benefit for GP or outpatient treatment" next to that benefit. Fix: keep C2's term veto (outside
+the policy list) as well as the new sentence rule, and add this label-style control beside GP.b1.
+
+**R6-3. Low-Medium (already in C2; C3 now quotes it first): an exclusion counts as medical-expense wording.** `PAYS` matches "We
+will not pay any medical expenses arising from a pre-existing condition". It refuses the absence and is quoted ahead of other
+lines as what the documents print for the GP bill, with the heading merged in ("General Exclusions We will not pay ..."). That
+attaches another benefit's exclusion to a fall. Fix: skip sentences with a negation before the payment verb (not / no / never /
+excluded). Inpatient-only wording ("... while hospitalised as an inpatient") is also counted. It is quoted verbatim, so this is
+listed only.
+
+**R6-4. Low (cosmetic, also in C2):** the G1 sentence reads "Outpatient Medicare Policy Policy (OPMC)".
+
+## Round-5 items on C3
+
+| item | verdict | evidence |
+| --- | --- | --- |
+| A1 too/also block | closed | block removed (`loop.ts:116`). 9/12 messages as intended. Residual (Low, accepted trade-off): "Daniel fell too, not Grace though, she was fine" and "Daniel also fell, it wasn't Grace who pushed him" now read as corrections (reversible) |
+| A2 spouse's products named | closed, but over-tight (R6-1) | only rows naming the subject are read (`absence-scope.ts:125-133`); subject scope only (`:64`) |
+| A3 doctor/practitioner wording | closed for sentence wording; regressed for label-style wording (R6-2) | "reimburse the reasonable charges for treatment by a Registered Medical Practitioner" now refuses |
+| F1 policy list quoted | closed | `chosen` never takes an `inPolicyList` line (`:70`); repeat with nothing quotable is left out (`statement-render.ts:314`); reproduced `printed=[]` |
+| F2 G2 note after refusal | closed | `loop.ts:2149` says "could not confirm" after a refusal |
+| F3 partial sentence, other subject | closed | subject-matched in `statement-render.ts:328-329` and the new `withPartialAbsence` (`loop.ts:2563`) |
+| F4 quoted bare "$" | holds by reading; still no test | the bare-currency gates run on the full text, quotes included, before the payout check blanks quotes (`compose.ts:1121-1150`) |
+| C1-3 re-analysis in place | listed open with the corrected reason | `developer/C1.md:25-29`, `RELEASE-REPORT.md` |
+
+## UX regressions
+
+- **X-ray card (FX-K4B): fixed.** The own-section filter now runs before the relevance and "unprinted requirement" checks
+  (`loop.ts:1182-1217`), so a mobility-aid passage no longer justifies a fracture question.
+- **Dental "couldn't confirm" (FX-K6B): fixed.** `withPartialAbsence` adds the server's "what was read" statement for the same
+  subject when the reply has no absence of its own. Bonus: the GP-path merge now keeps `absenceChecks` (`loop.ts:2152`), so that
+  saved absence can be withdrawn on reopen. It was lost on C2.
+- **Correction line (superseded answers not marked): not fixed; listed open.** Medium. After a correction, the earlier answer's
+  figures (S$2,500 / S$300,000) stay on screen and after reload with no "replaced" marking. This is also on main, so it is not a
+  regression. It is next to the worst-bug class (a withdrawn figure readable as current), so fix it before public launch.
+- Death abroad (L2): the repatriation benefit is now a death benefit (label-only rule, `event-relations.ts:16`) and keeps its
+  printed condition, quoted.
+
+## Correction handling, household isolation, applicability, fallbacks
+
+- Corrections: as A1 above. No new crossing.
+- Household isolation: members are read per account (`checkNotFound`), and `partialAbsence` is per turn and per subject. No crossing
+  found.
+- Applicability: R6-1, R6-2, R6-3. Quoted reference wording still carries no "scheme wording, not proof of cover" qualifier when
+  the quoted document is not the person's certificate (Medium-Low, widened by A3). List it as open.
+- Fallbacks: F1-F3 and FX-K6B hold. Where G1 does not fire, the answer is the neutral "could not confirm", never a false absence,
+  except in R6-2.
+
+## Release verdict on C3
+
+**Not release-ready.** Two small fixes, both in `absence-scope.ts`, plus two scripted controls:
+1. R6-1: match certificate rows by display or preferred name, as the table selector does, excluding rows that name another member.
+2. R6-2: restore C2's medical-term veto beside the new sentence rule.
+
+After that, list as open: R6-3, R6-4, the reference-quote qualifier, superseded answers not marked, C1-3, travel trip dates, the
+F4 test, and no live run. All C3 evidence is scripted (OpenAI configuration). The Claude switch (PR #59) needs its own check.
+Nothing found in C3 states a wrong claimable amount.
