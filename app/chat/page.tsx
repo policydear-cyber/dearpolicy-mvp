@@ -93,7 +93,8 @@ function ChatContent(){
   const params=useSearchParams();
   const [family,setFamily]=useState<Member[]>([]);
   const [memberId,setMemberId]=useState(params.get("member")??"");
-  const [question,setQuestion]=useState("");
+  // The home page's ask box opens a new chat with its question in the box, ready to send (not sent for them).
+  const [question,setQuestion]=useState(()=>(params.get("ask")??"").slice(0,MAX_QUESTION_LENGTH));
   const [messages,setMessages]=useState<Message[]>([]);
   const [conversationId,setConversationId]=useState<string|null>(null);
   const [revision,setRevision]=useState(0);

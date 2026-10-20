@@ -1178,3 +1178,31 @@ div.answer-point { display: grid; gap: 4px; }
 .claim-upload-form input[type=file] { min-height: 52px; width: 100%; }
 .claim-upload-form input[type=file]::file-selector-button { min-height: 36px; padding: 6px 14px; margin-right: 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .bill-review-confirm { min-height: 44px; }
+
+/* Home for a returning household: ask first, then what changed and what needs them. */
+.portfolio-hero.compact { margin-bottom: 12px; }
+.portfolio-hero.compact h1 { font-size: var(--fs-2xl); }
+.home-attention { display: grid; gap: 14px; }
+.home-ask label { display: block; font-weight: 650; margin-bottom: 6px; }
+.home-ask-row { display: flex; gap: 8px; }
+.home-ask-row input { flex: 1; min-width: 0; min-height: 48px; padding: 10px 14px; border: 1px solid var(--input-line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); font: inherit; }
+.home-ask-row .button { min-height: 48px; padding-inline: 20px; }
+.home-since { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.home-attention-title { font-size: var(--fs-lg); margin: 4px 0 0; display: flex; align-items: center; gap: 8px; }
+.home-attention-title span { font-size: var(--fs-xs); font-weight: 700; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: inline-grid; place-items: center; background: var(--warn-tint); color: var(--warn-text); }
+.home-attention-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.home-attention-list a { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 14px; border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--r-md); background: var(--surface); color: inherit; }
+.home-attention-list li.warn a { border-left-color: var(--critical); }
+.home-attention-list li.info a { border-left-color: var(--warn); }
+.home-attention-text { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.home-attention-text small { color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; }
+.home-attention-action { flex: none; font-size: var(--fs-sm); font-weight: 650; color: var(--brand-ink); }
+.home-all-clear { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--good-tint); color: var(--good-text); font-weight: 600; }
+/* On a phone the three totals sit side by side as small tiles, so what needs attention stays near the top. */
+@media (max-width: 620px) {
+  .summary-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .summary-row .summary-card { min-height: 0; padding: 12px; gap: 4px; }
+  .summary-row .summary-card.premium-feature { grid-column: 1 / -1; }
+  .summary-row .summary-card > strong { font-size: var(--fs-xl); }
+  .summary-row .summary-sub { font-size: var(--fs-xs); }
+}
