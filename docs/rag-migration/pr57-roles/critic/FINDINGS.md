@@ -1758,3 +1758,49 @@ safe (`ON CONFLICT DO NOTHING`, idempotent DELETE), so this is only a confusing 
 **Ready to merge.** Nothing reads, writes or hides across households, and it is safe before `sql/detected-name-dismissals.sql` is
 applied. Apply that file after `sql/policy-member-exclusions.sql`, in either order relative to the deploy. R30-1 and R30-2 are
 short follow-ups.
+
+# Round 31: PR #74 wrong amounts at `25365a5` (R29-1, R29-2 fixes)
+
+Read `git diff 1a73ddd 25365a5` (extract.ts, amount-alternatives.ts, both regression scripts) and traced the real wrist rows
+(reviewer-confirmations.md §1: Product Summary p13 and Benefit Summary p8 are two separate documents in the household, so the
+new "different documents" rule fits the real case and the DB fixture change matches reality). Scratch check: `eventForBenefitName`
+gives `other` for "Arm , Elbow, Wrist or Ribs 25%" and `fracture` for the "(Other Fracture)" row, so `namedEvent` does not split
+the real pair. No builds, DB suites or paid calls.
+
+R29-1 is fixed for the reported case and R29-2 is fixed (generic names skipped, one-document pairs skipped, conflicting named
+events skipped; four cases plus a control).
+
+## R31-1 (High, fix before merge): the liability guard now trusts the reader's own label, so a liability sum can become the person's death benefit
+
+`extract.ts:112-115` tests `THIRD_PARTY_LIABILITY` only against `benefitName`/`detail`, which are the extraction model's labels
+(kept when ≥60% of their words are on the page, `fact-check.ts:81-92`). The guard exists for rows the model has already
+mis-typed. Trace: a travel or home page prints "Legal liability for accidental death or bodily injury to third parties
+S$500,000". The model returns `benefitName:"Accidental Death"`, `eventType:"accidental_death"`. "Accidental" and "death" are on
+the page, so the name counts as printed; it doesn't match the liability pattern; `eventSupported("accidental_death", names+part)`
+passes because the quote says "accidental death". The row is kept, and S$500,000 owed to other people reads as the person's own
+accidental death cover. That is a wrong claimable amount. Before this push, the quote's "liability" dropped it.
+
+Fix (one regex): keep the name test, and also test the printed quote with the third-party sense only, e.g.
+`/third[- ]part(?:y|ies)\b|\bto other (?:people|persons)\b|\b(?:personal|legal|public) liabilit\w*|\bliab\w* (?:to|for)\b[^.]{0,60}\b(?:others?|third)\b/i`.
+"The Company shall not be liable for death caused by war" matches none of these, so the R29-1 case stays kept. Add the trace above
+as a case next to the R29-1 test.
+
+## R31-2 (Medium, follow-up): exact trait equality may stop DC's real wrist, hip and ankle groups forming
+
+`sameBenefitKey` requires identical `traits`. The two real rows get their traits by different paths (`catalog-builder.ts:165-173`):
+the Product Summary row has no keyword trait, so it takes the categorising model's `respondsTo` as is. The "(Other Fracture)" row
+has the keyword `bodily_injury` plus only the model's traits in the same family. If the model adds `disability` to one, or its call
+fails (keyword `["other"]` against `["bodily_injury"]`), the group silently doesn't form. That is not a wrong amount: each row keeps its own figure, as
+on main. But the fix this PR is for may not show up for the real household, and the DB test hard-codes equal traits. Fix: compare
+only the traits that tell benefits apart (`death`, `disability`, `illness`, `hospitalisation`), not `accident`, `bodily_injury` or
+`other`. Also add the wrist group on Coverage to the post-deploy Live site check.
+
+## R31-3 (Low): two documents' same-name rows with the same traits still group
+
+"Leg 50%" in a fracture table of one document and "Leg 50%" in a dismemberment table of another both read as event `other`. When
+the model gives both the same traits, they are offered as alternatives. Both figures are real and nothing is summed, so the harm
+is a wrong pairing note. Accept for now.
+
+## Verdict on PR #74 at `25365a5`
+
+**Not ready: fix R31-1 first** (one regex plus one case). R31-2 is a follow-up and a post-deploy check. R31-3 is accepted.
