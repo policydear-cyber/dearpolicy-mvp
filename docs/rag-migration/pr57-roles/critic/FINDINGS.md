@@ -1642,3 +1642,59 @@ The default is now on for hosted models, and `DEARPOLICY_PREFETCH_PERSON=0` turn
 - use real member names;
 - read the outcome from the trace;
 - have a deploy slot ready for the switch-off, because turning it off with the env flag needs a redeploy.
+
+---
+
+# Round 29: PR #74 (wrong amounts, either/or alternatives) at `1a73ddd`
+
+Scope: `git diff effa2a2 1a73ddd -- lib app`, which covers `amount-alternatives.ts`, the `ledgerAlternatives` and
+`coverageForLedgerRow` code in `ledger/store.ts`, `events.ts` (liability and per-plan), `extract.ts` `rowSupported`,
+`scale-limit.ts` `statesItsOwnBase`, `benefit-catalog.ts` `coverForEvent`, and the two routes. Read only.
+
+## What holds
+
+- **No alternative is ever summed.** `amountAlternatives` only lists options. Nothing in the diff adds them, and the
+  regressions assert that no S$453,750 or S$121,250 appears anywhere.
+- **No alternative is picked silently.** A group is returned whole or not at all: if any option can't be worked out, there is
+  no group. The same figure printed twice is not offered as an alternative.
+- **No alternative goes to the wrong person.**
+  - The options are worked out per contract (one owner, one scheme's documents), and the sum insured is that owner's cover
+    (`coverageForBenefit(contract, …)`).
+  - `/api/benefits` sends a group only when every contract showing the row produces identical options. So a spouse on a
+    different sum insured gets no shared group.
+  - `/api/ledger` maps options per `benefitId|ownerId`.
+- **Inferred-base rows are unchanged.** `statesItsOwnBase` applies only to rows carrying the "from the heading of the
+  schedule" note. Heading-inferred rows such as the cheekbone S$1,500 still scale (test kept).
+- **The other fixes are sound:**
+  - Accident rows join the accident cover (`coverForEvent`, unresolved when it can't tell).
+  - Per-plan rows and "Not covered" rows carry no figure.
+  - No existing expected value changed.
+
+## R29-1 (Medium, fix before merge): the liability test reads the whole quote, so a real death benefit can be dropped
+
+`rowSupported` rejects any row not mapped to "other" when `THIRD_PARTY_LIABILITY` (`liable|liability|third party|to other
+people`) matches the joined name, detail **and printed quote** (`part`). Personal accident quotes often carry wording such as "the
+Company shall not be liable for death caused by …" or "liability of the Company". An accidental-death row whose quote includes that
+sentence is then dropped from Coverage, so a documented benefit is hidden. Fix: test only the row's name and detail. Or require
+the third-party sense ("liab\w* (?:to|for) … (?:other people|third part)", "third[- ]party liability", "personal liability").
+
+## R29-2 (Medium): alternatives are grouped by row name alone
+
+`rowKey` keeps only letters and digits of the benefit name. Two rows with the same generic name in different tables of one
+scheme are offered as alternatives of each other, even when they pay for different events. Examples are "Others", "Any other
+bone", or "Leg" in a fracture table and a dismemberment table. Fix: also require the same event (`eventForBenefitName(...).event`)
+and the same `requires` (accident). For extra safety, leave out names shorter than about 4 letters, or names that are generic
+("others", "any other", "total").
+
+## R29-3 (Low, the designer's): until the page draws the group, the two rows still read as two benefits
+
+The ledger still has one row per option, each with its own figure, and the new `alternatives` field is only data. Until Coverage
+and Benefits render the group with its note (ux-design/coverage-alternatives-shape.md), the screen shows S$1,250 and S$120,000 as
+two rows with nothing saying "never added together". That is no worse than main, but the page change should follow soon. Also,
+when one option can't be worked out, there is no group, but the remaining row still shows its own single figure. That is the
+existing behaviour.
+
+## Verdict on PR #74 at `1a73ddd`
+
+**Ready to merge once R29-1 is fixed** (one regex). The alternatives can't be summed, picked silently or attached to the wrong
+person, and inferred-base rows are unchanged. R29-2 is a short follow-up, best in the same push. R29-3 is for the designer.
