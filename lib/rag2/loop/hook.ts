@@ -268,6 +268,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     answer.details = body.slice(1);
     if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
     answer.nextSteps = c.nextSteps;
+    trace.shown = { subjectId: c.subjectId ?? state.subjectId ?? null, nextSteps: [...c.nextSteps] };
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;
     if (c.libraryNames?.length) answer.libraryNames = c.libraryNames;
