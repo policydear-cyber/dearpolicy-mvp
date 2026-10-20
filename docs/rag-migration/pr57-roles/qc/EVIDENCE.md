@@ -484,3 +484,30 @@ Not in PR #70: the live app's Benefits page S$1,000 and the Coverage page S$1,00
 - Separately, "ended" compares the printed end with today, not with the event date. The verdict needs "recent" words or a place, so the false-verdict risk there is lower, but the event date is the right comparison when the household gave one.
 
 **Verdict on 76de2d8:** the three re-checked items pass. One new medium finding: the place comparison can say "does not fit" for a place inside the printed destination.
+
+## 18. Ruling for PR #70's next round: GP-bill and death-abroad cards (coordinator, 13:20Z)
+
+From the stored text I hold only. Fracture household = anonymised copy of DC's pages; livelib = synthetic; PS p20/p25 = invented test pages.
+
+### GP bill (E2a, E2b)
+
+| planned | ruling | why (pages) |
+| --- | --- | --- |
+| Panel GP "$30" line as an amount card | **Not as a card. Quoted scheme terms only (plain text).** | An amount card needs a person (`reconcileStatements`), so a card makes it "Daniel's" amount. The invented PS p25 names no policy and no person. In DC's real library, the GP lines sit on PS p16 and p33, and p33 is the section the app labels "Outpatient Medicare". BS p1: a benefit applies only if its policy is in Part 1, and Daniel's (and Desmond's) certificate lists no Outpatient Medicare. "$30" is a bare $ with its currency unresolved. Allowed: the quoted line with page and section, and the note that the page does not say whose cover it is (or, once the page shows it is Outpatient Medicare, that his certificate does not list that policy). **Which policy p16 belongs to waits on DC's PS p14-16 and p33** |
+| Overseas "$1,000 per Accident" line as a card | **Not as a card, for the same reason.** Plain text, and only when the message names no place or an overseas one | invented PS p20; outside Singapore only |
+| E2a bottom line mentioning Outpatient Medicare | **Supported**, worded as printed: "the scheme also has an Outpatient Medicare policy, which his certificate does not list". Must not say "he has no outpatient cover" | BS p1 names OPMC; CERT p1 lists four products without it. Living Care and Living Care Plus are listed but undescribed, Core Scheme cover is unknown, and the pages are partial |
+| Ambulance card | **Documented for him, conditionally.** PS p8, the Group Personal Accident page, lists "Reimbursement of ambulance cost" as a key feature, and Daniel holds Group Personal Accident S$600,000 (CERT p1, 6 Oct 2022). The card may carry Daniel, but its **first condition must be the event**: only if, after the accident, a ground ambulance took him to hospital, which was not reported. Also: per event (BS p8) / per incident (PS p13); up to S$500 (PS p13; BS p8 prints a bare "$500"); "\*This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme" | PS p8, PS p13, BS p8 (STORED-REAL for BS p8) |
+| Recuperation card with "within 30 days", "24 hours" | **Documented for him, conditionally.** It is a Group Personal Accident benefit (BS p9 accident section J; PS p13 GPA list). Conditions that must all travel with it: "within 30 days following bodily injury as a result of an Accident"; confined as a resident patient in a Hospital "for a continuous period of at least 24 hours on the recommendation of a Registered Medical Practitioner but not for the purpose of convalescent rest"; one-time per hospitalisation; "Subsequent hospitalisation resulting from the same injury will not be payable"; Core-or-Voluntary. Amount: S$250 only when PS p13 is cited, otherwise "250, bare $". The first condition is the event: only if he was then admitted for at least 24 hours | BS p9, PS p13 |
+| Bottom line with these cards | **Must not count them as amounts that may apply to the GP bill.** Neither pays a GP bill. With ambulance and recuperation as cards, the current rule ("Your documents print amounts that may apply...") would read as an answer to "can he claim his GP bill". The GP bill bottom line stays the E2a not-found outcome, with these benefits said as "only if" alternatives | E2a |
+
+### Death abroad (livelib, synthetic; nothing here waits on DC's pages)
+
+| planned condition | on which card | ruling |
+| --- | --- | --- |
+| "notify ... within 6 months, with the death certificate" | Term Life only | **Supported.** GTL_SUM p1 is the Group Term Life product summary for the policy on CERT (KPT-310045). It must not go on the accident or repatriation cards: no page gives them that step |
+| "100% of the Sum Insured" → 100% of S$600,000 | Accidental Death | **Supported.** SUMMARY p9 percentage; Adrian's Group Personal Accident S$600,000 as of 6 Oct 2022 (CERT p1); WORD p2 "Sum Insured means the amount shown ... under Group Personal Accident in the Certificate". It is an illustration, never "will pay" |
+| "Territorial Limits: worldwide, 24 hours a day" | Accidental Death (and Repatriation) | **Supported**, from the same page and policy (SUMMARY p9, Group Personal Accident). Never on Term Life |
+| war / civil war / deliberate self-injury exclusions | Accidental Death and Repatriation | **Supported.** SUMMARY p9 covers "death or injury" under that policy, and WORD p3 "General Exclusions" adds "invasion". They belong to the accident policy, so they may go on both of its cards, **never on Term Life**: the GTL page prints no exclusions, and attaching them would be another benefit's condition |
+| Repatriation "reimburse ... up to" | Repatriation | **Supported.** WORD p3: "we will reimburse the reasonable cost of returning the remains to Singapore, up to $2,000" (bare $). SUMMARY p9: "S$2,000 per Insured Person, if death occurs outside Singapore as a result of an Accident". S$ only with SUMMARY p9 cited; the summary's own condition stays |
+
+**For DC's real library (release set):** the equivalent death and accident rows wait on PS p10 (Death due to Accident heading and base) and BS p5 (the "Benefit 2" heading). Whose policy the GP lines are waits on PS p14-16 and p33. Ambulance (PS p13, BS p8) needs no further pages.
