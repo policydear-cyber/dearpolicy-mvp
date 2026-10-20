@@ -186,7 +186,9 @@ export function decideNotFound(s: Record<string, unknown>, src: AbsenceSource, c
   // the document has, or a page count that is not known, means part of it was never read.
   const partial = scope.docs.filter((d) => {
     const ps = pagesOf.get(d.id) ?? [];
-    return ps.some((p) => !p.text.trim()) || d.pageCount == null || new Set(ps.map((p) => p.page)).size < d.pageCount;
+    // (every page 1..pageCount must be stored: a count of stored pages can match while a page in the middle is missing)
+    const have = new Set(ps.map((p) => p.page));
+    return ps.some((p) => !p.text.trim()) || d.pageCount == null || Array.from({ length: d.pageCount }, (_, i) => i + 1).some((n) => !have.has(n));
   });
   if (partial.length) return { ok: false, problem: `${partial.map((d) => labels.get(d.id)).join(", ")} ${partial.length > 1 ? "were" : "was"} not read in full (a page has no stored text, or not every page is stored), so nothing can be said to be absent from ${partial.length > 1 ? "them" : "it"}: say what the pages that were read print, and that the rest could not be checked` };
   const check: AbsenceCheck = {
