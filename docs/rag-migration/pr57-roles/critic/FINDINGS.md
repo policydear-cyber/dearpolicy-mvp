@@ -3188,3 +3188,49 @@ This is conservative and does not produce a wrong amount. Note it only.
 **Not ready: one Medium (R65-1).** The wrist either/or fix is correct for DC's household. Narrow
 `servesAsReference` to unconfirmed personal-role documents that prove nobody's cover, add the cross-member test, and
 it is ready.
+
+---
+
+# Round 66: PR #85 recheck at `c40fca7` (R65-1 fix), combined with main after #83
+
+What changed: `servesAsReference` (inventory.ts:54-61) now accepts an unconfirmed `certificate` or `personal_schedule`
+as wording only when all of these hold:
+- authority is below 70;
+- `named_member_ids` is known and empty, where any link other than `scheme_reference_match` counts as naming someone;
+- there are no declared members.
+
+`loadPolicyInventory` selects `named_member_ids`. A caller that does not supply the field gets `false`, which fails
+safe. The new DB test covers an unconfirmed certificate name-matched to another member.
+
+I re-ran the offline `buildContracts` probe (scratchpad `r65/t66.ts`). Desmond and Charmaine are on one confirmed
+group certificate:
+
+| Unconfirmed document | Authority | Named / declared | Wording for anyone |
+|---|---|---|---|
+| Benefit Summary, linked only by scheme match | 30 | none | yes, for both (intended) |
+| Same, with a leftover `upload_hint` to Desmond | 30 | Desmond | no |
+| Certificate name-matched to Charmaine | 30 | Charmaine | no (R65-1 case) |
+| Certificate, high authority, no names | 80 | none | no |
+| `named_member_ids` not supplied | 30 | unknown | no |
+| Declared by Desmond | 30 | Desmond | no; it stays his own declared contract, as before |
+
+**R65-1: fixed.**
+
+**Combination with main** (`d6c3042`, which includes #83, #82 and #86): `git merge-tree` is clean. #83 makes a newly
+read Benefit Summary `benefit_guide`, which `referenceRoles` already accepts. #85 handles the stored row that still
+says `certificate`. The two rules agree and neither overrides the other.
+
+**Stored-data rewrite:** unchanged since round 65. It is scoped to the row owner's own contract and is idempotent.
+It still needs DC's explicit yes, because it rewrites `coverage_rules.sum_basis` on production.
+
+**R66-1 (Low, verify after merge).** The fix applies to DC's live Benefit Summary only if every one of its member
+links is `scheme_reference_match`. That is likely: ingest.ts:751 runs `linkRelatedReferenceDocuments` after the
+`upload_hint` insert (ingest.ts:622), and that function's `ON CONFLICT ... DO UPDATE` overwrites the hint. I could
+not confirm it without a production read. If a hint survives, the fix is inert and fails safe: no wrong amount, but
+the wrist stays S$1,250 alone. The Live site tester's Coverage check after deploy settles it.
+
+R65-2 (Low) is accepted as is.
+
+## Verdict on PR #85 at `c40fca7`
+
+**Ready.** The merge still needs DC's explicit yes because it rewrites stored data (round 61).
