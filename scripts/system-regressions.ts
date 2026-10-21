@@ -807,6 +807,16 @@ export function runSystemRegressions(){
     // A real schedule always outranks a declaration.
     const schedule=document({id:"schedule",declared_member_ids:[person]});
     assert.equal(buildContracts([schedule],people,[coverage()])[0].ownershipBasis,"evidence");
+    // Critic R69-2 (PR #87): a booklet claimed for someone whose certificate already reads it as wording is listed once,
+    // as that certificate's wording, never also as a declared contract of its own.
+    const certificate=document({id:"certificate",group_policy_number:"G-100",product_name:"CareShield Life",products:["CareShield Life"]});
+    const claimed={...booklet,policy_number:null,group_policy_number:"G-100",insurer:"Example Insurer"};
+    const both=buildContracts([certificate,claimed],people,[coverage({policyId:"certificate",productName:"CareShield Life"})]);
+    assert.equal(both.length,1,"One contract for the person");
+    assert.equal(both[0].ownershipBasis,"evidence");
+    assert.deepEqual(both[0].references.map(r=>r.id),["booklet"],"The booklet is the certificate's wording");
+    // Without a certificate that reads it, the claimed booklet stays the person's declared contract.
+    assert.equal(buildContracts([{...certificate,member_ids:[]},claimed],people,[])[0]?.ownershipBasis,"declared");
   });
   test("A declared policy pays its own printed figures, but never a share of an unknown sum insured",()=>{
     const flat:CatalogBenefit={id:"b1",policyId:"booklet",productName:"CareShield Life",benefitName:"Monthly payout",

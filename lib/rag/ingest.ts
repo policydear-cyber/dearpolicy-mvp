@@ -18,7 +18,7 @@ import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLik
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
-import { familyMembersForAccount, findFamilyMatchWithKind, linkRelatedReferenceDocuments, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -612,6 +612,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       await query(`UPDATE policies SET document_date=$3 WHERE id=$1 AND account_id=$2`, [args.policyId, args.accountId, documentDate]);
     }
 
+    // A printed name the household matched to someone by hand (their link is user_declared, so it survives the
+    // delete below) is matched to that person again by this read, so their cover is rebuilt instead of dropped.
+    const handMatches = await householdNameMatches(args.accountId, args.policyId);
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
     const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
@@ -656,9 +659,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const candidate = matches[index];
       const found = candidate && (candidate.kind === "exact" || hitsPerMember.get(candidate.member.id) === 1) ? candidate : null;
       let match = found?.member ?? null;
-      let link: { source: "ai_name_match" | "upload_hint"; confidence: number } = found?.kind === "partial"
+      let link: { source: "ai_name_match" | "upload_hint" | "user_declared"; confidence: number } = found?.kind === "partial"
         ? { source: "ai_name_match", confidence: 0.85 }
         : { source: "ai_name_match", confidence: 0.95 };
+      // The household's own match wins over the automatic one (a name they moved from one person to another).
+      const handMatch = preferHouseholdMatch(person.name, handMatches, family);
+      if (handMatch) { match = handMatch; link = { source: "user_declared", confidence: 1.0 }; }
       // The printed name matched no profile, but the person uploaded this
       // document to a profile they chose, and it names exactly ONE insured
       // person: that choice is the link (flagged for review below). With

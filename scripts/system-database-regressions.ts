@@ -23,7 +23,8 @@ import { GET as listPolicies } from "@/app/api/policies/route";
 import { nameKey,nameKeySql,notDismissedCondition,recountedReview } from "@/lib/policies/name-dismissals";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
-import { linkRelatedReferenceDocuments,syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { findFamilyMatchWithKind,householdNameMatches,linkRelatedReferenceDocuments,preferHouseholdMatch,syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { POST as reprocessPolicy } from "@/app/api/policies/reprocess/route";
 import { seedLedger } from "@/lib/ledger/store";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
@@ -1401,6 +1402,92 @@ async function main(){
       assert.equal((await post({policyId:doc,detectedName:"Stranger Lim",familyMemberId:daniel,declared:true})).status,200);
       assert.ok((await shown()).includes("Stranger Lim"),"The name is listed again once the household links it");
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[doc,foreignDoc]]);
+    });
+    await test("People the household linked or ticked by hand stay linked, with their tier, when the document is read again",async()=>{
+      // Critic R67-1 (PR #87): a hand match and a tick were stored as ai_name_match, which every re-read deletes.
+      const [daniel,grace]=[people[0].id,people[1].id];
+      const doc=uuid(701850);
+      const printed="Grace Printed Differently";
+      const extraction={insuredPeople:[{name:people[0].display_name,relationshipHint:"employee",coverages:[]},
+        {name:printed,relationshipHint:"spouse",coverages:[{category:"Hospitalisation",amount:150,currency:"SGD",productName:"Hand Plan",notes:null,sourcePage:1,evidenceText:"Daily hospital cash SGD 150",evidenceVerified:true}]}],
+        paymentRecords:[],personalCoverageConfirmed:true} as unknown as PolicyExtraction;
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,extracted_json) VALUES($1,$2,$3,'Example Insurer','Hand Plan','HAND-1','Hospital','personal_schedule',true,95,'ready','hand.pdf','hand.pdf','scan_clean',$4::jsonb)",[doc,account,daniel,JSON.stringify(extraction)]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'ai_name_match',0.95)",[doc,daniel,account]);
+      await db.query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.95),($1,$2,$5,NULL,0.6)",[account,doc,people[0].display_name,daniel,printed]);
+      const source=async(member:string)=>(await db.query<{source:string;benefit_tier:string|null}>("SELECT source,benefit_tier FROM policy_members WHERE policy_id=$1 AND family_member_id=$2",[doc,member])).rows[0];
+
+      // The household matches the printed name to Grace by hand (the call app/api/policies/link-person makes; the route
+      // itself is not driven here because this single-connection database cannot serve its nested pool query).
+      const route=await readFile(path.resolve("app/api/policies/link-person/route.ts"),"utf8");
+      assert.match(route,/householdChoice: true,[\s\S]{0,200}link: \{ source: "user_declared", confidence: 1\.0 \}/,"The route stores a hand match as the household's own link");
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:doc,familyMemberId:grace,detectedName:printed,extraction,householdChoice:true,link:{source:"user_declared",confidence:1}});
+      assert.equal((await source(grace))?.source,"user_declared","A hand match is the household's own link");
+      const ticked=await linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId:doc,assignments:[{familyMemberId:daniel,planTier:"Plan A"},{familyMemberId:grace,planTier:null}]})}));
+      assert.equal(ticked.status,200);
+      assert.equal((await source(daniel))?.source,"user_declared","A tick on a name-matched person is the household's own link");
+      // The plan the household chose (this synthetic document offers none, so it is set as the picker would store it).
+      await db.query("UPDATE policy_members SET benefit_tier='Plan A' WHERE policy_id=$1 AND family_member_id=$2",[doc,daniel]);
+
+      // The re-read (lib/rag/ingest.ts) remembers the hand matches, then deletes machine-made links only.
+      const remembered=await householdNameMatches(account,doc);
+      assert.equal(remembered.get(nameKey(printed)),grace,"The re-read knows whom the household matched the printed name to");
+      await db.query("DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')",[doc,account]);
+      assert.ok(await source(grace),"Grace's hand link survives the re-read");
+      assert.ok(await source(daniel),"Daniel's tick survives the re-read");
+      // The re-read matches Daniel by his printed name again: his link stays the household's, with their plan.
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:doc,familyMemberId:daniel,detectedName:people[0].display_name,extraction});
+      assert.deepEqual(await source(daniel),{source:"user_declared",benefit_tier:"Plan A"},"A name match never downgrades the household's link or its plan");
+      // ... and matches the printed name to Grace again, rebuilding her cover.
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:doc,familyMemberId:grace,detectedName:printed,extraction,link:{source:"user_declared",confidence:1}});
+      assert.equal(Number((await db.query<{amount:string}>("SELECT amount::text FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[doc,grace])).rows[0]?.amount),150,"Her cover is rebuilt");
+      await db.query("DELETE FROM policy_coverages WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policy_detected_people WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policy_members WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policies WHERE id=$1",[doc]);
+    });
+    await test("A printed name the household moved to someone else stays with that person when the document is read again",async()=>{
+      // Critic R69-1 (PR #87): the automatic matcher finds the person the household removed, so their hand match must win.
+      const [daniel,grace]=[people[0].id,people[1].id];
+      const doc=uuid(701860);
+      const printed=people[0].display_name;
+      const extraction={insuredPeople:[{name:printed,relationshipHint:"spouse",coverages:[{category:"Hospitalisation",amount:120,currency:"SGD",productName:"Moved Plan",notes:null,sourcePage:1,evidenceText:"Daily hospital cash SGD 120",evidenceVerified:true}]}],
+        paymentRecords:[],personalCoverageConfirmed:true} as unknown as PolicyExtraction;
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status,extracted_json) VALUES($1,$2,$3,'Example Insurer','Moved Plan','MOVE-1','Hospital','personal_schedule',true,95,'ready','move.pdf','move.pdf','scan_clean',$4::jsonb)",[doc,account,daniel,JSON.stringify(extraction)]);
+      await db.query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,NULL,0.6)",[account,doc,printed]);
+      const family=people.map(({id,display_name,preferred_name})=>({id,display_name,preferred_name}));
+      const covered=async(member:string)=>(await db.query("SELECT 1 FROM policy_coverages WHERE policy_id=$1 AND family_member_id=$2",[doc,member])).rows.length;
+      // The household removes Daniel from the document and moves the printed name to Grace by hand.
+      await db.query("INSERT INTO policy_member_exclusions(account_id,policy_id,family_member_id) VALUES($1,$2,$3)",[account,doc,daniel]);
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:doc,familyMemberId:grace,detectedName:printed,extraction,householdChoice:true,link:{source:"user_declared",confidence:1}});
+
+      // The re-read (lib/rag/ingest.ts): the automatic matcher still finds Daniel by the printed name ...
+      const handMatches=await householdNameMatches(account,doc);
+      await db.query("DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')",[doc,account]);
+      assert.equal(findFamilyMatchWithKind(printed,family)?.member.id,daniel,"The automatic matcher finds the removed person");
+      // ... but the household's match wins, before any automatic or upload-profile link.
+      assert.equal(preferHouseholdMatch(printed,handMatches,family)?.id,grace,"The household's match wins over the automatic one");
+      const ingest=await readFile(path.resolve("lib/rag/ingest.ts"),"utf8");
+      assert.match(ingest,/const handMatch = preferHouseholdMatch\(person\.name, handMatches, family\);\s*if \(handMatch\) \{ match = handMatch; link = \{ source: "user_declared", confidence: 1\.0 \}; \}/,"The re-read applies the household's match whatever the automatic matcher found");
+      await syncInsuredPersonToMember({accountId:account,sourcePolicyId:doc,familyMemberId:grace,detectedName:printed,extraction,link:{source:"user_declared",confidence:1}});
+      assert.equal(await covered(grace),1,"Grace keeps the cover");
+      assert.equal(await covered(daniel),0,"Daniel stays removed");
+      assert.equal((await householdNameMatches(account,doc)).get(nameKey(printed)),grace,"The match is still remembered for the next re-read");
+      await db.query("DELETE FROM policy_coverages WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policy_member_exclusions WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policy_detected_people WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policy_members WHERE policy_id=$1",[doc]);
+      await db.query("DELETE FROM policies WHERE id=$1",[doc]);
+    });
+    await test("Reading documents again is limited per household",async()=>{
+      // Critic R67-2 (PR #87): each re-read is a full paid reading.
+      await db.exec(await readFile(path.resolve("sql/rate-limit.sql"),"utf8"));
+      const statuses:number[]=[];
+      for(let i=0;i<21;i++)statuses.push((await reprocessPolicy(new NextRequest("http://localhost/api/policies/reprocess",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({policyId:uuid(709000+i)})}))).status);
+      assert.deepEqual(statuses.slice(0,20),Array(20).fill(404),"Within the allowance the request is handled (an unknown document is not found)");
+      assert.equal(statuses[20],429,"The 21st in an hour is refused");
+      await db.query("DELETE FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
     });
     await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
       const [daniel,grace]=[people[0].id,people[1].id];

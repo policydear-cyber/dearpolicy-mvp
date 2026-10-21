@@ -183,6 +183,8 @@ export async function POST(request: NextRequest) {
         detectedName: body.detectedName!,
         extraction,
         householdChoice: true,
+        // The household's own match: kept by a re-read (ingest deletes only machine-made links).
+        link: { source: "user_declared", confidence: 1.0 },
       });
       return { ok: true, refresh: true };
     });

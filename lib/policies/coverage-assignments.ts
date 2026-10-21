@@ -40,7 +40,7 @@ export async function saveDocumentCoverage(args: {
       await client.query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier)
          VALUES($1,$2,$3,'user_declared',1.0,$4)
-         ON CONFLICT(policy_id,family_member_id) DO UPDATE SET benefit_tier=EXCLUDED.benefit_tier`,
+         ON CONFLICT(policy_id,family_member_id) DO UPDATE SET benefit_tier=EXCLUDED.benefit_tier,source='user_declared',confidence=1.0`,
         [args.policyId, a.familyMemberId, args.accountId, a.tier],
       );
     }

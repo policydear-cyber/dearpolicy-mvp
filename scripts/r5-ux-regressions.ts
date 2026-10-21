@@ -148,6 +148,14 @@ async function main() {
     assert.match(page, /\/api\/policies\/reprocess/);
     assert.ok(!/It is password-protected\./.test(page));
   });
+  await test("a ready document can be read again in place, after a confirming click", () => {
+    const page = read("app/policies/page.tsx");
+    // Offered on ready documents, beside Details; the first click only arms it; the second calls the same
+    // in-place re-read as "Try reading it again" (/api/policies/reprocess), so nothing is deleted or re-uploaded.
+    assert.match(page, /policy\.processing_status === "ready" && <button type="button" className="mini-button"[^>]*onClick=\{\(\) => \{ if \(confirmRereadId === policy\.id\) \{ setConfirmRereadId\(null\); void retryReading\(policy\); \} else setConfirmRereadId\(policy\.id\); \}\}>/);
+    assert.match(page, /"Confirm read again" : "Read again"/);
+    assert.match(page, /async function retryReading[\s\S]{0,400}\/api\/policies\/reprocess/);
+  });
   await test("upload form labels are tied to their inputs", () => {
     const page = read("app/policies/page.tsx");
     for (const id of ["up-profile", "up-file", "up-password"]) { assert.match(page, new RegExp(`htmlFor="${id}"`)); assert.match(page, new RegExp(`id="${id}"`)); }
