@@ -137,6 +137,15 @@ async function main() {
     assert.equal(deterministicDocumentRole(late, null), "endorsement", "an endorsement not titled as wording keeps the old rule");
   });
 
+  await t("TE-EXTRA controls: a group scheme summary naming its company policyholder; an endorsement citing the policy wording", () => {
+    const group = doc("Harbour Unions group insurance summary\nGroup Policy No. G1234567\nPolicyholder : Harbour Unions Council\nPlease refer to the policy wording for the terms.");
+    assert.notEqual(deterministicDocumentRole(group, null), "personal_schedule", "a group policy number is not a personal policy number");
+  });
+  await t("TE-EXTRA control 2: an endorsement citing the policy wording", () => {
+    const endorsement = doc("Example Life Ltd\nNotice to policyholder\nPolicy number: 77001234\nLife assured: Lim Wei Jie\nThis endorsement changes your effective date.\nAll other terms of the policy wording stay the same.");
+    assert.equal(deterministicDocumentRole(endorsement, null), "endorsement", "the words policy wording deep in an endorsement do not make it the wording");
+  });
+
   if (failed.length) { console.error(`document role regressions FAILED: ${failed.length} of ${cases + failed.length}`); process.exit(1); }
   console.log(`document role regressions passed: ${cases} cases`);
 }

@@ -106,8 +106,9 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
-  // A document whose own title is "Policy wording" is the wording, whatever endorsements it describes.
-  if (/\bpolicy wording\b/.test(opening)) return "policy_wording" as const;
+  // A document whose own title line is "Policy wording" is the wording, whatever endorsements it describes; an
+  // endorsement that only cites "the policy wording" is not.
+  if (/^\s*policy wording\s*$/m.test(opening) && !/\bthis endorsement\b/.test(opening)) return "policy_wording" as const;
   if (/endorsement|policy amendment|amendment to policy/.test(text) && /(policy number|effective date|insured)/.test(text)) return "endorsement" as const;
   if (/renewal notice|renewal statement|renewal premium/.test(text)) return "renewal_statement" as const;
   if (/premium receipt|official receipt|payment receipt/.test(text) && /(premium|policy)/.test(text)) return "premium_receipt" as const;
