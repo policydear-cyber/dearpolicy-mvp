@@ -24,7 +24,7 @@ import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyRepo
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
-export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean };
+export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date };
 
 /** Opens or continues the conversation; who the question is about is left to the model and the checks. */
 export async function prepareSimpleChat(request: ChatRequest): Promise<ChatContext> {
@@ -52,6 +52,8 @@ export async function conversationTurns(accountId: string, conversationId: strin
 }
 
 /** Who the chat was opened for, said to the model so "my" and "his" read the same way the household meant them. */
+/** Today's date in Singapore, so a waiting period or a policy's start can be set against an event the household describes now. */
+const dated = (d: Date) => `(Today is ${new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10)}.) `; // Singapore time (UTC+8)
 function chatFor(context: ChatContext): string {
   const p = context.family.find((f) => f.id === context.conversation.family_member_id);
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";
@@ -69,7 +71,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const started = Date.now();
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
-    reply = await model.call({ library: renderLibrary(household), history, question: chatFor(context) + message });
+    reply = await model.call({ library: renderLibrary(household), history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }

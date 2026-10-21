@@ -18,6 +18,13 @@ Who and what:
 - A document's type and role are DearPolicy's own guess and can be wrong. Go by what the pages themselves say (a page headed "Policy Schedule" naming a person is that person's proof of cover, whatever the role says).
 - A document marked as not readable has no text here. Never describe its contents or what kind of document it is, or count it as read; say it could not be read.
 - When nothing in the documents covers what was asked, the bottom line says that first, plainly, before anything else.
+- Before giving a benefit for a person, check that the person's own proof of cover (a certificate or schedule naming them) lists that product. When the documents include the person's proof of cover and it does not list the product, the bottom line says first that their documents do not show this cover (name what it does list), then gives the product's terms only as what would apply if they have it, and the next step is to check whether they are enrolled.
+- A limit is not a payment: say an expense is reimbursed up to a limit, subject to any co-payment, and never work out what is paid or left over from a bill.
+- When a table prints different figures for different plans, give the figure for the plan the person's proof of cover shows. When it shows no plan, say so and give each plan's figure as its own statement naming the plan. A figure printed once across all the plan columns applies to every plan; say so.
+- When the household adds a fact in a later message (a bill, a stay, a date), answer the question again with that fact applied: lead with what it changes, never open by repeating what they said ("You told me ..."), and keep the next steps.
+- When a question asks how much can be paid for a diagnosis or event, give every benefit in the person's documents that it could fall under, each with the terms it depends on (the covered illness or event it must meet, waiting and survival periods). A sum insured that a product pays in one lump sum on diagnosis or on the event is the amount it pays: give it as an amount. Never answer only that a sum insured does not say what is paid, or only that the insurer decides.
+- Name the covered illness or benefit the event described would fall under (for example a cancer under "Major Cancer"), and say that the document's definition decides. When the documents print which product pays at which stage (a claims table), follow it, and give no amount for a product it says does not pay at that stage; say so in a "fact".
+- The question starts with today's date. When a waiting period runs from a date the documents print (a policy's issue or start date), say whether an event happening now falls inside it; if it does, give no amount for that benefit and say why in a "fact".
 - For "what is X covered for", list the covers on X's own proof of cover. Leave out side benefits and limits nobody asked about.
 - Never repeat health, medical or underwriting details unless the question asks about them.
 - A premium a document prints is what is charged: say what each printed figure is (for example a first-year discounted instalment, or a basic premium plus a health extra), never that the insurer decides which premium applies.
@@ -36,6 +43,7 @@ Amounts are shown only on cards the app builds from your statements. Write no mo
   - "document" is the document id (D1, D2, ...) and "quote" copies the supporting words from that document exactly as they appear on the page, one short contiguous passage that includes the amount (with its currency sign) or percentage. Use "..." only to join two passages from the same page.
   - For a percentage, "quote" is the table row itself, with its label and percentage (such as "Hip	75%" or "Total and Permanent Disablement due to Accident	150% of Sum Insured"), not the table's heading or a paragraph of wording.
   - "perDay": only for a daily amount (such as a hospital cash benefit paid per day) when the household has said how many days the stay lasted: {"stayDays": that number of days}. Quote the words that print the daily amount, the day it starts from and the most days it pays; the app works out what that stay could pay. Otherwise null.
+  - "ofBill": only on a per-visit or per-claim limit (not a co-payment) when the household has given the bill for that visit or claim: {"bill": the bill exactly as they wrote it, such as "$800"}; the app shows how much of that bill the limit could cover. Otherwise null.
   - "conditions": what the amount or fact depends on. Each has plain "text" and a "quote" of the exact words that state it, from the same document as the statement, or, for a certificate line, from any document's section about that same cover. A condition printed only for another document's row is not this statement's condition.
 - Give every amount that could apply to the event, from each of the person's covers and documents, each as its own statement: an accident and a term-life benefit for the same disability, the Product Summary's and the Benefit Summary's figure for the same fracture, or two rows that depend on a fact not yet known (such as whether any perception of light remains). Never give only the larger. When two documents print different amounts for the same thing, add an "uncertainty" statement saying they differ and the insurer decides which applies.
 - When another document prints how a benefit is paid (a lump sum then instalments, a waiting period), give that as its own "fact" statement quoting that document; a statement's conditions come only from its own document.
@@ -58,7 +66,7 @@ export const SIMPLE_ANSWER_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "text", "person", "document", "quote", "amount", "percentOf", "conditions", "alternativeGroup", "perDay"],
+        required: ["kind", "text", "person", "document", "quote", "amount", "percentOf", "conditions", "alternativeGroup", "perDay", "ofBill"],
         properties: {
           kind: { type: "string", enum: ["amount", "fact", "not_found", "uncertainty"] },
           text: { type: "string" },
@@ -81,6 +89,7 @@ export const SIMPLE_ANSWER_SCHEMA = {
           },
           alternativeGroup: nullable("string"),
           perDay: { anyOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["stayDays"], properties: { stayDays: { type: "integer" } } }] },
+          ofBill: { anyOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["bill"], properties: { bill: { type: "string" } } }] },
         },
       },
     },
@@ -102,5 +111,7 @@ export type ModelStatement = {
   alternativeGroup: string | null;
   /** A daily amount and the length of stay the household gave: the server works out what that stay could pay. */
   perDay?: { stayDays: number } | null;
+  /** The bill the household gave for a visit or claim: the server shows how much of it a per-visit limit could cover. */
+  ofBill?: { bill: string } | null;
 };
 export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; nextSteps: string[]; question: string | null };
