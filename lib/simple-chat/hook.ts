@@ -93,7 +93,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
-  const { answer, report } = parsed ? verifyAnswer(household, parsed, asked) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
+  const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
   if (fromRows.report && answer.statements) {
     const { kept, refused } = keepLabelledAmounts(answer.statements, fromRows.report);
     answer.statements = kept;

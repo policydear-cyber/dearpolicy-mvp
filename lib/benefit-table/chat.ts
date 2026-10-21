@@ -9,17 +9,14 @@ import type { BenefitTable, TableRow } from "./assemble";
 import { figureText } from "./assemble";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember, statesMoney } from "@/lib/simple-chat/verify";
+import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null };
-/** `labels`: the server's own wording of each amount statement it wrote. After the chat's checks, an amount whose
- * statement no longer reads exactly that is refused (keepLabelledAmounts), so a figure never loses what it is for. */
+/** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
+ * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string }[]; labels: string[] };
 
-/** A label's own digits are written as full-width digits while the chat's checks run, so a name like "Plan 300" is not
- * read as money and the label survives (Critic R91-2). Only a sentence that is exactly a server label is turned back. */
-const shield = (s: string) => s.replace(/[0-9]/g, (d) => String.fromCharCode(0xff10 + Number(d)));
-const unshield = (s: string) => s.replace(/[\uff10-\uff19]/g, (d) => String(d.charCodeAt(0) - 0xff10));
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
 
@@ -68,6 +65,11 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (!row) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
+    // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2):
+    // a plan may be a bare number ("Plan 300"), never a sum.
+    if ([row.benefit, row.product, row.cover, row.qualifier ?? ""].some(statesMoney) || moneyFiguresIn(row.plan ?? "").length) {
+      report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
+    }
     // The same row named twice is given once (Critic R91-3).
     if (given.has(row.id)) continue;
     given.add(row.id);
@@ -93,13 +95,11 @@ export function rowLabel(row: ChatRow): string {
 }
 
 /** Applied to the checked answer: an amount whose statement is not exactly one of the server's labels lost its label to
- * the checks (or was never labelled), so its amount is refused. A kept server label is given back its own digits. */
-export function keepLabelledAmounts<T extends { amount?: unknown; text: string; fullText?: string }>(statements: T[], report: RowReport): { kept: T[]; refused: T[] } {
-  const labels = new Set(report.labels.map((l) => l.trim()));
-  const refused = statements.filter((st) => st.amount && !labels.has(st.text.trim()));
-  const kept = statements.filter((st) => !refused.includes(st)).map((st) => !labels.has(st.text.trim()) ? st
-    : { ...st, text: unshield(st.text), ...(st.fullText != null ? { fullText: st.fullText === st.text ? unshield(st.fullText) : st.fullText } : {}) });
-  return { kept, refused };
+ * the checks (or was never labelled), so its amount is refused. */
+export function keepLabelledAmounts<T extends { amount?: unknown; text: string }>(statements: T[], report: RowReport): { kept: T[]; refused: T[] } {
+  const labels = new Set(report.labels);
+  const refused = statements.filter((st) => st.amount && !labels.has(st.text));
+  return { kept: statements.filter((st) => !refused.includes(st)), refused };
 }
 
 /** Applied last: an amount the row step dropped or refused never reached verifyAnswer, so its "left out an amount" note
@@ -113,7 +113,7 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
  * percentage with the base it is worked out on and the words that print that base. */
 function statementFromRow(row: ChatRow, raw: Record<string, unknown>): Record<string, unknown> | null {
   const f = row.figure;
-  const said = shield(rowLabel(row));
+  const said = rowLabel(row);
   const base = { ...raw, text: said, person: baseName(row.person), document: documentId(row.docIndex), quote: row.source.excerpt, amount: null, percentOf: null };
   if (f.kind === "none") return null;
   if (f.kind !== "worked_out") return { ...base, amount: money(f.amount, f.currency) };

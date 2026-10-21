@@ -69,7 +69,7 @@ function answer(statements: Record<string, unknown>[], rs = rows) {
     kind: "amount", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...s })) };
   const fromRows = amountsFromRows(raw, rs, HOUSE);
   const parsed = readModelAnswer(fromRows.json)!;
-  const { answer: a, report } = verifyAnswer(HOUSE, parsed, ["How much?"]);
+  const { answer: a, report } = verifyAnswer(HOUSE, parsed, ["How much?"], new Set(fromRows.report.labels));
   if (process.env.DEBUG_CHAT) console.log(JSON.stringify({ st: parsed.statements, report }, null, 1));
   // As the app's chat turn does (lib/simple-chat/hook.ts): unlabelled amounts refused, left-out amounts noted.
   const { kept, refused } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
@@ -162,24 +162,45 @@ test("a percentage of the sum insured says so (R91-1)", () => {
   const a = answer([{ row: idOf("Lim Ah Kow", "Ankle"), person: "Lim Ah Kow", text: "Ankle." }]);
   assert.match(a.amounts[0]?.text ?? "", /: 50% of the amount printed, worked out\.$/);
 });
-test("a plan or benefit name with a number of 100 or more keeps its amount and its name (R91-2)", () => {
-  const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan, benefit: r.benefit === "Ambulance Cost" ? "Ambulance Cost 2026 Section 150" : r.benefit }));
+test("a plan named with a number of 100 or more keeps its amount and its name (R91-2)", () => {
+  const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan }));
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Ambulance." }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.statements));
-  assert.match(r.amounts[0].text, /^Ambulance Cost 2026 Section 150 \(Group Scheme, Group Personal Accident, plan 300\): up to this limit\.$/);
+  assert.match(r.amounts[0].text, /^Ambulance Cost \(Group Scheme, Group Personal Accident, plan 300\): up to this limit\.$/);
   assert.match(r.amounts[0].amount, /500/);
   assert.match(r.amounts[1].amount, /450,000/);
-  assert.doesNotMatch(JSON.stringify(r.statements), /[\uff10-\uff19]/);
+});
+test("a row whose benefit, cover or plan name states money is never labelled (R92-2)", () => {
+  const named = rows.map((r) => r.benefit === "Ambulance Cost" ? { ...r, benefit: "Accidental Death S$1,000,000" } : r.benefit === "Hip" ? { ...r, cover: "Accident cover 1,000,000" }
+    : r.benefit === "Ankle" ? { ...r, plan: "S$300" } : r);
+  const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" },
+    { row: idOf("Lim Ah Kow", "Ankle"), person: "Lim Ah Kow", text: "c" }], named);
+  assert.equal(r.amounts.length, 0);
+  assert.deepEqual(r.dropped.map((d) => /name states money/.test(d.why)), [true, true, true]);
+  assert.doesNotMatch(JSON.stringify(r.statements), /1,000,000|S\$300/);
+  assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+});
+test("money in full-width digits is money: left out of the bottom line, next steps and facts (R92-1)", () => {
+  const parsed = readModelAnswer({ bottomLine: "Your death cover pays S$１,０００,０００.", nextSteps: ["Claim S＄５００ now.", "Call the insurer."], question: null, statements: [
+    { kind: "fact", text: "Your death cover pays S$１,０００,０００. Ambulance is covered.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!;
+  const { answer: a } = verifyAnswer(HOUSE, parsed, ["How much?"]);
+  const all = JSON.stringify({ b: a.bottomLine, n: a.nextSteps, s: (a.statements ?? []).map((s) => s.text) });
+  assert.doesNotMatch(all, /[\uff10-\uff19]/, all);
+  assert.match(all, /Ambulance is covered/);
+  assert.match(all, /Call the insurer/);
+});
+test("a bottom line built from the first card shows the label as written (TE, 233669e)", () => {
+  const raw = { bottomLine: "S$999.", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: idOf("Lim Ah Kow", "Ankle") }] };
+  const fromRows = amountsFromRows(raw, rows, HOUSE);
+  const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["How much?"], new Set(fromRows.report.labels));
+  assert.match(a.bottomLine ?? "", /Ankle \(.*\): 50% of the amount printed, worked out\./);
+  assert.doesNotMatch(JSON.stringify(a), /[\uff10-\uff19]|999/);
 });
 test("the same row named twice is given once (R91-3)", () => {
   const id = idOf("Lim Ah Kow", "Hip");
   const r = answer([{ row: id, person: "Lim Ah Kow", text: "Hip." }, { row: id, person: "Lim Ah Kow", text: "Hip again." }]);
   assert.equal(r.amounts.length, 1);
   assert.equal(r.dropped.length, 0);
-});
-test("a model sentence in full-width digits is never turned into money", () => {
-  const { kept } = keepLabelledAmounts([{ text: "Pays ＳＧＤ ９９９．", amount: null }], { dropped: [], labels: [] });
-  assert.equal(kept[0].text, "Pays ＳＧＤ ９９９．");
 });
 test("a non-guaranteed value is said to be projected", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Surrender value"), person: "Lim Ah Kow", text: "The surrender value." }]);

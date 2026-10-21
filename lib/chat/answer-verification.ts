@@ -56,7 +56,8 @@ export type StatedFigure = { raw: string; value: number; currency: string };
 /** Every money figure a text states, with its currency. */
 export function figuresIn(text: string): StatedFigure[] {
   const out: StatedFigure[] = [];
-  for (const m of (text ?? "").matchAll(FIGURE)) {
+  // Full-width digits and signs ("S$１,０００") are read as the figures they are (Critic R92-1).
+  for (const m of (text ?? "").normalize("NFKC").matchAll(FIGURE)) {
     const currency = m[1] ?? (m[2] ? SYMBOL[m[2]] : m[3] ? SYMBOL[m[3]] : m[4] ? SYMBOL[m[4]] : m[8]);
     const digits = (m[5] ?? m[7] ?? "").replace(/,/g, "");
     const value = Number(digits) * (m[6] ? MULT[m[6].toLowerCase()] ?? 1 : 1);
@@ -69,7 +70,7 @@ const BARE_DOLLAR = /(?<![A-Za-z$])\$\s?(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|milli
 /** Every money figure of `text`, including bare "$" figures (currency "$"). */
 export function moneyFiguresIn(text: string): StatedFigure[] {
   const out = figuresIn(text);
-  for (const m of (text ?? "").matchAll(BARE_DOLLAR)) {
+  for (const m of (text ?? "").normalize("NFKC").matchAll(BARE_DOLLAR)) {
     const value = Number(m[1].replace(/,/g, "")) * (m[2] ? MULT[m[2].toLowerCase()] ?? 1 : 1);
     if (Number.isFinite(value)) out.push({ raw: m[0], value, currency: "$" });
   }

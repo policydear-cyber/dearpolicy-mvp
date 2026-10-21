@@ -592,6 +592,8 @@ const RATE_OR_TIME = /^\s*(?:%|per\s?cent|percent|-?\s*(?:calendar\s+)?(?:days?|
  * server's cards, so no sentence the model wrote may carry one -- which is what keeps it from adding amounts or giving a
  * range, whatever words it uses. */
 export function statesMoney(sentence: string): boolean {
+  // Full-width digits ("S$１,０００,０００") are money as much as ASCII ones (Critic R92-1).
+  sentence = (sentence ?? "").normalize("NFKC");
   if (moneyFiguresIn(sentence).length) return true;
   const t = (sentence ?? "").replace(DATES, " ");
   if (/\b(?:dollars?|cents?|SGD|USD)\b/i.test(t) && /\d|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand)\b/i.test(t)) return true;
@@ -899,7 +901,9 @@ function basisOf(household: Household, c: Checked): string {
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
-export function verifyAnswer(household: Household, model: ModelAnswer, written: string[] = []): { answer: StructuredAnswer; report: VerifyReport } {
+/** `serverWords`: statement texts the server wrote itself (the benefit table's row labels, lib/benefit-table/chat.ts). Only a
+ * statement whose text is exactly one of them keeps its words without the money filter; everything else is filtered. */
+export function verifyAnswer(household: Household, model: ModelAnswer, written: string[] = [], serverWords: ReadonlySet<string> = new Set()): { answer: StructuredAnswer; report: VerifyReport } {
   const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [] };
   const checked: Checked[] = [];
   const read = proseRead(household);
@@ -1005,7 +1009,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    let text = withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    let text = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     // A finding left with no words (its only sentence stated money) still shows the bill it says is uncovered (TE #91 Q8).
