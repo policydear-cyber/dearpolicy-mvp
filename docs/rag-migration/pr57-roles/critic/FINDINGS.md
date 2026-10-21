@@ -3606,3 +3606,26 @@ Everything else holds:
 **Not ready: one Medium (R72-1).** DC's live cases are right, and every round 68 probe that produced a wrong amount
 is fixed except the count-column shape. Tie whole-cell pricing to one-cell rows or plan columns, add the missing
 count words, and it is ready.
+
+---
+
+# Round 73: PR #87 delta at `a77723b` (R69-1, R69-2)
+
+- **R69-1: fixed.** `preferHouseholdMatch` (linking.ts:131) is now checked for every printed name, so the household's
+  hand match wins over the automatic match. In the correction flow (A taken off, the name linked to B), a re-read
+  links B as `user_declared` and rebuilds B's cover. A also stays off, because the automatic match is no longer used
+  for that name. The DB regression and e2e spec cover this flow.
+- **R69-2: fixed.** `buildContracts` (inventory.ts:138-142) drops a declared contract only when every one of its
+  documents is already wording for the **same person's** evidenced contract. I probed it offline (scratchpad
+  `r65/t73.ts`):
+  - A booklet claimed for Desmond (who has a certificate) and for Charmaine (who has none) is listed once for
+    Desmond, as wording on his certificate contract. Charmaine keeps her declared contract.
+  - An unrelated booklet claimed for Desmond (a different group and product) keeps its own declared contract.
+  - No benefit is hidden: the document is still read through the evidenced contract's references, which the ledger
+    and benefits use (owner plus document-in-contract scoping is unchanged).
+- **Unchanged:** the rate limit, the confirm note, and the scoping and double-click behaviour from round 67.
+- **R70-1 still applies.** `git merge-tree` still shows a conflict with #89 on the `document-meta` line.
+
+## Verdict on PR #87 at `a77723b`
+
+**Ready.**
