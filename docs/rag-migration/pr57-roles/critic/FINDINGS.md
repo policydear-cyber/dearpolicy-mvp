@@ -4208,3 +4208,25 @@ I re-ran all 37 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
 - The real certificate's extracted quote in run-02 is "Ambulance Cost*\tUp to S$500 per incident", with tab cells.
 - So the edit makes the fixture match the real layout. It does not hide a real loss.
 - The cost (an untabbed neighbour with a cap withholds the row above it) is safe and logged in COVERAGE-PLAN line 79. I accept it.
+
+## R102 — PR #96 delta d3883e2 → dc62892 (R101 fixes)
+
+**Verdict: NOT READY.** Two narrow "whichever is lower" paths still accept a cap while a second limit is printed. Both fixes are one condition each.
+
+I re-ran all 44 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
+- Fixed: E3, G1 and G2 now withhold. G4 (a tab cap column) now reads cap 50,000, so the over-refusal is gone.
+- G6 and H4 now stop at the next row: "Knee\t10%\nup to S$50,000" belongs to Knee. That is correct.
+- H1 ("\nOr 10% of annual salary, whichever is lower" on the next line) withholds.
+- Also withheld: H5 (a blank line, then the cap), H6 (cap column with the cap unread) and H7 (a tab neighbour's cap).
+- H8 (cap on the 4th plain line) is outside the 3-line window. That is the same bound I accepted at R99.
+
+- **R102-1 (second limit printed as a figure)** H3: the line is "Hip 75% of Sum Insured up to S$50,000 or S$500 per day, whichever is lower", and cap 50,000 is claimed.
+  - The cap is accepted, so Hip shows min(75% SI, S$50,000). The lower S$500-per-day limit is ignored.
+  - This was already the case at 1eaa9f8; it is not new. But it is a realistic layout and it shows a wrong, too-high amount.
+  - Fix: a tied cap is accepted only when the row's joined text prints no money figure other than the claimed cap. `otherPercent` already does this for percentages; treat a second figure the same way. E5 ("(or up to S$50,000, whichever is lesser)") still reads, because it has only one figure.
+- **R102-2 (upper-case "Or")** H2: the line is "Hip 75% of Sum Insured up to S$50,000 Or 10% of annual salary, whichever is lower".
+  - The new next-row cut `/\s+[A-Z][^%\d]*\d+…%/` treats "Or 10%" as the next row's label. So `otherPercent` stays false and the cap is accepted.
+  - Fix: the next-row label must not start with a connective word (`CONNECTIVE` minus its leading-punctuation part). H1, the same text on the next line, already withholds because `CONNECTIVE` is case-insensitive.
+- Add H2 and H3 as tests.
+
+With these two fixed, every path I have found either reads the row's own cap or withholds the amount.
