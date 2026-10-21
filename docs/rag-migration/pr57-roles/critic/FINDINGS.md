@@ -3806,3 +3806,16 @@ Fixed: R77-1 (P2/P3/P4 no longer show the not-covered card next to the S$100 lim
 - Note: the card now rarely shows for DC's household. GP and A&E lines with figures exist in the scheme documents, so the model's own finding stands alone. This leans safe and is acceptable.
 
 Verdict: **NOT READY until R78-1 is fixed** (widen the figure check to the next lines, plus the Qc test). R78-2 is optional.
+
+## Round 79: PR #91 delta, head 64259c8 (R78 fixes, TE N1-N9)
+
+Probes: `t77.ts` P1-P10 and Qa-Qi rerun on 64259c8 lib with DC's snapshot locally (not committed).
+
+- R78-1 fixed. A care's figure on the matching line or the next three now counts. Qc ("desmond physio bill $800") no longer shows the not-covered card, because his travel policy D6 p8 prints the physio limits two lines below the name.
+- R78-2 fixed. A dropped bottom line leads with the finding only when its card is shown. Qd falls back to "Here is what your documents say."
+- GP words widened (polyclinic, doctor, consultation, medical practitioner, whole words). "specialist doctor" now resolves to GP care first, which only refuses more cards (Qi). That is the safe side.
+- Every probe leans safe: no not-covered card appears beside a limit for the same person, or for a care any of that person's documents print. No new amount is shown anywhere.
+
+No new findings.
+
+Verdict: **READY.**
