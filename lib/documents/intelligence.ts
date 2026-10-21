@@ -63,7 +63,26 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
   if (!personal) return null;
   if (/\bcertificate\s+of\s+renewal\b|\brenewal\s+certificate\b/.test(t)) return "certificate";
   if (/\bpolicy\s+contract\b|\bpolicy\s+information\s+page\b/.test(t)) return "personal_schedule";
+  // A personal summary ("Your travel insurance summary") prints the policy's own number (not a group scheme's) and the
+  // person it is for ("Your name : Lim Wei Jie"), not just the words.
+  if (/\b(?:insurance|policy)\s+summary\b/.test(t)
+    && /(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
+    && new RegExp(String.raw`\b(?:policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t)) return "personal_schedule";
   return null;
+}
+
+/** A printed person's name after a label ("Life Assured: Lim Wei Jie"), not a definition ("any eligible employee",
+ * "the person named in Part 1"). Lower-case text. */
+const PERSON_VALUE = String.raw`(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as)\b)[a-z][a-z.'-]+[ \t,]+[a-z]`;
+const NAMED_PERSON = new RegExp(String.raw`\b(?:life assured|insured member|insured person)\s*:[ \t]*` + PERSON_VALUE);
+
+/** Part 1 of a certificate: who is insured and for how much, in any of the ways a certificate prints it. */
+function partOneParticulars(text: string) {
+  if (/particulars of insured|insured person'?s? name|name of (?:the )?insured/.test(text)) return true;
+  // A sum assured counts only beside a named person: a plan table in Part 2 prints sums too.
+  if (NAMED_PERSON.test(text)) return true;
+  // A name line with an amount and the date it took effect ("Lim Wei Jie  S$500,000  As of 01/02/2023").
+  return text.split("\n").some((line) => /(?:s\$|sgd)\s?\d[\d,]{3,}/.test(line) && /\bas of \d|effective date\s*:?\s*\d/.test(line));
 }
 
 export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExtraction["documentRole"]) {
@@ -73,7 +92,11 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   if (correspondence) return correspondence;
   const text = fullText(pages).toLowerCase();
   if (/product summaries|product summary/.test(text) && /refer to your certificate of insurance/.test(text)) return "product_summary" as const;
-  if (/certificate of (group )?insurance/.test(text) && /(sum assured|effective date|particulars of insured|insured person)/.test(text)) return "certificate" as const;
+  // Part 2 of a group certificate ("Highlights of Cover") is the scheme's generic terms for every member: without Part 1's
+  // particulars of the insured it is a benefits guide, even though it says "certificate of insurance" and "insured person".
+  const partTwoOnly = /certificate of insurance part 2|part 2:\s*highlights of cover/.test(text) && !partOneParticulars(text);
+  if (partTwoOnly) return "benefit_guide" as const;
+  if (/certificate of (group )?insurance/.test(text) && (/(sum assured|effective date|particulars of insured|insured person)/.test(text) || partOneParticulars(text))) return "certificate" as const;
   const titled = personalDocumentTitle(fullText(pages, 2));
   if (titled) return titled;
   if (/certificate of insurance part 2|part 2:\s*highlights of cover/.test(text)) return "benefit_guide" as const;
@@ -83,6 +106,9 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
+  // A document whose own title line is "Policy wording" is the wording, whatever endorsements it describes; an
+  // endorsement that only cites "the policy wording" is not.
+  if (/^\s*policy wording\s*$/m.test(opening) && !/\bthis endorsement\b/.test(opening)) return "policy_wording" as const;
   if (/endorsement|policy amendment|amendment to policy/.test(text) && /(policy number|effective date|insured)/.test(text)) return "endorsement" as const;
   if (/renewal notice|renewal statement|renewal premium/.test(text)) return "renewal_statement" as const;
   if (/premium receipt|official receipt|payment receipt/.test(text) && /(premium|policy)/.test(text)) return "premium_receipt" as const;
