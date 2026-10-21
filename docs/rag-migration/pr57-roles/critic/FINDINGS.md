@@ -3886,3 +3886,35 @@ The life-cover TPD join now needs the benefit name to begin with TPD (`NAMED_TPD
 No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
 
 Verdict: **READY** (after DC's yes).
+
+## Round 85: PR #94 (benefit table behind DEARPOLICY_BENEFIT_TABLE), head edb369b on main c1520b9
+
+Read-only review of `sql/benefit-table.sql`, `lib/benefit-table/*`, the ingest hook, the three routes, and the Coverage switch in `app/ledger/page.tsx`. No DB suite or paid call was run.
+
+What holds:
+- **SQL is additive.** It adds three `CREATE TABLE IF NOT EXISTS` tables and alters, drops or rewrites nothing existing. RLS is enabled with `is_household_member(account_id)` policies and anon is revoked. The write checks tie a reading to a policy, and a confirmation to a family member, of the same household. A rollback line is given. Readers check `to_regclass` first, so code deployed before the SQL is applied keeps the old view.
+- **Cross-household scope.** Every service query filters by `account_id`, including `policy_pages`. The reading upsert's `ON CONFLICT ... WHERE benefit_readings.account_id=EXCLUDED.account_id` cannot overwrite another household's row. Links and confirmations are validated against the household's own sections, covers and people.
+- **Figure checks.** A row is kept only when its quote is located on a stored page and its figure is printed in that quote. A fixed base must be printed on the same page. Day counts must be printed too. A cover needs the person's name on its page. Rows are never added together, and a figure with no stated currency is labelled.
+- **Flag off on the server.** Ingest, the dashboard and chat behave as today, and the routes answer `enabled:false`, 404 or 401.
+
+- **R85-1 (High, wrong amounts)** `lib/benefit-table/assemble.ts:115-121` `columnProblem` decides whether a plan column belongs to a person's cover by raw substring:
+  ```
+  plan && (col.includes(plan) || plan.includes(col))
+  ```
+  A one-letter plan matches almost anything. Plan "A" normalises to "a", and "plan b".includes("a") is true. So a Plan A member's cover accepts a link from the "Plan B" column section, and the person is shown Plan B's figures as theirs. The same happens with "Classic"/"Premier" columns for plan "A", or with any column containing the plan's letters. Two further problems:
+  - When the cover prints no plan, every plan-named column is accepted (`if (!plan) return null`). The doc comment says those are refused. Links to both the Plan A and the Plan B sections then both apply, showing two plans' figures as the person's.
+  - A non-plan column ("Adult", "Child", "Per Visit") is refused whenever the cover has a plan, which hides documented benefits.
+
+  Fix: compare whole tokens. Extract the plan identifier ("plan a", "a", "classic", "premier") and require the column's plan token to equal it. Refuse a plan-named column when the cover has no plan, as the comment says. Treat a column with no plan word as plan-neutral. Add tests: plan A against a "Plan B" column (refused), plan A against "Plan A" (kept), no plan against "Plan B" (refused), plan A against "Adult" (kept).
+- **R85-2 (Medium, projection shown as payable)** `assemble.ts:93-97` relies only on the model's `basis` field, or on the document kind being "illustration", to mark a figure as projected. A yearly policy statement or schedule (kind `personal_proof`) often prints a projected maturity or surrender value table under a "Non-Guaranteed" or "at 4.25% p.a." heading. If the model leaves `basis` null on such a row, the figure shows as a printed amount or as a "value" the person holds. Fix: a server backstop. Mark a row as projected when its quote, section, column or the line above its row prints "non-guaranteed", "not guaranteed", "illustrat", "projected", or an assumed return rate ("at 4.25%", "investment return"). Add a test.
+- **R85-3 (Medium, double paid reading with the flag on)** The flag swaps only the ingest hook (`lib/rag/ingest.ts:944`). With the flag on, ingest no longer sets `ledger_read_at`, so every new document stays "pending" for the old ledger. These callers then read it again with paid model calls and seed the old ledger:
+  - the dashboard's `after()` read (`app/api/dashboard/route.ts:46-54`, on every dashboard load until read);
+  - the ledger POST routes (`app/api/ledger/route.ts:104-112`);
+  - chat (`lib/chat/workflow.ts:2461-2465`).
+  #92's Coverage refresh also keeps running through `/api/ledger` if anything still calls it. Fix: gate those callers on `!benefitTableEnabled()` too, or mark the document ledger-read when the table read succeeds. Decide explicitly whether chat keeps using the old ledger while the flag is on.
+- **R85-4 (Low)** `app/ledger/page.tsx:62-75`. With the flag off, Coverage now waits on `/api/benefit-table` first, and shows "Your coverage could not be loaded" on any non-OK answer (a 500, or a 401 after the session expires) instead of the old view. Today's view is therefore no longer exactly identical with the flag off. Consider falling back to the ledger view on a non-OK answer while the flag is off; the server could also answer `enabled:false` before the auth/DB work when the switch is unset.
+- **R85-5 (Low)** `sql/benefit-table.sql:51-58` grants authenticated users INSERT/UPDATE/DELETE on all three tables. The server uses the service connection. A household member could write a reading or a model-labelled link straight from the browser. The checks re-verify quotes, so no unprinted figure would show, but SELECT-only for `authenticated` (as the comment's purpose implies) is tighter.
+- **R85-6 (Low)** `assemble.ts:128-133`. A correction applies only to the first cover with that person and key. A second copy with a different printed sum (two documents) keeps its printed figure, so one person can show two bases. Apply it to every match, or show the duplicates as a conflict.
+- Note for DC's spend: with the flag on, each document costs one Sonnet 5.5 reading (up to 24K output), up to 12 page re-reads, and a household-wide linking call on each upload. Usage is recorded through `recordUsage`.
+
+Verdict: **NOT READY until R85-1 to R85-3 are fixed.** R85-1 can show another plan's figures as the person's. R85-2 is the projection backstop. R85-3 doubles paid reads with the flag on. R85-4 to R85-6 are optional.
