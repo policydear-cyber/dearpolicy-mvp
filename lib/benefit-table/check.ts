@@ -68,19 +68,19 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-// A line that starts its own row is never read as going on with the one above: an item marker ("(b)", "ii.", "3)"), its
-// own percentage, its own label and figure, or tab-separated cells (Critic R96-1, R98-1).
+// Signs that a line is another row: an item marker ("(b)", "ii.", "3)"), its own percentage, an upper-case label with a
+// figure, or tab-separated cells (Critic R96-1, R98-1, R99).
 const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
 // A following line goes on with the row only when it starts with a connective or a cap word, optionally after "(":
 // "or up to S$50,000, whichever is lesser", "(max. S$5,000)", "subject to a maximum of ...". Nothing else joins (TE L12-L14).
 const CONNECTIVE = /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|min(?:imum)?|limit(?:ed)?|not\s+(?:to\s+)?exceed(?:ing)?|capped)\b/i;
 const TAB_CELLS = /\S\t+\S/;
-const startsRow = (text: string) => !CONNECTIVE.test(text) && (ITEM_MARKER.test(text) || /\d\s*%/.test(text)
-  || /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/.test(text));
+const PERCENT = /\d\s*%/;
+const LABEL_FIGURE = /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/;
 /** How many lines below the row are looked at for a cap that was not joined to it. */
 const LINES_BELOW = 2;
-/** The row as printed: the quoted words (by their place on the page), the rest of their line unless it starts another
- * row, and up to three following lines that start with a connective or cap word and have no tab cells.
+/** The row as printed: the quoted words (by their place on the page), the rest of their line when it starts
+ * with a connective or cap word, and up to three following lines that start with a connective or cap word and have no tab cells.
  * below: the text not joined (the rest of the line and the next lines), so cap words there mark the row as capped
  * and it shows no amount rather than a neighbour's cap or an uncapped figure (Critic R97, R98; TE L12-L14). */
 function rowSegment(pageText: string, start: number, end: number): { text: string; below: string } {
@@ -88,9 +88,10 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
   let seg = pageText.slice(start, end);
   const unjoined: string[] = [];
   const tail = pageText.slice(end, lineEnd(end));
+  // The rest of the row's own line follows the same rule: in a two-column extraction it may be the next row (TE L19-L21).
   if (tail.trim()) {
-    if (startsRow(tail)) unjoined.push(tail);
-    else seg += tail;
+    if (CONNECTIVE.test(tail) && !PERCENT.test(tail)) seg += tail;
+    else unjoined.push(tail);
   }
   let pos = lineEnd(end);
   let joining = true;
@@ -98,14 +99,17 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
     const line = pageText.slice(pos + 1, lineEnd(pos + 1));
     pos = lineEnd(pos + 1);
     if (!line.trim()) { joining = false; continue; }
-    if (joining && k < 3 && CONNECTIVE.test(line) && !TAB_CELLS.test(line)) seg += " " + line;
+    // A line with its own percentage is never joined, even after "Maximum" ("Maximum Disablement 20% up to S$5,000"): its
+    // cap may be another row's, so it goes below and the row withholds its amount (Critic R99-2).
+    if (joining && k < 3 && CONNECTIVE.test(line) && !TAB_CELLS.test(line) && !PERCENT.test(line)) seg += " " + line;
     else { joining = false; unjoined.push(line); }
   }
-  // A line that plainly starts another row (an item marker, its own percentage, its own label and figure, or tab cells
-  // with a percentage or amount) has its own limit, not this row's: "Wrist 20% up to S$5,000",
-  // "Advance Payment Benefit\t100% Sum Insured (up to S$400,000)", "•\tAmbulance Cost*\tUp to S$500". Anything else
-  // with cap words ("wrist fracture: up to S$5,000") may be this row's limit, so the row shows no amount.
-  const otherRow = (l: string) => startsRow(l) || (TAB_CELLS.test(l) && /\d\s*%|(?:S\$|US\$|SGD|\$)\s?\d/.test(l));
+  // A line that plainly starts another row has its own limit, not this row's: an item marker or its own percentage
+  // ("Wrist 20% up to S$5,000"), tab cells with a figure ("•\tAmbulance Cost*\tUp to S$500"), or an upper-case label
+  // with a figure. A line that starts with a connective or cap word, or lower-case ("which is payable up to S$50,000",
+  // "wrist fracture: up to S$5,000"), may be this row's limit, so the row shows no amount (Critic R99-1, TE L12-L14).
+  const otherRow = (l: string) => (TAB_CELLS.test(l) && /\d\s*%|(?:S\$|US\$|SGD|\$)\s?\d/.test(l))
+    || (!CONNECTIVE.test(l) && (ITEM_MARKER.test(l) || PERCENT.test(l) || (/^[ \t]*[A-Z]/.test(l) && LABEL_FIGURE.test(l))));
   return { text: seg, below: unjoined.filter((l) => !otherRow(l)).join("\n") };
 }
 
