@@ -123,13 +123,16 @@ async function main(argv: string[]) {
 
   const replay = arg(argv, "--replay");
   if (replay) {
-    const recorded = (JSON.parse(readFileSync(replay, "utf8")) as { turns: AppTurn[] }).turns;
+    const recorded = (JSON.parse(readFileSync(replay, "utf8")) as { turns?: AppTurn[] }).turns;
+    if (!Array.isArray(recorded) || !recorded.some((t) => t.json)) throw new Error(`${replay} holds no recorded app-path turns (an answer.ts results file has {meta, rows}, not turns)`);
     const result = await runSet({ household, questions, model: replayModel(recorded, choice) });
     const out = outsideRepo(arg(argv, "--out") ?? resolve(replay, "../replay"));
     mkdirSync(out, { recursive: true });
     writeFileSync(resolve(out, "replay.json"), JSON.stringify({ turns: result.turns }, null, 2));
     writeFileSync(resolve(out, "answers.md"), asMarkdown(result.turns, { replayOf: replay, at: new Date().toISOString() }));
-    console.log(`Replayed ${result.turns.length} turns; wrote ${out}/answers.md. Nothing was sent to a model.`);
+    const failed = result.turns.filter((t) => t.error);
+    console.log(`Replayed ${result.turns.length} turns (${failed.length} failed); wrote ${out}/answers.md. Nothing was sent to a model.`);
+    if (failed.length) { for (const t of failed) console.error(`${t.id}: ${t.error}`); process.exitCode = 1; }
     return;
   }
   if (!argv.includes("--paid")) { console.log("Estimate only. Nothing was sent to a model."); return; }
@@ -145,6 +148,8 @@ async function main(argv: string[]) {
   writeFileSync(resolve(out, "results.json"), JSON.stringify({ meta, turns: result.turns }, null, 2));
   writeFileSync(resolve(out, "answers.md"), asMarkdown(result.turns, meta));
   console.log(`Spent US$${result.spentUsd.toFixed(4)}. Wrote ${out}/answers.md`);
+  const failed = result.turns.filter((t) => t.error);
+  if (failed.length) { for (const t of failed) console.error(`${t.id}: ${t.error}`); process.exitCode = 1; }
 }
 
 if (require.main === module)

@@ -478,6 +478,25 @@ async function main() {
     assert.deepEqual(r50("Specialist visit\t20%", 20), []);
   });
 
+  await check("TE-EXTRA sum insured: base quote not stored, no heading, two amounts, quote without the amount stay facts", () => {
+    const cert = (text: string): Household => ({ ...SI_HOUSE, documents: SI_HOUSE.documents.map((d, i) => i === 1 ? { ...d, pages: [{ page: 1, text }] } : d) });
+    const p8 = (text: string): Household => ({ ...SI_HOUSE, documents: SI_HOUSE.documents.map((d, i) => i === 0 ? { ...d, pages: d.pages.map((pg) => pg.page === 8 ? { page: 8, text } : pg) } : d) });
+    const base = "Tan Mei Ling\tS$400,000\tAs of 06/10/2022";
+    for (const [why, house, st1] of [
+      ["base quote not in the stored pages", SI_HOUSE, pctSI("Mei Ling", "S$400,000", "Tan Mei Ling Personal Accident Plus Rider S$400,000 effective 2030")],
+      ["no cover heading above the sum insured", cert("Lim Ah Kow\tS$600,000\tAs of 06/10/2022\nTan Mei Ling\tS$400,000\tAs of 06/10/2022"), pctSI("Mei Ling", "S$400,000", base)],
+      ["two sums insured on the quoted line", cert("GROUP PERSONAL ACCIDENT(POLICY NO. 2)\nTan Mei Ling\tS$400,000\tS$1,000,000"), pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tS$1,000,000")],
+      ["quoted line does not print the sum insured", SI_HOUSE, pctSI("Mei Ling", "S$400,000", "GROUP PERSONAL ACCIDENT(POLICY NO. 2)")],
+      ["quoted line prints another figure than the base", cert("GROUP PERSONAL ACCIDENT(POLICY NO. 2)\nTan Mei Ling\tS$450,000\tAs of 06/10/2022\nTan Mei Ling S$400,000 previous cover"), pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$450,000\tAs of 06/10/2022")],
+      ["a heading naming another base after the sum-insured table", p8("Fracture due to Accident\nSchedule\n(% of Sum Insured)\nHip\t75%\nComa Benefit\nPayable as a percentage of Comatose State Sum Insured\nComa (Other)\t20%"), pctSI("Mei Ling", "S$400,000", base, "Coma (Other)\t20%")],
+      ["the row's own % of Sum Insured in prose", p8("Fracture due to Accident\nSchedule\n(% of Sum Insured)\nHip\t75%\nWrist (Other Fracture): the benefit will be 20% of the Sum Insured for this injury as set out in the table"), pctSI("Mei Ling", "S$400,000", base, "Wrist (Other Fracture): the benefit will be 20% of the Sum Insured for this injury")],
+    ] as const) {
+      const { answer } = verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [st1] });
+      assert.equal(answer.statements!.filter((x) => x.amount).length, 0, why);
+      assert.ok(answer.statements!.some((x) => x.kind === "fact" && x.source?.page === 8), why);
+    }
+  });
+
   await check("B1: a condition is kept only with its own quote from the statement's document", () => {
     const { answer, report } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
       st({ ...pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022"), conditions: [
