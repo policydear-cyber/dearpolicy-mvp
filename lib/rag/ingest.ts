@@ -18,7 +18,7 @@ import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLik
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
-import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -662,7 +662,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       let link: { source: "ai_name_match" | "upload_hint" | "user_declared"; confidence: number } = found?.kind === "partial"
         ? { source: "ai_name_match", confidence: 0.85 }
         : { source: "ai_name_match", confidence: 0.95 };
-      const handMatch = !match ? family.find((member) => member.id === handMatches.get(nameKey(person.name))) : undefined;
+      // The household's own match wins over the automatic one (a name they moved from one person to another).
+      const handMatch = preferHouseholdMatch(person.name, handMatches, family);
       if (handMatch) { match = handMatch; link = { source: "user_declared", confidence: 1.0 }; }
       // The printed name matched no profile, but the person uploaded this
       // document to a profile they chose, and it names exactly ONE insured

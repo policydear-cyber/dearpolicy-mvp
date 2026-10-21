@@ -127,6 +127,12 @@ export async function householdNameMatches(accountId: string, policyId: string):
   return new Map(rows.map((r) => [nameKey(r.detected_name), r.member]));
 }
 
+/** The family member the household matched this printed name to by hand, if any. It wins over the automatic match. */
+export function preferHouseholdMatch<T extends { id: string }>(printedName: string, handMatches: Map<string, string>, family: T[]): T | undefined {
+  const id = handMatches.get(nameKey(printedName));
+  return id ? family.find((member) => member.id === id) : undefined;
+}
+
 export async function syncInsuredPersonToMember(args: { accountId:string; sourcePolicyId:string; familyMemberId:string; detectedName:string; extraction:PolicyExtraction;
   /** How the person was linked: a name match (default, 0.95), or the member the
    * uploader chose for a document naming one person no profile matched. */

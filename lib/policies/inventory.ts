@@ -150,7 +150,11 @@ export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[
     contract.references=documents.filter(reference=>!contract.documents.some(d=>d.id===reference.id)&&contract.documents.some(owner=>referenceMatches(owner,reference)));
     contract.effectiveDate=contract.documents[0]?.effective_date??null;
   }
-  return [...contracts.values()];
+  // A booklet the household claimed for someone whose own certificate already reads it as wording is that
+  // certificate's wording, not a second contract: listed twice, its benefits would be offered twice.
+  const evidenced=[...contracts.values()].filter(c=>c.ownershipBasis==="evidence");
+  return [...contracts.values()].filter(c=>c.ownershipBasis==="evidence"||!c.documents.every(doc=>
+    evidenced.some(e=>e.ownerId===c.ownerId&&e.references.some(r=>r.id===doc.id))));
 }
 export async function loadPolicyInventory(accountId:string,people:ClaimPerson[]) {
   const documents:InventoryDocument[]=[];

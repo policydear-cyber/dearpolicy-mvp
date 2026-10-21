@@ -124,4 +124,23 @@ test.describe.serial("Read again on a ready document", () => {
     await expect.soft(card()).not.toContainText(`“${stranger}” is named in it`);
     await expect.soft(card()).not.toContainText(`“${printedHelper}” is named in it`);
   });
+
+  test("TE-EXTRA: the 20-an-hour re-read limit refuses the 21st, with the household's message, and leaves the document ready", async () => {
+    // The re-read above used one of this household's 20. Every request counts, so 19 more (for a document id that does
+    // not exist: no reading is queued) use up the hour.
+    const statuses: number[] = [];
+    for (let n = 0; n < 19; n++) statuses.push((await api(page, "/api/policies/reprocess", { method: "POST", body: { policyId: "00000000-0000-4000-8000-0000000000" + String(10 + n) } })).status);
+    expect(statuses.every((s) => s === 404), `the 19 requests: ${statuses.join(",")}`).toBe(true);
+    const before = (await sql<{ u: string }>("SELECT updated_at::text u FROM policies WHERE id=$1", [doc.id]))[0].u;
+    const refused = await api<{ error: string }>(page, "/api/policies/reprocess", { method: "POST", body: { policyId: doc.id } });
+    expect(refused.status).toBe(429);
+    expect(refused.body.error).toMatch(/Too many documents read again/);
+    // The button shows the refusal and the document stays as it was.
+    await page.goto("/policies");
+    await card().getByRole("button", { name: "Read again", exact: true }).click();
+    await card().getByRole("button", { name: "Confirm read again" }).click();
+    await expect(page.getByTestId("library-notice")).toContainText("Too many documents read again", { timeout: 30_000 });
+    await page.waitForTimeout(2000);
+    expect((await sql<{ u: string; s: string }>("SELECT updated_at::text u,processing_status s FROM policies WHERE id=$1", [doc.id]))[0]).toEqual({ u: before, s: "ready" });
+  });
 });
