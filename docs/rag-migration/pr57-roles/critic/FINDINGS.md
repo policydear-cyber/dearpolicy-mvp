@@ -4105,3 +4105,19 @@ Probed `checkReading` on 11 page layouts and `nameStatesMoney` on 11 names (tsx,
   Fix: a line is never a continuation when it starts with an item marker (`^\s*\(?([a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s`) or holds its own percentage, figure-with-label or tab-separated cells. Add B1 to B4 as tests. With the cap left unread (B6), `capUnread` is already true, so only the claimed-cap path is open.
 - Names by role are fine for the R94-1 shapes. "Death 1000000", "Accident 50000" and "Accidental Death 200000" in product or cover names are refused. "Shield 360", "MER 1500" and "Smart Life 100" pass. Benefit names keep the strict rule ("Room & Board 300" is refused) and allow counts ("Benefit 365 days").
 - Low: a 4-digit amount in a product or cover name passes ("Accidental Death 5000"). This is accepted as the cost of product numbers.
+
+## R97 — PR #96 delta 2eeccc5 → db6b313 (`startsRow`)
+
+**Verdict: NOT READY** (the new rule now drops a row's own cap line in two shapes, and the uncapped figure shows).
+
+Probed `checkReading` on 17 layouts (tsx, no DB, no paid calls).
+
+- R96-1 is fixed. B1 "(a)/(b)", B2 "a)/b)", B3 "(i)/(ii)", B5 "1./2." and B4 (lower-case rows) all refuse the neighbour's cap.
+- Still right: N4, N5, C4 ("subject to a maximum of"), C5/C6 ("(up to S$50,000)"), C7 ("up to … per accident") and C9 ("max S$50,000").
+- **R97-1 (blocker, uncapped figure)** `check.ts` `ITEM_MARKER`: `\(?[a-z]{1,3}[.)]\s` matches "max. " and "Max. ", so a cap line written "max. S$50,000" is treated as a new row.
+  - C1: "Hip\t75% of Sum Insured\nmax. S$50,000" with the cap not read gives `capUnread=false`, so 75% of the sum insured is shown uncapped.
+  - C8 does the same with "Max. S$50,000".
+  - C2: with the cap read, it is refused (not in the row), so no amount; that case is safe.
+- **R97-2 (blocker, uncapped figure)** `startsRow`'s own-percentage test runs before the connective check.
+  - C3b: "Death\t100% of Sum Insured\nor 200% of premiums paid, whichever is lower" ends the row at line 1, `capUnread=false`, and 100% of the sum insured is shown although the row pays the lower of the two.
+- Fix for both: when a line starts with a connective or cap word (add `max\.?`, `min\.?`, `maximum`, `limit` to `CONNECTIVE`), it always continues the row and `startsRow` is not consulted. Belt and braces: compute `capUnread` also from the next line when it starts with a connective or cap word, even if it was not joined. Add C1, C3b and C8 as tests.
