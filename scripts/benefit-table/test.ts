@@ -329,58 +329,73 @@ test("a reading recorded before riders and values were added still checks", () =
 });
 
 // ------------------------------------------------------------------ Critic R85: plan columns, projections, duplicate covers
-/** One person's plan cover and one benefit row in a column, linked: the rows the person gets. */
-function planCase(plan: string | null, column: string, otherPlans: string[] = []) {
+/** One person's cover with `plan`, a benefit table whose columns are `column` plus `siblings`, and the `column` section
+ * linked to the person's cover: whether the person is shown the row. `others` are plans other family members hold. */
+function planCase(plan: string | null, column: string, siblings: string[] = [], others: string[] = []) {
   const people = ["Lim Wei Jie", "Tan Mei Ling", "Lim Kai"];
-  const lines = [plan, ...otherPlans].map((p, i) => `${people[i]}\tPlan: ${p ?? "none"}`);
+  const lines = [plan, ...others].map((p, i) => `${people[i]}\tPlan: ${p ?? "none"}`);
   const proof: SourceDoc = { id: "pc", name: "Schedule.pdf", readable: true, pages: [{ page: 1, text: lines.join("\n") }] };
   const pr = checkReading(proof, { document: { kind: "personal_proof", product: "Shield", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
-    covers: [plan, ...otherPlans].map((p, i) => ({ person: people[i], product: "Shield", cover: "Shield", plan: p, sumInsured: null, asOf: null, page: 1, quote: lines[i] })), benefits: [] });
-  const table: SourceDoc = { id: "pt", name: "Table.pdf", readable: true, pages: [{ page: 1, text: `Benefits\t${column}\nWard\tS$1,000` }] };
-  const tr = checkReading(table, doc("scheme_terms", [], [benefit({ section: "Benefits", column, benefit: "Ward", pays: "up_to", value: 1000, quote: "Ward S$1,000" })]));
+    covers: [plan, ...others].map((p, i) => ({ person: people[i], product: "Shield", cover: "Shield", plan: p, sumInsured: null, asOf: null, page: 1, quote: lines[i] })), benefits: [] });
+  const cols = [column, ...siblings];
+  const table: SourceDoc = { id: "pt", name: "Table.pdf", readable: true, pages: [{ page: 1, text: cols.map((c, i) => `${c}\nWard ${i}\tS$${i + 1},000`).join("\n") }] };
+  const tr = checkReading(table, doc("scheme_terms", [], cols.map((c, i) => benefit({ section: "Benefits", column: c, benefit: "Ward", pays: "up_to", value: (i + 1) * 1000, quote: `Ward ${i} S$${i + 1},000` }))));
   const t = assembleTable([pr, tr], family, [{ section: sectionKeyOf("pt", { section: "Benefits", column }), cover: coverKeyOf({ product: "Shield", cover: "Shield", plan }), why: "x" }]);
   return { rows: t.people[0].rows, refused: t.refusedLinks };
 }
-test("R85-1: plan A is not plan B, though one name is inside the other", () => {
-  assert.equal(planCase("A", "Plan B").rows.length, 0);
-  assert.equal(planCase("A", "Plan A").rows.length, 1);
-  assert.equal(planCase("Plan A", "A").rows.length, 1);
-  assert.equal(planCase("Gold", "Gold Plus").rows.length, 0);
-  assert.equal(planCase("Gold Plus", "Gold").rows.length, 0);
-});
-test("R86-1: a plan column with a currency or unit still matches its plan, and only its plan", () => {
-  for (const col of ["Plan A (S$)", "Plan A Per Visit", "Plan A - SGD", "Plan A [SGD] per policy year"]) {
-    assert.equal(planCase("A", col).rows.length, 1, col);
-    assert.equal(planCase("B", col).rows.length, 0, col);
-  }
-  assert.equal(planCase("Max", "Max").rows.length, 1, "a plan named like a unit word");
-});
-test("R87: annual, single-trip and lifetime variants are different plans", () => {
-  assert.equal(planCase("Gold", "Annual Gold").rows.length, 0);
-  assert.equal(planCase("Annual Gold", "Gold").rows.length, 0);
-  assert.equal(planCase("Annual Gold", "Annual Gold").rows.length, 1);
-  assert.equal(planCase("Annual Gold", "Annual Gold (S$)").rows.length, 1);
-  assert.equal(planCase("Plan A", "Plan A Annual").rows.length, 0);
-  assert.equal(planCase("Single Trip Classic", "Annual Classic").rows.length, 0);
-  assert.equal(planCase("Lifetime Shield", "Shield").rows.length, 0);
-  assert.equal(planCase(null, "Single Trip Gold").rows.length, 0, "a variant column for a cover with no plan");
-  assert.equal(planCase("Healthy", "Annual Healthy", ["Annual Healthy"]).rows.length, 0, "a household plan inside a longer column");
-  assert.equal(planCase("Healthy", "Annual Healthy").rows.length, 0, "the person's own plan inside a longer column");
-  assert.equal(planCase("A", "Plan A (Adult)").rows.length, 1, "words in brackets are not the plan's name");
-  assert.equal(planCase("B", "Plan A (Adult)").rows.length, 0);
-});
-test("R85-1: a plan column is refused for a cover that prints no plan", () => {
+/** Every plan-column case raised in Critic rounds R85 to R88: [person's plan, column linked, other columns in the document,
+ * plans other members hold, shown?]. "Refused" means no figure, never another plan's figure. */
+const PLAN_COLUMN_CASES: [string | null, string, string[], string[], boolean, string][] = [
+  ["A", "Plan A", [], [], true, "R85-1 same plan"],
+  ["A", "Plan B", [], [], false, "R85-1 Plan B for a Plan A cover (substring)"],
+  ["Plan A", "A", [], [], true, "R85-1 the word Plan is not the name"],
+  ["Gold", "Gold Plus", [], [], false, "R85-1 longer plan name"],
+  ["Gold Plus", "Gold", [], [], false, "R85-1 shorter plan name"],
+  [null, "Plan B", [], [], false, "R85-1 plan column, cover prints no plan"],
+  [null, "Business", ["Classic"], [], false, "R85-1 one of a document's plans, cover prints no plan"],
+  [null, "Healthy Choice", [], ["Healthy Choice"], false, "R85-1 a plan another member holds"],
+  ["A", "Adult", [], [], true, "R85-1 Adult is neutral"],
+  ["A", "Child", [], [], true, "R85-1 Child is neutral"],
+  ["A", "Per Visit", [], [], true, "R85-1 Per Visit is neutral"],
+  [null, "Adult", ["Child"], [], true, "R85-1 Adult and Child columns are not plans"],
+  ["A", "Insured Person", [], [], false, "R85-1 any other heading is refused for a cover that prints a plan"],
+  [null, "Insured Person", [], [], true, "R85-1 neutral heading, cover prints no plan"],
+  ["Business", "Classic", [], [], false, "a lone column of another plan (Classic figures for a Business holder)"],
+  ["A", "Plan A (S$)", [], [], true, "R86-1 currency in brackets"],
+  ["A", "Plan A Per Visit", [], [], true, "R86-1 unit"],
+  ["A", "Plan A - SGD", [], [], true, "R86-1 currency"],
+  ["A", "Plan A [SGD] per policy year", [], [], true, "R86-1 currency and unit"],
+  ["A", "Plan A (Adult)", [], [], true, "R86-1 adult in brackets"],
+  ["B", "Plan A (S$)", [], [], false, "R86-1 other plan with currency"],
+  ["B", "Plan A Per Visit", ["Plan B Per Visit"], [], false, "R86-1 other plan with unit"],
+  ["Max", "Max", [], [], true, "R86-1 a plan named Max"],
+  ["Gold", "Annual Gold", ["Single Trip Gold"], [], false, "R87-1 annual variant"],
+  ["Annual Gold", "Gold", [], [], false, "R87-1 plain column for a variant plan"],
+  ["Annual Gold", "Annual Gold", ["Single Trip Gold"], [], true, "R87-1 same variant"],
+  ["Annual Gold", "Annual Gold (S$)", [], [], true, "R87-1 same variant with currency"],
+  ["Plan A", "Plan A Annual", [], [], false, "R87-1 Plan A Annual is not Plan A"],
+  ["Single Trip Classic", "Annual Classic", ["Single Trip Classic"], [], false, "R87-2 trip type"],
+  ["Lifetime Shield", "Shield", [], [], false, "R87 part of the plan's name"],
+  [null, "Single Trip Gold", ["Single Trip Platinum"], [], false, "R87-2 variant column, cover prints no plan"],
+  ["Healthy", "Annual Healthy", [], [], false, "R87 own plan inside a longer column"],
+  ["Healthy", "Annual Healthy", [], ["Annual Healthy"], false, "R87 another member's plan"],
+  ["Gold (Single Trip)", "Gold (Annual)", ["Gold (Single Trip)"], [], false, "R88-1 bracketed trip type is kept"],
+  ["Platinum", "Single Trip (Gold)", ["Single Trip (Platinum)"], [], false, "R88-1 Gold limits for a Platinum holder"],
+  ["Single Trip Platinum", "Single Trip (Platinum)", ["Single Trip (Gold)"], [], true, "R88-1 brackets do not change the words"],
+  ["Platinum", "Max Limit", [], [], false, "R88-2 refused for a plan holder: cannot be told from a plan name"],
+  [null, "Max Limit (S$)", [], [], true, "R88-2 Max Limit with currency is neutral"],
+  [null, "Core Benefits", [], [], true, "R88-2 Core Benefits is neutral"],
+  [null, "Gold", ["Platinum"], [], false, "a document's plans side by side, cover prints no plan"],
+  [null, "Gold", [], ["Gold"], false, "a plan another member holds, cover prints no plan"],
+  [null, "Shield", [], ["Lifetime Shield"], false, "part of a plan another member holds, cover prints no plan"],
+  [null, "Max Limit", [], [], true, "R88-2 neutral for a cover with no plan"],
+];
+test("plan columns (R85 to R88): one rule, every case", () => {
+  const wrong = PLAN_COLUMN_CASES.filter(([plan, column, siblings, others, shown]) => (planCase(plan, column, siblings, others).rows.length > 0) !== shown)
+    .map(([plan, column, , , shown, why]) => `${why}: plan ${plan} / column "${column}" should be ${shown ? "shown" : "refused"}`);
+  assert.deepEqual(wrong, []);
   const c = planCase(null, "Plan B");
-  assert.equal(c.rows.length, 0);
   assert.match(c.refused[0].why, /prints no plan/);
-  assert.equal(planCase(null, "Business").rows.length, 0);
-  assert.equal(planCase(null, "Healthy Choice", ["Healthy Choice"]).rows.length, 0, "a plan another member holds");
-});
-test("R85-1: a column that names no plan (Adult, Child, Per Visit) is neutral", () => {
-  for (const col of ["Adult", "Child", "Per Visit", "Insured Person"]) {
-    assert.equal(planCase("A", col).rows.length, 1, col);
-    assert.equal(planCase(null, col).rows.length, 1, col);
-  }
 });
 test("R85-2: a figure whose own words say non-guaranteed or projected is shown as a projection, whatever the model said", () => {
   const ilpPage: SourceDoc = { id: "pj", name: "Policy summary.pdf", readable: true, pages: [{ page: 1, text:

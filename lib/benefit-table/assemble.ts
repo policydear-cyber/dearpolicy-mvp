@@ -116,36 +116,38 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   return { kind: "none", why: `${b.value}% of a base the page does not state` };
 }
 
-/** Words that name a plan column without being part of the plan's name ("Plan A", "Option 2"). */
-const PLAN_WORDS = new Set(["plan", "plans", "option", "options", "tier", "class", "category", "type"]);
-/** Names a column can carry that are plan or tier names wherever they appear. */
-const TIER_NAMES = new Set(["basic", "standard", "classic", "enhanced", "premier", "premium", "elite", "deluxe", "superior", "executive", "business",
-  "bronze", "silver", "gold", "platinum", "diamond", "lite", "plus", "max", "essential", "comprehensive", "core", "prestige", "signature"]);
-/** What a column heading says besides the plan's name: anything in brackets ("Plan A (S$)"), anything from "per" on
- * ("Plan A Per Visit") and currency words. Nothing else is dropped: "Annual", "Single Trip", "Lifetime" or "Policy" can
- * name a plan variant, so "Annual Gold" is not "Gold". */
-const CURRENCY_WORDS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "hkd", "myr"]);
-const planTokens = (s: string | null) => norm((s ?? "").replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\bper\b.*$/is, " "))
-  .split(" ").filter((t) => t && !PLAN_WORDS.has(t) && !CURRENCY_WORDS.has(t));
-const samePlan = (a: string | null, b: string | null) => { const x = planTokens(a), y = planTokens(b); return x.length > 0 && x.join(" ") === y.join(" "); };
-/** A column that names a plan: a plan some cover in the household holds, a column called "Plan …"/"Option …", a single
- * letter or roman numeral, or a tier name. Any other column ("Adult", "Child", "Per Visit") says nothing about the plan. */
-function namesPlan(column: string, plans: (string | null)[]): boolean {
-  const words = norm(column).split(" ").filter(Boolean);
-  if (words.some((w) => PLAN_WORDS.has(w))) return true;
-  const rest = planTokens(column), text = ` ${rest.join(" ")} `;
-  // A column that carries a plan name anywhere ("Annual Gold", "Single Trip Classic") names that plan, variant and all,
-  // and so does a column that is part of a plan's name ("Shield" beside a "Lifetime Shield" plan).
-  if (plans.some((p) => { const t = planTokens(p); return t.length > 0 && rest.length > 0 && (text.includes(` ${t.join(" ")} `) || ` ${t.join(" ")} `.includes(text)); })) return true;
-  if (rest.some((w) => TIER_NAMES.has(w))) return true;
-  return rest.length === 1 && (/^[a-z]$/.test(rest[0]) || /^(i|ii|iii|iv|v|vi)$/.test(rest[0]));
+/** Plan columns, one rule. A heading keeps every word except a closed list of currency and unit tokens (S$, SGD, $, "per
+ * visit", "per policy year", adult, child) and the filler words "plan"/"option", wherever they stand, brackets or not.
+ * What is left is a plan column only if it equals, contains, or is part of a name in that document's plan list: the
+ * plans printed on the household's covers, the plan the document itself names, and, when the document prints two or
+ * more different columns, those columns (they are its plans side by side). A plan column links only to a cover whose plan
+ * is the same words; so does a heading that says "Plan" or "Option". Anything else is neutral, except that for a cover
+ * that prints a plan every column other than its own plan is refused (a lone column cannot be told apart from a neutral
+ * heading, and another plan's figure is the worst mistake this page can make). When in doubt the link is refused, so no figure is shown rather than
+ * another plan's. */
+const UNIT_TOKENS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "hkd", "myr", "adult", "adults", "child", "children", "plan", "plans", "option", "options"]);
+const PER = /\bper\s+(?:policy\s+|calendar\s+)?(?:visit|day|week|month|year|annum|trip|journey|incident|event|claim|accident|disability|person|insured|family)\b/gi;
+export const headingWords = (s: string | null) => norm((s ?? "").replace(/\$/g, " ").replace(PER, " ")).split(" ").filter((t) => t && !UNIT_TOKENS.has(t)).join(" ");
+const within = (a: string, b: string) => ` ${b} `.includes(` ${a} `);
+
+/** Each document's plan list (see above), as heading words. */
+function planLists(readings: CheckedReading[], types: CoverType[]): Map<string, Set<string>> {
+  const household = types.map((t) => headingWords(t.plan)).filter(Boolean);
+  return new Map(readings.map((r) => {
+    const columns = [...new Set(r.benefits.map((b) => headingWords(b.column)).filter(Boolean))];
+    return [r.documentId, new Set([...household, headingWords(r.plan), ...(columns.length >= 2 ? columns : [])].filter(Boolean))];
+  }));
 }
-/** A plan column belongs to a cover only when it is that cover's plan, word for word ("Plan A" is not "Plan B"); a plan
- * column is refused for a cover with no plan; a column that names no plan is neutral. */
-function columnProblem(column: string | null, cover: CoverType, plans: (string | null)[]): string | null {
-  if (!column || !namesPlan(column, plans)) return null;
-  if (cover.plan && samePlan(column, cover.plan)) return null;
-  return cover.plan ? `column "${column}" is not the plan "${cover.plan}" on the person's cover` : `column "${column}" names a plan, but the person's cover prints no plan`;
+function columnProblem(column: string | null, cover: CoverType, plans: Set<string>): string | null {
+  const words = headingWords(column);
+  if (!words) return null;
+  // For a cover that prints a plan, any other column is refused: a lone "Classic" column cannot be told apart from a
+  // neutral heading, and showing another plan's figure is worse than showing none.
+  if (cover.plan) return words === headingWords(cover.plan) ? null : `column "${column}" is not the plan "${cover.plan}" on the person's cover`;
+  // A heading that says "Plan" or "Option" names a plan, whatever follows.
+  const saysPlan = /\b(?:plans?|options?)\b/i.test(column ?? "");
+  if (!saysPlan && ![...plans].some((p) => within(p, words) || within(words, p))) return null;
+  return `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = []): BenefitTable {
@@ -163,6 +165,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     }
   }
   const sections = sectionsOf(readings);
+  const plansOf = planLists(readings, types);
+  const docOf = new Map(readings.flatMap((r) => r.benefits.map((b) => [sectionKeyOf(r.documentId, b), r.documentId] as const)));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
   for (const l of links) {
@@ -171,7 +175,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
     if (linkOf.has(l.section)) { refusedLinks.push({ link: l, why: "section linked twice" }); continue; }
     if (l.cover && !type) { refusedLinks.push({ link: l, why: "no such cover" }); continue; }
-    const problem = type ? columnProblem(section.column, type, types.map((t) => t.plan)) : null;
+    const problem = type ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set()) : null;
     if (problem) { refusedLinks.push({ link: l, why: problem }); continue; }
     linkOf.set(l.section, l);
   }
@@ -179,7 +183,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const unlinkedSections: BenefitTable["unlinkedSections"] = [];
   for (const s of sections) {
     const l = linkOf.get(s.key);
-    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : "not linked to any cover" });
+    const refused = refusedLinks.find((x) => x.link.section === s.key);
+    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover" });
   }
   for (const r of readings) for (const b of r.benefits) {
     const l = linkOf.get(sectionKeyOf(r.documentId, b));
