@@ -31,6 +31,8 @@ export type InventoryDocument = {
   /** People who told DearPolicy this policy is theirs. Uploading a welcome
    * booklet is a statement of ownership; it is still not proof of an amount. */
   declared_member_ids?:string[];
+  /** People linked to the document by anything but its scheme (a name on it, the profile it was uploaded to, their own word). Missing in older callers. */
+  named_member_ids?:string[];
   /** Stored corpus size for this document, used to measure how much of it was
    * actually retrieved and read. Both are 0 until processing stores text. */
   page_total:number;chunk_total:number;
@@ -44,6 +46,19 @@ export type PolicyContract = {
   ownershipBasis:"evidence"|"declared";
 };
 export const referenceRoles=new Set(["policy_wording","product_summary","benefit_guide","benefit_summary","rider"]);
+/** Roles of a personal document. One that proves nobody's cover (a scheme's "Benefit Summary" read as a certificate,
+ * naming no insured person) is the scheme's own wording, the same as a product summary. One that names a person, or
+ * that someone said is theirs, is that person's evidence even unconfirmed, and is never another member's wording. */
+const personalRoles=new Set(["certificate","personal_schedule"]);
+/** Whether a document can be read as the wording of a contract someone owns. */
+export function servesAsReference(doc:Pick<InventoryDocument,"document_role"|"personal_coverage_confirmed"|"document_authority"|"named_member_ids"|"declared_member_ids">){
+  const role=doc.document_role??"";
+  if(referenceRoles.has(role))return true;
+  if(doc.personal_coverage_confirmed||!personalRoles.has(role)||doc.document_authority>=70)return false;
+  // Not known whether anyone is named: not wording.
+  if(!doc.named_member_ids)return false;
+  return !doc.named_member_ids.length&&!(doc.declared_member_ids??[]).length;
+}
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
 export function productIdentity(value:string|null|undefined){
   const normal=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
@@ -71,7 +86,7 @@ export function referenceMatchReason(owner:InventoryDocument,reference:Inventory
   const no=(reason:string)=>({matches:false,reason});
   if(owner.id===reference.id)return yes("Same document: one PDF holding both the personalised part and the wording.");
   if(reference.personal_coverage_confirmed)return no("This is someone's personalised evidence, which is never reused as reference wording.");
-  if(!referenceRoles.has(reference.document_role??""))return no("Document role \""+(reference.document_role??"none")+"\" is not a wording role ("+[...referenceRoles].join(", ")+").");
+  if(!servesAsReference(reference))return no("Document role \""+(reference.document_role??"none")+"\" is not a wording role ("+[...referenceRoles].join(", ")+").");
   const insurer=canonicalDeathInsurer(owner.insurer);
   if(!insurer)return no("The owned document has no recognised insurer, so no wording can be bound to it.");
   if(insurer!==canonicalDeathInsurer(reference.insurer))return no("Insurer differs: owned \""+(owner.insurer??"none")+"\" vs wording \""+(reference.insurer??"none")+"\".");
@@ -143,7 +158,7 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
   // Keyset pagination is a work batch, not a policy limit.
   for(;;){
     const r:{rows:InventoryDocument[]}=await query<InventoryDocument>(
-      `SELECT p.id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.policy_type,p.document_role,p.personal_coverage_confirmed,p.document_authority,p.needs_review,p.processing_status,p.original_filename,p.updated_at::text,p.effective_date::text,p.renewal_or_expiry_date::text,(SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS page_total,(SELECT count(*)::int FROM policy_chunks pc WHERE pc.account_id=p.account_id AND pc.policy_id=p.id) AS chunk_total,ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) AS member_ids,ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id AND pm.source='user_declared') AS declared_member_ids,coalesce(p.extracted_json->'productsMentioned','[]'::jsonb) AS products,coalesce((SELECT string_agg(pp.text,' ' ORDER BY pp.page_number) FROM policy_pages pp WHERE pp.account_id=p.account_id AND pp.policy_id=p.id AND pp.page_number<=2),'') AS header,EXISTS(SELECT 1 FROM policy_reference_coverages prc WHERE prc.account_id=p.account_id AND prc.policy_id=p.id) AS has_reference_sections FROM policies p WHERE p.account_id=$1 AND (${activePredicate("p")}) AND p.superseded_at IS NULL AND ($2::uuid IS NULL OR p.id>$2::uuid) ORDER BY p.id LIMIT 200`,
+      `SELECT p.id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.policy_type,p.document_role,p.personal_coverage_confirmed,p.document_authority,p.needs_review,p.processing_status,p.original_filename,p.updated_at::text,p.effective_date::text,p.renewal_or_expiry_date::text,(SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS page_total,(SELECT count(*)::int FROM policy_chunks pc WHERE pc.account_id=p.account_id AND pc.policy_id=p.id) AS chunk_total,ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) AS member_ids,ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id AND pm.source='user_declared') AS declared_member_ids,ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id AND pm.source<>'scheme_reference_match') AS named_member_ids,coalesce(p.extracted_json->'productsMentioned','[]'::jsonb) AS products,coalesce((SELECT string_agg(pp.text,' ' ORDER BY pp.page_number) FROM policy_pages pp WHERE pp.account_id=p.account_id AND pp.policy_id=p.id AND pp.page_number<=2),'') AS header,EXISTS(SELECT 1 FROM policy_reference_coverages prc WHERE prc.account_id=p.account_id AND prc.policy_id=p.id) AS has_reference_sections FROM policies p WHERE p.account_id=$1 AND (${activePredicate("p")}) AND p.superseded_at IS NULL AND ($2::uuid IS NULL OR p.id>$2::uuid) ORDER BY p.id LIMIT 200`,
       [accountId,cursor]);
     for(const doc of r.rows){
       doc.products=Array.isArray(doc.products)?doc.products:[];
@@ -169,7 +184,7 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
   const personal=documents.filter(d=>d.personal_coverage_confirmed);
   const products=[...new Set([...personal.flatMap(d=>[d.product_name,...d.products]),...coverages.map(c=>c.productName)].filter((p):p is string=>!!p))];
   const issuers=[...new Set(personal.map(d=>d.insurer).filter((p):p is string=>!!p))];
-  for(const doc of documents.filter(d=>!d.personal_coverage_confirmed&&referenceRoles.has(d.document_role??""))){
+  for(const doc of documents.filter(d=>!d.personal_coverage_confirmed&&servesAsReference(d))){
     const header=" "+doc.header.toLowerCase().replace(/[^a-z0-9]+/g," ")+" ";
     if(!doc.insurer){
       const matches=issuers.filter(name=>name.length>=3&&header.includes(" "+name.toLowerCase().replace(/[^a-z0-9]+/g," ")+" "));
