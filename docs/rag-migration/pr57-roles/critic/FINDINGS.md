@@ -4150,3 +4150,31 @@ Re-ran all 21 earlier layouts plus 8 new ones (tsx, no DB, no paid calls). The 2
   - "Maximum" is a connective, so the next row joins and Hip takes cap 5000. D1 is safe only because it has tabs.
   - Fix: never accept a cap from a joined line that has its own percentage. Still mark `capUnread` for such a row, so C3b ("or 200% … whichever is lower") keeps withholding.
 - Add E1 and E8 as tests. With both fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R100 — PR #96 delta 72fa2c5 → 1eaa9f8 (no join for lines with their own %, stricter backstop)
+
+**Verdict: NOT READY.** One path still shows an uncapped amount. The fix is one condition.
+
+Re-ran all 29 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
+- All 29 earlier layouts are safe. E1 and E8 are now withheld.
+- E2 (lower-case continuation with the cap read) is also withheld now. That is safe over-refusal.
+- New layouts that pass:
+  - F4: a same-line two-column neighbour "Hip 75% of Sum Insured   Wrist 20% up to S$5,000" is withheld.
+  - F5: a same-line own cap "… up to S$50,000" is read as 50,000.
+  - F6: a same-line lower-case ", payable up to S$50,000" is withheld.
+  - F8: a joined line with its own % is withheld.
+  - F7: the next row "Ambulance Cost S$500" (no cap words) is treated as another row, so Hip shows its amount. That is correct.
+
+- **R100-1 (uncapped figure)**: an upper-case continuation of the row's own cap still counts as "another row".
+  - Pages with the cap not read:
+    - F1: "Hip\t75% of Sum Insured\nPayable up to S$50,000 per accident"
+    - F2: "…\nWhich is payable up to S$50,000"
+    - F3: "…\nPer accident limit S$50,000"
+  - In all three the line passes the upper-case label+figure test, so the backstop drops it and the result is `capUnread=false`. 75% of the sum insured shows uncapped.
+  - My R99-1 suggestion ("only when it starts upper-case") was not enough on its own. Capitalisation doesn't tell a cap continuation from a new row.
+  - Fix (`check.ts` `otherRow`): the upper-case label+figure case counts as another row only when the line has no cap words (`CAP_WORDS`, plus a bare `\blimit\b` for F3).
+    - A neighbour row that has cap words and no % or marker ("Ambulance Cost up to S$500") then withholds Hip. That is safe over-refusal.
+    - Tab-cell and item-marker rows are unchanged.
+  - Add F1 to F3 as tests.
+
+With this fixed, every path I have found either reads the row's own cap or withholds the amount.
