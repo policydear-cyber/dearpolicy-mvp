@@ -260,6 +260,25 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     // A join made here, not a person's edit: updated_at is left alone, so a re-read still replaces the row.
     if(match?.amount!=null&&match.amount>0)await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
   }
+  // A row joined before that rule existed keeps the cover it was joined to (live, 21 Oct: every scheme accident and
+  // dismemberment row still a percentage of the S$1,000,000 term life, not the S$600,000 personal accident cover).
+  // A machine-made row whose basis is one of its contract's cover amounts was joined, not printed, so it is joined
+  // again: moved to the cover it pays under, or cleared when that cannot be told. A basis no cover carries (a fixed
+  // limit the document printed) and a row a person changed are left alone.
+  const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string}>(
+    "SELECT id,policy_id,family_member_id,event_type,detail,cause,note,sum_basis::text FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NOT NULL AND policy_id IS NOT NULL AND origin<>'person' AND updated_at=created_at",[accountId]);
+  for(const row of joined.rows){
+    const contract=contracts.find(c=>c.ownerId===row.family_member_id&&[...c.documents,...c.references].some(d=>d.id===row.policy_id));
+    if(!contract)continue;
+    const stored=Number(row.sum_basis);
+    if(!contract.coverages.some(c=>c.amount!=null&&Number(c.amount)===stored))continue;
+    const match=coverageForLedgerRow(contract,row);
+    const basis=match?.amount!=null&&match.amount>0?Number(match.amount):null;
+    if(basis===stored)continue;
+    // Clearing applies only when the covers carry different amounts: then the stored one may be the wrong one.
+    if(basis==null&&new Set(contract.coverages.filter(c=>c.amount!=null&&c.amount>0).map(c=>Number(c.amount))).size<2)continue;
+    await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,basis]);
+  }
   // Round 10: one lookup for the keys already in the ledger and one insert for
   // the rest, instead of a lookup and an insert per seed (two queries for each
   // of a hundred-odd rows in a ten-person household, on every seeding).

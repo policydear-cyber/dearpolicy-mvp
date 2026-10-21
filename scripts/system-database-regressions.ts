@@ -1885,6 +1885,22 @@ async function main(){
       assert.equal(await basis(eye),600000,"An accident-scale row is a percentage of the personal accident cover");
       assert.equal(await basis(death),1000000,"A death row is a percentage of the life cover");
 
+      // Live, 21 Oct (main 176313e): rows joined before the rule above still showed "% of the sum insured (S$1,000,000)"
+      // on every scheme accident row. A machine-made row already holding the wrong cover's amount is joined again; a
+      // basis the document printed and a person's own figure are kept.
+      const stale=await row("dismemberment","accident","Loss of speech");
+      const printed=await row("fracture","accident","Wrist");
+      const edited=await row("dismemberment","accident","Loss of hearing in one ear");
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000 WHERE id=ANY($1::uuid[])",[[stale,edited]]);
+      await db.query("UPDATE coverage_rules SET sum_basis=5000 WHERE id=$1",[printed]);
+      await db.query("UPDATE coverage_rules SET updated_at=created_at+interval '1 minute' WHERE id=$1",[edited]);
+      await db.query("UPDATE coverage_rules SET updated_at=created_at WHERE id=ANY($1::uuid[])",[[stale,printed]]);
+      await seedLedger(account);
+      assert.equal(await basis(stale),600000,"A row joined to the term life cover is moved to the personal accident cover");
+      assert.equal(await basis(printed),5000,"A fixed limit the document printed is not replaced by a cover");
+      assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
+      assert.equal(await basis(death),1000000,"A death row stays on the life cover");
+
       // Live release set (20 Oct): a travel wording's third-party liability row ("if you are liable for accidental death,
       // injury or damage to other people", one figure per plan column) showed as the person's own "Accidental death
       // S$500,000", and a "Not covered" schedule term showed as a S$500 lump sum.
