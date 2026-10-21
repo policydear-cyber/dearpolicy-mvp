@@ -3101,3 +3101,24 @@ Method: read the diff (`app/policies/page.tsx`, `app/globals.css`, two e2e specs
 ## Verdict on PR #86 at `c0dbbb9`
 
 **Ready.**
+
+# Round 64: recheck of PR #82 at `fe5bd31` (R62-1)
+
+Method: as in round 62. All probes from rounds 52–62 and the snapshot sweep were run at 844e968 and fe5bd31, and the
+outputs diffed.
+
+- **R62-1 fixed.** The Charmaine-only travel policy's "reduced by 50% … aged 70 or above" is no longer kept on
+  Desmond's group PA certificate line. The cross-document path now needs a household member named on the statement's
+  line and a document with the same non-empty linked people.
+- **No other change.** The only difference in the full probe diff is that line. The Evidence Reviewer figures, the
+  refused caps, R55-1, R59-1 to R59-6 and R60-1 to R60-3 all hold, and so do the legitimate moves (S$250 recuperation and
+  child education to the BS lines with their own conditions).
+- **Residual (Low, not blocking):** a different product linked to *exactly the same* people (for example a family travel
+  policy linked to both spouses with a "PERSONAL ACCIDENT" section) can still lend a condition to the group PA
+  certificate line. Conditions never carry money, and the case needs the model to cite that clause. A later tightening
+  could also require the same insurer or scheme reference.
+
+## Verdict on PR #82 at `fe5bd31`
+
+**Ready.** Every wrong-amount and borrowed-condition finding from rounds 50–62 is fixed, and I found no remaining
+wrong-amount path in this household or in the synthetic probes.
