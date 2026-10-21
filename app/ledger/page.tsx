@@ -5,6 +5,7 @@ import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { COVER_KINDS,coverGaps,isToConfirm,kindOfName,kindOfRow,listOf } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
+import { BenefitTableCoverage,type BenefitTableData } from "@/components/benefit-table-coverage";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
  *
@@ -55,7 +56,26 @@ function sourceLabel(row:Row){
   return row.origin==="schedule"?`Your schedule or certificate${page}`:`Your policy wording${page}`;
 }
 
+/** With DEARPOLICY_BENEFIT_TABLE on, Coverage is the benefit table; switched off (the server answers enabled:false),
+ * the ledger view below, unchanged. */
 export default function CoveragePage(){
+  // undefined while loading; "error" when the server could not answer, so the old view (which reads documents into the
+  // old ledger on its own) never opens just because the new one failed.
+  const [table,setTable]=useState<BenefitTableData|null|"error"|undefined>(undefined);
+  const loadTable=async()=>{
+    try{
+      const res=await fetch("/api/benefit-table",{cache:"no-store"});
+      const data=await res.json().catch(()=>({}));
+      setTable(!res.ok?"error":data.enabled?data as BenefitTableData:null);
+    }catch{setTable("error");}
+  };
+  useEffect(()=>{void loadTable();},[]);
+  if(table===undefined)return <div className="page"><p className="muted" role="status">Loading your coverage…</p></div>;
+  if(table==="error")return <div className="page"><div className="alert error" role="alert"><strong>Your coverage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div></div>;
+  return table?<BenefitTableCoverage data={table} reload={loadTable}/>:<LedgerCoveragePage/>;
+}
+
+function LedgerCoveragePage(){
   const [rows,setRows]=useState<Row[]>([]);
   const [family,setFamily]=useState<Member[]>([]);
   const [member,setMember]=useState("");

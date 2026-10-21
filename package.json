@@ -11,6 +11,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "benefit-table:test": "node --import tsx scripts/benefit-table/test.ts",
+    "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
     "benefit-table:read": "node --import tsx scripts/benefit-table/read.ts",
     "simple:offline-test": "node --import tsx scripts/simple-answer/offline-test.ts",
     "simple:compare": "node --import tsx scripts/simple-answer/compare.ts",

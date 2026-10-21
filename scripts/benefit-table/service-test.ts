@@ -1,0 +1,263 @@
+/** Scripted tests for the benefit table's storage and API layer (lib/benefit-table/service.ts), with an in-memory database
+ * and a scripted model. Synthetic pages only, no household data, no network.
+ *   npm run benefit-table:service-test */
+import assert from "node:assert/strict";
+import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
+import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
+import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
+
+let passed = 0;
+const failures: string[] = [];
+async function test(name: string, fn: () => Promise<void>) {
+  try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+type Policy = { id: string; account_id: string; original_filename: string; processing_status: string; lifecycle_state: string; superseded_at: string | null };
+/** Just the statements service.ts sends, against in-memory rows. An unknown statement fails the test. */
+function fakeDb(opts: { tables?: boolean } = {}) {
+  const s = {
+    family: [] as { id: string; account_id: string; display_name: string; preferred_name: string | null; lifecycle_state: string }[],
+    policies: [] as Policy[],
+    pages: [] as { policy_id: string; account_id: string; page_number: number; text: string }[],
+    readings: new Map<string, { account_id: string; reading: string; model: string; prompt_version: string }>(),
+    links: new Map<string, { account_id: string; section_key: string; cover_key: string | null; why: string; chosen_by: string }>(),
+    confirmations: new Map<string, { account_id: string; family_member_id: string; cover_key: string; status: string; sum_insured: number | null; updated_by: string | null; updated_at: string }>(),
+  };
+  const db: Db = async (sql, p) => {
+    const q = sql.replace(/\s+/g, " ").trim();
+    if (q.startsWith("SELECT to_regclass")) return [{ ok: opts.tables !== false }];
+    if (q.startsWith("SELECT id, display_name, preferred_name FROM family_members"))
+      return s.family.filter((f) => f.account_id === p[0] && f.lifecycle_state === "active");
+    if (q.startsWith("SELECT id, original_filename, processing_status FROM policies"))
+      return s.policies.filter((x) => x.account_id === p[0] && x.lifecycle_state === "active" && !x.superseded_at && (p.length < 2 || x.id === p[1]));
+    if (q.startsWith("SELECT policy_id, page_number, text FROM policy_pages"))
+      return s.pages.filter((x) => x.account_id === p[0] && (p[1] as string[]).includes(x.policy_id)).sort((a, b) => a.page_number - b.page_number);
+    if (q.startsWith("INSERT INTO benefit_readings")) {
+      const old = s.readings.get(p[0] as string);
+      if (!old || old.account_id === p[1]) s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string, model: p[3] as string, prompt_version: p[4] as string });
+      return [];
+    }
+    if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
+      return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
+    if (q.startsWith("SELECT section_key, cover_key, why, chosen_by FROM benefit_links")) return [...s.links.values()].filter((l) => l.account_id === p[0]);
+    if (q.startsWith("DELETE FROM benefit_links")) { for (const [k, l] of s.links) if (l.account_id === p[0] && l.chosen_by === "model") s.links.delete(k); return []; }
+    if (q.startsWith("INSERT INTO benefit_links")) {
+      const k = `${p[0]}|${p[1]}`, household = q.includes("'household'");
+      if (s.links.has(k) && !household) return [];
+      s.links.set(k, { account_id: p[0] as string, section_key: p[1] as string, cover_key: p[2] as string | null, why: household ? "Set by you" : p[3] as string, chosen_by: household ? "household" : "model" });
+      return [];
+    }
+    if (q.startsWith("SELECT family_member_id, cover_key, status, sum_insured, updated_at FROM benefit_confirmations"))
+      return [...s.confirmations.values()].filter((c) => c.account_id === p[0]);
+    if (q.startsWith("DELETE FROM benefit_confirmations")) { s.confirmations.delete(`${p[0]}|${p[1]}|${p[2]}`); return []; }
+    if (q.startsWith("INSERT INTO benefit_confirmations")) {
+      s.confirmations.set(`${p[0]}|${p[1]}|${p[2]}`, { account_id: p[0] as string, family_member_id: p[1] as string, cover_key: p[2] as string, status: p[3] as string,
+        sum_insured: p[4] as number | null, updated_by: p[5] as string | null, updated_at: "2026-10-21" });
+      return [];
+    }
+    throw new Error("fake db: unexpected statement " + q.slice(0, 80));
+  };
+  return { db, s };
+}
+
+/** A model that answers each call from a list, recording what it was asked. */
+function scriptedModel(answers: ((c: TableCall) => unknown)[]) {
+  const calls: TableCall[] = [];
+  const model: TableModel = { choice: { provider: "anthropic", model: "test-model" }, async call(c) {
+    calls.push(c);
+    const next = answers.shift();
+    if (!next) throw new Error("model called more often than scripted");
+    const json = next(c);
+    return { json, stopReason: json == null ? "max_tokens" : "end_turn", model: "test-model", input: 100, output: 50, ms: 1 } satisfies TableReply;
+  } };
+  return { model, calls };
+}
+
+const A = "acct-a", B = "acct-b";
+const doc = (kind: string, covers: unknown[], benefits: unknown[]) => ({ document: { kind, product: "Group Scheme", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null }, covers, benefits });
+const cover = (person: string, sumInsured: number, quote: string) => ({ person, product: "Group Scheme", cover: "Group Personal Accident", plan: null, sumInsured, asOf: null, page: 1, quote });
+const benefit = (o: Record<string, unknown>) => ({ section: "Accident", column: null, pays: "words", value: null, percentOf: null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, ...o });
+const gpa = coverKeyOf({ product: "Group Scheme", cover: "Group Personal Accident", plan: null });
+const accident = sectionKeyOf("terms", { section: "Accident", column: null });
+const SCALE = "Compensation Schedule (% of Sum Insured)\nDeath 100%\nArm 20%\nHip 75%\nKnee 50%\nAnkle 25%";
+
+function household() {
+  const f = fakeDb();
+  f.s.family.push({ id: "p1", account_id: A, display_name: "Lim Wei Jie", preferred_name: null, lifecycle_state: "active" },
+    { id: "p2", account_id: A, display_name: "Tan Mei Ling", preferred_name: null, lifecycle_state: "active" });
+  const policy = (id: string, account: string, name: string, status = "ready") =>
+    f.s.policies.push({ id, account_id: account, original_filename: name, processing_status: status, lifecycle_state: "active", superseded_at: null });
+  policy("cert", A, "Certificate.pdf"); policy("terms", A, "Terms.pdf"); policy("scan", A, "Blurry.jpg", "failed"); policy("other", B, "Theirs.pdf");
+  f.s.pages.push({ policy_id: "cert", account_id: A, page_number: 1, text: "CERTIFICATE\nLim Wei Jie\tS$200,000\nTan Mei Ling\tS$100,000" },
+    { policy_id: "terms", account_id: A, page_number: 1, text: SCALE },
+    { policy_id: "terms", account_id: A, page_number: 2, text: "Ambulance up to S$500 per incident" },
+    { policy_id: "scan", account_id: A, page_number: 1, text: "Lim Wei Jie S$1,000" },
+    { policy_id: "other", account_id: B, page_number: 1, text: "Someone else S$9,000,000" });
+  return f;
+}
+const certAnswer = () => doc("personal_proof", [cover("Lim Wei Jie", 200000, "Lim Wei Jie S$200,000"), cover("Tan Mei Ling", 100000, "Tan Mei Ling S$100,000")], []);
+const termsAnswer = () => doc("scheme_terms", [], [benefit({ benefit: "Arm", pays: "percent", value: 20, percentOf: "sum_insured", quote: "Arm 20%" })]);
+
+async function readBoth(f: ReturnType<typeof household>) {
+  await readDocument(f.db, scriptedModel([certAnswer]).model, A, "cert");
+  await readDocument(f.db, scriptedModel([termsAnswer, () => doc("scheme_terms", [], [
+    benefit({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", quote: "Hip 75%" }),
+    benefit({ benefit: "Arm", pays: "percent", value: 20, percentOf: "sum_insured", quote: "Arm 20%" })])]).model, A, "terms");
+}
+
+async function main() {
+  await test("the switch's tables are checked before anything is read or shown", async () => {
+    assert.equal(await tableReady(fakeDb({ tables: false }).db), false);
+    assert.equal(await tableReady(fakeDb().db), true);
+  });
+  await test("a document the app could not read is not sent to the model", async () => {
+    const f = household(), m = scriptedModel([]);
+    const r = await readDocument(f.db, m.model, A, "scan");
+    assert.equal(r.read, false);
+    assert.equal(m.calls.length, 0);
+  });
+  await test("another household's document is not found, and nothing is sent or stored", async () => {
+    const f = household(), m = scriptedModel([]);
+    assert.equal((await readDocument(f.db, m.model, A, "other")).read, false);
+    assert.equal(m.calls.length, 0);
+    assert.equal(f.s.readings.size, 0);
+  });
+  await test("a whole-document read is stored with its model and prompt version, and its usage is reported", async () => {
+    const f = household(), m = scriptedModel([certAnswer]), used: string[] = [];
+    const r = await readDocument(f.db, m.model, A, "cert", (what) => { used.push(what); });
+    assert.deepEqual(r, { read: true, pagesReread: 0 });
+    assert.deepEqual(used, ["reading"]);
+    const stored = f.s.readings.get("cert")!;
+    assert.equal(stored.account_id, A);
+    assert.equal(stored.model, "test-model");
+    assert.ok(JSON.parse(stored.reading).document.covers.length === 2);
+  });
+  await test("a page with many figures but few rows read is read again on its own, and the new rows are kept", async () => {
+    const f = household(), m = scriptedModel([termsAnswer, () => doc("scheme_terms", [], [benefit({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", quote: "Hip 75%" })])]);
+    const used: string[] = [];
+    const r = await readDocument(f.db, m.model, A, "terms", (what) => { used.push(what); });
+    assert.equal(r.pagesReread, 1);
+    assert.deepEqual(used, ["reading", "page reading"]);
+    assert.match(m.calls[1].user, /Hip 75%/);
+    assert.doesNotMatch(m.calls[1].user, /Ambulance/);
+    const { table } = await tableFor(f.db, A);
+    assert.ok(table.unlinkedSections.some((u) => u.section.key === accident));
+  });
+  await test("a read that does not finish stores nothing and keeps the earlier reading", async () => {
+    const f = household();
+    await readDocument(f.db, scriptedModel([certAnswer]).model, A, "cert");
+    const before = f.s.readings.get("cert")!.reading;
+    const r = await readDocument(f.db, scriptedModel([() => null]).model, A, "cert");
+    assert.equal(r.read, false);
+    assert.match(r.why!, /did not finish/);
+    assert.equal(f.s.readings.get("cert")!.reading, before);
+  });
+  await test("page re-reads are capped", async () => {
+    const f = household();
+    f.s.pages.push(...Array.from({ length: MAX_PAGE_REREADS + 3 }, (_, i) => ({ policy_id: "terms", account_id: A, page_number: 10 + i, text: SCALE })));
+    const m = scriptedModel([termsAnswer, ...Array.from({ length: MAX_PAGE_REREADS + 3 }, () => () => doc("scheme_terms", [], []))]);
+    const r = await readDocument(f.db, m.model, A, "terms");
+    assert.equal(r.pagesReread, MAX_PAGE_REREADS);
+  });
+  await test("the table lists each document as read, waiting or not readable, and nobody else's", async () => {
+    const f = household();
+    await readDocument(f.db, scriptedModel([certAnswer]).model, A, "cert");
+    const { documents, table } = await tableFor(f.db, A);
+    assert.deepEqual(documents.map((d) => [d.id, d.state]), [["cert", "read"], ["terms", "waiting"], ["scan", "not_readable"]]);
+    assert.equal(table.people.find((p) => p.id === "p1")!.covers[0].sumInsured, 200000);
+  });
+  await test("re-linking asks the model about sections only, keeps the household's links, and drops links to unknown keys", async () => {
+    const f = household();
+    await readBoth(f);
+    const m = scriptedModel([(c) => ({ links: [{ section: accident, cover: gpa, why: "the accident scale" }, { section: "made-up", cover: gpa, why: "x" }, { section: accident, cover: "no-such-cover", why: "y" }] })]);
+    const used: string[] = [];
+    assert.deepEqual(await relink(f.db, m.model, A, (w) => { used.push(w); }), { proposed: 1 });
+    assert.deepEqual(used, ["linking"]);
+    const { table } = await tableFor(f.db, A);
+    const wei = table.people.find((p) => p.id === "p1")!;
+    assert.deepEqual(wei.rows.map((r) => [r.benefit, r.figure.kind === "worked_out" ? r.figure.amount : null]).sort(), [["Arm", 40000], ["Hip", 150000]]);
+    await setLink(f.db, A, accident, null);
+    const again = scriptedModel([]);
+    assert.deepEqual(await relink(f.db, again.model, A), { proposed: 0 });
+    assert.equal(again.calls.length, 0, "a section the household placed is not sent again");
+    assert.equal(f.s.links.get(`${A}|${accident}`)!.chosen_by, "household");
+    assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!.rows.length, 0);
+  });
+  await test("the household can only link a section and a cover its own documents show", async () => {
+    const f = household();
+    await readBoth(f);
+    await assert.rejects(setLink(f.db, A, "terms|nothing|", gpa), TableInputError);
+    await assert.rejects(setLink(f.db, A, accident, "no|such|cover"), TableInputError);
+    await assert.rejects(setLink(f.db, B, accident, gpa), TableInputError, "another household cannot link this household's section");
+    await setLink(f.db, A, accident, gpa);
+    assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p2")!.rows.find((r) => r.benefit === "Arm")!.figure.kind, "worked_out");
+  });
+  await test("a correction changes every amount worked out from that sum insured, and Undo restores the printed one", async () => {
+    const f = household();
+    await readBoth(f);
+    await setLink(f.db, A, accident, gpa);
+    await setConfirmation(f.db, A, "user-1", "p1", gpa, "corrected", 300000);
+    let wei = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
+    assert.equal(wei.covers[0].sumInsured, 300000);
+    assert.equal(wei.covers[0].confirmation!.printed, 200000);
+    assert.deepEqual(wei.rows.map((r) => (r.figure.kind === "worked_out" ? r.figure.amount : null)).sort(), [225000, 60000]);
+    assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p2")!.covers[0].sumInsured, 100000, "only that person's cover changes");
+    await setConfirmation(f.db, A, "user-1", "p1", gpa, null, null);
+    wei = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
+    assert.equal(wei.covers[0].sumInsured, 200000);
+    assert.equal(wei.covers[0].confirmation, null);
+  });
+  await test("confirmations are refused for someone outside the family, a cover they do not hold, or a correction without a number", async () => {
+    const f = household();
+    await readBoth(f);
+    await assert.rejects(setConfirmation(f.db, A, null, "stranger", gpa, "confirmed", null), TableInputError);
+    await assert.rejects(setConfirmation(f.db, B, null, "p1", gpa, "confirmed", null), TableInputError, "another household cannot confirm this family's cover");
+    await assert.rejects(setConfirmation(f.db, A, null, "p1", "no|such|cover", "confirmed", null), TableInputError);
+    await assert.rejects(setConfirmation(f.db, A, null, "p1", gpa, "corrected", null), TableInputError);
+    await setConfirmation(f.db, A, "user-1", "p1", gpa, "confirmed", 999);
+    assert.equal(f.s.confirmations.get(`${A}|p1|${gpa}`)!.sum_insured, null, "a confirmation stores no amount of its own");
+  });
+  await test("a re-read that no longer shows a confirmed cover lists the confirmation to check again", async () => {
+    const f = household();
+    await readBoth(f);
+    await setConfirmation(f.db, A, "user-1", "p2", gpa, "confirmed", null);
+    await readDocument(f.db, scriptedModel([() => doc("personal_proof", [cover("Lim Wei Jie", 200000, "Lim Wei Jie S$200,000")], [])]).model, A, "cert");
+    const { table } = await tableFor(f.db, A);
+    assert.deepEqual(table.staleConfirmations.map((k) => k.personId), ["p2"]);
+  });
+  await test("a removed document leaves the table at once", async () => {
+    const f = household();
+    await readBoth(f);
+    f.s.policies.find((p) => p.id === "cert")!.lifecycle_state = "deleted";
+    const { table, documents } = await tableFor(f.db, A);
+    assert.equal(table.people.flatMap((p) => p.covers).length, 0);
+    assert.ok(!documents.some((d) => d.id === "cert"));
+  });
+
+  await test("a document that later fails to process leaves the table, though its reading is kept", async () => {
+    const f = household();
+    await readBoth(f);
+    f.s.policies.find((p) => p.id === "cert")!.processing_status = "failed";
+    const { table, documents } = await tableFor(f.db, A);
+    assert.equal(table.people.flatMap((p) => p.covers).length, 0);
+    assert.equal(documents.find((d) => d.id === "cert")!.state, "not_readable");
+    assert.ok(f.s.readings.has("cert"));
+  });
+  await test("a removed family member's confirmations are not listed to check again", async () => {
+    const f = household();
+    await readBoth(f);
+    await setConfirmation(f.db, A, "user-1", "p2", gpa, "confirmed", null);
+    f.s.family.find((p) => p.id === "p2")!.lifecycle_state = "deleted";
+    assert.deepEqual((await tableFor(f.db, A)).table.staleConfirmations, []);
+  });
+  await test("Undo is refused for someone outside the family", async () => {
+    const f = household();
+    await readBoth(f);
+    await assert.rejects(setConfirmation(f.db, A, null, "stranger", gpa, null, null), TableInputError);
+  });
+
+  console.log(`benefit-table service: ${passed} passed, ${failures.length} failed`);
+  for (const f of failures) console.log("  FAIL " + f);
+  if (failures.length) process.exit(1);
+}
+void main();

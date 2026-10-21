@@ -941,17 +941,26 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // leave it at stage 'finalising', 98% and "Reading the document into
       // your coverage ledger…" for good. Only keep the job lease alive.
       if (args.jobHeartbeat) await args.jobHeartbeat().catch(() => undefined);
-      const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
-      // A payment document states premiums, not cover: nothing to read into the ledger.
-      if (!isPaymentDocument && !noCover) await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
-        console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
-      });
-      const { seedLedger } = await import("@/lib/ledger/store");
-      await seedLedger(args.accountId);
-      // Rows seeded from the benefit catalogue get the same evidence columns
-      // (and inherit any conflict) as the rows they came from.
-      await annotateLedgerEvidence(args.accountId, args.policyId);
-      await markConflicts(args.accountId, args.policyId);
+      // With DEARPOLICY_BENEFIT_TABLE on (and its tables applied), the document is read once into the benefit table
+      // instead, and the old ledger rows and seeded defaults are not made. Switched off, nothing below changes.
+      const benefitTable = await import("@/lib/benefit-table/app");
+      if (await benefitTable.benefitTableLive()) {
+        if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId).catch((error) => {
+          console.warn("Benefit table reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
+        });
+      } else {
+        const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
+        // A payment document states premiums, not cover: nothing to read into the ledger.
+        if (!isPaymentDocument && !noCover) await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
+          console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
+        });
+        const { seedLedger } = await import("@/lib/ledger/store");
+        await seedLedger(args.accountId);
+        // Rows seeded from the benefit catalogue get the same evidence columns
+        // (and inherit any conflict) as the rows they came from.
+        await annotateLedgerEvidence(args.accountId, args.policyId);
+        await markConflicts(args.accountId, args.policyId);
+      }
     } catch (error) {
       console.warn("Coverage ledger update failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }

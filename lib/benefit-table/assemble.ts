@@ -29,7 +29,11 @@ export type TableRow = {
   benefit: string; section: string | null; column: string | null; pays: CheckedBenefit["pays"]; figure: Figure;
   fromDay: number | null; maxDays: number | null; conditions: string[]; source: Source; baseSource: Source | null; linkWhy: string;
 };
-export type PersonCover = CheckedCover & { personId: string; coverKey: string };
+/** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
+export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
+export type PersonCover = CheckedCover & { personId: string; coverKey: string;
+  /** Set when the household confirmed or corrected this cover; `printed` is the sum insured the document prints. */
+  confirmation: (Confirmation & { printed: number | null }) | null };
 export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
@@ -38,6 +42,8 @@ export type BenefitTable = {
   illustrationCovers: CheckedCover[];
   /** Sections no cover was linked to, with why: shown to the household, never silently dropped. */
   unlinkedSections: { section: SectionRef; why: string }[];
+  /** Confirmations for a cover the documents no longer show for that person (a re-read changed it): shown to check again. */
+  staleConfirmations: Confirmation[];
   /** Links refused by the server's own checks. */
   refusedLinks: { link: SectionLink; why: string }[];
 };
@@ -60,7 +66,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
     const coverKey = coverKeyOf(c);
     // The same cover printed twice for one person (a pack that repeats its schedule) is one cover.
     if (covers.some((x) => x.personId === match.member.id && x.coverKey === coverKey && x.sumInsured === c.sumInsured)) continue;
-    covers.push({ ...c, personId: match.member.id, coverKey });
+    covers.push({ ...c, personId: match.member.id, coverKey, confirmation: null });
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
@@ -100,7 +106,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   if (b.percentOf === "sum_insured") {
     if (cover.sumInsured == null) return { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` };
     return { kind: "worked_out", amount: cents(b.value! * cover.sumInsured / 100), currency: cover.currency,
-      how: `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""})` };
+      how: `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})` };
   }
   return { kind: "none", why: `${b.value}% of a base the page does not state` };
 }
@@ -114,8 +120,17 @@ function columnProblem(column: string | null, cover: CoverType): string | null {
   return `column "${column}" is not the plan "${cover.plan}" on the person's cover`;
 }
 
-export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[]): BenefitTable {
+export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = []): BenefitTable {
   const { covers, unmatched, illustration, types } = coversOf(readings, family);
+  // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
+  // it; the printed figure stays on the cover, so the page can show both.
+  const staleConfirmations: Confirmation[] = [];
+  for (const k of confirmations) {
+    const c = covers.find((x) => x.personId === k.personId && x.coverKey === k.coverKey);
+    if (!c) { staleConfirmations.push(k); continue; }
+    c.confirmation = { ...k, printed: c.sumInsured };
+    if (k.status === "corrected") c.sumInsured = k.sumInsured;
+  }
   const sections = sectionsOf(readings);
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
@@ -144,7 +159,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why });
     }
   }
-  return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, refusedLinks };
+  return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
 }
 
 export function figureText(f: Figure): string {
