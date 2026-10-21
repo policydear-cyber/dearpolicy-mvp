@@ -2836,3 +2836,85 @@ Method: as in round 56. role-test gives 15/15.
 ## Verdict on PR #83 at `c6e48fb`
 
 **Ready.**
+
+# Round 59: review of PR #82 at `39ab335` (loosened checks: currency inference, heading-% mapping, wider conditions, perDay, identifiers, file facts)
+
+Method: verify.ts at 39ab335 run offline.
+- The whole-snapshot `%` sweep was diffed against 9fe083c, and all earlier probes were rerun.
+- Synthetic documents were added to a copy of the snapshot household for currency, perDay and condition cases.
+- No model calls. Nothing private is committed.
+
+## Confirmed
+
+- **No change on the snapshot sweep.** The Evidence Reviewer figures, PS fractures on S$5,000, burns payout rows,
+  split-line rows, and no card for comatose, TPD cap and natural catastrophe all hold.
+- **New and correct:** PS p5 Term Life "Death / TPD 100% of Sum Insured" now gives S$1,000,000 for Desmond, because the
+  scheme title is read as that section.
+- **Kept out:** the Benefit Summary's "Core or Voluntary" footnote is still not put on the PS wrist row. A travel
+  policy's personal-accident clauses are not put on the group PA certificate line.
+- **Currency:** a page declaring "Currency : Singapore Dollar" gives S$ to "300,000.00". A US$ amount on an SGD page,
+  and an S$ amount on a US Dollar page, are refused.
+
+## Findings
+
+**R59-1 (High, wrong amount; also reopens R55-1): `rowFor` maps a wrong percentage onto whichever row prints it.** When
+the quoted row's last % differs from the stated one, `rowFor` searches every document for a single tab row ending in the
+stated %. The row qualifies when its label shares two words with the statement's text *or quote*. The overlap count also
+counts repeated label words, so "Loss of or Permanent Total Loss of …" matches on "loss" alone.
+
+| Statement | Card | Correct |
+|---|---|---|
+| Loss of speech, 25%, quote "(% of Sum Insured)" | S$150,000 (hearing in one ear row) | S$300,000 |
+| Loss of sight in one eye, 30% | S$180,000 (a thumb/hand row) | not that row |
+| R55-1 probe: "≥40% → 50%" row quoted, model says 40% | S$240,000 (the "25–40% → 40%" row) | S$300,000 |
+
+The check that existed to catch a wrong percentage now turns it into a different row's amount, labelled with the model's
+words.
+
+Fix:
+- Never map away from a quoted row line that prints a percentage. Use `rowFor` only when the quote prints no row
+  percentage at all (a heading or wording).
+- Count distinct label words, and match on the statement's text only, not the quote.
+- Require *all* label words to match (or name the row exactly), and search only the quoted document.
+- Add controls for speech 25% and burns 40%.
+
+**R59-2 (High, wrong amount): `perDay` ignores other day rules in the same text.**
+- "S$100 per day from the 1st day, ICU S$200 per day for a maximum of 7 days / up to a maximum of 365 days per policy
+  year" with a 30-day stay gives **S$700**. The first "maximum … 7 days" is the ICU cap; the right answer is S$3,000.
+- "S$100 per day, payable after the 3rd day … maximum of 30 days / The benefit is not payable if the stay is less than
+  7 days" with a 5-day stay gives **S$200**, where nothing is payable.
+
+Fix: compute only when the row and its continuation print exactly one daily figure, one start-day rule and one
+maximum-days figure, and no other day count or "not payable / less than / minimum / per admission" wording. Otherwise
+show the daily benefit as a fact.
+
+**R59-3 (Medium, wrong amount): the stay length can come from an unrelated number.** `stayDaysWritten` accepts any "N
+days" the household wrote. "Can I claim within 30 days?" lets a stay of 30 through and gives a S$600 card for a stay no
+one described. Fix: require the number beside stay words ("in hospital for 15 days", "stayed 15 nights", "15-day stay"),
+or ask.
+
+**R59-4 (Medium, borrowed condition): a condition travels between sub-benefits of one benefit.** In the Benefit Summary,
+"A. Death …" to "N. Natural Catastrophe" are not headings, so everything under "BENEFIT 2: GROUP PERSONAL ACCIDENT" is
+one section. The Comatose condition "must be confined to a Hospital for the duration of the Comatose state" is accepted
+on the **Hip fracture** row. It wrongly suggests a fracture claim needs a hospital stay. Fix: treat lettered or numbered
+sub-benefit titles ("M. Comatose State Lump Sum Benefit", "D. Injury due to Accident") as section ends for conditions, or
+keep conditions to the row's own sub-benefit.
+
+**R59-5 (Medium, wrong currency): currency inference on a page that names another currency.** "All amounts are in
+Singapore dollars unless stated otherwise." with a row "Medical expenses overseas (in US$)\t50,000.00" gives
+**S$50,000**. Fix: no inferred currency when the page says "unless stated otherwise/specified", or when the quoted row
+line or its column heading names another currency (US$, USD, RM, HK$, A$, €, £).
+
+**R59-6 (Low-Medium): a non-money figure on a declared-currency page becomes money.** "Currency : SGD / Units
+allocated\t1,250.00" gives an S$1,250 card. Fix: refuse when the row label names units, rate, age, year, points or
+factor.
+
+**Notes (Low):** the file-status facts come from the library record and read correctly. Identifier read-past keeps
+"Call 1250" blocked against S$1,250. One edge: a bare 6+ digit number that the documents print unformatted would be read
+past in prose. None exists in this snapshot.
+
+## Verdict on PR #82 at `39ab335`
+
+**Not ready.** R59-1 and R59-2 are wrong claimable amounts that the previous head refused, and R59-1 reopens R55-1.
+R59-3 to R59-5 should be fixed in the same pass; each needs one control. The other loosenings (scheme-title section, file
+facts, identifiers, unsigned figures on a schedule page) look right.
