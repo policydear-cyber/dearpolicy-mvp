@@ -50,7 +50,7 @@ import { pool } from "@/lib/db/client";
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
 import { enqueueStoragePurge, purgeSoon } from "@/lib/storage/purge";
-import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
+import { deleteHouseholdPassages, deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
@@ -1505,6 +1505,15 @@ export async function requestHouseholdDeletion(args: {
   await pool.query("DELETE FROM model_usage WHERE account_id=$1", [args.householdId]).catch((error: unknown) => {
     console.warn("model_usage cleanup after household deletion failed:", error instanceof Error ? error.message : String(error));
   });
+  // The cascade does not reach Pinecone either, which holds the text of every
+  // passage this household uploaded in a namespace of its own. Remove the
+  // whole namespace (best-effort, as for each document's passages above: the
+  // household is already gone, so a Pinecone outage must not fail it).
+  if (pineconeEnabled()) {
+    await deleteHouseholdPassages({ accountId: args.householdId }).catch((error: unknown) => {
+      console.warn("Pinecone cleanup after household deletion failed:", error instanceof Error ? error.message : String(error));
+    });
+  }
   // The accounts row -- and with it, via ON DELETE CASCADE, the
   // deletion_requests row created above and the deletion_audit_log row
   // just written -- no longer exists past this point. See this
