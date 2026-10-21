@@ -3538,3 +3538,71 @@ R70-1 (the merge conflict with #87 on the `document-meta` line) and R70-3 (accep
 ## Verdict on PR #89 at `14bc2d6`
 
 **Ready.**
+
+---
+
+# Round 72: PR #88 recheck at `0b8e364`
+
+What changed since round 68:
+- **`moneyTable`.** A "(S$)" heading now holds only until another unit heading or a prose line. Its own lines say
+  whether it is per visit.
+- **R59-6 word list.** More count words: plan, co-insurance, sessions, visits, period, term, survival, waiting.
+  "per visit/year" is stripped before the check, and "limit" no longer counts as money.
+- **Bill card.**
+  - It takes the bill and its currency from the household's own words (`moneyFiguresIn`).
+  - It refuses a per-day, per-week or annual row, and a bill the household gave for several visits.
+  - It shows only the limit, with no worked figure.
+- **Date.** The hook's date is now SGT.
+
+I re-ran the round 68 probes and added variants (scratchpad `r72/t68.ts`, on DC's snapshot plus one synthetic page per
+case).
+
+| Case | a085833 | 0b8e364 |
+|---|---|---|
+| Age limit 65 / Visit limit 12 / Physio sessions 6 | S$65 / S$12 / S$6 | dropped |
+| Co-insurance 20 / Plan 2 / Survival period 30 / Policy term 20 | S$20 / S$2 / S$30 / S$20 | dropped |
+| Waiting period (months) 3; a later "days" table | dropped | dropped |
+| Bill: the household wrote US$80, HK$800, A$800, NT$800, RM800 or "800 USD" | wrong bill card | no bill card |
+| Bill: a per-day row under an earlier per-visit heading | "Up to S$100 of S$800" | no bill card |
+| Bill: the household wrote S$800 and the model "$800" | — | card, bill shown as "S$800" (right) |
+| DC's A&E (PS p33 / BS p16), S$800 bill | S$100 + bill card | S$100 + bill card |
+| **Row `Physiotherapy\t80\t12` under columns "Limit Per Visit / Max visits"; the model claims 12** | **S$12** | **S$12** |
+| **`Maximum claims\t3`** | — | **S$3** |
+| **`Hospital stay limit (per admission)\t30`** | — | **S$30** |
+| Bill "$800 for her 2 A&E visits" | — | card: "above the S$100 limit, reimbursed only up to S$100" |
+
+R68-2, R68-4 and R68-5 are fixed. R68-3 is fixed for the per-day case. Most of R68-1 is fixed.
+
+## Findings
+
+**R72-1 (Medium, wrong amount; not in DC's snapshot). verify.ts:412-423.**
+- **Remaining shapes.**
+  - **Count column.** A row with several numeric cells is still priced cell by cell, so a count column under a
+    "(S$)" heading becomes money (S$12 visits).
+  - **Labels the word list misses.** "claims", "stay" and "admission" are not on the list, so S$3 and S$30 still
+    appear.
+- **Why a structural fix.** Word lists will keep missing shapes like these. Suggested rule:
+  - Price a whole cell only when the row has exactly one numeric cell, or when every numeric cell sits under a plan
+    column (the header lines name that many plans, as "Plan A / Plan B" or "(Superior) (Deluxe)" do on DC's pages).
+  - Also add claims, stay(s), admission(s) and nights to the count words.
+- **Effect on DC's pages.** None: "Annual Limits Per Policy Year\t1,000\t500" sits under two plan columns, and every
+  other row there has one cell.
+- **Tests.** Add the three rows above.
+
+**R72-2 (Low, bill card).** The several-visits guard only matches a number placed directly before "visits"
+(`MANY`). So "$800 for her 2 A&E visits" still makes a card that says the bill "could be reimbursed only up to
+S$100". For two visits that understates S$200. Suggested: refuse when the household's sentence about the bill has any
+number other than the bill next to visit/claim words within a few words. Or drop "only up to" from the text and just
+say the limit is per visit.
+
+Everything else holds:
+- No worked figure is shown.
+- A co-payment row is never treated as a limit.
+- The bill is shown exactly as the household wrote it.
+- The prompt line "A limit is not a payment" fits the standing rules.
+
+## Verdict on PR #88 at `0b8e364`
+
+**Not ready: one Medium (R72-1).** DC's live cases are right, and every round 68 probe that produced a wrong amount
+is fixed except the count-column shape. Tie whole-cell pricing to one-cell rows or plan columns, add the missing
+count words, and it is ready.
