@@ -2690,3 +2690,47 @@ was `personal_schedule` at d883368. The model's role then stands, so this is acc
 
 **Not ready yet:** R53-1 needs a stop-word guard on the two person-field patterns, a "master policy" skip, and one
 control. Everything else is confirmed.
+
+# Round 54: review of PR #84 at `97ceaae` (household deletion removes its Pinecone namespace)
+
+Method: read the diff (`lib/rag/pinecone.ts`, `lib/lifecycle/coordinator.ts`, the deletion regression script) and the
+callers in `lib/rag/ingest.ts` and `lib/rag/backfill.ts`. The DB regression suite was not run, because database suites
+are out of scope for this role.
+
+## Answers to the three questions
+
+- **Only the deleted household's namespace?** Yes.
+  - `deleteHouseholdPassages` sends `{deleteAll: true, namespace: namespaceFor(householdId)}`, and `namespaceFor` is
+    the identity function, the same one used for every upsert and search.
+  - It runs only after `deleteHousehold()` has returned. That call already passed the `SELECT … FROM accounts`
+    existence check and the owner/RLS check, so a forbidden or missing household throws before any Pinecone call.
+  - The test asserts exactly one delete-all, scoped to the deleted id, and that the other household's id never appears.
+- **Can a failed Pinecone call block or corrupt the deletion?** No.
+  - The call is awaited inside `.catch(...)`, after the irreversible DB delete. `apiKey()` and `indexHost()` errors are
+    rejections inside the async function, so they are caught too.
+  - It is skipped entirely when `PINECONE_API_KEY` is unset. A 404 (namespace never created) counts as success.
+- **What happens to the rest if it fails?** The household is already fully deleted, and the outcome is still
+  `completed`. Only a `console.warn` records the miss, and the namespace and its passage text remain.
+
+## Findings (all Low, none blocking)
+
+**R54-1 (Low, privacy retention): no retry.** If Pinecone is down at that moment, the deleted household's passage text
+stays in the index forever. Nothing reads it (the namespace is a deleted UUID), but it outlives the deletion. The
+per-document deletes at coordinator.ts:275 and :886 have the same pattern. Suggested later: record the namespace in the
+existing purge queue (`enqueueStoragePurge`-style) or the daily jobs cron, so it is retried.
+
+**R54-2 (Low, race): an upload being indexed during deletion can recreate the namespace.** `ingest.ts` inserts chunks
+and then upserts for up to 120 s (`indexPolicyPassages`). If the household is deleted between those steps, the upsert
+lands after the delete-all and recreates the namespace with that document's passages. Later chunk inserts fail on the
+foreign key, so only an upsert already in flight leaks. R54-1's retry would also close this.
+
+**R54-3 (Low, defensive):** `deleteHouseholdPassages` is exported and would send `namespace: ""` for an empty id, which
+Pinecone treats as the default namespace. Today the only caller has already proved the id exists. A one-line
+`if (!accountId.trim()) throw` would keep any future caller from emptying the default namespace.
+
+**R54-4 (Low):** the cleanup adds up to about 60 s (host lookup 30 s plus delete 30 s) to the DELETE response in the
+worst case, after the household is already gone. That is acceptable.
+
+## Verdict on PR #84 at `97ceaae`
+
+**Ready.** The scope is safe, and a failure cannot block or corrupt the deletion. R54-1 to R54-4 are follow-ups.
