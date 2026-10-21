@@ -3510,3 +3510,31 @@ link is ever minted for a deleted document.
 ## Verdict on PR #89 at `9efe42a`
 
 **Ready.** I found no cross-household path and no signed-URL leak. Resolve the #87 conflict at merge time.
+
+---
+
+# Round 71: PR #89 delta at `14bc2d6` (R70-2, R70-4)
+
+- **R70-4: fixed.**
+  - The format now comes from the file's first 64 bytes (`sniffFileFormat`, lib/documents/formats.ts:100). On
+    Supabase Storage they are fetched with a server-side `Range: bytes=0-63` request through a fresh signed URL. That
+    URL never leaves the server, and it comes from our own Supabase client, so there is no SSRF.
+  - A PDF redirects to a signed URL.
+  - JPEG, PNG, WebP and TIFF are re-encoded to JPEG.
+  - Anything else, including Word files, old .doc files and unrecognised bytes, gets a download signed URL
+    (`download=` makes Supabase send `attachment`), or `application/octet-stream` with `attachment` on local disk.
+  - A file is never opened inline as something its bytes are not.
+- **R70-2: fixed.** `limitInputPixels: 50_000_000` makes sharp refuse a larger image before decoding it. A failed or
+  oversized photo returns 422 JSON with the private headers.
+- **Unchanged and still OK.** Ownership and scan checks run before any storage access. The signed-URL TTL is 300 s.
+  Every response is no-store, no-referrer and nosniff. The tests were extended for the sniffed formats and the
+  422 case.
+- **New note (Low).** A request may now mint two signed URLs: one to sniff the bytes and one to download. Only the
+  second is ever sent to the browser. A missing or empty object makes the Range fetch throw, and the route returns
+  the plain 500 message.
+
+R70-1 (the merge conflict with #87 on the `document-meta` line) and R70-3 (accepted) still apply.
+
+## Verdict on PR #89 at `14bc2d6`
+
+**Ready.**
