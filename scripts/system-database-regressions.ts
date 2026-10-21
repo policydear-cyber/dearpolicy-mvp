@@ -1980,11 +1980,23 @@ async function main(){
       const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as {id:string;alternatives:{options:{amountText:string}[]}|null}[];
       for(const b of listed.filter(b=>ids.includes(b.id)))
         assert.deepEqual(b.alternatives?.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort(),"Benefits: the same group");
-      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
-      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+
+      // Critic R65-1: another member's own certificate that the reader did not confirm (same insurer and group number)
+      // names that member. It is their evidence, never this member's wording: none of its rows reach this ledger.
+      const otherCert=uuid(703003);
+      await doc(otherCert,"certificate",false,30,null,"Example Group Two");
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'ai_name_match',0.95)",[otherCert,people[1].id,account]);
+      await db.query(`INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES
+        ($1,$2,'Group Personal Accident','Hospital Cash for Accident',ARRAY['hospitalisation','accident']::text[],ARRAY['accident']::text[],'daily',777,'SGD',3,'Hospital Cash for Accident S$777 per day','[]'::jsonb,'[]'::jsonb,false,false)`,[account,otherCert]);
+      await seedLedger(account);
+      const mine=(await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).json()).rows as {policyId:string|null}[];
+      assert.equal(mine.some(r=>r.policyId===otherCert),false,"Another member's unconfirmed certificate is not this member's wording");
+      assert.equal((await db.query("SELECT 1 FROM coverage_rules WHERE policy_id=$1 AND family_member_id=$2",[otherCert,member])).rows.length,0);
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary,otherCert]]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary,otherCert]]);
       await db.query("DELETE FROM policy_coverages WHERE policy_id=$1",[cert]);
-      await db.query("DELETE FROM policy_members WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
-      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+      await db.query("DELETE FROM policy_members WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary,otherCert]]);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary,otherCert]]);
     });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);
