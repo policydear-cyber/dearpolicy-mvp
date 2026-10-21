@@ -22,7 +22,7 @@ import { loadHousehold, renderLibrary, type Household } from "./library";
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, chatRows, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -94,6 +94,12 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
+  if (fromRows.report && answer.statements) {
+    const { kept, refused } = keepLabelledAmounts(answer.statements, fromRows.report);
+    answer.statements = kept;
+    fromRows.report.dropped.push(...refused.map((st) => ({ why: "the amount lost its label to the checks", text: st.text })));
+    answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
+  }
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });

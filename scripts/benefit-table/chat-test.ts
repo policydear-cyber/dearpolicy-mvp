@@ -5,9 +5,9 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, renderTable } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
-import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -71,6 +71,10 @@ function answer(statements: Record<string, unknown>[], rs = rows) {
   const parsed = readModelAnswer(fromRows.json)!;
   const { answer: a, report } = verifyAnswer(HOUSE, parsed, ["How much?"]);
   if (process.env.DEBUG_CHAT) console.log(JSON.stringify({ st: parsed.statements, report }, null, 1));
+  // As the app's chat turn does (lib/simple-chat/hook.ts): unlabelled amounts refused, left-out amounts noted.
+  const { kept, refused } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  fromRows.report.dropped.push(...refused.map((st) => ({ why: "the amount lost its label to the checks", text: st.text })));
+  a.statements = noteLeftOutAmounts(kept, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   const amounts = (a.statements ?? []).filter((s) => s.amount).map((s) => ({ person: s.personName, text: s.text, amount: s.amount!.text }));
   return { amounts, dropped: fromRows.report.dropped, statements: a.statements ?? [] };
 }
@@ -119,14 +123,42 @@ test("an amount with no row, a made-up row, or another person's row is dropped",
   ]);
   assert.equal(r.amounts.length, 0);
   assert.deepEqual(r.dropped.map((d) => d.text), ["no row", "made-up row", "another person's row"]);
+  assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
+});
+test("money in the model's own sentence never removes what the amount is for (R90-1)", () => {
+  const r = answer([{ row: idOf("Lim Ah Kow", "Hospital cash"), person: "Lim Ah Kow", text: "Hospital cash pays S$999 a day, so S$9,990 for ten days." }]);
+  assert.equal(r.amounts.length, 1);
+  assert.match(r.amounts[0].amount, /50/);
+  assert.match(r.amounts[0].text, /^Hospital cash \(/);
+  assert.doesNotMatch(JSON.stringify(r.statements), /999|9,990/);
+});
+test("the model's sentence naming another benefit is not used: the row's own benefit is said (R90-2)", () => {
+  const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Death benefit pays this." }]);
+  assert.match(r.amounts[0]?.text ?? "", /^Ambulance Cost \(Group Scheme, Group Personal Accident\): up to this limit\.$/);
+  assert.doesNotMatch(JSON.stringify(r.statements), /Death benefit/);
+});
+test("with no table rows yet, an amount asked for is said plainly not to be ready (R90-3)", () => {
+  const r = answer([{ row: "R1", person: "Lim Ah Kow", text: "Hip." }], []);
+  assert.equal(r.amounts.length, 0);
+  assert.ok(r.statements.some((s) => s.text === NO_ROWS_YET), JSON.stringify(r.statements));
+  assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+});
+test("an amount whose sentence is not the server's label is refused after the checks", () => {
+  const report = { dropped: [], labels: ["Hip (Group Scheme)."] };
+  const { kept, refused } = keepLabelledAmounts([{ text: "Hip (Group Scheme).", amount: { text: "S$1" } }, { text: "Hip (Group Scheme)", amount: { text: "S$2" } }, { text: "A fact.", amount: null }], report);
+  assert.deepEqual(kept.map((s) => s.text), ["Hip (Group Scheme).", "A fact."]);
+  assert.deepEqual(refused.map((s) => s.text), ["Hip (Group Scheme)"]);
+  const noted = noteLeftOutAmounts([{ id: "left-out-fact", kind: "uncertainty", text: "I left out a point I couldn’t find in your documents." }], { dropped: [{ why: "x", text: "y" }], labels: [] }, (id, text) => ({ id, kind: "uncertainty", text }));
+  assert.deepEqual(noted.map((s) => s.id), ["left-out-amount"]);
+  assert.deepEqual(noteLeftOutAmounts([], { dropped: [], labels: [] }, (id, text) => ({ id, kind: "uncertainty", text })), []);
 });
 test("a row for a child says so with its amount (R89-1)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Hospital cash"), person: "Lim Ah Kow", text: "Hospital cash is paid per day." }]);
-  assert.match(r.amounts[0]?.text ?? "", /^For child:/);
+  assert.match(r.amounts[0]?.text ?? "", /^Hospital cash \(.*\), for child only: paid per day\.$/);
 });
 test("a non-guaranteed value is said to be projected", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Surrender value"), person: "Lim Ah Kow", text: "The surrender value." }]);
-  assert.match(r.statements.find((s) => /surrender/i.test(s.text))?.text ?? "", /^Projected, not guaranteed:/);
+  assert.match(r.statements.find((s) => /surrender/i.test(s.text))?.text ?? "", /^Surrender value \(SaveMore\): projected, not guaranteed\.$/);
 });
 test("a corrected sum insured is never shown as a printed amount: the chat points to Coverage", () => {
   const corrected = chatRows(tableWith([{ personId: "p1", coverKey: gpa, status: "corrected", sumInsured: 700000 }]), HOUSE);
@@ -180,6 +212,13 @@ async function integration() {
       percentOf: { percent: 75, baseAmount: "S$600,000", baseDocument: "D1", baseQuote: "Lim Ah Kow S$600,000 As of 01/01/2026" }, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] }), true);
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
     assert.match(t.saved.state.simpleChat.turns[0].report.dropped.map((d) => d.why).join(";"), /no table row/);
+    assert.ok((t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
+  });
+  await atest("in the app's chat turn, a made-up row is dropped and the household is told an amount was left out", async () => {
+    const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "amount", text: "made up", person: "Lim Ah Kow", document: null, quote: null, amount: "S$777", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: "R99" }] }), true);
+    assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
+    assert.ok((t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT));
+    assert.ok(!JSON.stringify(t.saved.answer).includes("777"));
   });
 }
 async function atest(name: string, fn: () => Promise<void>) {
