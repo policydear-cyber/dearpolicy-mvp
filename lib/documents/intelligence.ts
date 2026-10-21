@@ -63,6 +63,8 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
   if (!personal) return null;
   if (/\bcertificate\s+of\s+renewal\b|\brenewal\s+certificate\b/.test(t)) return "certificate";
   if (/\bpolicy\s+contract\b|\bpolicy\s+information\s+page\b/.test(t)) return "personal_schedule";
+  // A personal summary ("Your travel insurance summary") prints the policy's own number, not just the words.
+  if (/\b(?:insurance|policy)\s+summary\b/.test(t) && /\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)) return "personal_schedule";
   return null;
 }
 
@@ -73,6 +75,10 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   if (correspondence) return correspondence;
   const text = fullText(pages).toLowerCase();
   if (/product summaries|product summary/.test(text) && /refer to your certificate of insurance/.test(text)) return "product_summary" as const;
+  // Part 2 of a group certificate ("Highlights of Cover") is the scheme's generic terms for every member: without Part 1's
+  // particulars of the insured it is a benefits guide, even though it says "certificate of insurance" and "insured person".
+  const partTwoOnly = /certificate of insurance part 2|part 2:\s*highlights of cover/.test(text) && !/particulars of insured|insured person'?s? name|name of (?:the )?insured/.test(text);
+  if (partTwoOnly) return "benefit_guide" as const;
   if (/certificate of (group )?insurance/.test(text) && /(sum assured|effective date|particulars of insured|insured person)/.test(text)) return "certificate" as const;
   const titled = personalDocumentTitle(fullText(pages, 2));
   if (titled) return titled;
@@ -83,6 +89,8 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
   if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
+  // A document whose own title is "Policy wording" is the wording, whatever endorsements it describes.
+  if (/\bpolicy wording\b/.test(opening)) return "policy_wording" as const;
   if (/endorsement|policy amendment|amendment to policy/.test(text) && /(policy number|effective date|insured)/.test(text)) return "endorsement" as const;
   if (/renewal notice|renewal statement|renewal premium/.test(text)) return "renewal_statement" as const;
   if (/premium receipt|official receipt|payment receipt/.test(text) && /(premium|policy)/.test(text)) return "premium_receipt" as const;

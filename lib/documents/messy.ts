@@ -30,6 +30,8 @@ export function printedLines(text: string): string[] {
 }
 const TITLE = /\b(?:policy schedule|schedule of (?:insurance|benefits)|certificate of (?:group )?insurance|policy contract|renewal certificate|certificate of renewal|annual (?:policy )?statement|policy wording|product summary|benefit (?:illustration|summary)|policy information page)\b/i;
 
+const TITLE_LINE = new RegExp("^" + TITLE.source + "(?:\\s*\\(continued\\))?$", "i");
+
 /** Letters, claim decisions, bills, app screenshots and notes, by what the page itself prints; null for anything else. */
 export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]): CorrespondenceRole | null {
   const first = pages.slice(0, 6).map((p) => printedLines(p.text).join("\n")).join("\n");
@@ -50,8 +52,11 @@ export function correspondenceRole(pages: Pick<PdfPage, "text" | "legibility">[]
   // The family's own notes: typed ("my notes", "to do") or handwritten (the reader could only partly read it).
   if (!titled && (/\b(?:my|our) (?:own )?(?:insurance |policy |family )?notes\b|\bnotes? (?:for|to) (?:myself|self)\b|^\s*to[- ]do\b/im.test(headText) || /\bnot from the insurer/i.test(first))) return "personal_notes";
   if (!titled && pages.length <= 3 && pages.some((p) => p.legibility === "poor") && !/\b(?:policy|certificate) (?:no\.?|number)\b/i.test(first)) return "personal_notes";
+  // A cover letter sent with the policy itself ("Your policy is now ready", then the policy schedule on page 3) is the
+  // policy, not correspondence: a later page that opens with a line that IS a document title encloses that document.
+  const enclosesDocument = pages.slice(1, 6).some((p) => printedLines(p.text).slice(0, 4).some((line) => TITLE_LINE.test(line)));
   // Any other letter -- unless it is a notice the policy's own status rests on (renewal, premium due, lapse, receipt).
-  if (letter && !titled && !/\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapsed|grace period|reinstate\w*|official receipt|premium receipt|certificate)\b/i.test(first)) return "insurer_letter";
+  if (letter && !titled && !enclosesDocument && !/\b(?:renewal notice|premium notice|premium reminder|notice of lapse|lapsed|grace period|reinstate\w*|official receipt|premium receipt|certificate)\b/i.test(first)) return "insurer_letter";
   return null;
 }
 
