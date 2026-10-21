@@ -15,7 +15,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { statedCurrencyCode } from "@/lib/format/currency";
+import { formatMoney,statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -205,6 +205,38 @@ export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:str
     conditions:[],requirements:[],needsReview:false};
   return coverageForBenefit({...contract,coverages:contract.coverages.filter(c=>c.amount!=null&&c.amount>0)},stub);
 }
+/** Rows changed within a minute of this many other machine-made rows were changed by a machine, not a person: more
+ *  than a person edits by hand in a minute (Critic R76-1). The live older join stamped 52 rows within 12 seconds. */
+const MACHINE_BATCH=20;
+const WRONG_COVER_NOTE="This may be worked out from the wrong cover";
+/** The note for a changed row whose sum insured is another cover's, or null when it already says so. */
+function wrongCoverNote(stored:number,basis:number|null,currency:string,conditions:string[]|null){
+  if((conditions??[]).some(c=>c.startsWith(WRONG_COVER_NOTE)))return null;
+  const money=(v:number)=>formatMoney(v,currency);
+  return WRONG_COVER_NOTE+": "+money(stored)+" is the sum insured of another cover"+(basis!=null?"; the cover this pays under is "+money(basis):"")+". Check it before relying on it.";
+}
+async function refreshSeededRows(accountId:string,seeds:Seed[]){
+  if(!seeds.length)return;
+  const legacyOf=(s:Seed)=>s.seedKey.replace(/\|member:[^|]+$/,"");
+  const bySeedKey=new Map<string,Seed>();
+  for(const s of seeds){bySeedKey.set(s.seedKey,s);bySeedKey.set(legacyOf(s)+"#"+s.familyMemberId,s);}
+  const held=(await query<{id:string;seed_key:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;pays_kind:string;amount:string|null;currency:string;sum_basis:string|null;offset_days:number|null;maximum_days:number|null}>(
+    `SELECT id,seed_key,family_member_id::text,event_type,detail,cause,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days FROM coverage_rules
+      WHERE account_id=$1 AND seed_key=ANY($2::text[]) AND origin<>'person' AND status<>'rejected' AND updated_at=created_at`,
+    [accountId,[...new Set(seeds.flatMap(s=>[s.seedKey,legacyOf(s)]))]])).rows;
+  const n=(v:string|number|null|undefined)=>v==null||v===""?"":String(Number(v));
+  for(const row of held){
+    const seed=bySeedKey.get(row.seed_key)??bySeedKey.get(row.seed_key+"#"+row.family_member_id);
+    if(!seed||seed.familyMemberId!==row.family_member_id)continue;
+    const same=row.event_type===seed.eventType&&(row.detail??"")===(seed.detail??"")&&(row.cause??"")===(seed.cause??"")&&row.pays_kind===seed.paysKind
+      &&n(row.amount)===n(seed.amount)&&row.currency===seed.currency&&(seed.sumBasis==null||n(row.sum_basis)===n(seed.sumBasis))&&n(row.offset_days)===n(seed.offsetDays)&&n(row.maximum_days)===n(seed.maximumDays);
+    if(same)continue;
+    // Not a person's edit: updated_at is left alone, so the row stays the machine's to refresh.
+    await query(`UPDATE coverage_rules SET event_type=$3,detail=$4,cause=$5,pays_kind=$6,amount=$7,currency=$8,sum_basis=$9,offset_days=$10,maximum_days=$11,conditions=$12::text[],note=$13,quote=$14
+      WHERE account_id=$1 AND id=$2`,
+      [accountId,row.id,seed.eventType,seed.detail,seed.cause,seed.paysKind,seed.amount,seed.currency,seed.sumBasis??(row.sum_basis==null?null:Number(row.sum_basis)),seed.offsetDays,seed.maximumDays,seed.conditions??[],seed.note,seed.quote]);
+  }
+}
 /** Adds ledger rows for everything read so far that is not in the ledger yet. */
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
   await ensureLedgerSchema();
@@ -245,6 +277,11 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
     seeds.push(...mineSeeds);
   }
+  // A seed's key is fixed by the row it came from, so a row seeded under an older rule is never seeded again: it kept
+  // what that rule said (live, 21 Oct: a travel policy's liability-to-others row still "Accidental death S$500,000",
+  // seeded the day before liability rows stopped being read as the person's own death cover). A machine-made row nobody
+  // has touched takes what its seed says now. A row a person changed, and one they rejected, are left alone.
+  await refreshSeededRows(accountId,seeds);
   // A rule read from the wording ("100% of the Sum Insured") and the sum on
   // the certificate live in different documents of the same contract. Join
   // them here, once, so the row carries its own figure.
@@ -264,9 +301,19 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // dismemberment row still a percentage of the S$1,000,000 term life, not the S$600,000 personal accident cover).
   // A machine-made row whose basis is one of its contract's cover amounts was joined, not printed, so it is joined
   // again: moved to the cover it pays under, or cleared when that cannot be told. A basis no cover carries (a fixed
-  // limit the document printed) and a row a person changed are left alone.
-  const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string}>(
-    "SELECT id,policy_id,family_member_id,event_type,detail,cause,note,sum_basis::text FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NOT NULL AND policy_id IS NOT NULL AND origin<>'person' AND updated_at=created_at",[accountId]);
+  // limit the document printed) is left alone.
+  // An older version of this join wrote updated_at (live: 52 rows stamped within 12 seconds, 29 minutes after one
+  // seeding on 27 Sep), so updated_at alone cannot tell a person's edit. Neither can status: wording rows are seeded
+  // confirmed, and an edit can be sent as "proposed" (Critic R75-1, R75-2). What a person cannot do is change dozens of
+  // rows within a minute: a row stamped together with at least MACHINE_BATCH other machine-made rows was stamped by a
+  // machine and is joined again like an untouched one. Any other changed row may hold a person's figure: it is never
+  // changed silently; it says it may be worked out from the wrong cover.
+  const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string;currency:string;conditions:string[]|null;machine:boolean}>(
+    `SELECT c.id,c.policy_id,c.family_member_id,c.event_type,c.detail,c.cause,c.note,c.sum_basis::text,c.currency,c.conditions,
+       (c.updated_at=c.created_at OR (SELECT count(*) FROM coverage_rules o WHERE o.account_id=c.account_id AND o.id<>c.id AND o.origin<>'person'
+          AND o.updated_at<>o.created_at AND o.updated_at BETWEEN c.updated_at-interval '60 seconds' AND c.updated_at+interval '60 seconds')>=$2) AS machine
+     FROM coverage_rules c WHERE c.account_id=$1 AND c.pays_kind='percent_of_sum' AND c.sum_basis IS NOT NULL AND c.policy_id IS NOT NULL AND c.origin<>'person' AND c.status<>'rejected'`,
+    [accountId,MACHINE_BATCH]);
   for(const row of joined.rows){
     const contract=contracts.find(c=>c.ownerId===row.family_member_id&&[...c.documents,...c.references].some(d=>d.id===row.policy_id));
     if(!contract)continue;
@@ -277,6 +324,11 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     if(basis===stored)continue;
     // Clearing applies only when the covers carry different amounts: then the stored one may be the wrong one.
     if(basis==null&&new Set(contract.coverages.filter(c=>c.amount!=null&&c.amount>0).map(c=>Number(c.amount))).size<2)continue;
+    if(!row.machine){
+      const note=wrongCoverNote(stored,basis,row.currency,row.conditions);
+      if(note)await query("UPDATE coverage_rules SET conditions=array_append(coalesce(conditions,ARRAY[]::text[]),$3) WHERE account_id=$1 AND id=$2",[accountId,row.id,note]);
+      continue;
+    }
     await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,basis]);
   }
   // Round 10: one lookup for the keys already in the ledger and one insert for
