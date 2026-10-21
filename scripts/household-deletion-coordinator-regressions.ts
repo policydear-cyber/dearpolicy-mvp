@@ -43,6 +43,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pool } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/household/repo";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
+import { deleteHouseholdPassages } from "@/lib/rag/pinecone";
 
 const SQL_FILES = [
   "sql/schema.sql",
@@ -218,6 +219,76 @@ async function runDatabaseTests() {
         );
       },
     );
+    // Pinecone holds each household's passage text in a namespace of its own
+    // (lib/rag/pinecone.ts); the database cascade cannot reach it. Stubbed at
+    // fetch with a resolved index host -- no network, no real index.
+    const withPinecone = async (respond: (url: string) => Response, fn: (calls: { url: string; body: unknown }[]) => Promise<void>) => {
+      const cache = globalThis as typeof globalThis & { __dearpolicyPineconeHost?: Promise<string> };
+      const originalFetch = globalThis.fetch, originalKey = process.env.PINECONE_API_KEY, originalHost = cache.__dearpolicyPineconeHost;
+      const calls: { url: string; body: unknown }[] = [];
+      process.env.PINECONE_API_KEY = "test-key-not-real";
+      cache.__dearpolicyPineconeHost = Promise.resolve("https://index.pinecone.test");
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (!url.startsWith("https://index.pinecone.test")) return originalFetch(input, init);
+        calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+        return respond(url);
+      }) as typeof fetch;
+      try {
+        await fn(calls);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.PINECONE_API_KEY; else process.env.PINECONE_API_KEY = originalKey;
+        cache.__dearpolicyPineconeHost = originalHost;
+      }
+    };
+
+    await testAsync("deleting a household also deletes its whole Pinecone namespace, and no other household's", async () => {
+      const householdId = await seedHousehold(pool);
+      const ownerId = await seedMember(pool, householdId, "owner");
+      const otherId = await seedHousehold(pool, "Other household");
+      await withPinecone(() => new Response("{}", { status: 200 }), async (calls) => {
+        await requestHouseholdDeletion({ actorUserId: ownerId, householdId, idempotencyKey: "delete-pinecone" });
+        const deletes = calls.filter((c) => c.url.endsWith("/vectors/delete"));
+        assert.deepEqual(deletes.map((c) => c.body), [{ deleteAll: true, namespace: householdId }],
+          "exactly one delete-all, scoped to the deleted household's namespace");
+        assert.ok(!JSON.stringify(calls).includes(otherId), "another household's namespace must never be touched");
+      });
+    });
+
+    await testAsync("a Pinecone outage or a never-created namespace does not fail an already-completed household deletion", async () => {
+      for (const status of [500, 404]) {
+        const householdId = await seedHousehold(pool);
+        const ownerId = await seedMember(pool, householdId, "owner");
+        await withPinecone(() => new Response("unavailable", { status }), async (calls) => {
+          const outcome = await requestHouseholdDeletion({ actorUserId: ownerId, householdId, idempotencyKey: `delete-pinecone-${status}` });
+          assert.equal(outcome.status, "completed");
+          assert.equal(calls.length, 1, "the cleanup was attempted");
+        });
+        const remaining = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM accounts WHERE id=$1`, [householdId]);
+        assert.equal(remaining.rows[0].n, "0");
+      }
+    });
+
+    await testAsync("a blank household id never becomes a delete-all on Pinecone's default (\"\") namespace", async () => {
+      await withPinecone(() => new Response("{}", { status: 200 }), async (calls) => {
+        for (const accountId of ["", "   ", "\t\n"]) {
+          await assert.rejects(() => deleteHouseholdPassages({ accountId }), /without a household id/);
+        }
+        await assert.rejects(() => deleteHouseholdPassages({ accountId: undefined as unknown as string }), /without a household id/);
+        assert.equal(calls.length, 0, "no request may reach Pinecone");
+      });
+    });
+
+    await testAsync("with Pinecone not configured, household deletion makes no Pinecone call", async () => {
+      const householdId = await seedHousehold(pool);
+      const ownerId = await seedMember(pool, householdId, "owner");
+      await withPinecone(() => new Response("{}", { status: 200 }), async (calls) => {
+        delete process.env.PINECONE_API_KEY;
+        await requestHouseholdDeletion({ actorUserId: ownerId, householdId, idempotencyKey: "delete-no-pinecone" });
+        assert.equal(calls.length, 0);
+      });
+    });
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;
@@ -228,7 +299,7 @@ async function runDatabaseTests() {
 async function main() {
   await runDatabaseTests();
   console.log(
-    `household-deletion regressions passed: ${cases} cases (owner deletion succeeds, cascades to household_members/family_members, this flow's own deletion_requests/deletion_audit_log rows are provably cascade-gone afterward, RLS-enforced forbidden deletion, missing-household refusal, clean retry-after-completion refusal).`,
+    `household-deletion regressions passed: ${cases} cases (owner deletion succeeds, cascades to household_members/family_members, this flow's own deletion_requests/deletion_audit_log rows are provably cascade-gone afterward, RLS-enforced forbidden deletion, missing-household refusal, clean retry-after-completion refusal, Pinecone namespace removed and best-effort, blank household id refused).`,
   );
 }
 

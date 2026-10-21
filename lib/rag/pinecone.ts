@@ -268,6 +268,25 @@ export async function deletePolicyPassages(args: { accountId: string; policyId: 
   return ids.length;
 }
 
+/** Removes every passage of a household: its whole namespace. Deleting a
+ * household goes through here, so the passage text Pinecone stores does not
+ * outlive the household it belonged to. A namespace that was never created
+ * (a household that uploaded nothing) is already in the wanted state. */
+export async function deleteHouseholdPassages(args: { accountId: string }) {
+  // "" is Pinecone's default namespace: a blank id must never become a
+  // delete-all there.
+  if (!(args.accountId ?? "").trim()) throw new Error("Refusing to delete Pinecone passages without a household id");
+  const host = await indexHost();
+  const response = await fetch(host + "/vectors/delete", {
+    method: "POST",
+    body: JSON.stringify({ deleteAll: true, namespace: namespaceFor(args.accountId) }),
+    headers: { "Api-Key": apiKey(), "X-Pinecone-Api-Version": API_VERSION, "content-type": "application/json" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (response.status === 404) return;
+  if (!response.ok) throw new Error(`Pinecone request to /vectors/delete failed (${response.status}): ${await response.text()}`);
+}
+
 /** How many passages of one document the index is holding. Used to decide
  * whether a document uploaded before Pinecone existed still needs indexing,
  * which is asked of Pinecone rather than tracked in a column so the answer
