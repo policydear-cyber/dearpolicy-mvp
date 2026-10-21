@@ -4271,3 +4271,17 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 - Residual limits, not blockers:
   - The 3-line window (H8).
   - The detection is wording-based, so a cap phrase with no cap word at all would not be caught.
+
+## R105 — PR #96 delta 7326b4f → cce0e43 (tab next-row cells left out of `near`)
+
+**Verdict: READY with a one-token change: in the new condition, use `NEAR_CAP.test(label)` instead of `CONNECTIVE.test(label)`.** The swap only withholds more, so it doesn't need another review.
+
+- I re-ran all 60 earlier layouts, and none changed. G3 (a tab neighbour "Wrist\t20% up to S$5,000" with Wrist's cap claimed) still withholds, because the claimed cap isn't in Hip's row. With nothing claimed, Hip now correctly shows uncapped.
+- New layouts:
+  - K1: the Hip line is followed by its own "up to S$50,000" on the next line. It still withholds.
+  - K2: a "Maximum" label cell stays in `near`, so the row withholds.
+  - K3: a lower-case label never matches, so the row withholds.
+  - K4: a label cell followed by a cap cell with no % withholds.
+- **R105-1 (narrow)** K5: "Hip\t75% of Sum Insured\tPayable up to\t50% of S$100,000" shows Hip uncapped.
+  - The label cell has cap words, but it doesn't *start* with one, so `CONNECTIVE` misses it.
+  - Test the label with `NEAR_CAP` (cap words anywhere, including "limit"). A real next-row label rarely contains cap words, so this costs almost nothing.
