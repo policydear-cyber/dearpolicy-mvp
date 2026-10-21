@@ -273,6 +273,9 @@ export async function deletePolicyPassages(args: { accountId: string; policyId: 
  * outlive the household it belonged to. A namespace that was never created
  * (a household that uploaded nothing) is already in the wanted state. */
 export async function deleteHouseholdPassages(args: { accountId: string }) {
+  // "" is Pinecone's default namespace: a blank id must never become a
+  // delete-all there.
+  if (!(args.accountId ?? "").trim()) throw new Error("Refusing to delete Pinecone passages without a household id");
   const host = await indexHost();
   const response = await fetch(host + "/vectors/delete", {
     method: "POST",

@@ -43,6 +43,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pool } from "@/lib/db/client";
 import { NotFoundError } from "@/lib/household/repo";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
+import { deleteHouseholdPassages } from "@/lib/rag/pinecone";
 
 const SQL_FILES = [
   "sql/schema.sql",
@@ -269,6 +270,16 @@ async function runDatabaseTests() {
       }
     });
 
+    await testAsync("a blank household id never becomes a delete-all on Pinecone's default (\"\") namespace", async () => {
+      await withPinecone(() => new Response("{}", { status: 200 }), async (calls) => {
+        for (const accountId of ["", "   ", "\t\n"]) {
+          await assert.rejects(() => deleteHouseholdPassages({ accountId }), /without a household id/);
+        }
+        await assert.rejects(() => deleteHouseholdPassages({ accountId: undefined as unknown as string }), /without a household id/);
+        assert.equal(calls.length, 0, "no request may reach Pinecone");
+      });
+    });
+
     await testAsync("with Pinecone not configured, household deletion makes no Pinecone call", async () => {
       const householdId = await seedHousehold(pool);
       const ownerId = await seedMember(pool, householdId, "owner");
@@ -288,7 +299,7 @@ async function runDatabaseTests() {
 async function main() {
   await runDatabaseTests();
   console.log(
-    `household-deletion regressions passed: ${cases} cases (owner deletion succeeds, cascades to household_members/family_members, this flow's own deletion_requests/deletion_audit_log rows are provably cascade-gone afterward, RLS-enforced forbidden deletion, missing-household refusal, clean retry-after-completion refusal, Pinecone namespace removed and best-effort).`,
+    `household-deletion regressions passed: ${cases} cases (owner deletion succeeds, cascades to household_members/family_members, this flow's own deletion_requests/deletion_audit_log rows are provably cascade-gone afterward, RLS-enforced forbidden deletion, missing-household refusal, clean retry-after-completion refusal, Pinecone namespace removed and best-effort, blank household id refused).`,
   );
 }
 
