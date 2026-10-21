@@ -226,8 +226,10 @@ function checkAmount(st: ModelStatement, found: Found, household: Household, per
   if (st.percentOf && st.percentOf.percent > 0) {
     const pct = st.percentOf.percent;
     const page = doc.pages.find((p) => p.page === found.page)!;
-    // The percentage must be printed on the row's own line (the first quoted words), not in a later joined passage.
-    if (!new RegExp(`(?<![\\d.])${String(pct).replace(".", "\\.")}\\s?(?:%|per\\s?cent)`, "i").test(rowLine(page.text, found.offset).text)) return { ok: false, why: "the percentage is not on the quoted row" };
+    // The percentage must be the row's own compensation figure: printed on the row's line (the first quoted words), and the
+    // last percentage on it, since a row label can print thresholds ("Equals to or greater than 8%	100%", R55-1).
+    const printedPcts = [...rowLine(page.text, found.offset).text.matchAll(/(?<![\d.])(\d+(?:\.\d+)?)\s?(?:%|per\s?cent)/gi)].map((m) => Number(m[1]));
+    if (!printedPcts.length || printedPcts.at(-1) !== pct) return { ok: false, why: "the percentage is not the quoted row's own figure" };
     const printed = rowBase(page.text, found.offset);
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);

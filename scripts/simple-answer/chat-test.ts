@@ -469,6 +469,8 @@ async function main() {
     const one = (quote: string, percent: number) => verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022", quote, percent)] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
     assert.deepEqual(one("Death due to natural catastrophe\t15% of Sum Insured", 15), []);
     assert.deepEqual(one("- Equals to or greater than 8%\t100%", 100), ["S$400,000"]);
+    // R55-1: a threshold in the row label is never the row's percentage.
+    assert.deepEqual(one("- Equals to or greater than 8%\t100%", 8), []);
     assert.deepEqual(one("Disappearance\t100% of Sum Insured", 100), ["S$400,000"]);
   });
 
@@ -615,6 +617,10 @@ async function main() {
       assert.deepEqual(one("Product Summary.pdf", "Death due to natural catastrophe\t15% of Sum Insured", 15), []);
       assert.deepEqual(one("Product Summary.pdf", "Comatose State Lump Sum Benefit\t15% of Sum Insured or", 15), []);
       assert.deepEqual(one("Product Summary.pdf", "- Equals to or greater than 8%\t100%", 100), ["S$600,000"]);
+      assert.deepEqual(one("Product Summary.pdf", "- Equals to or greater than 8%\t100%", 8), []);
+      assert.deepEqual(one("Product Summary.pdf", "Head - Equals to or greater than 2% but less than 5%\t50%", 5), []);
+      assert.deepEqual(one("Product Summary.pdf", "Head - Equals to or greater than 2% but less than 5%\t50%", 2), []);
+      assert.deepEqual(one("Product Summary.pdf", "Head - Equals to or greater than 2% but less than 5%\t50%", 50), ["S$300,000"]);
       // Control: an uncapped row on the same kind of line still works out.
       assert.deepEqual(one("Product Summary.pdf", "Hip\t75%", 75), []);
       assert.deepEqual(one("Benefit Summary.pdf", "Hip\t75%", 75), ["S$450,000"]);
