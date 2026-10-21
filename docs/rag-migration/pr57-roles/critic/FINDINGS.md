@@ -3629,3 +3629,38 @@ count words, and it is ready.
 ## Verdict on PR #87 at `a77723b`
 
 **Ready.**
+
+---
+
+# Round 74: PR #88 delta at `53f92d2` (R72-1, R72-2)
+
+What changed:
+- **One figure per row.** A whole cell under "(S$)" is priced only when its row prints exactly one numeric cell, or
+  exactly one per "Plan X" column named in the heading's own lines.
+- **More count words.** Claims, stays, admissions and nights are added.
+- **Several visits.** `MANY` now allows up to three words between a count and what it counts, and refuses any plural
+  visits/claims/bills/admissions/sessions/consultations/trips, or "twice".
+
+I re-ran the probes (scratchpad `r72/t68.ts` and `r72/t74.ts`, on DC's snapshot):
+
+| Case | 0b8e364 | 53f92d2 |
+|---|---|---|
+| `Physiotherapy\t80\t12` under "Limit Per Visit / Max visits", model claims 12 | **S$12** | dropped |
+| `Maximum claims\t3` / `Hospital stay limit (per admission)\t30` | **S$3 / S$30** | dropped |
+| Age limit, co-insurance, plan, sessions, survival, term (round 68 set) | dropped | dropped |
+| Bill "$800 for her 2 A&E visits" / "for 3 A&E visits" | card "only up to S$100" | no bill card |
+| Bill, the household wrote S$800 and the model "$800" | card | card (right) |
+| DC's PS p33 / BS p16: A&E 100 with an $800 bill | S$100 + card | S$100 + card |
+| DC's PS p33 / BS p16: Non-Panel GP 30 | S$30 | S$30 |
+| DC's PS p33 / BS p16: "Annual Limits Per Policy Year 1,000 500", Plan B | S$500 | S$500 (two plan columns) |
+
+R72-1 and R72-2 are fixed. I found no new wrong-amount path.
+
+**Note (Low, fails safe).** In a row with a money cell beside a count cell, the money figure is now dropped too
+(`Physiotherapy\t80\t12`, claimed 80, gives no card). That is a missing card, not a wrong amount, and the model's text
+still states the limit. The plan count only recognises "Plan A/B/1/2" labels. A table whose plan columns are named
+otherwise ("Silver/Gold") prices only its one-cell rows, which also fails safe.
+
+## Verdict on PR #88 at `53f92d2`
+
+**Ready.**
