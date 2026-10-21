@@ -940,6 +940,46 @@ async function main() {
     assert.equal(q9.bottomLine, "No cover in Ah Kow's documents pays a GP bill.", "Q9 the finding leads over a fracture amount");
   });
 
+  // TE-EXTRA (#91): the "not shown to be covered" card never appears where a cover for that bill may exist.
+  const probe91: string[] = [];
+  {
+    const GP = "Benefits Limits Per Visit\n(S$)\nNon-Panel General Practitioner\t30\nFor claims matters, please contact the Customer Service Hotline at 6123 4567.";
+    const FREE = "Personal Accident Benefits\nHip\t75%\nFor claims matters, please contact the Customer Service Hotline at 6123 4567.";
+    const gp = R59("Outpatient9.pdf", GP), free = R59("Accident9.pdf", FREE);
+    const none = (bill: string | null = "$800", person = "Ah Kow", text = "No cover in Ah Kow's documents pays a GP bill.") => st({ kind: "not_found", text, person, ofBill: bill ? { bill } : null });
+    const limit = (ofBill: { bill: string } | null) => st({ kind: "amount", text: "GP visits are covered up to a limit.", person: "Ah Kow", document: "D7", quote: "Non-Panel General Practitioner\t30", amount: "30", ofBill });
+    const uncovered = (h: Household, s: ModelStatement[], written: string[]) => r59(h, s, written).answer.statements!.filter((x) => x.id.endsWith("-bill") && x.kind === "not_found");
+    const expect = (label: string, got: { text: string; amount?: unknown }[], n: number, starts?: string) => {
+      const ok = got.length === n && got.every((x) => (x.amount ?? null) === null) && (!starts || got[0]?.text.startsWith(starts));
+      if (!ok) probe91.push(label);
+      console.log(`${ok ? "ok" : "PROBE FAIL"} - TE-EXTRA #91 ${label}: ${got.length} card(s) ${JSON.stringify(got.map((x) => x.text.slice(0, 60)))}`);
+    };
+    const other = (name: string, text: string, extra: Partial<Household["documents"][number]> = {}) => ({ ...free, documents: [...free.documents, { ...free.documents.at(-1)!, policyId: "cccccccc-0000-0000-0000-000000000009", name, pages: [{ page: 1, text }], ...extra }] });
+    // My first-round probes, now asserted.
+    expect("Q1 a GP limit shown without ofBill", uncovered(gp, [limit(null), none()], ["GP bill was $800, can he claim"]), 0);
+    expect("Q2 a GP limit whose bill card is refused (two visits)", uncovered(gp, [limit({ bill: "$800" }), none()], ["his 2 GP visits came to $800, can he claim"]), 0);
+    expect("Q3 the model says not found, the document prints a GP limit", uncovered(gp, [none()], ["GP bill was $800, can he claim"]), 0);
+    expect("Q4 a premium, not a bill", uncovered(free, [none()], ["my premium is $800 a year; can he claim the GP visit?"]), 0);
+    expect("Q5 two findings, one bill", uncovered(free, [none(), none("$800", "Ah Kow", "Outpatient Medicare is not on his certificate.")], ["GP bill was $800"]), 1);
+    expect("Q6 a person not in the household", uncovered(free, [none("$800", "Tan Ah Beng")], ["GP bill was $800"]), 0);
+    expect("Q8 the finding's own figure", uncovered(free, [none("$800", "Ah Kow", "No cover pays the $800 GP bill.")], ["GP bill was $800"]), 1, "The $800 bill");
+    expect("Q9 a fracture amount beside it (card allowed)", uncovered(free, [st({ kind: "amount", text: "Hip fracture.", person: "Ah Kow", document: "D7", quote: "Hip\t75%", percentOf: { percent: 75, baseAmount: "S$5,000" } }), none()], ["he fell, broke his hip, GP bill was $800"]), 1);
+    expect("Q10 800 dollars", uncovered(free, [none("800 dollars")], ["the GP bill was 800 dollars"]), 1, "The bill of 800 dollars");
+    expect("Q12 the limit takes the bill", uncovered(gp, [limit({ bill: "$800" }), none()], ["GP bill was $800"]), 0);
+    // New: other ways a document can print the cover without the household's word for it.
+    expect("N1 the bill's kind is not said", uncovered(free, [none()], ["the bill was $800, can he claim"]), 0);
+    expect("N2 polyclinic bill, document prints 'Polyclinic 20'", uncovered(other("Clinic.pdf", "Polyclinic\t20 per visit"), [none()], ["his polyclinic bill was $800"]), 0);
+    expect("N3 family doctor bill, document prints a GP limit", uncovered(gp, [none()], ["the family doctor bill was $800"]), 0);
+    expect("N4 GP bill, document prints 'Outpatient Medicare' with 'Doctor consultation 30' below", uncovered(other("Medicare.pdf", "OUTPATIENT MEDICARE\nDoctor consultation\t30"), [none()], ["GP bill was $800"]), 0);
+    expect("N5 GP bill, document prints 'Clinical treatment by a doctor S$40'", uncovered(other("Doctor.pdf", "Clinical treatment by a registered medical practitioner\tS$40 per visit"), [none()], ["GP bill was $800"]), 0);
+    expect("N6 a GP figure only in another person's document (card allowed)", uncovered(other("Spouse.pdf", "Non-Panel General Practitioner\t30", { linkedPeople: ["Lim Mei Mei"] }), [none()], ["GP bill was $800"]), 1);
+    expect("N7 GP named only beside a year (card allowed)", uncovered(other("Notes.pdf", "General Practitioner panel list updated 2025"), [none()], ["GP bill was $800"]), 1);
+    expect("N8 a GP figure in an unreadable document (card allowed)", uncovered(other("Scan.pdf", "Non-Panel General Practitioner\t30", { processingStatus: "failed" }), [none()], ["GP bill was $800"]), 1);
+    expect("N9 dental bill, document prints 'Dental treatment 300'", uncovered(other("Dental.pdf", "Dental treatment due to accident\t300"), [none("$800", "Ah Kow", "No cover pays a dental bill.")], ["the dental bill was $800"]), 0);
+    expect("N10 A&E bill, document prints 'Accident & Emergency 100'", uncovered(other("AE.pdf", "Accident & Emergency treatment\t100"), [none("$800", "Ah Kow", "No cover pays an A&E bill.")], ["the A&E bill was $800"]), 0);
+    expect("N11 GP bill, document prints 'GP\tS$30' in a document linked to nobody", uncovered(other("Scheme.pdf", "GP\tS$30", { linkedPeople: [] }), [none()], ["GP bill was $800"]), 0);
+  }
+
   await check("TE #88 mutations: each table and bill rule holds on its own", () => {
     const one = (text: string, quote: string, amount: string) => amounts(r59(R59("Table3.pdf", text), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount })]).answer);
     assert.deepEqual(one("Premium (S$) payable\nSpecialist\t100", "Specialist\t100", "100"), [], "a heading inside a line");
@@ -1143,6 +1183,7 @@ async function main() {
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
   assert.deepEqual(probeFails, [], "TE-EXTRA #88 wrong-amount probes");
+  assert.deepEqual(probe91, [], "TE-EXTRA #91 uncovered-bill probes");
   console.log(`${passed} checks passed`);
 }
 
