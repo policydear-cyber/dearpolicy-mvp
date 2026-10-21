@@ -96,7 +96,10 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
   let otherPercent = false;
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
-    near.push(tail);
+    // A tab cell holding its own label and then a cell with its own percentage is the next row ("Hip\t75%\tWrist\t20% up
+    // to S$5,000"): its limit is that row's, not near this one (follow-up to TE L22 control).
+    const nextRowCells = tail.match(/^\t+([A-Z][^\t%\d]*)\t+[^\t]*\d\s*%/);
+    if (!nextRowCells || CONNECTIVE.test(nextRowCells[1])) near.push(tail);
     // In a two-column extraction the rest of the line may hold the next row (TE L19-L23): only the part before the next
     // tab cell or the next label with a percentage can be this row's.
     const cell = tail.split("\t").find((c) => c.trim()) ?? "";
