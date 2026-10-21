@@ -4178,3 +4178,33 @@ Re-ran all 29 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
   - Add F1 to F3 as tests.
 
 With this fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R101 — PR #96 delta 1eaa9f8 → d3883e2 (fail-safe "cap word near the row" rule)
+
+**Verdict: NOT READY.** Two regressions show a wrong amount, and both are small fixes.
+
+I re-ran all 37 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
+- F1 to F3 (R100) are fixed.
+- All the neighbour-cap layouts still withhold the amount: N1, B1 to B5, D1, D2, E4, E6 to E8, F4, G3 and G5.
+
+- **R101-1 (uncapped figure, regression)** E3: the page reads "Hip\t75% of Sum Insured\nfor each fracture\nas certified by a doctor\nup to S$50,000", and the cap is not read.
+  - At 1eaa9f8 this was withheld. Now it gives `capUnread=false`, so 75% of the sum insured shows with no cap.
+  - Cause: the loop now stops after `below < LINES_BELOW` (2 lines). Before, the stop was `unjoined.length < LINES_BELOW + 1` (3 lines). The "up to" line is the third non-joined line, so nobody looks at it.
+  - Fix: restore the 3-line window.
+- **R101-2 (cap read while an alternative limit is printed, regression)** G1: the page reads "Hip 75% of Sum Insured up to S$50,000 or 10% of annual salary, whichever is lower", and the cap 50,000 is claimed.
+  - The new "next label with a %" split cuts the tail at " or 10% …". So "up to S$50,000" joins the row, the cap is accepted, and Hip shows min(75% SI, S$50,000). The lower "10% of annual salary" limit is ignored.
+  - At 1eaa9f8 the tail had its own %, so it was not joined and the row withheld.
+  - G2 is the same text on the next line ("…up to S$50,000\nor 10% of annual salary, whichever is lower"). It also accepts the cap. That was already the case at 1eaa9f8, so it is not a regression.
+  - Fix: when a claimed cap is accepted, still withhold if the rest of the row's line, or a connective line below, has a percentage of its own. That is a second limit the table can't work out. Then the split only needs to keep the neighbour's cap out of the row.
+- Add E3, G1 and G2 as tests.
+
+**Non-blocking (over-refusal):**
+- G4: in "Hip\t75% of Sum Insured\tup to S$50,000", the row withholds even with the cap read. `tail.split("\t")[0]` is empty when the tail starts with a tab, so the row's own cap cell is never joined.
+  - This will hit every tab table with a cap column. It is safe but likely common.
+  - Suggested fix: take the first non-empty cell.
+- G6: a lower neighbour "Transport up to S$300" within two lines withholds the amount. This is the accepted cost of the rule.
+
+**Fixture edit ("Ambulance Cost up to $500 per incident" changed to tab cells): fair.**
+- The real certificate's extracted quote in run-02 is "Ambulance Cost*\tUp to S$500 per incident", with tab cells.
+- So the edit makes the fixture match the real layout. It does not hide a real loss.
+- The cost (an untabbed neighbour with a cap withholds the row above it) is safe and logged in COVERAGE-PLAN line 79. I accept it.
