@@ -564,13 +564,17 @@ function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Poli
   const summary = covered.map((p) => p.planTier ? `${p.name} (${p.planTier})` : p.name).join(", ");
   const planMissing = tiers.length > 0 && covered.some((p) => !p.planTier);
   // Always one line until "Change" opens it: a library of reference documents would otherwise be a wall of empty choices.
-  // With nobody linked yet, the line says so and what choosing does.
-  if (!open) return <div className={`covers-summary${covered.length ? "" : " empty"}`} data-testid="covers-picker">
+  // A reference document already used as matching wording for someone's plan says whose; only one linked to nobody at
+  // all says "nobody yet" and what choosing does.
+  const linked = covered.length > 0 || referenceLinks.length > 0;
+  if (!open) return <div className={`covers-summary${linked ? "" : " empty"}`} data-testid="covers-picker">
     {covered.length
       ? <span><b>Covers</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
-      : <span><b>Covers</b> nobody yet<small className="covers-plan-missing"> · choose who it covers so answers can use it</small></span>}
+      : referenceLinks.length
+        ? <span><b>Used for</b> {referenceLinks.join(", ")}<small className="covers-plan-missing"> · as the wording for their plan</small></span>
+        : <span><b>Covers</b> nobody yet<small className="covers-plan-missing"> · choose who it covers so answers can use it</small></span>}
     {saved && <span className="covers-saved" role="status">Saved</span>}
-    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{covered.length ? "Change" : "Choose"}</button>
+    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{linked ? "Change" : "Choose"}</button>
   </div>;
   return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
     <strong>Who does this document cover?</strong>

@@ -857,6 +857,10 @@ table { font-variant-numeric: tabular-nums; }
 .benefit-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .benefit-head small { color: var(--muted); }
 .benefit-item p { margin: 0; }
+/* A document's own file name (one long word, like Product_Summary_GroupPersonalAccident_2026_v3.pdf) breaks inside the
+ * card on a phone instead of widening the page. */
+.benefit-item > *, .benefit-head > * { min-width: 0; overflow-wrap: anywhere; }
+.schedule-group .section-heading { min-width: 0; overflow-wrap: anywhere; }
 /* Coverage: person, then kind of cover. The glance (kinds found, main kinds not found) comes before any row. */
 .coverage-person .section-heading { margin-bottom: 6px; }
 .coverage-glance { display: grid; gap: 8px; margin-bottom: 14px; }
