@@ -3076,3 +3076,28 @@ Add the Charmaine-travel control.
 ## Verdict on PR #82 at `844e968`
 
 **Not ready, one small fix:** R62-1. Everything from R59 and R60 is fixed and confirmed.
+
+# Round 63: review of PR #86 at `c0dbbb9` (reference summaries: "Used for …"; phone Benefits sideways scroll)
+
+Method: read the diff (`app/policies/page.tsx`, `app/globals.css`, two e2e specs). Browser tests were not run.
+
+- **No claim of personal cover.**
+  - `covered` still excludes `scheme_reference_match` links (page.tsx:542), so the "Covers …" line is only ever built
+    from personal links.
+  - A summary linked only by a scheme match now reads "**Used for** Desmond, Charmaine · as the wording for their plan".
+    It does not say "Covers", it names the role (wording for their plan), and the names come from the policy's own
+    `linked_people` in this household.
+  - A document with no links of either kind still says "Covers nobody yet · choose who it covers…".
+  - The open picker keeps "Also available as matching wording for …" (page.tsx:599), and nothing new is written to the
+    database.
+- **Button:** it now reads "Change" rather than "Choose" when only reference links exist. Opening it starts with no
+  personal cover selected, as before, and saving still goes through `saveCoverage`, so a person must pick people
+  explicitly to make it personal cover.
+- **CSS:** `min-width:0; overflow-wrap:anywhere` on benefit items, heads and schedule headings. This is a contained
+  change for long file names, with no layout change elsewhere.
+- **Note (Low):** "Used for" can still be skimmed as cover by a hurried reader. "Wording used for …'s plan" would be
+  harder to misread, but the current text is accurate.
+
+## Verdict on PR #86 at `c0dbbb9`
+
+**Ready.**
