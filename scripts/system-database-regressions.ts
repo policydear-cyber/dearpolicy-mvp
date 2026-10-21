@@ -25,7 +25,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
 import { findFamilyMatchWithKind,householdNameMatches,linkRelatedReferenceDocuments,preferHouseholdMatch,syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { POST as reprocessPolicy } from "@/app/api/policies/reprocess/route";
-import { seedLedger } from "@/lib/ledger/store";
+import { forgetLedgerRefresh,seedLedger } from "@/lib/ledger/store";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
@@ -1971,6 +1971,72 @@ async function main(){
       const basis=async(id:string)=>Number((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[id])).rows[0].sum_basis);
       assert.equal(await basis(eye),600000,"An accident-scale row is a percentage of the personal accident cover");
       assert.equal(await basis(death),1000000,"A death row is a percentage of the life cover");
+      // Evidence Reviewer, 21 Oct: the scheme's TPD is 100% of the Group Term Life sum insured (PS p5, BS p3, the
+      // certificate's life line); its "TPD due to Accident" is 150% of the personal accident sum. Never added together.
+      const tpd=await row("tpd",null,"Total and Permanent Disability Benefit");
+      const accidentTpd=await row("tpd","accident","Total and Permanent Disability due to Accident");
+      const injuryTpd=await row("tpd",null,"Permanent disablement caused by injury");
+      await seedLedger(account);
+      assert.equal(await basis(tpd),1000000,"TPD with no disability cover of its own is a percentage of the life cover");
+      assert.equal(await basis(accidentTpd),600000,"TPD due to an accident stays on the personal accident cover");
+      assert.equal((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[injuryTpd])).rows[0].sum_basis,null,"A disablement written about an injury is never put on the life cover");
+      {
+        // TE-EXTRA (#92 06feac8): TPD goes to the life cover only when it is the one life cover and nothing says accident or injury.
+        const raw=async(id:string)=>(await db.query<{b:string|null}>("SELECT sum_basis::text b FROM coverage_rules WHERE id=$1",[id])).rows[0].b;
+        const certOf=async(n:number,product:string,covers:[string,number][])=>{
+          const id=uuid(n);
+          await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Other Insurer',$4,$5,$6,'Group Insurance','certificate',true,95,'ready',$7,$7,'scan_clean')",[id,account,member,product,"TE-"+n,"G-TE-"+n,`te-${n}.pdf`]);
+          await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'user_declared',1.0)",[id,member,account]);
+          for(const [category,amount] of covers)await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,$4,$5,'SGD',$6,1,$7,true)",[account,id,member,category,amount,product,`${category} SGD ${amount}`]);
+          return id;};
+        const ruleOn=async(policy:string,plan:string,eventType:string,cause:string|null,note:string)=>(await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,cause,pays_kind,amount,currency,note,origin,status) VALUES($1,$2,$3,$4,$5,$6,$7,'percent_of_sum',1,'SGD',$6,'wording','confirmed') RETURNING id",[account,member,policy,plan,eventType,note,cause])).rows[0].id;
+        // On the scheme (life S$1,000,000, accident S$600,000): accident wording with no cause set, and injury wording.
+        const accidentWords=await ruleOn(cert,"Example Group Scheme","tpd",null,"Total and Permanent Disablement due to Accident");
+        const accidental=await ruleOn(cert,"Example Group Scheme","tpd",null,"Accidental Total and Permanent Disability");
+        const bodilyInjury=await ruleOn(cert,"Example Group Scheme","tpd",null,"Total and Permanent Disability following bodily injury");
+        // Two life covers: which one TPD pays under cannot be told.
+        const twoLives=await certOf(702701,"Two Lives Scheme",[["Group Term Life",1000000],["Dependants Life",200000],["Group Personal Accident",600000]]);
+        const tpdTwo=await ruleOn(twoLives,"Two Lives Scheme","tpd",null,"Total and Permanent Disability Benefit");
+        // Its own disability cover: TPD pays under that, never the life sum.
+        const ownTpd=await certOf(702702,"Own TPD Scheme",[["Group Term Life",1000000],["Total and Permanent Disability",500000]]);
+        const tpdOwn=await ruleOn(ownTpd,"Own TPD Scheme","tpd",null,"Total and Permanent Disability Benefit");
+        // No life cover at all: TPD is not put on the accident sum.
+        const paOnly=await certOf(702703,"Accident Only Scheme",[["Group Personal Accident",600000],["Group Hospitalisation",50000]]);
+        const tpdPa=await ruleOn(paOnly,"Accident Only Scheme","tpd",null,"Total and Permanent Disability Benefit");
+        // Control on its own contract: one life cover, no disability cover, plain TPD wording joins the life cover.
+        const oneLife=await certOf(702704,"One Life Scheme",[["Group Term Life",300000],["Group Personal Accident",100000]]);
+        const tpdOne=await ruleOn(oneLife,"One Life Scheme","tpd",null,"Total and Permanent Disability Benefit");
+        // Probe (printed): a row that only mentions TPD (Critic R81-1's natural catastrophe), stored with the TPD event.
+        const natCat=await ruleOn(oneLife,"One Life Scheme","tpd",null,"Natural Catastrophe: 15% of the Sum Insured on death or Total and Permanent Disability caused by one");
+        await seedLedger(account);
+        assert.equal(await raw(natCat),null,"A ledger row whose note names another benefit that only mentions TPD is not put on the life cover");
+        const got={accidentWords:await raw(accidentWords),accidental:await raw(accidental),bodilyInjury:await raw(bodilyInjury),tpdTwo:await raw(tpdTwo),tpdOwn:await raw(tpdOwn),tpdPa:await raw(tpdPa),tpdOne:await raw(tpdOne)};
+        assert.equal(Number(got.accidentWords),600000,"TPD due to Accident stays on the personal accident cover, whatever the cause field");
+        assert.equal(Number(got.accidental),600000,"Accidental TPD stays on the personal accident cover");
+        assert.notEqual(Number(got.bodilyInjury),1000000,"TPD following bodily injury is never put on the life cover");
+        assert.equal(got.tpdTwo,null,"No join when the contract has several life covers");
+        assert.equal(Number(got.tpdOwn),500000,"A contract's own disability cover is not overridden by the life cover");
+        assert.notEqual(Number(got.tpdPa),600000,"TPD is not put on the accident sum when there is no life cover");
+        assert.equal(Number(got.tpdOne),300000,"control: one life cover, no disability cover: TPD joins the life cover");
+        // R81-1 on the Benefits page: a benefit that only mentions TPD in its wording is not put on the life cover.
+        await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'One Life Scheme','Natural Catastrophe',ARRAY[]::text[],'sum_insured',0.15,'SGD',4,'15% of the Sum Insured on death or Total and Permanent Disability caused by a natural catastrophe','[]'::jsonb,'[]'::jsonb,false)",[account,oneLife]);
+        const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as Record<string,unknown>[];
+        const cat=listed.find(b=>JSON.stringify(b).includes("Natural Catastrophe"));
+        assert.ok(cat,"the benefit is listed");
+        assert.doesNotMatch(JSON.stringify(cat),/300,000|45,000/,"a benefit that only mentions TPD is not worked out on the life cover");
+        await db.query("DELETE FROM policy_benefits WHERE policy_id=$1",[oneLife]);
+        // A document stuck in processing for over 30 minutes does not hold the refresh back.
+        const stuck=uuid(702705);
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Stuck upload','Group Insurance','certificate',false,30,'extracting',$4,$4,'scan_clean')",[stuck,account,member,"te-stuck.pdf"]);
+        await db.query("UPDATE policies SET updated_at=now()-interval '31 minutes' WHERE id=$1",[stuck]);
+        await db.query("UPDATE coverage_rules SET sum_basis=NULL WHERE id=$1",[tpdOne]);
+        forgetLedgerRefresh(account);
+        assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+        assert.equal(Number(await raw(tpdOne)),300000,"a document stuck in processing for 31 minutes does not stop the refresh");
+        await db.query("DELETE FROM policies WHERE id=$1",[stuck]);
+        for(const p of [twoLives,ownTpd,paOnly,oneLife]){await db.query("DELETE FROM coverage_rules WHERE policy_id=$1",[p]);await db.query("DELETE FROM policies WHERE id=$1",[p]);}
+        for(const id of [accidentWords,accidental,bodilyInjury])await db.query("DELETE FROM coverage_rules WHERE id=$1",[id]);
+      }
 
       // Live, 21 Oct (main 176313e): rows joined before the rule above still showed "% of the sum insured (S$1,000,000)"
       // on every scheme accident row. A machine-made row already holding the wrong cover's amount is joined again; a
@@ -1985,6 +2051,23 @@ async function main(){
       await seedLedger(account);
       assert.equal(await basis(stale),600000,"A row joined to the term life cover is moved to the personal accident cover");
       assert.equal(await basis(printed),5000,"A fixed limit the document printed is not replaced by a cover");
+      // Live, 21 Oct (main 55abc78): seedLedger only ran when a document was read, so the fix above reached no stored row
+      // on seven loads of Coverage. Opening Coverage now puts a stored row right before it is shown.
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,updated_at=created_at WHERE id=$1",[stale]);
+      forgetLedgerRefresh(account);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),600000,"Opening Coverage moves a stored row to the cover it pays under");
+      // Critic R80-1: while a document is being processed (an upload reads itself into the ledger as it finishes, perhaps
+      // on another instance), opening Coverage leaves the rows to that read.
+      const uploading=uuid(702900);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Upload in progress','Group Insurance','certificate',false,30,'extracting',$4,$4,'scan_clean')",[uploading,account,member,"uploading.pdf"]);
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,updated_at=created_at WHERE id=$1",[stale]);
+      forgetLedgerRefresh(account);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),1000000,"Coverage is not refreshed while a document is being read");
+      await db.query("DELETE FROM policies WHERE id=$1",[uploading]);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),600000,"Coverage is refreshed once the read is over");
       assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
       assert.equal(await basis(death),1000000,"A death row stays on the life cover");
       // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, 29 minutes after seeding, on 52

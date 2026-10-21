@@ -395,6 +395,29 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   }
   return {added};
 }
+/** How often opening Coverage puts stored rows right, per household, on one server instance. */
+const REFRESH_ON_OPEN_MS=10*60_000;
+const refreshedOnOpen=new Map<string,number>();
+/** Puts the household's stored rows right with what the ledger's rules say now (refreshSeededRows, the joins), when
+ *  opening Coverage. seedLedger otherwise only ran when a document was read or the ledger was empty, so a fix to stored
+ *  rows reached none of them (live, 21 Oct: #90 was deployed and no row changed on seven loads). At most once every ten
+ *  minutes per household on this instance; a failure is logged and the page still loads. */
+export async function refreshLedgerOnOpen(accountId:string):Promise<void>{
+  const last=refreshedOnOpen.get(accountId);
+  if(last!=null&&Date.now()-last<REFRESH_ON_OPEN_MS)return;
+  // Forget households not seen for ten minutes, so the guard does not grow with every household (Critic R80-3).
+  if(refreshedOnOpen.size>=1000)for(const [id,at] of refreshedOnOpen)if(Date.now()-at>=REFRESH_ON_OPEN_MS)refreshedOnOpen.delete(id);
+  refreshedOnOpen.set(accountId,Date.now());
+  const started=Date.now();
+  try{
+    await seedLedger(accountId);
+    // How long opening Coverage waited for it (Critic R80-2).
+    console.info("Coverage ledger refreshed on open in "+(Date.now()-started)+" ms");
+  }
+  catch(error){refreshedOnOpen.delete(accountId);console.warn("Coverage ledger refresh on open failed:",error instanceof Error?error.message:error);}
+}
+/** Lets the next open refresh again at once (tests). */
+export function forgetLedgerRefresh(accountId:string){refreshedOnOpen.delete(accountId);}
 /** Loads the ledger for these people, seeding it first if it is empty. */
 export async function ledgerFor(accountId:string,people:ClaimPerson[]):Promise<LedgerRow[]>{
   const ids=people.map(p=>p.id);

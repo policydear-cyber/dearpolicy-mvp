@@ -1134,6 +1134,8 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
   }
   return coverForEvent(contract,benefit);
 }
+/** A benefit named as total and permanent disability, not one whose name merely mentions it. */
+const NAMED_TPD=/^\s*(?:total(?:ly)? and permanent(?:ly)? disab|permanent total disab|tpd\b)/i;
 function coverForEvent(contract:PolicyContract,benefit:CatalogBenefit):OwnedCoverage|null{
   // Last resort: join by what the benefit is written to pay ON.
   //
@@ -1167,6 +1169,18 @@ function coverForEvent(contract:PolicyContract,benefit:CatalogBenefit):OwnedCove
     // Several match: the one with a figure, if only one has one.
     const withAmount=byEvent.filter(coverage=>coverage.amount!=null);
     if(withAmount.length===1)return withAmount[0];
+    // Total and permanent disability not caused by an accident is paid under the life cover when the contract has no
+    // disability cover of its own (the household's group scheme: TPD at 100% of the Group Term Life sum insured, the
+    // certificate's life line). A disablement written about an accident or an injury never comes here: it is the
+    // accident plan's ("TPD due to Accident", 150% of the personal accident sum), and the two are never added.
+    // The benefit's own name must begin as TPD: a row that only mentions it ("Natural Catastrophe: 15% of the Sum Insured
+    // on death or Total and Permanent Disability caused by one") is not the life cover's TPD (Critic R81-1). A ledger
+    // row's name begins with its own note, so a note naming another benefit keeps that row off the life cover too.
+    if(!byEvent.length&&!accidentOnly&&!namesAnInjury&&NAMED_TPD.test(benefit.benefitName)
+      &&!/\baccident|\binjur/i.test(benefit.benefitName+" "+benefit.quote)){
+      const life=contract.coverages.filter(coverage=>/death|life/.test(category(coverage))&&coverage.amount!=null);
+      if(life.length===1)return life[0];
+    }
   }
   return contract.coverages.length===1?contract.coverages[0]:null;
 }

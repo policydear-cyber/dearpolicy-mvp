@@ -1195,6 +1195,13 @@ export function runSystemRegressions(){
     assert.equal(coverageForBenefit(scheme,row("Critical Illness","100% of the Sum Insured on diagnosis of a Critical Illness."))?.id,"lc");
     // Nothing tells the covers apart: no figure is worked out from any of them.
     assert.equal(coverageForBenefit(scheme,row("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+    // Evidence Reviewer, 21 Oct: with no disability cover of its own, the scheme's TPD is 100% of the Group Term Life sum
+    // insured. Its accident TPD (150%) is the accident plan's, and the two are never added.
+    assert.equal(coverageForBenefit(scheme,row("Total and Permanent Disability Benefit","We pay 100% of the Sum Insured on total and permanent disability."))?.id,"gtl");
+    assert.equal(coverageForBenefit(scheme,row("Total and Permanent Disablement due to Accident","150% of the Sum Insured where disablement results from an accident.",["accident"]))?.id,"gpa");
+    assert.notEqual(coverageForBenefit(scheme,row("Permanent Total Disablement","100% of the Sum Insured where an injury results in permanent total disablement."))?.id,"gtl");
+    // Critic R81-1: a row that only mentions TPD in its wording is not the life cover's TPD.
+    assert.notEqual(coverageForBenefit(scheme,row("Natural Catastrophe","An additional 15% of the Sum Insured is payable on death or Total and Permanent Disability resulting from a natural catastrophe."))?.id,"gtl");
   });
   test("The policy's own limits on adding injuries up are followed",()=>{
     // Two sentences from the household's own wording: a schedule amount is not

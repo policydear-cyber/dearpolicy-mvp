@@ -357,6 +357,18 @@ export async function pendingDocumentCount(accountId:string,opts:{dueOnly?:boole
        AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)${await dueClause(!opts.dueOnly)}`,[accountId]);
   return Number(r.rows[0]?.n??0);
 }
+/** A document of this household is being read, here or on another server instance: one still being processed (an
+ *  upload reads itself into the ledger as it finishes) or one ready and due for its ledger read. A read deletes and
+ *  re-inserts its rows, so the ledger is not refreshed meanwhile (Critic R80-1). A document whose processing has not
+ *  moved for 30 minutes is stuck, not being read, and does not hold the refresh back for good. */
+export async function ledgerReadUnderway(accountId:string){
+  if(ledgerReadingInProgress(accountId))return true;
+  const processing=await query<{n:number}>(
+    `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status IN ('queued','extracting','indexing')
+       AND p.updated_at>now()-interval '30 minutes' AND ${activePredicate("p")}`,[accountId]);
+  if(Number(processing.rows[0]?.n??0)>0)return true;
+  return await pendingDocumentCount(accountId,{dueOnly:true})>0;
+}
 export function ledgerReadingInProgress(accountId:string){
   return !!(globalThis as ExtractGlobals).__dearpolicyLedgerReading?.has(accountId);
 }
