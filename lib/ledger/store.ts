@@ -205,6 +205,28 @@ export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:str
     conditions:[],requirements:[],needsReview:false};
   return coverageForBenefit({...contract,coverages:contract.coverages.filter(c=>c.amount!=null&&c.amount>0)},stub);
 }
+async function refreshSeededRows(accountId:string,seeds:Seed[]){
+  if(!seeds.length)return;
+  const legacyOf=(s:Seed)=>s.seedKey.replace(/\|member:[^|]+$/,"");
+  const bySeedKey=new Map<string,Seed>();
+  for(const s of seeds){bySeedKey.set(s.seedKey,s);bySeedKey.set(legacyOf(s)+"#"+s.familyMemberId,s);}
+  const held=(await query<{id:string;seed_key:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;pays_kind:string;amount:string|null;currency:string;sum_basis:string|null;offset_days:number|null;maximum_days:number|null}>(
+    `SELECT id,seed_key,family_member_id::text,event_type,detail,cause,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days FROM coverage_rules
+      WHERE account_id=$1 AND seed_key=ANY($2::text[]) AND origin<>'person' AND status<>'rejected' AND updated_at=created_at`,
+    [accountId,[...new Set(seeds.flatMap(s=>[s.seedKey,legacyOf(s)]))]])).rows;
+  const n=(v:string|number|null|undefined)=>v==null||v===""?"":String(Number(v));
+  for(const row of held){
+    const seed=bySeedKey.get(row.seed_key)??bySeedKey.get(row.seed_key+"#"+row.family_member_id);
+    if(!seed||seed.familyMemberId!==row.family_member_id)continue;
+    const same=row.event_type===seed.eventType&&(row.detail??"")===(seed.detail??"")&&(row.cause??"")===(seed.cause??"")&&row.pays_kind===seed.paysKind
+      &&n(row.amount)===n(seed.amount)&&row.currency===seed.currency&&(seed.sumBasis==null||n(row.sum_basis)===n(seed.sumBasis))&&n(row.offset_days)===n(seed.offsetDays)&&n(row.maximum_days)===n(seed.maximumDays);
+    if(same)continue;
+    // Not a person's edit: updated_at is left alone, so the row stays the machine's to refresh.
+    await query(`UPDATE coverage_rules SET event_type=$3,detail=$4,cause=$5,pays_kind=$6,amount=$7,currency=$8,sum_basis=$9,offset_days=$10,maximum_days=$11,conditions=$12::text[],note=$13,quote=$14
+      WHERE account_id=$1 AND id=$2`,
+      [accountId,row.id,seed.eventType,seed.detail,seed.cause,seed.paysKind,seed.amount,seed.currency,seed.sumBasis??(row.sum_basis==null?null:Number(row.sum_basis)),seed.offsetDays,seed.maximumDays,seed.conditions??[],seed.note,seed.quote]);
+  }
+}
 /** Adds ledger rows for everything read so far that is not in the ledger yet. */
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
   await ensureLedgerSchema();
@@ -245,6 +267,11 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
     seeds.push(...mineSeeds);
   }
+  // A seed's key is fixed by the row it came from, so a row seeded under an older rule is never seeded again: it kept
+  // what that rule said (live, 21 Oct: a travel policy's liability-to-others row still "Accidental death S$500,000",
+  // seeded the day before liability rows stopped being read as the person's own death cover). A machine-made row nobody
+  // has touched takes what its seed says now. A row a person changed, and one they rejected, are left alone.
+  await refreshSeededRows(accountId,seeds);
   // A rule read from the wording ("100% of the Sum Insured") and the sum on
   // the certificate live in different documents of the same contract. Join
   // them here, once, so the row carries its own figure.
@@ -264,9 +291,13 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // dismemberment row still a percentage of the S$1,000,000 term life, not the S$600,000 personal accident cover).
   // A machine-made row whose basis is one of its contract's cover amounts was joined, not printed, so it is joined
   // again: moved to the cover it pays under, or cleared when that cannot be told. A basis no cover carries (a fixed
-  // limit the document printed) and a row a person changed are left alone.
+  // limit the document printed) is left alone.
+  // An older version of this join wrote updated_at (live: 52 rows "changed" within 12 seconds of one seeding on 27 Sep),
+  // so updated_at alone cannot tell a person's edit. A person who changes a figure also confirms the row (PATCH
+  // /api/ledger), so a row still "proposed" holds no figure of theirs and is joined again like an untouched one. A row
+  // that was changed and is confirmed may hold their figure, and is left alone.
   const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string}>(
-    "SELECT id,policy_id,family_member_id,event_type,detail,cause,note,sum_basis::text FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NOT NULL AND policy_id IS NOT NULL AND origin<>'person' AND updated_at=created_at",[accountId]);
+    "SELECT id,policy_id,family_member_id,event_type,detail,cause,note,sum_basis::text FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NOT NULL AND policy_id IS NOT NULL AND origin<>'person' AND (updated_at=created_at OR status='proposed')",[accountId]);
   for(const row of joined.rows){
     const contract=contracts.find(c=>c.ownerId===row.family_member_id&&[...c.documents,...c.references].some(d=>d.id===row.policy_id));
     if(!contract)continue;

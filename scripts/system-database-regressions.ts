@@ -1900,6 +1900,13 @@ async function main(){
       assert.equal(await basis(printed),5000,"A fixed limit the document printed is not replaced by a cover");
       assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
       assert.equal(await basis(death),1000000,"A death row stays on the life cover");
+      // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, so 52 untouched rows looked
+      // changed and kept S$1,000,000. A person who changes a figure also confirms the row; one still "proposed" is joined again.
+      const touched=await row("dismemberment","accident","Loss of speech, joined by an older version");
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,status='proposed',updated_at=created_at+interval '29 minutes' WHERE id=$1",[touched]);
+      await seedLedger(account);
+      assert.equal(await basis(touched),600000,"A proposed row an older join stamped is moved to the personal accident cover");
+      assert.equal(await basis(edited),1000000,"A changed, confirmed row still keeps its figure");
 
       // Live release set (20 Oct): a travel wording's third-party liability row ("if you are liable for accidental death,
       // injury or damage to other people", one figure per plan column) showed as the person's own "Accidental death
@@ -1920,6 +1927,17 @@ async function main(){
       assert.equal(seeded.some(r=>/Sports equipment/.test(r.note??"")&&r.amount!=null),false,"A \"Not covered\" row carries no amount");
       assert.equal(seeded.find(r=>/Trip cancellation/.test(r.note??""))?.amount??null,null,"A per-plan cancellation limit is not given as the person's");
       assert.equal(seeded.some(r=>r.event_type==="accidental_death"&&Number(r.amount)===500000),false);
+      // Live, 21 Oct (main 96fa81d): the same row seeded the day before that rule kept "Accidental death S$500,000",
+      // because a seed key already in the ledger is never seeded again. An untouched machine row takes what its seed says now.
+      const liabilityId=(await db.query<{id:string}>("SELECT id FROM coverage_rules WHERE policy_id=$1 AND note LIKE 'If you are liable%'",[cert])).rows[0].id;
+      await db.query("UPDATE coverage_rules SET event_type='accidental_death',cause='accident',pays_kind='lump_sum',amount=500000,updated_at=created_at WHERE id=$1",[liabilityId]);
+      await seedLedger(account);
+      const refreshed=(await db.query<{event_type:string;amount:string|null}>("SELECT event_type,amount::text FROM coverage_rules WHERE id=$1",[liabilityId])).rows[0];
+      assert.equal(refreshed.event_type,"other","A row seeded under the older rule is no longer the person's accidental death");
+      assert.equal(refreshed.amount,null,"…and carries no plan column's figure");
+      await db.query("UPDATE coverage_rules SET event_type='accidental_death',amount=500000,status='confirmed',updated_at=created_at+interval '1 minute' WHERE id=$1",[liabilityId]);
+      await seedLedger(account);
+      assert.equal((await db.query<{event_type:string}>("SELECT event_type FROM coverage_rules WHERE id=$1",[liabilityId])).rows[0].event_type,"accidental_death","A row a person changed is theirs");
       await db.query("DELETE FROM policy_benefits WHERE policy_id=$1",[cert]);
       await db.query("DELETE FROM coverage_rules WHERE policy_id=$1",[cert]);
 
