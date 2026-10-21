@@ -2647,3 +2647,46 @@ differ) is consistent with the Evidence Reviewer's rule and with "never added".
 
 **Not ready yet:** R52-1 is a wrong claimable amount, and R52-2 hides amounts that 741aba9 showed correctly. Both are
 small changes to `CAPPED` and its scope, each with one control case. R50-1 to R50-4 are fixed.
+
+# Round 53: recheck of PR #83 at `cec8873` (R51-1, R51-2)
+
+Method: `intelligence.ts` and `messy.ts` at cec8873 run offline against the snapshot (never committed) and synthetic
+probes. `npm run documents:role-test` gives 12/12.
+
+## Confirmed
+
+- On the snapshot, the same four roles change as at d883368. Product Summary, Certificate, the CI II illustration and
+  the invoice are unchanged. DC's Benefit Summary stays `benefit_guide`.
+- **R51-1:** "Harbour Group Insurance Summary / Group Policy No. G123400" is null again. A personal travel summary with
+  "Policyholder: Lim Wei Jie" is still `personal_schedule`.
+- **R51-2:** combined certificates whose Part 1 says "Name of Insured Member" or "Life Assured: … Sum Assured S$…" are
+  `certificate` again.
+- **R51-3:** a claim letter enclosing a schedule copy is still `personal_schedule`. This is accepted.
+
+## Findings
+
+**R53-1 (Medium): a definition line counts as a named person.** The person-field patterns accept any two words after the
+colon. Both new rules therefore treat a definitions line as a named person:
+- "Group Insurance Summary / Master Policy No. G123400 / Insured Person: any eligible employee of the company" is
+  `personal_schedule`. Only "group policy" is skipped, not "master policy".
+- A Part 2-only "Highlights of Cover" printing "Insured Person: any member of the Scheme", "Life Assured: the person
+  named in Part 1", or a plan table "Plan A Sum Insured: S$100,000" is `certificate`. At d883368 these were
+  `benefit_guide`, and `detectHighConfidenceReferenceRole` still says `benefit_guide`.
+
+Main also called the Part 2 cases `certificate`, so this is no worse than main. It is the same generic-as-personal error
+R51-1 named, though, and a multi-plan table read as a personal certificate is a route to a wrong amount.
+
+Fix:
+- Reject a field value that starts with any, the, a, an, all, each, every, eligible, means or refers.
+- Skip "master policy" as well as "group policy".
+- Count "Sum Insured: S$…" as Part 1 only when the same line or page also prints a named person (the name-line rule
+  already does this).
+- Add one definitions control.
+
+**R53-2 (Low):** a personal "Policy Summary" whose "Insured Person" label and name sit on separate lines is now null. It
+was `personal_schedule` at d883368. The model's role then stands, so this is acceptable.
+
+## Verdict on PR #83 at `cec8873`
+
+**Not ready yet:** R53-1 needs a stop-word guard on the two person-field patterns, a "master policy" skip, and one
+control. Everything else is confirmed.
