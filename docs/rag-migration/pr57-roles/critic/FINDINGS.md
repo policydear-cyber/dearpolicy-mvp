@@ -3776,3 +3776,21 @@ Unchanged and still OK:
 
 **Ready.** R76-1 is optional. The merge still rewrites stored ledger rows on production, so it needs DC's explicit
 yes.
+
+## Round 77: PR #91 (simple chat: uncovered-bill card, claim-steps prompt), head 2ede3c4 on main 9b76779
+
+Scope: `lib/simple-chat/verify.ts` (billWritten, billUncovered, the `-bill` not_found card, the bottom-line fallback), `lib/simple-chat/prompt.ts` (a4aa437 and the prompt-only 2ede3c4), new chat-test cases. Probes run locally on pr91 lib with DC's snapshot (not committed): `t77.ts` P1-P10, `t77b.ts` next steps.
+
+Wrong amounts: none found. The new card carries no amount (`amount: null`) and echoes the bill only as the household wrote it ("US$800", "800 dollars" stay as written). Printed hotline numbers, office hours ("8.30am to 5.30pm"), day counts and a payee sentence survive `withoutMoney` in nextSteps; a "$10 co-payment" step is still removed.
+
+Snapshot check of the false "not covered" risk for the GP-bill case: the GPA pays fracture percentages and ground ambulance (Benefit Summary p8), not GP bills; Desmond's travel policy pays "Medical expenses incurred in Singapore" only after a trip. So the card is correct for DC's household on L4/L5.
+
+- **R77-1 (Medium, false "not covered")** `lib/simple-chat/verify.ts:906`. The uncovered card is dropped only when a bill card was actually built. When `billAgainst` refuses (bill for several visits, a foreign currency, a per-day or annual row), a kept per-visit limit for the same person stays next to "The $800 bill you gave is not shown to be covered by Ong Pei Lin Charmaine's documents". Probes P2 ("her 2 A&E visits cost $800"), P3 ("US$800") and P4 (limit statement without ofBill) all show the S$100 limit card and the not-covered card together. The prompt makes this pairing likely, since a product missing from the certificate is to be given "only as what would apply if they have it". Fix: drop `uncovered` for a person when any kept amount statement for that person carries `ofBill` (P2/P3). P4 is model inconsistency and can also be covered by dropping it when any kept amount for that person comes from a "Limits Per Visit/Claim" row. Add P2/P3 as tests.
+- **R77-2 (Low)** `verify.ts:1036` fallback. When a bottom line is dropped for stating money and there is no amount card, the first non-card not_found becomes the headline, even a side point. P7: "The documents do not say whether physiotherapy is covered." headlines over a fact that the ambulance is reimbursed. Prefer the not_found that carries `ofBill` (the intended finding), else keep "Here is what your documents say."
+- **R77-3 (Low)** `verify.ts:906` suppression is household-wide. Desmond's bill card hides Charmaine's uncovered card (P6). This is conservative, because her own not_found text still shows. Note only; scoping to the same person would fit naturally with the R77-1 fix.
+- **R77-4 (Low)** `verify.ts:486` billWritten matches the figure in any message of the conversation, so an earlier "$800" premium is echoed as "the $800 bill" (P8). It is an echo only, not a computed amount. Note only.
+- **R77-5 (Nit)** "The 800 dollars bill you gave" (P9) reads oddly; consider "The bill of 800 dollars you gave".
+
+Prompt 2ede3c4 (office hours both, suggestions labelled, payee in full): no conflict with the money rules; no finding.
+
+Verdict: **NOT READY until R77-1 is fixed** (one line plus two tests). R77-2 to R77-5 are optional.
