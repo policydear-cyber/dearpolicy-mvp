@@ -10,6 +10,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "simple:offline-test": "node --import tsx scripts/simple-answer/offline-test.ts",
+    "simple:compare": "node --import tsx scripts/simple-answer/compare.ts",
+    "simple:chat-test": "node --import tsx scripts/simple-answer/chat-test.ts",
     "db:start": "docker compose up -d db",
     "db:status": "docker compose ps",
     "db:setup": "node --import tsx scripts/setup-db.ts",
@@ -224,6 +227,7 @@
     "rag2:live-ledger-test": "node --import tsx scripts/rag2-live/ledger-regressions.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "mammoth": "^1.13.0",

@@ -114,6 +114,9 @@ const PRICES:Record<string,Price>={
   "anthropic:claude-haiku-4-5":{input:1,output:5,cachedInput:0.1},
   "anthropic:claude-sonnet-5":{input:2,output:10,cachedInput:0.2},
   "anthropic:claude-opus-5":{input:5,output:25,cachedInput:0.5},
+  // claude-api skill model table (cached 2026-10-06); used by the simple chat (lib/simple-chat).
+  "anthropic:claude-opus-5-5":{input:4,output:20,cachedInput:0.2},
+  "anthropic:claude-sonnet-5-5":{input:2,output:10,cachedInput:0.2},
   "gemini:gemini-2.5-flash-lite":{input:0.10,output:0.40},
   "gemini:gemini-2.5-flash":{input:0.30,output:2.50},
   "gemini:gemini-3.5-flash-lite":{input:0.30,output:2.50},
