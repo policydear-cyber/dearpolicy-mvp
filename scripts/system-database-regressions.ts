@@ -25,7 +25,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { searchPassages } from "@/lib/rag2/search";
 import { findFamilyMatchWithKind,householdNameMatches,linkRelatedReferenceDocuments,preferHouseholdMatch,syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { POST as reprocessPolicy } from "@/app/api/policies/reprocess/route";
-import { seedLedger } from "@/lib/ledger/store";
+import { forgetLedgerRefresh,seedLedger } from "@/lib/ledger/store";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
@@ -1985,6 +1985,12 @@ async function main(){
       await seedLedger(account);
       assert.equal(await basis(stale),600000,"A row joined to the term life cover is moved to the personal accident cover");
       assert.equal(await basis(printed),5000,"A fixed limit the document printed is not replaced by a cover");
+      // Live, 21 Oct (main 55abc78): seedLedger only ran when a document was read, so the fix above reached no stored row
+      // on seven loads of Coverage. Opening Coverage now puts a stored row right before it is shown.
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,updated_at=created_at WHERE id=$1",[stale]);
+      forgetLedgerRefresh(account);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),600000,"Opening Coverage moves a stored row to the cover it pays under");
       assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
       assert.equal(await basis(death),1000000,"A death row stays on the life cover");
       // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, 29 minutes after seeding, on 52
