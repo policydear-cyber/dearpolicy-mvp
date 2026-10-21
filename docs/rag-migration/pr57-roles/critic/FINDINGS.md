@@ -3996,3 +3996,18 @@ What holds:
 - R90-3 (Medium, hiding, decide before switching on) `lib/simple-chat/hook.ts:84,88`: `rows` is `[]` (truthy) for a household whose table has no rows yet. `renderTable` then returns "" (no instructions), but `withRows` is true, so every amount is dropped with no explanation. Documents not yet read into the table lose their amounts the same way. Either fall back to today's path when there are no rows, or say plainly that amounts are not ready yet.
 - R90-4 (Low) The row's unit is not carried. A per-day row shows "S$50" and relies on the model's text to say "a day" (P2). `statementFromRow` knows `f.unit`, so it could add "a day" or set `perDay`. The cash-value as-of date is also dropped. Pre-existing in verify.ts, but now cheap to fix.
 - Note (by design, from R89-1): an adult holder gets child-column rows. That is acceptable only while R90-1 keeps the label.
+
+## R91 — PR #95 delta c719256 → 3d49e09 (server-only amount labels)
+
+**Verdict: READY** (Lows only).
+
+Probed with the PR's chat-test fixture (scripted model replies, tsx, no DB, no network, no paid calls).
+
+- R90-1 is fixed. The qualifier is part of the server's label ("Hospital cash (Group Scheme, Group Personal Accident), for child only: paid per day."). The model's sentence is never used, so a money sentence can no longer strip it. `keepLabelledAmounts` refuses any amount whose text is not exactly a server label.
+- R90-2 is fixed. With the model text "Death benefit pays S$1,000,000." for each of Hip, Ankle, Ambulance Cost, Hospital cash and Surrender value, every card shows only the row's own benefit and cover, with the row's figure. The person is taken from the row, after the model's person must match it. Model `conditions` and `ofBill` did not attach to the card.
+- R90-3 is fixed. An empty table plus a dropped amount gives the "Amounts are not shown yet" note, and any dropped or refused amount adds the left-out-amount note.
+- R90-4 is fixed. Per-day, per-period, up-to, value as-of and projected are all in the label.
+- Correct amounts survive: Hip S$450,000, Ankle S$2,500, Ambulance Up to S$500, Hospital cash S$50 (for child only), Surrender value S$12,400 (projected, not guaranteed). Alternatives still get the "not a total" note.
+- R91-1 (Low, wording) `lib/benefit-table/chat.ts` `rowLabel`: a percentage of the sum insured reads "75% of the amount printed, worked out". The test is `/sum insured/` against `f.how`, which prints the figure, not those words. Use `row.percentOf`/`baseSource` (sum_insured vs fixed_amount) instead.
+- R91-2 (Low, hiding) A plan or benefit name with a number of 100 or more ("plan Plan 300", "plan 1000") makes `statesMoney` true for the label. verify.ts then drops the label and the correct amount is refused, though it is noted as left out. Consider passing the label through verify.ts as trusted text, or quoting plan names so the money check ignores them.
+- R91-3 (Low, cosmetic): the same row named twice gives two identical cards. Consider de-duplicating by row id.
