@@ -2769,3 +2769,30 @@ rows computable again. Fix:
 ## Verdict on PR #82 at `7089ddd`
 
 **Not ready yet, one small fix:** R55-1. R50-1 to R50-4 and R52-1 to R52-3 are all fixed.
+
+# Round 56: recheck of PR #83 at `8022bc1` (R53-1)
+
+Method: as in round 53, with the same probes. role-test gives 13/13.
+
+## Confirmed
+
+- **R53-1 fixed.**
+  - "Group Insurance Summary / Master Policy No. … / Insured Person: any eligible employee" is null.
+  - The Part 2-only definitions probes ("Insured Person: any member", "Life Assured: the person named in Part 1") and a
+    plan table "Plan A Sum Insured: S$100,000" are `benefit_guide` again.
+- **Controls hold.** Combined certificates with "Name of Insured Member" or "Life Assured: Lim Wei Jie" stay
+  `certificate`, and the personal travel summary stays `personal_schedule`.
+- **Snapshot:** the same four roles change and nothing else. DC's Benefit Summary stays `benefit_guide`.
+
+## Notes (Low, not blocking)
+
+- **R56-1:** the name-line rule still accepts any line with an amount and "effective date"/"as of", with no name
+  required. So a Part 2 line like "Ambulance limit S$5,000 effective date: 01/01/2026 for all members" makes the page
+  `certificate`. It is contrived and no worse than main.
+- **R56-2:** `PERSON_VALUE` needs at least two words, so a single-word name ("Insured Person: Madonna") does not count.
+  The cost is a null role, and the model's role then stands.
+- R51-3 and R53-2 remain accepted.
+
+## Verdict on PR #83 at `8022bc1`
+
+**Ready.** After merge, DC re-reads the four documents, as the PR report says.
