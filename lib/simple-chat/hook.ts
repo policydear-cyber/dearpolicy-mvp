@@ -74,7 +74,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
   const parsed = readModelAnswer(reply.json);
-  const { answer, report } = parsed ? verifyAnswer(household, parsed) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
+  const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
+  const { answer, report } = parsed ? verifyAnswer(household, parsed, asked) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });

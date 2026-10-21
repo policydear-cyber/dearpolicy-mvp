@@ -43,10 +43,11 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
   return {
     model: choice.model,
     max_tokens: MAX_OUTPUT_TOKENS,
-    // The library is the same for every question of a household, so it is cached after the first request.
+    // The library is the same for every question of a household, so it is cached after the first request. The 5-minute
+    // cache costs 1.25x input to write (the 1-hour one 2x), and still covers a conversation's follow-ups.
     system: [
       { type: "text" as const, text: SIMPLE_SYSTEM_PROMPT },
-      { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } },
+      { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } },
     ],
     messages: [...alternating(args.history).map((t) => ({ role: t.role, content: t.text })), { role: "user" as const, content: args.question }],
     output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: SIMPLE_ANSWER_SCHEMA as unknown as Record<string, unknown> } },
@@ -112,7 +113,12 @@ export function modelFromChoice(choice: ModelChoice): SimpleModel {
   throw new Error(`The simple chat has no path for provider ${choice.provider}`);
 }
 
-/** Usage as lib/ai/ledger.ts books it: input counts every prompt token (cache writes twice, at their 2x price), cached the cache reads. */
+/** Usage as lib/ai/ledger.ts books it: input counts every prompt token (5-minute cache writes at their 1.25x price), cached
+ * the cache reads. */
 export function ledgerUsage(u: SimpleUsage): { input: number; output: number; cached: number } {
-  return { input: u.input + u.cacheRead + 2 * u.cacheWrite, output: u.output, cached: u.cacheRead };
+  return { input: u.input + u.cacheRead + Math.ceil(1.25 * u.cacheWrite), output: u.output, cached: u.cacheRead };
+}
+/** What one call cost at list price, US$ (5-minute cache writes at 1.25x input, cache reads at the cached price). */
+export function callUsd(price: { input: number; output: number; cachedInput?: number }, u: SimpleUsage): number {
+  return (u.input * price.input + 1.25 * u.cacheWrite * price.input + u.cacheRead * (price.cachedInput ?? price.input) + u.output * price.output) / 1e6;
 }
