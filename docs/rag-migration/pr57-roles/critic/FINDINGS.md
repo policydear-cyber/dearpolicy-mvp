@@ -3794,3 +3794,15 @@ Snapshot check of the false "not covered" risk for the GP-bill case: the GPA pay
 Prompt 2ede3c4 (office hours both, suggestions labelled, payee in full): no conflict with the money rules; no finding.
 
 Verdict: **NOT READY until R77-1 is fixed** (one line plus two tests). R77-2 to R77-5 are optional.
+
+## Round 78: PR #91 delta, head 7fe86f9 (fixes for R77-1..5 and TE Q1-Q12)
+
+Probes: `t77.ts` P1-P10 rerun on 7fe86f9 lib, plus Qa-Qf, with DC's snapshot locally (not committed).
+
+Fixed: R77-1 (P2/P3/P4 no longer show the not-covered card next to the S$100 limit), R77-2 (P7 falls back to "Here is what your documents say."), R77-3 (per person: Qf keeps Charmaine's own finding, and Desmond's limit card no longer affects her card, which is now refused for the documents' dental lines anyway), R77-4 (P8: a figure written as a premium is not a bill), R77-5 ("The bill of 800 dollars"). Card duplicates are keyed per person and bill. A finding whose only sentence stated money still shows its card. There are no wrong amounts: the card carries no amount.
+
+- **R78-1 (Medium, false "not covered")** `lib/simple-chat/verify.ts` `billMayBeUncovered`, last statement. The check that a document "prints a figure for that care" only looks at single lines that contain both the care word and a digit. Benefit tables often print the name on one line and the figures on the next. Probe Qc: "desmond physio bill $800" with the model's not_found shows "The $800 bill you gave is not shown to be covered by Tan Yi Chuen Desmond's documents". But his travel policy (D6, linked to him) p8 prints "Chinese medicine practitioner, physiotherapist and / chiropractor expenses / S$300 S$500 S$500 / Capped at S$50 per visit". The benefit is conditional on a trip, which the card hides, and hiding a documented benefit is a failure. Fix: count a figure on the matching line or the next few lines (for example up to 3), or use `rowLine`/`moneyTable` around each match. Add Qc as a test.
+- **R78-2 (Low)** Bottom-line fallback `finding`. When the card is refused because a document prints that care (DC's L4 GP limit), the model's not_found still becomes a dropped bottom line's headline (Qd: "No cover on her certificate pays this bill."). For L4 that is close to the model's intended bottom line, and the wording is the model's, not the server's. Optionally lead with it only when `c.uncovered` is set.
+- Note: the card now rarely shows for DC's household. GP and A&E lines with figures exist in the scheme documents, so the model's own finding stands alone. This leans safe and is acceptable.
+
+Verdict: **NOT READY until R78-1 is fixed** (widen the figure check to the next lines, plus the Qc test). R78-2 is optional.
