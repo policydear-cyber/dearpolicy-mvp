@@ -43,6 +43,8 @@ export const MIGRATION_ORDER = [
   "sql/chat-upgrade.sql", "sql/claim-composition.sql", "sql/claim-evidence.sql", "sql/critical-illness.sql", "sql/disability.sql",
   "sql/model-provenance.sql", "sql/rate-limit.sql", "sql/background-jobs.sql", "sql/lifecycle.sql", "sql/claim-reviewers.sql",
   "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
+  // Optional household tables (each needs household-rls.sql and sets its own RLS, policies and grants).
+  "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql",
 ];
 
 let finished = false;
@@ -294,6 +296,32 @@ async function main() {
     }
     const ownAudit = await attempt({ role: "authenticated", userId: ownerA }, `SELECT 1 FROM public.policy_document_audit_log WHERE account_id=$1`, [householdA]);
     record(ownAudit.ok && ownAudit.rows >= 1, "control: a household can still read its own policy audit trail");
+
+    // === 3b. optional household-writable tables: own household only ======
+    // policy_member_exclusions ("does not cover this person") and policy_name_dismissals ("not in my family").
+    await pool.query(`INSERT INTO policy_member_exclusions(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [policyA, personA, householdA]);
+    await pool.query(`INSERT INTO policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'someone else','Someone Else')`, [policyA, householdA]);
+    for (const [t, insert, params, forgedParams] of [
+      ["policy_member_exclusions", `INSERT INTO public.policy_member_exclusions(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [policyA, removable, householdA], [policyA, removable, householdB]],
+      ["policy_name_dismissals", `INSERT INTO public.policy_name_dismissals(policy_id,account_id,name_key,detected_name) VALUES($1,$2,'another name','Another Name')`, [policyA, householdA], [policyA, householdB]],
+    ] as const) {
+      for (const [op, sql] of [["SELECT", `SELECT 1 FROM public.${t}`], ["INSERT", insert], ["DELETE", `DELETE FROM public.${t}`]] as const) {
+        const r = await attempt({ role: "anon", userId: null }, sql, op === "INSERT" ? [...params] : []); matrix++;
+        record(!r.ok && DENIED.test(r.error), `anon can ${op} ${t}${r.ok ? "" : ` (${r.error})`}`);
+      }
+      const read = await attempt({ role: "authenticated", userId: ownerB }, `SELECT 1 FROM public.${t} WHERE account_id=$1`, [householdA]); matrix++;
+      record(read.ok && read.rows === 0, `another household can read ${t} rows of household A`);
+      const write = await attempt({ role: "authenticated", userId: ownerB }, insert, [...params]); matrix++;
+      record(!write.ok, `another household can write a ${t} row for household A`);
+      const forged = await attempt({ role: "authenticated", userId: ownerB }, insert, [...forgedParams]); matrix++;
+      record(!forged.ok, `another household can file a ${t} row under its own household naming household A's document`);
+      const removed = await attempt({ role: "authenticated", userId: ownerB }, `DELETE FROM public.${t} WHERE account_id=$1 RETURNING 1`, [householdA]); matrix++;
+      record(removed.ok && removed.rows === 0, `another household can delete ${t} rows of household A`);
+      const own = await attempt({ role: "authenticated", userId: memberA }, `SELECT 1 FROM public.${t} WHERE account_id=$1`, [householdA]);
+      record(own.ok && own.rows === 1, `control: a member of household A cannot read its own ${t} row (${own.error})`);
+      const ownWrite = await attempt({ role: "authenticated", userId: memberA }, insert, [...params]);
+      record(ownWrite.ok, `control: a member of household A cannot add a ${t} row (${ownWrite.error})`);
+    }
 
     // Lifecycle specifics named in the requirements.
     for (const [label, sql] of [
