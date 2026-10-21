@@ -3878,3 +3878,11 @@ Cost guard. `anthropicRequest` caches the library with `ttl: "5m"`, and `callUsd
 - Note: for Opus and Sonnet runs, a server-side fallback is billed at the fallback model's rates, while `callUsd` prices every call at the requested model's rates. A fallback to a dearer model such as Opus 4.8 ($5/$25 against Opus 5.5's $4/$20) would be under-counted for that call. This is not new in #93 and does not apply to Haiku.
 
 Verdict: **READY.** R83-1 is optional.
+
+## Round 84: PR #92 delta, head 83d2707 (NAMED_TPD)
+
+The life-cover TPD join now needs the benefit name to begin with TPD (`NAMED_TPD`, `lib/policies/benefit-catalog.ts:1138`). This only narrows R81-1's check: a name that merely contains TPD ("Natural Catastrophe ... Total and Permanent Disability", or a ledger note naming another benefit) no longer joins. DC's "Total and Permanent Disability Benefit (TPD)" still matches. A name with a leading section letter ("B. Total and Permanent Disability Benefit") would not match and would resolve to no cover. That leans safe: no figure rather than a wrong one. The accident and injury guards and the one-life-cover rule are unchanged. The TE's Natural Catastrophe ledger probe is now an assertion in `scripts/system-database-regressions.ts`.
+
+No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **READY** (after DC's yes).
