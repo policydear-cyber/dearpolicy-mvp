@@ -43,6 +43,11 @@ const ANSWERS: Record<string, unknown> = {
         source: { policyName: "Group PA", page: 8, rowLabel: "Loss of use of one hand", citationIds: ["c3"] }, group: { id: "g1", kind: "either_or", note: "These are alternatives for the same injury, never a total." } },
     ] },
   // Critic R47: sentences close to the bottom line or a step but adding "not", a condition or a warning.
+  // Critic R48: close to a "can claim" bottom line, each adding a condition or a negation.
+  conditions: { ...base,
+    summary: "Ah Kow can claim for the wrist fracture if admitted. Ah Kow can claim for the wrist fracture, subject to approval. Ah Kow can claim for the wrist fracture once discharged. Ah Kow couldn’t claim for the wrist fracture. Ah Kow can claim for the wrist fracture.",
+    bottomLine: "Ah Kow can claim for the wrist fracture.",
+    statements: [{ id: "c1", kind: "fact", text: "Ah Kow has a Group PA plan.", fullText: "Ah Kow has a Group PA plan.", conditions: [] }] },
   qualifiers: { ...base,
     summary: "Ah Kow is not covered for the wrist fracture. Send the bill within 30 days, but only after he is discharged from hospital. Call the claims hotline before any treatment overseas, or the claim may be refused.",
     bottomLine: "Ah Kow is covered for the wrist fracture.",
@@ -99,9 +104,7 @@ test("to confirm: the bottom line says so first, and the next step is right unde
   await expect(answer.getByTestId("answer-bottom-line")).toHaveClass(/to-confirm/);
   // The step that settles it sits with the answer, before the collapsed sources.
   expect(await topOf(answer.getByTestId("next-step"))).toBeLessThan(await topOf(answer.getByTestId("answer-where")));
-  // Said once: the summary's restatement of the bottom line is not repeated under "Also in this answer". The sentence that
-  // adds a reason to the step stays (Critic R47-1: a sentence is hidden only when it says no more than the step).
-  await expect(answer.getByTestId("answer-remaining")).not.toContainText("usually includes a hospital benefit");
+  // A sentence that adds a reason to the step stays (Critic R47-1: a sentence is hidden only when it says no more than the step).
   await expect(answer.getByTestId("answer-remaining")).toContainText("so DearPolicy can check what it pays");
   await shot(page, "1-to-confirm");
 });
@@ -150,4 +153,12 @@ test("Critic R47: a sentence that adds 'not', a condition or a warning to the bo
   await expect(remaining).toContainText("Ah Kow is not covered for the wrist fracture.");
   await expect(remaining).toContainText("but only after he is discharged from hospital");
   await expect(remaining).toContainText("or the claim may be refused");
+});
+
+test("Critic R48: under the bottom line, only a sentence that adds no word is hidden", async ({ page }) => {
+  const answer = await askOnPhone(page, "conditions", "Can Ah Kow claim for his wrist?");
+  const remaining = answer.getByTestId("answer-remaining");
+  for (const said of ["if admitted", "subject to approval", "once discharged", "couldn’t claim"]) await expect(remaining).toContainText(said);
+  // The bottom line said again, word for word, is not repeated.
+  await expect(remaining.locator("p", { hasText: /^Ah Kow can claim for the wrist fracture\.$/ })).toHaveCount(0);
 });

@@ -47,7 +47,7 @@ const norm = (s: string) => s.replace(/[*_`#>]/g, "").replace(/[“”"‘’']/
 /** The content words of a sentence (amounts kept), for telling when one sentence only says another again in other words. */
 const STOP = new Set("a an and are as at be by for from her his if in is it its of on or so the their this to was were with your you".split(" "));
 const words = (s: string) => norm(s).split(/[^a-z0-9$,.%]+/).map((w) => w.replace(/[.,]+$/, "")).filter((w) => w && !STOP.has(w));
-const NEGATION = /\b(not|no|never|none|nobody|nothing|dont|doesnt|didnt|isnt|arent|wasnt|werent|cant|cannot|wont|wouldnt|hasnt|havent)\b/;
+const NEGATION = /\b(not|no|never|none|nobody|nothing|dont|doesnt|didnt|isnt|arent|wasnt|werent|cant|cannot|wont|wouldnt|hasnt|havent|couldnt|shouldnt|mustnt|neither|nor)\b/;
 const LIMITS = new Set("only unless except excluded exclusion without until after before".split(" "));
 /** Whether most of `part`'s words are already in `whole`: a restatement, not new information. A figure (any word with
  * a digit) that `whole` does not have always makes it new. */
@@ -159,7 +159,9 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   // or is one of the next steps shown under the answer, is not repeated; the full answer still has every word.
   const eitherDrawn = statements.filter((s) => s.group?.kind === "either_or").length > 1;
   const steps = (answer.nextSteps ?? []).map((t) => norm(render(t)));
-  const repeats = (s: string) => (!!bottomLine && restates(s, render(bottomLine)))
+  // Against the bottom line a sentence is hidden only when it adds no word at all (Critic R48-1): "…if admitted",
+  // "…subject to approval" or "…once discharged" all stay.
+  const repeats = (s: string) => (!!bottomLine && restates(s, render(bottomLine), 1))
     || (eitherDrawn && /\b(alternatives?|never (added|both)|not a total)\b/i.test(s) && s.length < 90)
     // A sentence that adds anything to a step (a condition, a deadline, a warning) is kept.
     || steps.some((t) => t === norm(s) || restates(s, t, 0.8));
