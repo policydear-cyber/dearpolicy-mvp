@@ -1167,6 +1167,15 @@ function coverForEvent(contract:PolicyContract,benefit:CatalogBenefit):OwnedCove
     // Several match: the one with a figure, if only one has one.
     const withAmount=byEvent.filter(coverage=>coverage.amount!=null);
     if(withAmount.length===1)return withAmount[0];
+    // Total and permanent disability not caused by an accident is paid under the life cover when the contract has no
+    // disability cover of its own (the household's group scheme: TPD at 100% of the Group Term Life sum insured, the
+    // certificate's life line). A disablement written about an accident or an injury never comes here: it is the
+    // accident plan's ("TPD due to Accident", 150% of the personal accident sum), and the two are never added.
+    if(!byEvent.length&&!accidentOnly&&!namesAnInjury&&triggers.includes("total_permanent_disability")
+      &&!/\baccident|\binjur/i.test(benefit.benefitName+" "+benefit.quote)){
+      const life=contract.coverages.filter(coverage=>/death|life/.test(category(coverage))&&coverage.amount!=null);
+      if(life.length===1)return life[0];
+    }
   }
   return contract.coverages.length===1?contract.coverages[0]:null;
 }

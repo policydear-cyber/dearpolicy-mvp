@@ -1971,6 +1971,15 @@ async function main(){
       const basis=async(id:string)=>Number((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[id])).rows[0].sum_basis);
       assert.equal(await basis(eye),600000,"An accident-scale row is a percentage of the personal accident cover");
       assert.equal(await basis(death),1000000,"A death row is a percentage of the life cover");
+      // Evidence Reviewer, 21 Oct: the scheme's TPD is 100% of the Group Term Life sum insured (PS p5, BS p3, the
+      // certificate's life line); its "TPD due to Accident" is 150% of the personal accident sum. Never added together.
+      const tpd=await row("tpd",null,"Total and Permanent Disability Benefit");
+      const accidentTpd=await row("tpd","accident","Total and Permanent Disability due to Accident");
+      const injuryTpd=await row("tpd",null,"Permanent disablement caused by injury");
+      await seedLedger(account);
+      assert.equal(await basis(tpd),1000000,"TPD with no disability cover of its own is a percentage of the life cover");
+      assert.equal(await basis(accidentTpd),600000,"TPD due to an accident stays on the personal accident cover");
+      assert.equal((await db.query<{sum_basis:string|null}>("SELECT sum_basis::text FROM coverage_rules WHERE id=$1",[injuryTpd])).rows[0].sum_basis,null,"A disablement written about an injury is never put on the life cover");
 
       // Live, 21 Oct (main 176313e): rows joined before the rule above still showed "% of the sum insured (S$1,000,000)"
       // on every scheme accident row. A machine-made row already holding the wrong cover's amount is joined again; a
@@ -1991,6 +2000,17 @@ async function main(){
       forgetLedgerRefresh(account);
       assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
       assert.equal(await basis(stale),600000,"Opening Coverage moves a stored row to the cover it pays under");
+      // Critic R80-1: while a document is being processed (an upload reads itself into the ledger as it finishes, perhaps
+      // on another instance), opening Coverage leaves the rows to that read.
+      const uploading=uuid(702900);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Upload in progress','Group Insurance','certificate',false,30,'extracting',$4,$4,'scan_clean')",[uploading,account,member,"uploading.pdf"]);
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,updated_at=created_at WHERE id=$1",[stale]);
+      forgetLedgerRefresh(account);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),1000000,"Coverage is not refreshed while a document is being read");
+      await db.query("DELETE FROM policies WHERE id=$1",[uploading]);
+      assert.equal((await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).status,200);
+      assert.equal(await basis(stale),600000,"Coverage is refreshed once the read is over");
       assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
       assert.equal(await basis(death),1000000,"A death row stays on the life cover");
       // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, 29 minutes after seeding, on 52

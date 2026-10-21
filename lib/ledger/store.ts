@@ -405,8 +405,15 @@ const refreshedOnOpen=new Map<string,number>();
 export async function refreshLedgerOnOpen(accountId:string):Promise<void>{
   const last=refreshedOnOpen.get(accountId);
   if(last!=null&&Date.now()-last<REFRESH_ON_OPEN_MS)return;
+  // Forget households not seen for ten minutes, so the guard does not grow with every household (Critic R80-3).
+  if(refreshedOnOpen.size>=1000)for(const [id,at] of refreshedOnOpen)if(Date.now()-at>=REFRESH_ON_OPEN_MS)refreshedOnOpen.delete(id);
   refreshedOnOpen.set(accountId,Date.now());
-  try{await seedLedger(accountId);}
+  const started=Date.now();
+  try{
+    await seedLedger(accountId);
+    // How long opening Coverage waited for it (Critic R80-2).
+    console.info("Coverage ledger refreshed on open in "+(Date.now()-started)+" ms");
+  }
   catch(error){refreshedOnOpen.delete(accountId);console.warn("Coverage ledger refresh on open failed:",error instanceof Error?error.message:error);}
 }
 /** Lets the next open refresh again at once (tests). */

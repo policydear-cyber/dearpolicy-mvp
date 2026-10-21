@@ -9,7 +9,7 @@ import { statedCurrencyCode } from "@/lib/format/currency";
 import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedgerRow,refreshLedgerOnOpen,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
-import { ledgerReadDocuments,ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
+import { ledgerReadDocuments,ledgerReadUnderway,ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -33,9 +33,9 @@ export async function GET(request:NextRequest){
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
     const people=(await family(accountId)).rows;
-    // Rows stored under an older rule are put right before they are shown. While a document is being read, that read
-    // seeds the ledger itself when it finishes.
-    if(!ledgerReadingInProgress(accountId))await refreshLedgerOnOpen(accountId);
+    // Rows stored under an older rule are put right before they are shown. While a document is being read, here or on
+    // another instance, that read seeds the ledger itself when it finishes.
+    if(!(await ledgerReadUnderway(accountId)))await refreshLedgerOnOpen(accountId);
     const rows=await ledgerFor(accountId,people);
     // Either/or amounts travel with each member row as one group, never as one picked figure.
     const alternatives=await ledgerAlternatives(accountId,people).catch(()=>new Map());
