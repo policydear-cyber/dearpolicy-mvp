@@ -82,8 +82,9 @@ export function locateQuote(household: Household, quote: string, preferred: numb
 const wordsOf = (s: string) => s.toLowerCase().match(/[a-z]+|\d[\d,]*(?:\.\d+)?/g) ?? [];
 /** A table row the page's text split over two lines in a different order ("Mobility aid upon Accidental Total & Up to
  * S$10,000" / "Permanent Disablement*", release-set H7): every word and figure of the quote on one line and the next,
- * on one page. The excerpt is those two lines as stored. A quote of fewer than four words, or two places that fit, gives
- * none. */
+ * on one page, the second line only the label's end: no figure (so the quote's figures are on the first line), no tab, and not the start of another row (a bullet, number or letter), so a label is never paired with the
+ * next row's figure (R60-1). The excerpt is those two lines as stored. A quote of fewer than four words, or two places
+ * that fit, gives none. */
 function acrossTwoLines(household: Household, quote: string): Found | null {
   const want = wordsOf(quote.replace(/\s*(?:\.{3}|…)\s*/g, " "));
   if (want.length < 4) return null;
@@ -96,6 +97,8 @@ function acrossTwoLines(household: Household, quote: string): Found | null {
       for (let i = 0; i + 1 < lines.length; i++) {
         const start = at; at += lines[i].length + 1;
         const have = new Set(wordsOf(`${lines[i]} ${lines[i + 1]}`));
+        const next = lines[i + 1];
+        if (/\d|\t/.test(next) || /^\s*(?:[-•*·]|\(?[A-Za-z0-9]{1,3}[.,)])\s/.test(next) || !next.trim()) continue;
         if (want.every((w) => have.has(w)) && !want.every((w) => new Set(wordsOf(lines[i])).has(w)))
           hits.push({ docIndex: di, page: p.page, excerpt: `${lines[i].trim()} ${lines[i + 1].trim()}`.replace(/[ \t]+/g, " "), offset: start + (lines[i].length - lines[i].trimStart().length) });
       }
@@ -598,18 +601,30 @@ function onPage(household: Household, di: number, page: HouseholdDocument["pages
 /** The line a printed amount moves to when its condition is printed only in another document (Evidence Reviewer, 21 Oct:
  * B1's S$250 recuperation card cited the Product Summary row, while its 24-hour stay condition is on the Benefit Summary
  * page that also prints the $250): the one line, on a page that prints one of the card's conditions, that prints the same
- * figure. Null when there is none or more than one, and then the card stays as quoted. */
+ * figure, in a document linked to the same people, in the same cover's section, under a sub-benefit title whose every
+ * word is in the card's own row label ("J, Accidental Hospital Recuperation Benefit"), R60-2. Null when there is none or
+ * more than one, and then the card stays as quoted. */
 function lineWithCondition(household: Household, c: Checked, quotes: string[]): Found | null {
   const value = c.amount!.value;
   const hits = new Map<string, Found>();
+  const from = household.documents[c.found!.docIndex];
+  const covers = allCovers(household);
+  const cover = sectionOf(from, c.found!.page, c.found!.offset, covers);
+  const fromPage = from.pages.find((p) => p.page === c.found!.page)!.text;
+  const label = new Set(labelWords(rowLine(fromPage, c.found!.offset).text));
+  const people = (d: HouseholdDocument) => [...d.linkedPeople].map(baseName).sort().join("|");
   for (const q of quotes) for (let di = 0; di < household.documents.length; di++) {
-    if (di === c.found!.docIndex || unreadable(household.documents[di])) continue;
+    const d = household.documents[di];
+    if (di === c.found!.docIndex || unreadable(d) || !d.linkedPeople.length || people(d) !== people(from)) continue;
     for (const f of placesOf(household, di, q)) {
-      const text = household.documents[di].pages.find((p) => p.page === f.page)!.text;
+      const text = d.pages.find((p) => p.page === f.page)!.text;
       let at = 0;
       for (const line of text.split("\n")) {
         const start = at; at += line.length + 1;
-        if (moneyFiguresIn(line).some((m) => sameValue(m.value, value))) hits.set(`${di}:${f.page}:${start}`, { docIndex: di, page: f.page, excerpt: line.trim().replace(/[ \t]+/g, " "), offset: start + (line.length - line.trimStart().length) });
+        if (!moneyFiguresIn(line).some((m) => sameValue(m.value, value))) continue;
+        const sub = subBenefitOf(d, f.page, start, covers);
+        if (!cover || sectionOf(d, f.page, start, covers) !== cover || !sub || !labelWords(sub).every((w) => label.has(w))) continue;
+        hits.set(`${di}:${f.page}:${start}`, { docIndex: di, page: f.page, excerpt: line.trim().replace(/[ \t]+/g, " "), offset: start + (line.length - line.trimStart().length) });
       }
     }
   }
@@ -650,9 +665,9 @@ function conditionApplies(household: Household, found: Found, quote: string): bo
   return household.documents.some((d, di) => di !== found.docIndex && !unreadable(d) && placesIn(di).some((f) => !footnote(f) && sectionOf(d, f.page, f.offset, covers) === head.cover));
 }
 /** A lettered sub-benefit title within a cover's section ("A. Death due to Accident", "M. Comatose State Lump Sum
- * Benefit", "C. ... (continued)"): a short title-case line with no figures. Numbered lines are a schedule's rows ("7. Loss
+ * Benefit", "J, Accidental Hospital Recuperation Benefit", "C. ... (continued)"): a short title-case line with no figures. Numbered lines are a schedule's rows ("7. Loss
  * of ... both hands"), not sub-benefits. */
-const SUB_BENEFIT = /^\s*[A-Z][.)]\s+([A-Z][A-Za-z&'’\/,\- ()]{2,80}?)\s*$/;
+const SUB_BENEFIT = /^\s*[A-Z][.,)]\s+([A-Z][A-Za-z&'’\/,\- ()]{2,80}?)\s*$/;
 /** The sub-benefit a passage sits under, within its section (R59-4): conditions never travel between sub-benefits. Empty
  * when the passage is at the cover's own level. */
 function subBenefitOf(doc: HouseholdDocument, page: number, offset: number, covers: Set<string>): string {

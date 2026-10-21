@@ -713,8 +713,8 @@ async function main() {
   });
 
   await check("ER 21 Oct: a cap keeps 'Up to'; the sign is the page's; a card moves to the line its own condition is printed with; split rows are found", () => {
-    const summary = doc(7, "Summary2.pdf", "Test Summary", [{ page: 13, text: "Accidental Hospital Recuperation Benefit*\tS$250\nMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*" }]);
-    const terms = doc(8, "Terms2.pdf", "Test Terms", [{ page: 9, text: "J. Hospital Recuperation\nWe will pay a one-time amount of $250 per hospitalisation.\nYou must be confined for a continuous period of at least 24 hours.\nL. Funeral\nWe will pay funeral expenses of up to $2,000." }]);
+    const summary = doc(7, "Summary2.pdf", "Test Summary", [{ page: 13, text: "Group Personal Accident\nAccidental Hospital Recuperation Benefit*\tS$250\nMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*" }]);
+    const terms = doc(8, "Terms2.pdf", "Test Terms", [{ page: 9, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nJ, Hospital Recuperation\nWe will pay a one-time amount of $250 per hospitalisation.\nYou must be confined for a continuous period of at least 24 hours.\nL. Funeral\nWe will pay funeral expenses of up to $2,000." }]);
     const house: Household = { ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, terms] };
     const { answer } = r59(house, [
       st({ kind: "amount", text: "Recuperation.", person: "Ah Kow", document: "D7", quote: "Accidental Hospital Recuperation Benefit*\tS$250", amount: "S$250", conditions: [{ text: "24 hours in hospital.", quote: "You must be confined for a continuous period of at least 24 hours." }] }),
@@ -752,24 +752,40 @@ async function main() {
     assert.deepEqual(plain("Currency\t: SGD\nMedical expenses\t50,000.00\nOverseas cap\tNZ$20,000", "Medical expenses\t50,000.00", "50,000.00"), [], "another currency's figure");
     assert.deepEqual(plain("Currency\t: SGD\nMedical expenses (in US dollars)\t50,000.00", "Medical expenses (in US dollars)\t50,000.00", "50,000.00"), [], "another currency's name");
     assert.deepEqual(plain("Currency\t: SGD\nAmbulance\tUp to 500.00", "Ambulance\tUp to 500.00", "500.00"), ["Up to S$500"], "a cap on a declared-currency page");
+    assert.deepEqual(plain("Currency\t: SGD\nPlan code : 2045", "Plan code : 2045", "2045"), [], "a code is not written as an amount");
   });
 
   await check("ER single guards: a card moves only to one line, only when printed; a split row is found only once and only for a long quote", () => {
-    const summary = doc(7, "Summary3.pdf", "Test Summary", [{ page: 13, text: "Accidental Hospital Recuperation Benefit*\tS$250\nSimple Fracture Benefit Limit: S$5,000\nHip\t75%\nMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*" }]);
-    const terms = (text: string) => doc(8, "Terms3.pdf", "Test Terms", [{ page: 9, text }]);
+    const summary = doc(7, "Summary3.pdf", "Test Summary", [{ page: 13, text: "Group Personal Accident\nAccidental Hospital Recuperation Benefit*\tS$250\nSimple Fracture Benefit Limit: S$5,000\nHip\t75%\nMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*" }]);
+    const terms = (text: string, extra = {}) => doc(8, "Terms3.pdf", "Test Terms", [{ page: 9, text: `BENEFIT 2: GROUP PERSONAL ACCIDENT\nJ. Hospital Recuperation Benefit\n${text}` }], extra);
     const stay = { text: "24 hours in hospital.", quote: "You must be confined for a continuous period of at least 24 hours." };
     const recup = st({ kind: "amount", text: "Recuperation.", person: "Ah Kow", document: "D7", quote: "Accidental Hospital Recuperation Benefit*\tS$250", amount: "S$250", conditions: [stay] });
     const cards = (house: Household, s: ModelStatement[]) => r59(house, s).answer.statements!.filter((x) => x.amount).map((x) => [x.amount!.text, x.source!.policyName, x.conditions]);
     const twice = { ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, terms("We will pay $250 per hospitalisation.\nYou must be confined for a continuous period of at least 24 hours.\nA further $250 is paid on discharge.")] };
     assert.deepEqual(cards(twice, [recup]), [["S$250", "Test Summary", []]], "two lines print the figure");
     const hip = st({ kind: "amount", text: "Hip.", person: "Ah Kow", document: "D7", quote: "Hip\t75%", amount: "S$3,750", percentOf: { percent: 75, baseAmount: "S$5,000" }, conditions: [stay] });
-    const worked = { ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, terms("You must be confined for a continuous period of at least 24 hours.\nA hip fracture pays $3,750.")] };
+    const worked = { ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, doc(8, "Terms3.pdf", "Test Terms", [{ page: 9, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nH. Hip\nYou must be confined for a continuous period of at least 24 hours.\nA hip fracture pays $3,750." }])] };
     assert.deepEqual(cards(worked, [hip]), [["S$3,750", "Test Summary", []]], "a worked-out amount never moves");
     const split = (quote: string, extra: Household["documents"][number][] = []) => cards({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, ...extra] }, [st({ kind: "amount", text: "Mobility aid.", person: "Ah Kow", document: "D7", quote, amount: "S$10,000" })]);
     assert.deepEqual(split("Permanent S$10,000"), [], "a short quote");
     const again = doc(8, "Summary4.pdf", "Test Summary 2", [{ page: 2, text: "Mobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*" }]);
     assert.deepEqual(split("Mobility aid upon Accidental Total & Permanent Disablement* Up to S$10,000", [again]), [], "two places fit");
     assert.deepEqual(split("Mobility aid upon Accidental Total & Permanent Disablement* Up to S$10,000"), [["Up to S$10,000", "Test Summary", []]], "control");
+    // R60: a label is never paired with the next row's figure, and a card never moves to another person's, cover's or benefit's line.
+    const rows = doc(9, "Summary5.pdf", "Test Rows", [{ page: 13, text: "•\tAmbulance Cost*\tUp to S$500 per incident\n•\tMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*\n•\tAccidental Hospital Recuperation Benefit*\tS$250\n•\tChild Education Fund Benefit*\tS$5,000 per child (up to 2 children)\n•\tCompassionate Death Allowance Benefit*\tUp to S$2,000" }]);
+    for (const [quote, amount] of [["Child Education Fund Benefit S$250", "S$250"], ["Ambulance Cost Up to S$10,000", "S$10,000"], ["Compassionate Death Allowance Benefit S$5,000", "S$5,000"]])
+      assert.deepEqual(cards({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, rows] }, [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount })]), [], quote);
+    for (const next of ["Child Education Fund 5", "• Child Education Fund"]) {
+      const two = doc(9, "Summary6.pdf", "Test Rows", [{ page: 13, text: `Funeral Benefit\tUp to S$2,000\n${next}` }]);
+      assert.deepEqual(cards({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, two] }, [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Child Education Fund Benefit Up to S$2,000", amount: "S$2,000" })]), [], next);
+    }
+    const once = terms("We will pay $250 per hospitalisation.\nYou must be confined for a continuous period of at least 24 hours.");
+    const moved = (t: Household["documents"][number]) => cards({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, summary, t] }, [recup]);
+    assert.deepEqual(moved(once), [["$250", "Test Terms", ["24 hours in hospital."]]], "control: same people, cover and benefit");
+    assert.deepEqual(moved({ ...once, linkedPeople: ["Someone Else"] }), [["S$250", "Test Summary", []]], "another person's document");
+    assert.deepEqual(moved({ ...once, linkedPeople: [] }), [["S$250", "Test Summary", []]], "a document linked to nobody");
+    assert.deepEqual(moved({ ...once, pages: [{ page: 9, text: once.pages[0].text.replace("J. Hospital Recuperation Benefit", "K. Child Education Fund") }] }), [["S$250", "Test Summary", []]], "another benefit");
+    assert.deepEqual(moved({ ...once, pages: [{ page: 9, text: once.pages[0].text.replace("BENEFIT 2: GROUP PERSONAL ACCIDENT", "BENEFIT 1: GROUP TERM LIFE") }] }), [["S$250", "Test Summary", []]], "another cover");
   });
 
   await check("app-run: a question set goes through runSimpleChat turn by turn with the conversation so far, and replays free", async () => {
