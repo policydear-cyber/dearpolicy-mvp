@@ -2438,3 +2438,36 @@ A digit is already handled that way.
 
 **Not ready to merge yet:** fix R47-1 and R47-2. Both are small changes in `components/answer-cards.tsx`. Everything
 else is ready, and the result is the same with or without #79.
+
+---
+
+# Round 48: PR #81 at `404d54b`, re-check of round 47
+
+Only `components/answer-cards.tsx` and the phone e2e spec changed. Method: local tsx probe of the new `restates()`.
+
+- **R47-1: fixed.** The next-step check now hides a sentence only if it restates the step (`restates(s, t, 0.8)`) or
+  matches it exactly. "Send the bill within 30 days, but only after he is discharged." and "Call the claims hotline before
+  any treatment overseas…" are now shown. A sentence that says less than the step ("Send the claim form." under "Send the
+  claim form and the hospital bill.") is still hidden, which is right.
+- **R47-2: mostly fixed.** Under the bottom line "Ah Kow can claim for the wrist fracture.", these are now shown: "…is
+  not covered…", "…can't claim…", "…provided he was admitted.", "The plan excludes…".
+
+**R48-1 (Medium, same class as R47-2): some conditions and one negation are still hidden as restatements.** Under that
+bottom line, these are hidden:
+- "Ah Kow can claim for the wrist fracture if admitted." ("if" is in `STOP`, and "admitted" alone stays under the 0.7 share)
+- "…subject to approval."
+- "…once discharged."
+- "Ah Kow couldn't claim for the wrist fracture." ("couldnt" is missing from `NEGATION`)
+
+Fix:
+- Take "if" out of `STOP`.
+- Add if, when, once, provided, subject, unless and while to `LIMITS`.
+- Add couldnt, shouldnt, mustnt, neither and nor to `NEGATION`.
+- Simpler still: against the bottom line, hide a sentence only when it adds no content word at all (share 1.0).
+
+Hidden harmlessly: "may claim" for "can claim", and "too" or "also".
+
+## Verdict on PR #81 at `404d54b`
+
+**Not ready yet:** fix R48-1. It is a few words in the same two constants. Everything else from round 47 stands, with
+or without #79.
