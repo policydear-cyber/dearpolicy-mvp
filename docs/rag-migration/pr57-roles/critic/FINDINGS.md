@@ -4029,3 +4029,16 @@ Probed with the chat-test fixture (scripted model replies, tsx, no DB, no networ
 - **R92-2 (Medium, introduced)** `lib/benefit-table/chat.ts` `shield`: the shield also hides money inside a row's own names, which come from the document reading. A row whose benefit reads "Accidental Death S$1,000,000" shows "Accidental Death S$1,000,000 (Group Scheme, Group Personal Accident): up to this limit." next to "Up to S$500".
   - Before this delta the money check dropped that label and refused the amount.
   - Fix: before building the label, refuse (or strip money from) a benefit, cover or product name that states money. Allow only plan names, which may be bare numbers.
+
+## R93 — PR #95 delta 233669e → f63cd60 (NFKC money checks, server labels exempt by identity)
+
+**Verdict: READY.**
+
+Probed with the chat-test fixture (tsx, no DB, no network, no paid calls). benefit-table chat-test passed 28/28 and benefit-table test passed 38/38 locally. I could not run simple:offline-test here, because the scratch deps lack @anthropic-ai/sdk, so that rests on the Test engineer's run.
+
+- R92-1 fixed. In the bottom line "Your death cover pays S$１,０００,０００.", the next step "Claim S$１,０００,０００ now." and fact text with the same figure, the money is now caught. The bottom line falls back, the next step is dropped, and the fact shows only its quoted words. `figuresIn`/`moneyFiguresIn` NFKC-normalise, and callers find `raw` by content rather than offset, so the shared change does not shift positions.
+- R92-2 fixed. A row whose benefit reads "Accidental Death S$1,000,000" or "Death S$１,０００,０００" is dropped ("name states money") and noted as left out.
+- R91-2 still fixed. "plan Plan 300" survives through the exact `serverWords` allow-set.
+- Exemption is by identity only. A statement keeps unfiltered words only when its text exactly equals a server label, and labels can no longer carry money (names pre-checked; a plan may be a bare number only). So a model sentence that copies a label gains nothing.
+- Correct amounts still survive: Hip S$450,000 (now worded "75% of the sum insured"), Ankle S$2,500, Ambulance Up to S$500, Hospital cash S$50 (for child only), and Surrender value S$12,400 (projected, not guaranteed). In each case the model's own text carried full-width money.
+- No open findings on #95.
