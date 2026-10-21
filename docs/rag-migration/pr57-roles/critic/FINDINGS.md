@@ -2818,3 +2818,21 @@ Method: as in round 55. The whole-snapshot sweep was redone with the *last* `%` 
 ## Verdict on PR #82 at `9fe083c`
 
 **Ready.** R50-1 to R50-4, R52-1 to R52-3 and R55-1 are fixed, and I found no remaining wrong-amount path.
+
+# Round 58: recheck of PR #83 at `c6e48fb` (Test engineer's policy-wording regression)
+
+Method: as in round 56. role-test gives 15/15.
+
+- **Fix confirmed.** The "Policy wording" rule now needs an exact title line within the first 8 lines of page 1, and is
+  skipped when the opening says "this endorsement". An endorsement that only cites "the policy wording" falls through to
+  `endorsement` again.
+- **Snapshot:** the same four roles change. The travel wording (output_…157) is still `policy_wording`, and DC's Benefit
+  Summary is still `benefit_guide`.
+- **No change on the other probes:** the R51-1, R51-2 and R53-1 controls, the definitions probes, the claim letter and
+  the renewal letter enclosing a wording all give the same roles as at 8022bc1.
+- **Note (Low):** a wording whose title line carries more words ("Example Plan Policy Wording", "Policy Wording (v3)")
+  no longer matches. It falls back to the later rules, which is main's behaviour, so it is no regression against main.
+
+## Verdict on PR #83 at `c6e48fb`
+
+**Ready.**
