@@ -56,6 +56,12 @@ export async function deletePolicyFile(storageKey: string) {
   return backend().deletePolicyFile(storageKey);
 }
 
+/** Supabase Storage: a five-minute signed link to a policy file. Local driver:
+ * null, and the caller streams the bytes itself (app/api/policies/[id]/file). */
+export async function createPolicyFileSignedUrl(storageKey: string, download?: string) {
+  return backend().createPolicyFileSignedUrl(storageKey, download);
+}
+
 // --- Claim evidence: a private, separate location from policy documents
 // (see ./local.ts and ./supabase.ts). Signed URLs only, never a public path
 // -- createClaimEvidenceSignedUrl returns null on the local driver, which

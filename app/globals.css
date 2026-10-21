@@ -153,6 +153,7 @@ table { font-variant-numeric: tabular-nums; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
 .mini-button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--brand-ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .mini-button:hover { border-color: var(--brand-ink); }
+a.mini-button { display: inline-flex; align-items: center; text-decoration: none; }
 .mini-button:disabled { opacity: .5; cursor: default; }
 .mini-button.danger { border-color: var(--critical-line); color: var(--critical); }
 .mini-button.danger:hover { background: var(--critical-tint); }
@@ -343,9 +344,11 @@ table { font-variant-numeric: tabular-nums; }
 .document-card.needs-review { border-color: var(--warn-line); }
 .document-card.processing { border-color: var(--brand-tint-2); }
 .document-head { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; }
-.document-title { display: grid; gap: 2px; }
-.document-title strong { font-size: var(--fs-md); }
+.document-title { display: grid; gap: 2px; min-width: 0; }
+.document-title strong { font-size: var(--fs-md); overflow-wrap: anywhere; }
 .document-title span { font-size: var(--fs-xs); color: var(--muted); }
+/* The stored file name, under the title DearPolicy read from it: what the person sees in their own files. */
+.document-title .document-file { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
 .document-for, .document-found, .document-names { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .document-for b, .document-found b { color: var(--ink); margin-right: 4px; }
 .document-found.warn { color: var(--warn-text); }
