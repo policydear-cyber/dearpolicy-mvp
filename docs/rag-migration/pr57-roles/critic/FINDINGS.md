@@ -4011,3 +4011,21 @@ Probed with the PR's chat-test fixture (scripted model replies, tsx, no DB, no n
 - R91-1 (Low, wording) `lib/benefit-table/chat.ts` `rowLabel`: a percentage of the sum insured reads "75% of the amount printed, worked out". The test is `/sum insured/` against `f.how`, which prints the figure, not those words. Use `row.percentOf`/`baseSource` (sum_insured vs fixed_amount) instead.
 - R91-2 (Low, hiding) A plan or benefit name with a number of 100 or more ("plan Plan 300", "plan 1000") makes `statesMoney` true for the label. verify.ts then drops the label and the correct amount is refused, though it is noted as left out. Consider passing the label through verify.ts as trusted text, or quoting plan names so the money check ignores them.
 - R91-3 (Low, cosmetic): the same row named twice gives two identical cards. Consider de-duplicating by row id.
+
+## R92 — PR #95 delta 3d49e09 → 233669e (full-width digit shield, percentOf wording, one card per row)
+
+**Verdict: NOT READY** (one High, which already existed but is now load-bearing, and one Medium introduced by this delta).
+
+Probed with the chat-test fixture (scripted model replies, tsx, no DB, no network, no paid calls).
+
+- R91-1 is fixed: a sum-insured row now reads "75% of the sum insured, worked out" (`percentOf`).
+- R91-3 is fixed: a row named twice is given once.
+- The unshield step itself is narrow. Only a statement whose text exactly equals a server label gets its digits back, so the model cannot borrow it.
+- **R92-1 (High; already in `lib/simple-chat/verify.ts` `statesMoney`, not introduced here)**: full-width digits are not read as money. `statesMoney("Death pays S$１,０００,０００.")` returns false.
+  - End to end, a model reply with bottom line "Your death cover pays S$１,０００,０００.", next step "Claim S$１,０００,０００ now." and fact text "Death cover pays S$１,０００,０００." reaches the household unchanged.
+  - This is a hole in "the model's sentences carry no money". It also affects the live simple chat with the table switched off.
+  - The shield in this delta works only because this hole exists. Fixing `statesMoney` (NFKC-normalise before reading, and the same in `moneyFiguresIn`) would bring R91-2 back.
+  - Fix both together: normalise in verify.ts, and exempt a server label from the money check by identity (an allow-set of exact label texts passed to `verifyAnswer`), not by changing its digits.
+- **R92-2 (Medium, introduced)** `lib/benefit-table/chat.ts` `shield`: the shield also hides money inside a row's own names, which come from the document reading. A row whose benefit reads "Accidental Death S$1,000,000" shows "Accidental Death S$1,000,000 (Group Scheme, Group Personal Accident): up to this limit." next to "Up to S$500".
+  - Before this delta the money check dropped that label and refused the amount.
+  - Fix: before building the label, refuse (or strip money from) a benefit, cover or product name that states money. Allow only plan names, which may be bare numbers.
