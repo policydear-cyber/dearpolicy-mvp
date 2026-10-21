@@ -3727,3 +3727,52 @@ machine rows seeded `confirmed`, not figures a person typed.
 **Ready on code.** No other person's rows and no person's typed figure can be overwritten through the UI. The merge
 rewrites stored ledger rows, so it needs DC's explicit yes. For option (b), I recommend the time-gap rule above
 rather than overriding confirmed rows.
+
+---
+
+# Round 76: PR #90 delta at `9352440` (batch rule for machine stamps)
+
+What changed: the re-join now covers every non-rejected machine row (`origin<>'person'`) whose basis is one of its
+contract's cover amounts. Such a row is re-joined when either:
+- it is untouched (`updated_at=created_at`); or
+- at least 5 other machine-made rows in the account were stamped within ±60 s of it (`MACHINE_BATCH`).
+
+Any other changed row is never rewritten. It gets one appended condition, "This may be worked out from the wrong
+cover: S$X is the sum insured of another cover; the cover this pays under is S$Y. Check it before relying on it." The
+note is idempotent and is skipped when it is already present.
+
+## Can the batch rule override a real edit?
+
+**Only in a narrow case.** Every path below needs all three of these together:
+1. A person makes 6 or more ledger PATCHes within about 2 minutes. Each PATCH stamps `updated_at`, and the rows
+   they confirm are machine-made (`origin` wording or schedule), so their clicks count towards the batch.
+2. Inside that window they type a `sumBasis`. Only the operator Coverage page's "Fix" form exposes `sumBasis`
+   (app/operator/coverage/page.tsx:105, 207); the household ledger page does not.
+3. The typed value equals exactly one of the contract's *other* cover amounts. A value no cover carries is skipped
+   before this point.
+
+So no household edit can be overwritten, because a household cannot type a basis. DC confirms they never typed a
+Coverage amount.
+
+**R75-1: closed.** A lone edit sent as `proposed` is no longer re-joined, because status no longer decides.
+
+**R75-2: addressed.** Status is ignored, so machine rows seeded `confirmed` are now re-joined.
+
+**Live fit:** the 52 rows stamped within 12 s qualify as one batch. With 1722–1730 s between created and updated,
+the old 60 s gap rule would have missed them.
+
+**R76-1 (Low, hardening).** `MACHINE_BATCH=5` is low enough that a fast reviewer clicking confirm reaches it. The
+live batch is 52 rows. Raising it to about 20 keeps the live fix and puts the batch out of reach of a person's
+clicking. Alternatively, count only rows whose `sum_basis` also differs from their current join, since a person's
+confirm clicks do not change the basis.
+
+Unchanged and still OK:
+- Every pass is scoped by account, and to the owner's own contract.
+- The refresh still requires `updated_at=created_at` and the same person.
+- No pass stamps `updated_at`.
+- Rejected rows are excluded.
+
+## Verdict on PR #90 at `9352440`
+
+**Ready.** R76-1 is optional. The merge still rewrites stored ledger rows on production, so it needs DC's explicit
+yes.
