@@ -1,0 +1,30 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
+import { figureText } from "@/lib/benefit-table/assemble";
+import { tableFor } from "@/lib/benefit-table/service";
+
+export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
+
+/** Each person's benefit table (lib/benefit-table), assembled from the stored readings, links and confirmations on every
+ * request. Switched off, or before its tables are applied, it answers {enabled:false} and Coverage shows the old view. */
+export async function GET(request:NextRequest){
+  try{
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    if(!(await benefitTableLive()))return NextResponse.json({enabled:false});
+    const {table,documents,links}=await tableFor(appDb,accountId);
+    const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
+    return NextResponse.json({enabled:true,documents,
+      people:table.people.map(p=>({...p,rows:p.rows.map(r=>({...r,figureText:figureText(r.figure)}))})),
+      covers:[...new Map(table.people.flatMap(p=>p.covers).map(c=>[c.coverKey,{key:c.coverKey,product:c.product,cover:c.cover,plan:c.plan,riderOf:c.riderOf??null}])).values()],
+      unmatchedCovers:table.unmatchedCovers,illustrationCovers:table.illustrationCovers,
+      unlinkedSections:table.unlinkedSections.map(u=>({...u,chosenBy:chosenBy.get(u.section.key)??null})),
+      staleConfirmations:table.staleConfirmations});
+  }catch(error){
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not load your coverage"},{status:500});
+    return authResponse;
+  }
+}

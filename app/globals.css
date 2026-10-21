@@ -173,6 +173,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .alert { border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 20px; display: grid; gap: 4px; font-size: var(--fs-sm); line-height: 1.5; }
 .alert.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
 .note { margin-top: 12px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
+.field small.error { color: var(--critical); font-size: var(--fs-xs); }
 .empty-card, .empty-row { color: var(--muted); border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 20px; font-size: var(--fs-sm); line-height: 1.5; }
 .status { border-radius: 999px; padding: 3px 8px; background: var(--bg-2); color: var(--ink-2); text-transform: capitalize; font-size: var(--fs-xs); font-weight: 600; }
 .status.ready { background: var(--good-tint); color: var(--good-text); }

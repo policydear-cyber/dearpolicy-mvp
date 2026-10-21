@@ -5,6 +5,7 @@ import { useEffect,useMemo,useState } from "react";
 import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocument } from "@/components/reading-status";
 import { COVER_KINDS,coverGaps,isToConfirm,kindOfName,kindOfRow,listOf } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
+import { BenefitTableCoverage,type BenefitTableData } from "@/components/benefit-table-coverage";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
  *
@@ -55,7 +56,25 @@ function sourceLabel(row:Row){
   return row.origin==="schedule"?`Your schedule or certificate${page}`:`Your policy wording${page}`;
 }
 
+/** With DEARPOLICY_BENEFIT_TABLE on, Coverage is the benefit table; switched off (the server answers enabled:false),
+ * the ledger view below, unchanged. */
 export default function CoveragePage(){
+  // undefined while loading; null (switched off, or the server could not answer) shows the ledger view. That view cannot
+  // start a second paid read: with the switch on, the ledger's reads stop on the server (lib/ledger/extract.ts).
+  const [table,setTable]=useState<BenefitTableData|null|undefined>(undefined);
+  const loadTable=async()=>{
+    try{
+      const res=await fetch("/api/benefit-table",{cache:"no-store"});
+      const data=await res.json().catch(()=>({}));
+      setTable(res.ok&&data.enabled?data as BenefitTableData:null);
+    }catch{setTable(null);}
+  };
+  useEffect(()=>{void loadTable();},[]);
+  if(table===undefined)return <div className="page"><p className="muted" role="status">Loading your coverage…</p></div>;
+  return table?<BenefitTableCoverage data={table} reload={loadTable}/>:<LedgerCoveragePage/>;
+}
+
+function LedgerCoveragePage(){
   const [rows,setRows]=useState<Row[]>([]);
   const [family,setFamily]=useState<Member[]>([]);
   const [member,setMember]=useState("");
