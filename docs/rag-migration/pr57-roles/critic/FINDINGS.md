@@ -2918,3 +2918,74 @@ past in prose. None exists in this snapshot.
 **Not ready.** R59-1 and R59-2 are wrong claimable amounts that the previous head refused, and R59-1 reopens R55-1.
 R59-3 to R59-5 should be fixed in the same pass; each needs one control. The other loosenings (scheme-title section, file
 facts, identifiers, unsigned figures on a schedule page) look right.
+
+# Round 60: recheck of PR #82 at `fa0ef79` (R59 fixes, card moves, two-line rows)
+
+Method: verify.ts at fa0ef79 run offline. The round 52/55/57/59 probes, the whole-snapshot `%` sweep and new probes on
+the two new rules were run against the snapshot household, plus a copy with synthetic documents. No model calls.
+
+## Confirmed fixed
+
+- **R59-1:** a quoted row whose last % differs is refused, never moved. Speech 25% and sight 30% now give no card, and
+  the R55-1 burns probe (40%) gives none again. A heading quote with the right % still maps (speech 50% gives
+  S$300,000).
+- **R59-2:** the ICU-cap and minimum-stay texts no longer give a stay card.
+- **R59-3:** "within 30 days?" no longer counts as a stay. "I was in hospital for 15 days" still gives S$150 (S$30 a day
+  from day 11).
+- **R59-4:** the Comatose hospital condition is no longer kept on the Hip row.
+- **R59-5:** "unless stated otherwise" with a US$ row gives no inferred currency.
+- **R59-6:** a "Units allocated" figure is refused.
+- **Snapshot sweep unchanged.** The Evidence Reviewer figures, S$5,000 fractures, burns payouts, and no card for the caps
+  (the natural catastrophe cap now shows as "Up to S$50,000") all hold.
+- **Legitimate moves work:** the PS recuperation S$250 card moves to the BS "$250 per hospitalisation" line with its
+  24-hour condition, and PS child education moves to the BS "$5,000 per child" line with its age and student
+  condition. A recuperation condition offered for the compassionate allowance does not move it.
+
+## Findings
+
+**R60-1 (High, wrong amount): the two-line fallback pairs a row's label with the next row's figure.**
+`acrossTwoLines` only needs every quoted word and figure to appear somewhere on line *i* and line *i+1*. On PS p13:
+
+| Quote | Card | Correct |
+|---|---|---|
+| "Child Education Fund Benefit S$250" | **S$250** (recuperation figure) | S$5,000 per child |
+| "Ambulance Cost Up to S$10,000" | **Up to S$10,000** (mobility-aid figure) | up to S$500 |
+| "Compassionate Death Allowance Benefit S$5,000 per child" | **S$5,000** | up to S$2,000 |
+
+A model that mixes up two adjacent rows is exactly what this check must refuse.
+
+Fix: accept only the H7 shape.
+- The figure and the start of the label are on line *i*.
+- Line *i+1* prints no money figure and does not start a new row (bullet, number, letter or tab-separated label).
+- Line *i+1* is only the label's continuation ("Permanent Disablement*").
+- Add these three as controls.
+
+**R60-2 (Medium-High, borrowed condition and cross-person): a card can move to any document that prints the figure and
+the condition.** `lineWithCondition` ignores whose document it is and which benefit the target line is.
+- Desmond's PS recuperation S$250 card, with a condition quoted from a document linked only to Charmaine ("Only for
+  stays of at least 48 hours"), moves to *Charmaine's* document and keeps her condition.
+- PS child education S$5,000, with a condition quoted from the unlinked CI plan, moves to the CI plan's "Death Benefit
+  of S$5,000" line with "the Policy will terminate".
+
+The figure is the same in both cases, but the card now cites another person's or another product's benefit with that
+benefit's condition. That is the B1 error the rule set out to prevent.
+
+Fix: move only when all of these hold.
+- The target document is linked to the statement's person, or has the same linkage as the quoted one.
+- The target line's section has the same cover as the quoted row's.
+- The target line names the same benefit (its label words match the quoted row's).
+
+**R60-3 (Low-Medium): `SUB_BENEFIT` misses "J, Accidental Hospital Recuperation Benefit"** (BS p9 prints a comma). The
+recuperation text is therefore inside "I. Home Rehabilitation Renovation Expenses", and the home-rehab condition ("a
+self-powered, climbing wheelchair") is accepted on the $250 recuperation card. Fix: allow `[.,)]` after the letter.
+
+**Note (Low):** a moved card takes the target's printed sign, so S$250 becomes "$250" (unresolved currency). This is
+acceptable because it is what that page prints.
+
+## Verdict on PR #82 at `fa0ef79`
+
+**Not ready.**
+- R60-1 is a wrong claimable amount from the new two-line fallback.
+- R60-2 lets the new move rule borrow another person's or another product's line and condition.
+- Both are tight guards with controls, and R60-3 is a one-character regex fix.
+- Every R59 item is fixed.
