@@ -12,7 +12,7 @@ const Body=z.object({
   personId:z.string().uuid(),
   coverKey:z.string().min(1).max(600),
   status:z.enum(["confirmed","corrected"]).nullable(),
-  sumInsured:z.number().nonnegative().nullable().optional(),
+  sumInsured:z.number().positive().nullable().optional(),
 });
 
 /** The household confirms one person's headline amount, corrects it, or takes that back (status null). */

@@ -147,7 +147,7 @@ export async function setConfirmation(db: Db, accountId: string, userId: string 
   const held = coversOf(l.readings, l.family).covers.some((c) => c.personId === personId && c.coverKey === coverKey);
   if (status == null) { await db("DELETE FROM benefit_confirmations WHERE account_id=$1 AND family_member_id=$2 AND cover_key=$3", [accountId, personId, coverKey]); return; }
   if (!held) throw new TableInputError("Your documents do not show that cover for this person.");
-  if (status === "corrected" && (sumInsured == null || !Number.isFinite(sumInsured) || sumInsured < 0)) throw new TableInputError("Give the amount as a number.");
+  if (status === "corrected" && (sumInsured == null || !Number.isFinite(sumInsured) || sumInsured <= 0)) throw new TableInputError("Give the amount as a number more than 0.");
   await db(`INSERT INTO benefit_confirmations(account_id, family_member_id, cover_key, status, sum_insured, updated_by, updated_at) VALUES($1,$2,$3,$4,$5,$6,now())
     ON CONFLICT (account_id, family_member_id, cover_key) DO UPDATE SET status=EXCLUDED.status, sum_insured=EXCLUDED.sum_insured, updated_by=EXCLUDED.updated_by, updated_at=now()`,
     [accountId, personId, coverKey, status, status === "corrected" ? sumInsured : null, userId]);

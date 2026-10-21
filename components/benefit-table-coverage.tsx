@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { parseAmount } from "@/lib/benefit-table/amount";
 
 /** Coverage from the benefit table (lib/benefit-table): for each person, their covers with the headline amounts to
  * confirm or correct, then what each cover pays, each row with its page. Parts of documents not linked to anyone's
@@ -48,6 +49,7 @@ function CoverCard({cover,reload}:{cover:Cover;reload:()=>Promise<void>}){
     catch(e){setError(e instanceof Error?e.message:"Could not save that");}
     finally{setBusy(false);}
   };
+  const parsed=parseAmount(value);
   const k=cover.confirmation;
   return <li className="benefit-item coverage-row" data-testid="table-cover">
     <div className="coverage-top">
@@ -58,10 +60,13 @@ function CoverCard({cover,reload}:{cover:Cover;reload:()=>Promise<void>}){
       :k?.status==="confirmed"?<p className="coverage-conditions">You confirmed this amount.</p>:null}
     <p className="coverage-plan">{[cover.premium!=null?`Premium ${money(cover.premium,cover.currency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null,
       cover.startDate?`from ${cover.startDate}`:null,cover.endDate?`to ${cover.endDate}`:null].filter(Boolean).join(" · ")}</p>
-    {editing?<form className="schedule-controls" onSubmit={e=>{e.preventDefault();const n=Number(value.replace(/[^0-9.]/g,""));if(!value.trim()||!Number.isFinite(n)){setError("Give the amount as a number.");return;}void save("corrected",n);}}>
+    {editing?<form className="schedule-controls" onSubmit={e=>{e.preventDefault();if(parsed.ok)void save("corrected",parsed.amount);}}>
       <div className="field"><label htmlFor={`si-${cover.coverKey}`}>Correct sum insured</label>
-        <input id={`si-${cover.coverKey}`} inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)}/></div>
-      <button type="submit" className="button secondary compact" disabled={busy}>Save</button>
+        <input id={`si-${cover.coverKey}`} inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} aria-describedby={`si-${cover.coverKey}-check`}/>
+        {/* What will be saved, before it is saved: a typed amount is never guessed at. */}
+        <small id={`si-${cover.coverKey}-check`} className={parsed.ok?"muted":"error"} data-testid="correct-preview" role="status">
+          {parsed.ok?`Will save ${money(parsed.amount,cover.currency)}`:parsed.why}</small></div>
+      <button type="submit" className="button secondary compact" disabled={busy||!parsed.ok}>Save</button>
       <button type="button" className="mini-button" onClick={()=>setEditing(false)}>Cancel</button>
     </form>:<div className="schedule-controls">
       {k?.status!=="confirmed"&&cover.sumInsured!=null?<button type="button" className="button secondary compact" disabled={busy} onClick={()=>void save("confirmed")}>Confirm</button>:null}

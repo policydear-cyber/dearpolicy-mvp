@@ -3,6 +3,7 @@
  *   npm run benefit-table:service-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { parseAmount } from "@/lib/benefit-table/amount";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
 import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
@@ -268,6 +269,23 @@ async function main() {
     for (const head of ["export async function readDocumentIntoLedger(", "export async function readPendingDocuments(", "export async function pendingDocumentCount("])
       assert.match(body("lib/ledger/extract.ts", head), /\{\n  if\(await benefitTableOwnsReading\(\)\)return/, head);
     assert.match(body("lib/ledger/store.ts", "export async function seedLedger("), /if\(await benefitTableLive\(\)\)return \{added:0\}/);
+  });
+
+  await test("TE: a typed sum insured is read strictly; words, letters and zero are refused, never guessed", async () => {
+    for (const [typed, amount] of [["250000", 250000], ["250,000", 250000], ["S$250,000", 250000], ["$ 1,500,000.00", 1500000], [" 300000.5 ", 300000.5]] as const)
+      assert.deepEqual(parseAmount(typed), { ok: true, amount }, typed);
+    for (const typed of ["1.5 million", "250k", "abc", "", "0", "0.00", "-5", "25,00", "1,2345", "250 000", "S$250,000 per year", "2.5e5"])
+      assert.equal(parseAmount(typed).ok, false, typed);
+    const f = household();
+    await readBoth(f);
+    await assert.rejects(setConfirmation(f.db, A, null, "p1", gpa, "corrected", 0), TableInputError, "the server refuses 0 too");
+  });
+  await test("TE: the Correct field saves only what it shows, and shows it before saving", async () => {
+    const src = readFileSync("components/benefit-table-coverage.tsx", "utf8");
+    assert.ok(!/replace\(\/\[\^0-9\.\]/.test(src), "no stripping of letters from a typed amount");
+    assert.match(src, /parseAmount\(value\)/);
+    assert.match(src, /Will save \$\{money\(parsed\.amount/);
+    assert.match(src, /disabled=\{busy\|\|!parsed\.ok\}/);
   });
 
   console.log(`benefit-table service: ${passed} passed, ${failures.length} failed`);
