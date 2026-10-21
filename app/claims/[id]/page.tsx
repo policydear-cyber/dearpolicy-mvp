@@ -71,6 +71,33 @@ function suggestedTypes(requested: string[]): string[] {
   for (const text of requested) for (const hint of REQUEST_TYPE_HINTS) if (hint.pattern.test(text)) for (const t of hint.types) if (known.has(t) && !out.includes(t)) out.push(t);
   return out;
 }
+/** A document counts as sent once it is uploaded and not failed or rejected. */
+const SENT_STATUSES = new Set(["uploaded", "quarantined", "processing", "extracted", "needs_review", "matched"]);
+/** Which uploaded document answers one requested item, by the document types that item maps to. */
+function sentFor(requested: string, documents: EvidenceDoc[]): EvidenceDoc | null {
+  const types = suggestedTypes([requested]);
+  return documents.find((d) => types.includes(d.document_type) && SENT_STATUSES.has(d.status)) ?? null;
+}
+
+/** What happens next for this claim, in plain steps. Follows only the server's display tone; it never says what the
+ * insurer will decide or how long anything takes. */
+function nextSteps(tone: ClaimDisplay["tone"]): string[] {
+  if (tone === "info") return [
+    "Answer the remaining questions in the chat, so DearPolicy knows what happened.",
+    "DearPolicy then lists the documents this claim needs.",
+    "You upload them here, and DearPolicy reads each one.",
+  ];
+  if (tone === "waiting") return [
+    "Upload each document still needed. A photo or a PDF is fine.",
+    "DearPolicy reads each one and checks the name matches. Anything that must meet the policy’s own definition is checked by a DearPolicy reviewer.",
+    "An indicative estimate appears below once the evidence supports it. The insurer makes the final decision.",
+  ];
+  return [
+    "Check the indicative estimate below.",
+    "Send the claim and its documents to your insurer. The insurer makes the final decision on any amount.",
+  ];
+}
+
 export default function ClaimEvidencePage() {
   const params = useParams<{ id: string }>();
   const claimSessionId = params.id;
@@ -86,6 +113,14 @@ export default function ClaimEvidencePage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  /** "Upload this" on a needed item: preselects its document type and brings the file picker into view. */
+  function startUpload(requested: string) {
+    const type = suggestedTypes([requested])[0];
+    if (type) setDocType(type);
+    const input = document.getElementById("claim-file");
+    input?.scrollIntoView({ block: "center" });
+    input?.focus();
+  }
 
   const load = useCallback(async () => {
     const claimRes = await fetch(`/api/claims/${claimSessionId}`).then((r) => r.json());
@@ -159,19 +194,35 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
+      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Send the documents for this claim here and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
         <div className="eyebrow">STATUS</div>
         <h2 data-testid="claim-display-label">{claim.display?.label ?? "Open"}</h2>
         {claim.display?.detail && <p>{claim.display.detail}</p>}
         {claim.display?.tone === "info" && <p><a className="text-link" href={`/chat?member=${claim.family_member_id}&claim=${claim.id}`}>Continue answering questions →</a></p>}
-        {claim.display && claim.display.requestedDocuments.length > 0 ? <div data-testid="claim-requested-documents"><strong>What to send</strong><ul>{claim.display.requestedDocuments.map((d) => <li key={d}>{d}</li>)}</ul></div> : null}
+        {claim.display && claim.display.requestedDocuments.length > 0 ? (() => {
+          const items = claim.display.requestedDocuments.map((d) => ({ text: d, sent: sentFor(d, documents) }));
+          const left = items.filter((i) => !i.sent).length;
+          return <div className="claim-needed" data-testid="claim-requested-documents">
+            <strong>What to send <span className="muted">{left ? `${left} of ${items.length} still needed` : "All sent"}</span></strong>
+            <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
+              <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
+              <span className="claim-needed-text">{text}{sent ? <small>Sent: {sent.original_filename}</small> : <small>Still needed</small>}</span>
+              {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
+            </li>)}</ul>
+          </div>;
+        })() : null}
+        <div className="claim-next" data-testid="claim-next-steps">
+          <strong>What happens next</strong>
+          <ol>{nextSteps(claim.display?.tone ?? "info").map((step) => <li key={step}>{step}</li>)}</ol>
+          {claim.display?.tone === "ready" && claim.decision_packet ? <p><a className="text-link" href={`/api/claims/${claim.id}/pack`}>Download the claim pack (PDF) →</a></p> : null}
+        </div>
       </section>
 
       <section className="section">
         <h2>Upload a document</h2>
-        <form onSubmit={handleUpload} className="field" style={{ display: "grid", gap: 10, maxWidth: 480 }}>
+        <form onSubmit={handleUpload} className="field claim-upload-form" style={{ display: "grid", gap: 10, maxWidth: 480 }}>
           <label>Document type
             <select value={docType} onChange={(e) => setDocType(e.target.value)} required>
               <option value="" disabled>Choose what this document is…</option>
@@ -194,7 +245,7 @@ export default function ClaimEvidencePage() {
               ? <p className="muted"><b>{group.label}:</b> {group.guidance} {option.description}</p>
               : <p className="muted">Pick the closest match. Death records, medical evidence and bills are each read differently.</p>;
           })()}
-          <label>Document file<input type="file" name="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff" required /></label>
+          <label>Document file<input id="claim-file" type="file" name="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff" required /></label>
           {uploadError && <div className="alert error" role="alert">{uploadError}</div>}
           <button className="button primary" type="submit" disabled={busy || !docType}>{busy ? "Uploading…" : "Upload"}</button>
         </form>
@@ -365,7 +416,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
           </div>
         ))}
       </fieldset>
-      <label className="bill-review-confirm" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+      <label className="bill-review-confirm" style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         <span>I have checked these details against the document and they match what is printed.</span>
       </label>

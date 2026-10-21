@@ -185,9 +185,14 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     for (const who of [self, child]) ids[who] = family.find((f) => f.display_name === who)!.id;
     // Edit the child's preferred name; the Save button reports the save.
     const childCard = owner.locator(".profile-card").filter({ has: owner.locator(`input[value="${child}"]`) });
+    // PR #77 (family page): the fields are folded behind "Edit details". Original: filled "Preferred name" directly.
+    await childCard.getByRole("button", { name: "Edit details" }).click();
     await childCard.getByLabel("Preferred name").fill("Syn Child");
     await childCard.getByRole("button", { name: "Save" }).click();
-    await expect(childCard.getByRole("button", { name: "Saved" })).toBeVisible();
+    // PR #77: a successful save closes the details and reports it in the card's status line, so "Edit details" returns.
+    // Was: await expect(childCard.getByRole("button", { name: "Saved" })).toBeVisible();
+    await expect(childCard.locator(".profile-status")).toHaveText(`Saved ${child}.`);
+    await expect(childCard.getByRole("button", { name: "Edit details" })).toBeVisible();
     const after = (await api<{ family: { id: string; preferred_name: string | null }[] }>(owner, "/api/family")).body.family;
     expect(after.find((f) => f.id === ids[child])?.preferred_name).toBe("Syn Child");
   });
@@ -268,6 +273,12 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
 
     // Link the ready policy to the child through the UI.
     await owner.reload();
+    // PR #77: the people chips sit behind the covers picker's "Choose" (or "Change") button; open it first.
+    // Was: the chip was clicked directly.
+    const opener = card(owner, clean).getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+    // The card renders after the page loads; wait for its picker line before deciding it is already open.
+    await card(owner, clean).getByTestId("covers-picker").waitFor({ timeout: 10_000 }).catch(() => {});
+    if (await opener.isVisible()) await opener.click();
     await card(owner, clean).getByRole("button", { name: child, exact: true }).click();
     await expect(owner.getByTestId("library-notice")).toContainText("Saved");
     const linked = (await policies(owner)).find((p) => p.id === clean.id)!;
@@ -553,8 +564,11 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await owner.goto("/family");
     const childCard = () => owner.locator(".profile-card").filter({ has: owner.locator(`input[value="${child}"]`) });
     await childCard().getByRole("button", { name: `Delete ${child}` }).click();
-    await childCard().getByRole("button", { name: `Confirm delete ${child}` }).click();
-    await expect(owner.locator(".profile-add-panel [role=status]")).toContainText("has linked documents or activity");
+    // PR #77 (family page): a person still linked to a document is sent to Documents instead of being offered a delete that fails.
+    // Original: clicked `Confirm delete ${child}` and expected the status "has linked documents or activity".
+    await expect(childCard().getByRole("alert")).toContainText(new RegExp(`${child} is still linked to (?:a document|\\d+ documents)`));
+    await expect(childCard().getByRole("link", { name: "Go to Documents" })).toHaveAttribute("href", "/policies");
+    await expect(childCard().getByRole("button", { name: `Confirm delete ${child}` })).toHaveCount(0);
     expect(((await api<{ family: { id: string }[] }>(owner, "/api/family")).body.family ?? []).map((f) => f.id)).toContain(ids[child]);
     // Remove the child's document first, then the profile.
     await owner.goto("/policies");

@@ -165,6 +165,9 @@ table { font-variant-numeric: tabular-nums; }
 .field label span { font-weight: 400; color: var(--muted); }
 .field select, .field input, .chat-composer textarea, .detected-row select { width: 100%; background: var(--surface); border: 1px solid var(--input-line); border-radius: var(--r-sm); padding: 10px 12px; min-height: 44px; color: var(--ink); outline: none; transition: border-color var(--t-hover) var(--ease), box-shadow var(--t-hover) var(--ease); }
 .field input[type=file] { padding: 8px 10px; }
+/* The file picker is the first thing a new user taps: a full-width, finger-sized button. */
+.upload-form input[type=file] { min-height: 52px; width: 100%; }
+.upload-form input[type=file]::file-selector-button { min-height: 36px; padding: 6px 14px; margin-right: 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
 .field select:focus, .field input:focus, .chat-composer textarea:focus, .detected-row select:focus { border-color: var(--brand); box-shadow: var(--focus); }
 .alert { border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 20px; display: grid; gap: 4px; font-size: var(--fs-sm); line-height: 1.5; }
 .alert.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
@@ -321,6 +324,20 @@ table { font-variant-numeric: tabular-nums; }
 .profile-fields { display: grid; grid-template-columns: 1.5fr .8fr 1fr 1fr; gap: 10px; }
 .profile-actions { display: grid; gap: 8px; justify-items: end; }
 .profile-actions span { font-size: var(--fs-xs); color: var(--muted); }
+/* Family card: summary and glance on top, editable details below, actions last. */
+.profile-card { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.profile-summary { display: flex; align-items: center; gap: 12px; }
+.profile-summary strong { display: block; font-size: var(--fs-lg); }
+.profile-summary small { color: var(--muted); font-size: var(--fs-sm); }
+.profile-glance { display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--ink-2); }
+.profile-glance p { margin: 0; }
+.profile-glance b { color: var(--ink); }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-items: start; justify-content: flex-start; }
+.profile-remove-warning { border: 1px solid var(--critical); background: var(--critical-tint); color: var(--ink); border-radius: var(--r-md); padding: 10px 12px; font-size: var(--fs-sm); }
+.profile-status { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.profile-status.error { color: var(--critical); font-weight: 600; }
+.profile-fields[hidden] { display: none; }
+.button.danger { border-color: var(--critical); color: var(--critical); }
 .document-list { display: grid; gap: 12px; }
 .document-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 12px; }
 .document-card.needs-review { border-color: var(--warn-line); }
@@ -328,12 +345,22 @@ table { font-variant-numeric: tabular-nums; }
 .document-head { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; }
 .document-title { display: grid; gap: 2px; }
 .document-title strong { font-size: var(--fs-md); }
-.document-title span { font-size: var(--fs-xs); color: var(--muted); text-transform: capitalize; }
+.document-title span { font-size: var(--fs-xs); color: var(--muted); }
+.document-for, .document-found, .document-names { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.document-for b, .document-found b { color: var(--ink); margin-right: 4px; }
+.document-found.warn { color: var(--warn-text); }
+.document-names { font-size: var(--fs-xs); color: var(--muted); }
+.document-title .status { justify-self: start; margin-top: 4px; font-style: normal; text-transform: none; white-space: nowrap; }
+.detected-row label { font-size: var(--fs-sm); color: var(--ink); }
 .document-authority { font-size: var(--fs-xs); font-weight: 650; border-radius: 999px; padding: 5px 10px; }
 .document-authority.confirmed { background: var(--good-tint); color: var(--good-text); }
 .document-authority.reference { background: var(--bg-2); color: var(--ink-2); }
 .document-authority.processing { background: var(--brand-tint); color: var(--brand-ink); min-width: 48px; text-align: center; }
+.document-person-filter { margin: 4px 0 12px; font-size: var(--fs-sm); color: var(--muted); }
+.document-person-filter b { color: var(--ink); }
+.document-person-filter button.text-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--brand-ink); }
 .document-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: var(--fs-xs); }
+@media (max-width: 620px) { .document-meta > span { flex-basis: 100%; } }
 .linked-people { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: var(--fs-xs); }
 .person-tag { background: var(--brand-tint); color: var(--brand-ink); padding: 4px 8px; border-radius: 999px; font-weight: 600; }
 .linked-people > b, .detected-block > b { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
@@ -429,6 +456,9 @@ table { font-variant-numeric: tabular-nums; }
 .typing { color: var(--muted); }
 .chat-composer { position: sticky; bottom: 16px; margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; box-shadow: var(--shadow-float); }
 .chat-composer textarea { resize: vertical; border: 0; box-shadow: none !important; padding: 10px; min-height: 64px; background: transparent; }
+.chat-empty > p strong { color: var(--ink); }
+@media (max-width: 620px) { .chat-empty { margin-top: 12px; } .chat-empty .big-mark { display: none; } }
+.chat-empty > p.chat-library-note { font-size: var(--fs-sm); color: var(--ink-2); background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; }
 .chat-disclaimer { text-align: center; color: var(--muted); font-size: var(--fs-xs); margin-top: 10px; }
 .chat-value-strip { margin: 14px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .chat-value-strip span { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; }
@@ -689,7 +719,7 @@ table { font-variant-numeric: tabular-nums; }
   .summary-row, .dashboard-two-col, .trust-strip { grid-template-columns: 1fr; }
   .coverage-grid { grid-template-columns: 1fr 1fr; }
   .records-upload { grid-template-columns: 1fr; }
-  .profile-add-grid, .profile-fields { grid-template-columns: 1fr; }
+  .profile-add-grid { grid-template-columns: 1fr; }
   .profile-card { grid-template-columns: 1fr; }
   .profile-avatar { display: none; }
   .profile-actions { grid-column: 1; }
@@ -827,6 +857,25 @@ table { font-variant-numeric: tabular-nums; }
 .benefit-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
 .benefit-head small { color: var(--muted); }
 .benefit-item p { margin: 0; }
+/* Coverage: person, then kind of cover. The glance (kinds found, main kinds not found) comes before any row. */
+.coverage-person .section-heading { margin-bottom: 6px; }
+.coverage-glance { display: grid; gap: 8px; margin-bottom: 14px; }
+.coverage-kinds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.coverage-kinds a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 999px; background: var(--brand-tint); color: var(--brand-ink); font-size: var(--fs-sm); font-weight: 600; text-decoration: none; }
+.coverage-kinds li.to-confirm a { background: transparent; border: 1px dashed var(--line-strong); color: var(--ink-2); }
+.coverage-unconfirmed { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--warn-text); }
+.document-to-confirm { color: var(--ink-2); }
+.coverage-gaps { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.coverage-gaps b { color: var(--ink); }
+.coverage-kind { scroll-margin-top: 16px; }
+.coverage-kind + .coverage-kind { margin-top: 16px; }
+.coverage-kind h3 { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.coverage-top { display: grid; gap: 2px; }
+.coverage-top .benefit-head { justify-content: flex-start; }
+.coverage-row .pays-cell { font-size: var(--fs-lg); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.coverage-conditions { font-size: var(--fs-sm); color: var(--ink-2); }
+.coverage-plan { font-size: var(--fs-xs); color: var(--muted); }
+@media (pointer: coarse), (max-width: 620px) { .coverage-kinds a { min-height: 44px; } }
 .source-details > summary { cursor: pointer; font-size: var(--fs-xs, .8rem); color: var(--brand-ink); font-weight: 600; min-height: 24px; line-height: 1.6; }
 .source-details blockquote { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid var(--line-strong); background: var(--surface-2); font-size: var(--fs-sm, .9rem); overflow-wrap: anywhere; }
 .source-details ul { margin: 6px 0 0; padding-left: 18px; }
@@ -842,6 +891,10 @@ table { font-variant-numeric: tabular-nums; }
 
 /* Round 5: chat length counter */
 .chat-length { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); padding: 0 10px; }
+.chat-wait-hint { grid-column: 1 / -1; color: var(--ink-2); font-size: var(--fs-xs); padding: 0 10px; }
+/* The sending bubble scrolls into view above the sticky message box (and the phone tab bar), not behind them. */
+.chat-end { scroll-margin-bottom: 130px; }
+@media (max-width: 900px) { .chat-end { scroll-margin-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 140px); } }
 .chat-length.near-limit { color: var(--warn-text); }
 
 /* Round 5: library confirmations, locked PDFs, who a document covers */
@@ -957,6 +1010,15 @@ table { font-variant-numeric: tabular-nums; }
 .source-doc .source-open { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin-top: 2px; color: var(--brand-ink); font-weight: 600; }
 .chat-page .source-doc > summary::before { content: none; }
 .thinking-note { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.5; }
+/* Answer steps, drawn only when the server reports them: done, current, still to come. */
+.answer-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--muted); }
+.answer-steps li { display: flex; align-items: center; gap: 8px; }
+.answer-steps li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: 0 0 auto; }
+.answer-steps li.done { color: var(--ink-2); }
+.answer-steps li.done::before { background: var(--brand-ink); border-color: var(--brand-ink); }
+.answer-steps li.current { color: var(--ink); font-weight: 600; }
+.answer-steps li.current::before { border-color: var(--brand-ink); box-shadow: 0 0 0 3px var(--brand-tint); }
+.answer-wait-clock { font-variant-numeric: tabular-nums; }
 .chat-composer textarea { overflow-y: auto; }
 .chat-length { display: none; }
 .chat-length.visible { display: block; }
@@ -979,6 +1041,7 @@ table { font-variant-numeric: tabular-nums; }
    check chips (not primary buttons), and "Saved" beside the control. */
 .covers-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font-size: var(--fs-sm); }
 .covers-summary > span:first-child { flex: 1 1 12rem; min-width: 0; }
+.covers-summary.empty { border-style: dashed; }
 .covers-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .chip-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px 6px 8px; border-radius: 999px; border: 1px solid var(--input-line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .chip-toggle .chip-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--input-line); display: grid; place-items: center; font-size: 13px; line-height: 1; }
@@ -1052,6 +1115,18 @@ div.answer-point { display: grid; gap: 4px; }
 .answer-either-shared b { color: var(--ink); }
 .answer-either-or { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .answer-either-or::before, .answer-either-or::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); }
+/* Coverage and Benefits: the same either/or block for a row two documents price differently. */
+.alt-amounts { margin: 6px 0 4px; }
+.alt-option { display: grid; gap: 4px; padding: 2px 0; }
+.alt-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.alt-figure strong { font-size: var(--fs-lg); color: var(--ink); font-variant-numeric: tabular-nums; }
+.alt-figure span { color: var(--ink-2); font-size: var(--fs-sm); }
+.alt-source { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; font-size: var(--fs-xs); color: var(--muted); }
+.alt-source a { display: inline-flex; align-items: center; min-height: 24px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.alt-own { font-weight: 700; color: var(--ink-2); }
+.alt-conditions { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); }
+.alt-note { margin: 8px 0 0; font-size: var(--fs-xs); color: var(--muted); }
+@media (pointer: coarse), (max-width: 620px) { .alt-source a { min-height: 44px; } }
 /* The two disclosures share one row while closed; an open one takes the full width. */
 .answer-more { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 18px; border-top: 1px solid var(--line); padding-top: 4px; }
 .answer-more > details { flex: 0 0 auto; }
@@ -1061,3 +1136,21 @@ div.answer-point { display: grid; gap: 4px; }
 .answer-card-text { font-weight: 500; }
 .answer-card.printed { background: var(--surface-2); }
 .answer-card.printed .answer-card-amount strong { font-size: 1.05rem; color: var(--ink-2); }
+
+/* Claim page: what is still needed, what happens next, and an upload box sized for a thumb. */
+.claim-needed { margin-top: 12px; }
+.claim-needed > strong { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.claim-needed > strong .muted { font-size: var(--fs-sm); font-weight: 500; }
+.claim-needed ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.claim-needed li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.claim-needed li.sent { background: var(--surface-2); }
+.claim-needed-mark { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.claim-needed li.sent .claim-needed-mark { border-color: var(--good-line); color: var(--good-text); }
+.claim-needed-text { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.claim-needed-text small { color: var(--muted); font-size: var(--fs-xs); }
+.claim-next { margin-top: 16px; }
+.claim-next ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.claim-next li { line-height: 1.45; }
+.claim-upload-form input[type=file] { min-height: 52px; width: 100%; }
+.claim-upload-form input[type=file]::file-selector-button { min-height: 36px; padding: 6px 14px; margin-right: 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.bill-review-confirm { min-height: 44px; }

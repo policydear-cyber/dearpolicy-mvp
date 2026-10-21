@@ -7,7 +7,7 @@
  *   1. a 20 MB scanned document uploads (direct-to-storage, in parts)
  *   2. deleting a household lands on a confirmation with next steps
  *   3. a group booklet can cover several people, each with a cover tier
- *   4. chat length limit + counter, starter prompts from this household,
+ *   4. chat length limit + counter, an open invitation (no starter prompts),
  *      a reload mid-answer resumes the same conversation, and a two-tab
  *      conflict says what happened with a reload button
  *   5. empty portfolio, locked-PDF password on the card, wrong password
@@ -105,6 +105,12 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     await expect(page.getByTestId("empty-portfolio")).toBeVisible({ timeout: 60_000 });
     await expect(page.locator("main")).not.toContainText(/Everything looks current|S\$0\.00|Family member's protection/);
     await shot(page, "02-empty-portfolio");
+    // PR #77 (first-run): with nothing uploaded, an empty chat says to upload first and offers no fixed questions.
+    await page.goto("/chat");
+    const firstRun = page.getByTestId("chat-welcome");
+    await expect(firstRun).toContainText("Upload a policy first", { timeout: 60_000 });
+    await expect(firstRun.getByRole("link", { name: "Upload a document" })).toHaveAttribute("href", "/policies");
+    await expect(page.locator(".prompt-grid")).toHaveCount(0);
 
     // Family; a future date of birth is refused.
     const future = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
@@ -146,7 +152,8 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     const picker = card.getByTestId("covers-picker");
     // Once anyone is linked the picker is one "Covers …" line with a Change button; open it before using the chips.
     const openPicker = async () => {
-      const change = picker.getByRole("button", { name: "Change" });
+      // PR #77: the picker is one line for every document until opened; "Choose" when nobody is linked yet, "Change" otherwise. Was: { name: "Change" } only.
+      const change = picker.getByRole("button", { name: /^(?:Change|Choose)$/ });
       if (await change.isVisible().catch(() => false)) await change.click();
       await expect(picker.locator(".declare-owner")).toBeVisible({ timeout: 30_000 });
     };
@@ -215,10 +222,17 @@ test.describe("round 5: the exploratory findings, fixed", () => {
 
     // 4. Chat: limit + counter, this household's names, resume after reload, two-tab conflict.
     await page.goto("/chat");
-    const grid = page.locator(".prompt-grid");
-    await expect(grid).toBeVisible();
-    await expect(grid).not.toContainText(/Charmaine|endowment/);
-    await expect(grid).toContainText(PEOPLE.employee);
+    // PR #77 (first-run): no fixed starter questions; an open invitation that names nothing from another household.
+    // Original (starter questions built from this household's people):
+    //   const grid = page.locator(".prompt-grid");
+    //   await expect(grid).toBeVisible();
+    //   await expect(grid).not.toContainText(/Charmaine|endowment/);
+    //   await expect(grid).toContainText(PEOPLE.employee);
+    const welcome = page.getByTestId("chat-welcome");
+    await expect(welcome).toBeVisible();
+    await expect(welcome).toContainText("Ask anything about your policies, in your own words.");
+    await expect(welcome).not.toContainText(/Upload a policy first|Charmaine|endowment/);
+    await expect(page.locator(".prompt-grid")).toHaveCount(0);
     const box = page.getByLabel("Message to DearPolicy");
     await box.fill("x".repeat(2100));
     expect((await box.inputValue()).length).toBe(2000);

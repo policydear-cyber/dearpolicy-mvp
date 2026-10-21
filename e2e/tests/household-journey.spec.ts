@@ -137,6 +137,12 @@ test.describe.serial("synthetic household journey", () => {
     for (const [pid, who] of [[ids.a, parent], [ids.b, child]] as const) {
       const p = all.find((x) => x.id === pid)!;
       const c = card(page, p);
+      // PR #77: the people chips sit behind the covers picker's "Choose" (or "Change") button; open it first.
+      // Was: the chip was clicked directly.
+      const opener = c.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
+      // The card renders after the page loads; wait for its picker line before deciding it is already open.
+      await c.getByTestId("covers-picker").waitFor({ timeout: 10_000 }).catch(() => {});
+      if (await opener.isVisible()) await opener.click();
       await c.getByRole("button", { name: who, exact: true }).click();
       // The confirmation is shown with the library it changed (the library notice), not under the upload form.
       await expect(page.getByTestId("library-notice")).toContainText("Saved");
@@ -204,12 +210,27 @@ test.describe.serial("synthetic household journey", () => {
     await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     expect((await policies(page)).map((p) => p.id)).not.toContain(ids.bad);
 
+    // Negative control (PR #77): while the child's document is still in the library, Family refuses to remove them and
+    // sends the household to Documents instead; nothing is deleted.
+    await page.goto("/family");
+    const linkedCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
+    await linkedCard.getByRole("button", { name: "Delete" }).click();
+    await expect(linkedCard.getByRole("alert")).toContainText(`${child} is still linked to a document`);
+    await expect(linkedCard.getByRole("link", { name: "Go to Documents" })).toHaveAttribute("href", "/policies");
+    await expect(linkedCard.getByRole("button", { name: /Confirm delete/ })).toHaveCount(0);
+    await linkedCard.getByRole("button", { name: "Cancel" }).click();
+    expect(((await api<{ family: { id: string }[] }>(page, "/api/family")).body.family ?? []).map((f) => f.id)).toContain(ids[child]);
+    await page.goto("/policies");
+
     // Remove the child's policy, then the child's profile, through the UI.
     const b = (await policies(page)).find((p) => p.id === ids.b)!;
     const cb = card(page, b);
     await cb.getByRole("button", { name: "Delete" }).click();
     await cb.getByRole("button", { name: "Confirm delete" }).click();
     await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
+    // PR #77: the notice above can still be the first deletion's, so wait for this document to leave the library before
+    // leaving the page (leaving earlier could cut the request off). Was: went straight to /family.
+    await expect.poll(async () => (await policies(page)).map((p) => p.id), { timeout: 30_000 }).not.toContain(ids.b);
     await page.goto("/family");
     const childCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
     await childCard.getByRole("button", { name: "Delete" }).click();

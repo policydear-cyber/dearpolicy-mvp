@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent,Suspense,useEffect,useRef,useState } from "react";
+import Link from "next/link";
+import { FormEvent,Suspense,useCallback,useEffect,useRef,useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
@@ -10,6 +11,7 @@ import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
 import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
+import { AnswerWait,isAnswerStage,type AnswerStageId } from "@/components/answer-wait";
 import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
 
@@ -34,7 +36,7 @@ function rememberConversation(id:string|null){
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 const CHAT_MAX_WAIT_MS=6*60_000;
-type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean};
+type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
   information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"A DearPolicy reviewer will check this",
@@ -55,19 +57,33 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
 }
 
 class ConflictError extends Error{}
+/** The page stopped waiting; the job may still finish on the server, so the answer can still arrive in this chat. */
+class StoppedWaiting extends Error{}
 
-/** Starter questions that fit THIS household: its own people, never
- * another family's names or products. */
-function examplePrompts(family:Member[]):string[]{
-  const self=family.find(m=>m.relationship==="self")??family[0];
-  const other=family.find(m=>m!==self);
-  if(!self)return ["What policies does my family have?","What does my hospital plan cover?","When do my policies renew?","A family member was admitted to hospital. What can we claim?"];
-  return [
-    "What policies does my family have?",
-    `What is ${self.display_name} covered for?`,
-    other?`${other.display_name} broke an arm. What can we claim?`:`${self.display_name} was admitted to hospital. What can be claimed?`,
-    "When do our policies renew?",
-  ];
+/** What the household's library is like right now, so an empty chat says what a first question will be answered from:
+ * nothing uploaded yet, documents still being read, or documents that could not be read. */
+type Library={total:number;reading:number;failed:{id:string;name:string}[]};
+const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
+type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;processing_status?:string;quarantine_status?:string};
+function libraryOf(policies:LibraryPolicy[]):Library{
+  return {total:policies.length,
+    reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:p.product_name||p.original_filename||"Untitled document"}))};
+}
+
+/** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
+ * answer can draw on today. */
+function ChatWelcome({library}:{library:Library|null}){
+  return <div className="chat-empty" data-testid="chat-welcome"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
+    {library&&library.total===0?<>
+      <p><strong>Upload a policy first.</strong> DearPolicy answers only from the documents you upload, so there is nothing to answer from yet.</p>
+      <Link className="button primary" href="/policies">Upload a document</Link>
+    </>:<>
+      <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what. DearPolicy answers from your uploaded documents and shows the page each answer comes from.</p>
+      {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
+      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
+    </>}
+  </div>;
 }
 
 function ChatContent(){
@@ -82,7 +98,12 @@ function ChatContent(){
   const [historyCursor,setHistoryCursor]=useState<string|null>(null);
   const [messageCursor,setMessageCursor]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
-  const [progress,setProgress]=useState("Reading your message…");
+  // "" until the server reports a stage of its own: the wait never names a step that is not really happening.
+  const [progress,setProgress]=useState("");
+  const [stageId,setStageId]=useState<AnswerStageId|null>(null);
+  /** What is in the message box right now, read when a send fails (a closure would see the old value). */
+  const boxText=useRef("");
+  const [queued,setQueued]=useState(false);
   const [progressDetail,setProgressDetail]=useState<{completed:number;total:number}|null>(null);
   const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState("");
@@ -97,14 +118,22 @@ function ChatContent(){
   const composer=useRef<HTMLTextAreaElement|null>(null);
   /** Document id -> file name, so each source row says which file it is. */
   const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
-  useEffect(()=>{
-    let live=true;
-    fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(data=>{
-      if(!live||!data?.policies)return;
-      setDocumentFiles(Object.fromEntries((data.policies as {id:string;original_filename?:string|null}[]).filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
-    }).catch(()=>undefined);
-    return()=>{live=false;};
+  const [library,setLibrary]=useState<Library|null>(null);
+  const loadLibrary=useCallback(async()=>{
+    const data=await fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);
+    if(!data?.policies)return null;
+    const policies=data.policies as LibraryPolicy[];
+    setDocumentFiles(Object.fromEntries(policies.filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
+    const next=libraryOf(policies);setLibrary(next);return next;
   },[]);
+  // While documents are being read, the welcome checks again now and then (for up to ten minutes), so it never says
+  // "still being read" about a document that is ready.
+  useEffect(()=>{
+    let live=true,checks=0,timer:ReturnType<typeof setTimeout>|undefined;
+    const tick=async()=>{const next=await loadLibrary();if(live&&next&&next.reading>0&&++checks<100)timer=setTimeout(()=>void tick(),6000);};
+    void tick();
+    return()=>{live=false;if(timer)clearTimeout(timer);};
+  },[loadLibrary]);
   // Reading a real policy takes real time on a local GPU, so the indicator has
   // to keep moving and show what stage it is at rather than looking frozen.
   useEffect(()=>{
@@ -142,7 +171,7 @@ function ChatContent(){
     // finished, with the message kept, whatever the server still says.
     const giveUpAt=Date.now()+CHAT_MAX_WAIT_MS;
     for(;;){
-      if(Date.now()>giveUpAt){jobId.current=null;throw new Error("This is taking much longer than it should, so DearPolicy stopped waiting. Your message is saved.");}
+      if(Date.now()>giveUpAt){jobId.current=null;throw new StoppedWaiting("This is taking much longer than it should, so DearPolicy stopped waiting. Your question is saved, and the answer may still arrive.");}
       if(signal.aborted||version!==requestVersion.current)throw new DOMException("Cancelled","AbortError");
       const response=await fetch("/api/chat/jobs/"+id,{signal,cache:"no-store"});
       const data=await response.json();
@@ -154,7 +183,9 @@ function ChatContent(){
       if(data.job.status==="failed")throw new Error(data.job.error??"Analysis stopped");
       if(version===requestVersion.current){
         const p=data.job.progress;
-        setProgress(customerMessage(p?.stage,"Checking your policies…"));
+        setQueued(data.job.status==="queued");
+        setStageId(isAnswerStage(p?.stageId)?p.stageId:null);
+        setProgress(p?.stage?customerMessage(p?.stage,""):"");
         setProgressDetail(p?.total?{completed:p.completed,total:p.total}:null);
       }
       await new Promise<void>((resolve,reject)=>{
@@ -167,7 +198,7 @@ function ChatContent(){
   async function restore(id:string){
     stopLocal();const version=requestVersion.current;
     const abort=new AbortController();controller.current=abort;
-    setBusy(true);setError("");setProgress("Opening saved chat…");setProgressDetail(null);
+    setBusy(true);setError("");setProgress("Opening saved chat…");setStageId(null);setQueued(false);setProgressDetail(null);
     try{
       const response=await fetch("/api/chat/history/"+id,{signal:abort.signal,cache:"no-store"});
       const data=await response.json();
@@ -211,7 +242,7 @@ function ChatContent(){
     text=text.trim();if(!text||busy)return;
     const version=++requestVersion.current,abort=new AbortController();controller.current=abort;
     const userMessage:Message={role:"user",content:text};
-    setMessages(previous=>[...previous,userMessage]);setQuestion("");setBusy(true);setError("");setProgress("Understanding your message…");setProgressDetail(null);
+    setMessages(previous=>[...previous,userMessage]);setQuestion("");setBusy(true);setError("");setProgress("");setStageId(null);setQueued(false);setProgressDetail(null);
     try{
       const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},signal:abort.signal,
         body:JSON.stringify({familyMemberId:memberId||null,scope:memberId?"member":"family",
@@ -231,10 +262,13 @@ function ChatContent(){
       // messages didn't go through, and why, right where they sent it.
       if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
         const conflict=e instanceof ConflictError||isConflict(null,String((e as {message?:unknown}|null)?.message??""));
-        const message=conflict?CONFLICT_TEXT:customerError(e,ANSWER_FAILED);
-        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict}:m));
-        // The unsent text goes back into the box, ready to send again.
-        if(conflict)setQuestion(current=>current||text);
+        const stopped=e instanceof StoppedWaiting;
+        const message=conflict?CONFLICT_TEXT:stopped?e.message:customerError(e,ANSWER_FAILED);
+        // The unsent text goes back into the box, ready to send again -- unless something new is already typed there, or
+        // the page only stopped waiting: that answer may still arrive, and sending again would ask twice.
+        const restored=!stopped&&!boxText.current.trim();
+        if(restored)setQuestion(text);
+        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,stopped,restored}:m));
       }
     }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
@@ -288,6 +322,7 @@ function ChatContent(){
     if(!busy&&messages[messages.length-1]?.role==="assistant"&&latest.current){latest.current.scrollIntoView({behavior,block:"start"});return;}
     end.current?.scrollIntoView({behavior,block:"end"});
   },[messages,busy]);
+  useEffect(()=>{boxText.current=question;},[question]);
   async function ask(event:FormEvent){event.preventDefault();await sendText(question);}
   /** Enter sends and Shift+Enter starts a new line, on a keyboard. On a
    * touch screen Enter stays a new line: the Send button is right there. */
@@ -303,10 +338,11 @@ function ChatContent(){
 
   return <div className="page chat-page">
     <header className="chat-header">
-      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask about an event, a policy or your family’s plans. DearPolicy checks the uploaded evidence and keeps track of what is still unknown.</p></div>
-      <div className="chat-head-actions"><div className="auto-context"><strong>Automatic family context</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name, relationship, “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
+      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask anything, in your own words. Answers come only from the documents you uploaded.</p></div>
+      <div className="chat-head-actions"><div className="auto-context"><strong>Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
-    <details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
+    {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
+    {history.length||historyCursor?<details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
@@ -315,12 +351,9 @@ function ChatContent(){
       </li>)}</ul>}
       {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}
       {historyError?<p role="alert">{historyError}</p>:null}
-    </details>
+    </details>:null}
     <div className="chat-window" aria-live="polite">
-      {!messages.length&&!busy?<div className="chat-empty"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
-        <p>Just say who and what happened. DearPolicy resolves the person, follows the conversation, and checks that person’s uploaded policies.</p>
-        <div className="prompt-grid">{examplePrompts(family).map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
-      </div>:null}
+      {!messages.length&&!busy?<ChatWelcome library={library}/>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
@@ -420,23 +453,19 @@ function ChatContent(){
         </div>
         {message.error?(message.conflict
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>
-          :<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error} Send it again when you&rsquo;re ready.</span></div>):null}
+          :message.stopped
+          ?<div className="alert message-inline-error" role="alert" data-testid="chat-stopped-waiting"><strong>Still not answered.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Check for the answer</button>:null}</div>
+          :<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error.replace(/\.?\s*$/,".")} {message.restored&&index===messages.length-1&&!busy?"Your question is back in the box below, ready to send again.":"Send it again when you’re ready."}</span></div>):null}
       </div>)}
       {busy?<div className="message assistant"><div className="message-label">DearPolicy</div>
-        <div className="message-body thinking" role="status" aria-live="polite">
-          <div className="thinking-head"><span className="thinking-dots" aria-hidden="true"><i/><i/><i/></span><strong>{progress}</strong></div>
-          <div className={"thinking-bar "+(progressDetail?"determinate":"indeterminate")}>
-            <span style={progressDetail?{width:Math.max(4,Math.round((progressDetail.completed/Math.max(1,progressDetail.total))*100))+"%"}:undefined}/>
-          </div>
-          <small>Checking your policies · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
-          {elapsed>=12?<p className="thinking-note">Still working. DearPolicy is reading the pages that matter for this, which can take up to a minute when several documents apply.</p>:null}
-        </div></div>:null}
-      {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
+        <AnswerWait label={progress} stageId={stageId} detail={progressDetail} elapsed={elapsed} queued={queued}/></div>:null}
+      {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end} className="chat-end"/>
     </div>
-    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask about a policy or tell me what happened…" rows={2}/>
+    <form className="chat-composer" onSubmit={ask}><textarea ref={composer} aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} onKeyDown={sendOnEnter} placeholder="Ask anything about your policies…" rows={2}/>
       <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")+(question.length>=MAX_QUESTION_LENGTH*0.8?" visible":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
+      {busy&&question.trim()?<small className="chat-wait-hint" role="status">You can send this once the answer above arrives.</small>:null}
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
-    <p className="chat-disclaimer">Personal records confirm ownership. Matching policy wording supports benefit assessments.</p>
+    <p className="chat-disclaimer">DearPolicy answers only from your uploaded documents. Your insurer decides any claim.</p>
   </div>;
 }
 export default function ChatPage(){return <Suspense fallback={<div className="page">Loading…</div>}><ChatContent/></Suspense>;}
