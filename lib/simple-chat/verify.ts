@@ -526,7 +526,12 @@ function billMayBeUncovered(household: Household, c: Checked, checked: Checked[]
     if (o.s.ofBill || kind.test(`${row} ${o.found.excerpt}`) || /\bper\s+(?:visit|claim|incident)\b|\bup\s+to\b/i.test(`${row} ${o.found.excerpt}`) || moneyTable(page, o.found.offset)?.perVisit) return false;
   }
   return !household.documents.some((d) => !unreadable(d) && (!d.linkedPeople.length || d.linkedPeople.some((p) => baseName(p) === c.person)) &&
-    d.pages.some((p) => p.text.split("\n").some((l) => kind.test(l) && /\d/.test(l.replace(/\b(?:19|20)\d\d\b/g, "")))));
+    d.pages.some((p) => {
+      // The care's name with a figure on its line or the next three: a table can print the name and its figures on
+      // separate lines ("Physiotherapy" over its limits, Critic R78-1).
+      const lines = p.text.split("\n");
+      return lines.some((l, i) => kind.test(l) && lines.slice(i, i + 4).some((x) => /\d/.test(x.replace(/\b(?:19|20)\d\d\b/g, ""))));
+    }));
 }
 
 /** How much of a bill the household gave a per-visit or per-claim limit could cover (the A&E bill of $800 against
@@ -1070,7 +1075,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const shownAmounts = statements.filter((s) => s.amount).length;
   // The finding about a bill the household gave leads a dropped bottom line, unless an amount shown for that person may
   // pay it (Critic R77-2, TE #91 Q9).
-  const finding = checked.find((c) => c.billed && (c.uncovered || !checked.some((o) => o.amount && (!o.person || o.person === c.person) && (o.s.ofBill || o.bill))));
+  const finding = checked.find((c) => c.uncovered);
   const findingText = finding ? statements.find((x) => x.id === `s${checked.indexOf(finding) + 1}`)?.text : undefined;
   if (!bottomLine && findingText) bottomLine = findingText;
   if (!bottomLine) {

@@ -896,6 +896,9 @@ async function main() {
     assert.equal(cards(gp, [limit(null), none({ bill: "$800" })], ["GP bill was $800, can he claim"]).filter((x) => x.kind === "not_found").length, 0, "Q1 a GP limit shown without ofBill");
     assert.equal(cards(gp, [limit({ bill: "$800" }), none({ bill: "$800" })], ["his 2 GP visits came to $800, can he claim"]).length, 0, "Q2 / R77-1 P2 the limit's bill card refused, no uncovered card either");
     assert.equal(cards(gp, [none({ bill: "$800" })], ["GP bill was $800, can he claim"]).length, 0, "Q3 the document prints a GP limit, whatever the model said");
+    const physio = R59("Travel8.pdf", "Personal Accident Benefits\nHip\t75%\nOverseas medical expenses\nPhysiotherapy and chiropractic treatment\nBusiness plan\nS$1,000 per trip");
+    assert.equal(cards(physio, [none({ bill: "$800" })], ["his physio bill was $800"]).length, 0, "R78-1 the care's figures a few lines below its name");
+    assert.equal(cards(R59("Travel9.pdf", "Physiotherapy is not covered.\nOther text\nMore text\nStill more\nS$1,000 per trip"), [none({ bill: "$800" })], ["his physio bill was $800"]).length, 1, "control: a figure further down is another row");
     const q12 = verifyAnswer(gp, { bottomLine: "Covered up to S$30 per visit.", nextSteps: [], question: null, statements: [limit({ bill: "$800" }), none({ bill: "$800" })] }, ["GP bill was $800"]).answer;
     assert.equal(q12.bottomLine!.startsWith("Your documents list"), true, "Q12 the not-covered finding never headlines beside a limit that takes the bill");
     assert.deepEqual(q12.statements!.filter((x) => x.id.endsWith("-bill")).map((x) => x.kind), ["calculation"], "Q12 only the limit's bill card");
@@ -1120,6 +1123,8 @@ async function main() {
       assert.equal(a.bottomLine!.startsWith("Not shown to be covered"), true);
       assert.deepEqual(a.statements!.map((x) => [x.kind, x.amount ?? null]), [["fact", null], ["fact", null], ["not_found", null]], "TE #91 Q3: the household's documents print a GP limit, so the server never adds 'not covered'");
       assert.equal(a.nextSteps.length, 2, "the hotline and email the documents print and a deadline in days are kept");
+      const physio = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "not_found", text: "No cover pays a physio bill.", person: self, ofBill: { bill: "$800" } })] }, ["his physio bill was $800"]).answer;
+      assert.equal(physio.statements!.filter((x) => x.id.endsWith("-bill")).length, 0, "R78-1 his travel policy prints physiotherapy cover over several lines");
     });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
