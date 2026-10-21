@@ -704,6 +704,9 @@ for (const [name, text, quote, claim, expect] of [
   ["H2", "Hip 75% of Sum Insured up to S$50,000 Or 10% of annual salary, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
   ["H3", "Hip 75% of Sum Insured up to S$50,000 or S$500 per day, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
   ["H3 in the quote", "Hip 75% of Sum Insured up to S$50,000 or S$500 per day, whichever is lower", "Hip 75% of Sum Insured up to S$50,000 or S$500 per day, whichever is lower", "up to S$50,000", "none"],
+  ["I2", "Hip\t75% of Sum Insured up to S$50,000\nper accident, or S$500 per day, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
+  ["I4", "Hip 75% of Sum Insured up to S$50,000 or 500 per day, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
+  ["I4 in the quote", "Hip 75% of Sum Insured up to S$50,000 or 500 per day, whichever is lower", "Hip 75% of Sum Insured up to S$50,000 or 500 per day, whichever is lower", "up to S$50,000", "none"],
   ["next row stops the look-down", "Hip 75%\nKnee 10%\nElbow 10%\nAmbulance up to S$500", "Hip 75%", null, 150000],
 ] as const) test(`R101 ${name}`, () => {
   const probe: SourceDoc = { id: "probe-r101", name: "Probe.pdf", readable: true, pages: [{ page: 1, text: `GROUP PERSONAL ACCIDENT\n${text}` }] };

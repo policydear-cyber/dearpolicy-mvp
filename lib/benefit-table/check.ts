@@ -234,7 +234,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
       const otherMoney = [...flat(row).matchAll(/(?:s\$|us\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/g)].some((m) => Number(m[1].replace(/,/g, "")) !== claimed);
-      if (tied && (otherPercent || otherMoney)) {
+      // "Whichever" with any other number near the row ("or 500 per day, whichever is lower") is a second limit (Critic R103-1).
+      // A leading item number ("1. Hip 75%") is the row's own.
+      const otherWhichever = /\bwhichever\b/i.test(`${row}\n${near}`)
+        && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![claimed, value].includes(Number(m[0].replace(/,/g, ""))));
+      if (tied && (otherPercent || otherMoney || otherWhichever)) {
         out.dropped.push({ what: label, why: `cap ${claimed} printed with another limit; no amount is worked out for it` });
         capUnread = true;
       } else if (tied) {
