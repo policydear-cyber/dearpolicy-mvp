@@ -3397,3 +3397,58 @@ The prompt changes are otherwise consistent with the standing rules:
 **Not ready: one High (R68-1) and one Medium (R68-2).** Both are wrong-amount paths that the server checks exist to
 stop. DC's two live cases are right, and nothing in DC's snapshot hits the new paths wrongly. Scope the table
 currency and the "limit" word, and take the bill's currency from the household's words. Then recheck.
+
+---
+
+# Round 69: PR #87 recheck at `295e13c` (R67-1/2/3)
+
+What changed:
+- link-person hand matches and CoversPicker ticks are now stored as `user_declared`.
+- `syncInsuredPersonToMember` never downgrades a `user_declared` row.
+- ingest reads `householdNameMatches` (hand matches by name key) before it deletes machine links and detected
+  people, then re-applies them.
+- `/api/policies/reprocess` gets a household rate limit of 20 per hour (`createDbRateLimiter`, which fails open on a DB
+  error).
+- The confirm step shows "Coverage for this document is unavailable for a minute…".
+
+## Checks
+
+- **R67-1, the main case: fixed.** A name the household linked by hand, where the matcher found nobody, is matched to
+  the same person again. The read happens before the delete at ingest.ts:619 and before `policy_detected_people` is
+  cleared. The cover is rebuilt and the link stays `user_declared`.
+- **Ticked tiers: fixed.** Ticks are `user_declared`, which ingest does not delete, so `benefit_tier` survives.
+- **R67-2: fixed.** Each household gets 20 re-reads an hour. The limit is per household, not per member. It also
+  counts locked-PDF unlock attempts (the same route), so 20 wrong passwords lock unlocking for an hour. Acceptable.
+- **R67-3: addressed.** The confirm step now says so. A worse read still has no undo, and C1-3 is unchanged; both are
+  accepted.
+- **Semantic change (the coordinator asked about it).** A hand match or tick on an *unconfirmed* document now makes a
+  `declared` contract for that person in `buildContracts`, with indicative amounts. Before, an `ai_name_match` link
+  there made no contract. This is consistent with what a fresh tick already did, because the tick was already
+  `user_declared`. It needs a choice by the household, so it does not move cover to a person nobody named.
+  Probe (scratchpad `r65/t69.ts`): a benefit guide hand-matched to Desmond, who also holds a confirmed certificate,
+  is listed both as his declared contract's document and as wording for his certificate contract.
+
+## Findings
+
+**R69-1 (Medium; the R67-1 correction case is still lost). ingest.ts:665.**
+- **The problem.** The hand match applies only when the automatic matcher found nobody (`!match ? ... : undefined`).
+- **How the household corrects a wrong auto match.** They take person A off the document, which records an
+  exclusion, then link the printed name to B by hand.
+- **What a re-read does.**
+  - The matcher finds A again.
+  - `syncInsuredPersonToMember(A)` returns early because A is excluded.
+  - B's hand match is never applied.
+  - B's `policy_coverages` were already deleted (ingest.ts:637).
+  - `policy_detected_people` now records A, so the next re-read no longer even knows about B.
+- **Result.** B keeps a `user_declared` link with no cover amounts.
+- **Fix (one line).** Look up the hand match first, so the household's match wins over the automatic one:
+  `const hand = family.find(m => m.id === handMatches.get(nameKey(person.name)));`, and if it is found, use it. Also
+  add a test for the correction case.
+
+**R69-2 (Low, double listing).** The double listing in the probe above was already possible from fresh ticks. Hand
+matches on unconfirmed group documents make it more common. Check that Coverage and Benefits do not count the same
+row twice for one person (no wrong total if they dedupe by benefit id).
+
+## Verdict on PR #87 at `295e13c`
+
+**Not ready: one Medium (R69-1), with a one-line fix.** Everything else from round 67 is fixed.
