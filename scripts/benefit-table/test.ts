@@ -693,6 +693,22 @@ for (const [name, line] of [
   const row = assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
   assert.equal(row.figure.kind, "none", figureText(row.figure));
 });
+// Critic R101: E3, a limit three lines below still withholds; G1/G2, a second percentage limit with the cap withholds
+// even when the cap is read; a cap column ("Hip\t75%\tup to S$50,000") is read.
+for (const [name, text, quote, claim, expect] of [
+  ["E3", "Hip\t75% of Sum Insured\nPayable once per life.\nSee the notes.\nup to S$50,000", "Hip 75% of Sum Insured", null, "none"],
+  ["G1", "Hip 75% of Sum Insured up to S$50,000 or 10% of annual salary, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
+  ["G2", "Hip 75% of Sum Insured\nup to S$50,000 or 10% of annual salary, whichever is lower", "Hip 75% of Sum Insured", "up to S$50,000", "none"],
+  ["cap column", "Hip\t75%\tup to S$50,000\nKnee\t10%\tup to S$5,000", "Hip 75%", "up to S$50,000", 50000],
+  ["G3", "Hip 75% of Sum Insured up to S$50,000 or 10% of annual salary, whichever is lower", "Hip 75% of Sum Insured up to S$50,000", "up to S$50,000", "none"],
+  ["next row stops the look-down", "Hip 75%\nKnee 10%\nElbow 10%\nAmbulance up to S$500", "Hip 75%", null, 150000],
+] as const) test(`R101 ${name}`, () => {
+  const probe: SourceDoc = { id: "probe-r101", name: "Probe.pdf", readable: true, pages: [{ page: 1, text: `GROUP PERSONAL ACCIDENT\n${text}` }] };
+  const r = checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", benefit: "Hip", value: 75, page: 1, quote, ...(claim ? { cap: 50000, capQuote: claim } : {}) })]));
+  const f = assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0].figure;
+  if (expect === "none") assert.equal(f.kind, "none", figureText(f));
+  else assert.equal(f.kind === "worked_out" && f.amount, expect, figureText(f) + JSON.stringify(r.dropped));
+});
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
   const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;

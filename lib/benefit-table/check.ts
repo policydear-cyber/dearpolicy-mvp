@@ -78,26 +78,32 @@ const TAB_CELLS = /\S\t+\S/;
 const PERCENT = /\d\s*%/;
 const LABEL_FIGURE = /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/;
 /** How many lines below the row are looked at for a cap that was not joined to it. */
-const LINES_BELOW = 2;
+const LINES_BELOW = 3;
 /** The row as printed, and the text near it whose cap words withhold the row's amount unless a cap is tied to the row.
  * text: the quoted words (by their place on the page); then, from the rest of their line, the part up to the next tab
  * cell or the next label with a percentage, when it starts with a connective or cap word; then up to three following
  * lines that start with a connective or cap word and have no tab cells or percentage of their own.
  * near: the whole rest of the row's own line, never filtered (TE L22), every line below that starts with a connective
- * or cap word, and any other of the next two lines that does not plainly start another row. Cap words (NEAR_CAP) in it
- * mark the row capped, so it shows no amount rather than a neighbour's cap or an uncapped figure. */
-function rowSegment(pageText: string, start: number, end: number): { text: string; near: string } {
+ * or cap word, and any other of the next three lines that does not plainly start another row, up to the first that
+ * does. Cap words (NEAR_CAP) in it mark the row capped, so it shows no amount rather than a neighbour's cap or an
+ * uncapped figure. otherPercent: a second percentage limit printed with the row's own cap. */
+function rowSegment(pageText: string, start: number, end: number): { text: string; near: string; otherPercent: boolean } {
   const lineEnd = (i: number) => { const e = pageText.indexOf("\n", i); return e < 0 ? pageText.length : e; };
   let seg = pageText.slice(start, end);
   const near: string[] = [];
+  // Another percentage on the row's own line or on a connective line below ("… up to S$50,000 or 10% of annual salary,
+  // whichever is lower") is a second limit: the row withholds its amount even with its cap read (Critic R101-2).
+  let otherPercent = false;
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
     near.push(tail);
     // In a two-column extraction the rest of the line may hold the next row (TE L19-L23): only the part before the next
     // tab cell or the next label with a percentage can be this row's.
-    const cell = tail.split("\t")[0];
-    const next = cell.search(/\s+[A-Za-z][^%\d]*\d+(?:\.\d+)?\s*%/);
+    const cell = tail.split("\t").find((c) => c.trim()) ?? "";
+    // The next row starts with an upper-case label; "or 10% of annual salary" is this row's second limit (Critic R101-2).
+    const next = cell.search(/\s+[A-Z][^%\d]*\d+(?:\.\d+)?\s*%/);
     const own = next < 0 ? cell : cell.slice(0, next);
+    otherPercent = PERCENT.test(own);
     if (CONNECTIVE.test(own) && !PERCENT.test(own)) seg += own;
   }
   let pos = lineEnd(end);
@@ -110,9 +116,12 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
     if (joining && k < 3 && CONNECTIVE.test(line) && !TAB_CELLS.test(line) && !PERCENT.test(line)) { seg += " " + line; continue; }
     joining = false;
     below++;
+    if (CONNECTIVE.test(line) && PERCENT.test(line)) otherPercent = true;
     if (CONNECTIVE.test(line) || !otherRow(line)) near.push(line);
+    // Lines after the next row belong to it ("Knee 10%\nElbow 10%\nAmbulance up to S$500"): stop there (TE control).
+    else break;
   }
-  return { text: seg, near: near.join("\n") };
+  return { text: seg, near: near.join("\n"), otherPercent };
 }
 // A line below that plainly starts another row has its own limit, not this row's: an item marker or its own percentage
 // ("Wrist 20% up to S$5,000"), tab cells with a figure ("•\tAmbulance Cost*\tUp to S$500"), or an upper-case label with
@@ -154,7 +163,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     return at(f);
   };
-  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "" }; };
+  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
@@ -217,10 +226,14 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) { out.dropped.push({ what: label, why: "quote holds more than one row" }); continue; }
     if (pays === "percent") {
-      const { text: row, near } = segmentOf(source);
+      const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
-      if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))) {
+      const tied = s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
+      if (tied && otherPercent) {
+        out.dropped.push({ what: label, why: `cap ${claimed} printed with another percentage limit; no amount is worked out for it` });
+        capUnread = true;
+      } else if (tied) {
         cap = claimed; capSource = s;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
