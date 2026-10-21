@@ -3304,3 +3304,96 @@ accepted ready documents before this PR; the button makes it one click. Suggeste
 
 **Not ready: one Medium (R67-1).** Keep hand-linked names and tiers across a re-read (or drop the tooltip's promise
 and add the test). Then it is ready. R67-2 is advisable before launch but not blocking.
+
+---
+
+# Round 68: PR #88 at `a085833` (A&E and stage 3 cancer, simple chat)
+
+What changed in `lib/simple-chat/verify.ts`:
+- **Table currency.** A new `tableCurrency` lets an own-line "(S$)"/"(SGD$)" heading anywhere above the quote price
+  any whole figure that sits alone in a tab cell.
+- **"limit" as a money word.** "limit(s)" now counts as a money word that overrides the count/rate words of R59-6.
+- **Bill card.** A new `billAgainst` card is driven by `ofBill`.
+
+The prompt now covers lump sums, the claims-by-stage table and waiting periods against today's date, and the hook
+adds "(Today is YYYY-MM-DD.)". I probed offline on top of DC's snapshot with one synthetic page per case (scratchpad
+`r68/t68.ts`).
+
+## In DC's snapshot
+
+Every whole cell under an own-line currency heading is money:
+- Product Summary p33 and Benefit Summary p16, Outpatient Medicare: 30, 100, co-payment 10, annual 1,000/500.
+- The p4 premium table has no whole cell.
+
+So the two live cases come out right: A&E S$100 per visit, and "Up to S$100" of an S$800 bill.
+
+## Findings
+
+**R68-1 (High, wrong amount; not reachable in DC's snapshot). verify.ts:155-159 and 399-405.**
+- **The problem.** The "(S$)" heading is not scoped to its table or its column, and "limit" now overrides every
+  count word.
+- **Result.** A count, period, age or percentage cell becomes a dollar amount. On main every one of these was
+  dropped.
+
+| Synthetic page (own-line "(S$)" above) | Model's claim | Card at `a085833` |
+|---|---|---|
+| `Physiotherapy\t80\t12`, header "Maximum visits per year" | 12 | **S$12** |
+| `Age limit\t65` | 65 | **S$65** |
+| `Visit limit\t12` | 12 | **S$12** |
+| `Physio sessions\t6` | 6 | **S$6** |
+| `Co-insurance\t20`, a percent with no sign | 20 | **S$20** |
+| `Plan\t2` | 2 | **S$2** |
+| `Survival period\t30` | 30 | **S$30** |
+| `Policy term\t20` | 20 | **S$20** |
+| A later "Maximum days payable" table, row `Intensive Care Unit\t30` | 30 | dropped (R59-6 "days") |
+
+Fix:
+- Price a whole cell only when the heading heads the row's own table: only table rows or sub-headings lie between
+  them, with no prose and no new heading.
+- Take the figure only from a column the heading covers. A row with more numeric cells than the heading's plan
+  columns does not qualify.
+- Count "limit" as money only in "limit(s) per (visit|claim|policy year|…)" or "annual limit", never after a count
+  word ("age/visit/day limit").
+- Add plan, co-insurance, sessions, visits, period, term and survival to the R59-6 count/rate words.
+- Add tests for the rows above.
+
+**R68-2 (Medium, wrong amount on the bill card). verify.ts:473-476.**
+- **The problem.** The "the household wrote it" test matches `$80` inside "US$80" (and "HK$", "A$"). The bill's sign
+  comes from the model's `ofBill` string, not from what the household wrote.
+
+| Household wrote | Model's `ofBill` | Card |
+|---|---|---|
+| "her bill was US$80" | "$80" | **"Up to S$80"**, "within this limit, up to the whole bill" |
+| "the bill was RM800" | "800" | "Of the **S$800** bill, at most S$100" (the limit is right, the bill is mislabelled) |
+
+The PR's own test (US$800 → no card) passes only because the model's string there carries "US$".
+
+Fix: read the bill's currency from the household's own words. Refuse when they print another currency or a letter
+before "$", or when the sign they wrote does not match the limit's.
+
+**R68-3 (Low–Medium, the bill card's limit test is not scoped).**
+- **Per-day row.** The "Limit(s) Per Visit" heading can be anywhere above on the page. A per-day "Daily benefit\t100"
+  row in a later table on the same page gets "Up to S$100 of the S$800 bill".
+- **Several visits.** A bill the household gave for several visits ("$800 for 3 A&E visits") is set against one
+  visit's limit, which understates up to S$300 as "at most S$100".
+
+Fix: scope the heading to the row's table, as in R68-1. Refuse when the household's sentence about the bill names a
+count of visits or claims above one.
+
+**R68-4 (Low).** hook.ts:56 uses `toISOString()`, a UTC date. Between 00:00 and 08:00 Singapore time it gives
+yesterday, so a waiting period that ends today can be judged as still running. Use the household's time zone (SGT).
+
+**R68-5 (Info, for the Evidence Reviewer).** "Non-Panel Specialist with referral" is 100 in the Product Summary
+(p33) but 30 in the Benefit Summary (p16). That is a real difference between the documents. Answers should state
+both figures, with the documents-differ uncertainty.
+
+The prompt changes are otherwise consistent with the standing rules:
+- The bill and stay cards stay server-computed.
+- "Give no amount" applies at a stage the claims table excludes.
+- A lump sum is still priced only from a certificate or table line the server checks.
+
+## Verdict on PR #88 at `a085833`
+
+**Not ready: one High (R68-1) and one Medium (R68-2).** Both are wrong-amount paths that the server checks exist to
+stop. DC's two live cases are right, and nothing in DC's snapshot hits the new paths wrongly. Scope the table
+currency and the "limit" word, and take the bill's currency from the household's words. Then recheck.
