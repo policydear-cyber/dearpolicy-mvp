@@ -1171,7 +1171,9 @@ function coverForEvent(contract:PolicyContract,benefit:CatalogBenefit):OwnedCove
     // disability cover of its own (the household's group scheme: TPD at 100% of the Group Term Life sum insured, the
     // certificate's life line). A disablement written about an accident or an injury never comes here: it is the
     // accident plan's ("TPD due to Accident", 150% of the personal accident sum), and the two are never added.
-    if(!byEvent.length&&!accidentOnly&&!namesAnInjury&&triggers.includes("total_permanent_disability")
+    // The benefit's own name must be TPD: a row that only mentions it ("Natural Catastrophe": 15% of the Sum Insured on
+    // death or Total and Permanent Disability caused by one) is not the life cover's TPD (Critic R81-1).
+    if(!byEvent.length&&!accidentOnly&&!namesAnInjury&&benefitTriggerEvents(benefit.benefitName,"").includes("total_permanent_disability")
       &&!/\baccident|\binjur/i.test(benefit.benefitName+" "+benefit.quote)){
       const life=contract.coverages.filter(coverage=>/death|life/.test(category(coverage))&&coverage.amount!=null);
       if(life.length===1)return life[0];
