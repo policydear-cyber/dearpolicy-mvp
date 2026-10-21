@@ -3948,3 +3948,17 @@ Probed locally (tsx, `columnProblem` and `parseAmount` on 41ab81e); no DB, no pa
 - R86-3 fixed: `tableReady` caches a yes per `Db` in a WeakSet; `appDb` is a module constant (`lib/benefit-table/app.ts:15`), so it hits. A no is re-checked. Fine.
 - Amount parsing (`lib/benefit-table/amount.ts`): correct. Refuses 0, "250k", "1.5 million", "1,0000", "$1,00", "12.345", "USD 1000". Accepts "S$ 1,000", "1,500,000.00". The preview shows the exact amount before Save, Save is disabled when invalid, and the route (`z.number().positive()`) and `setConfirmation` (`<= 0`) both refuse 0. No issues.
 - R87-2 (Low, pre-existing, not from this delta): a column such as "Annual Gold" or "Single Trip Gold" is not judged a plan column (`namesPlan`, not all tier words), so it is neutral and accepted for any cover. The trip type in travel tables has no guard. Worth a follow-up, not blocking.
+
+## R88 — PR #94 delta 41ab81e → 76cf9d2 (R87-1, R87-2)
+
+**Verdict: NOT READY** (one Medium).
+
+Probed `columnProblem` on 76cf9d2 locally (tsx), no DB, no paid calls.
+
+- R87-1 fixed for unbracketed headings: "Annual Gold" vs "Gold", "Gold" vs "Annual Gold" and "Single Trip Gold" vs "Annual Gold" are all refused. "Plan A (S$)" and "Plan A Per Visit" still match "Plan A". "Plan B" vs "Plan A" is still refused.
+- R87-2 fixed for unbracketed headings: a column naming a tier anywhere is now a plan column.
+- **R88-1 (Medium, wrong amount)** `lib/benefit-table/assemble.ts:128`: `planTokens` drops all bracketed text, not only currency and units. So the variant or tier in brackets is lost:
+  - "Gold (Annual)" is ACCEPTED for plan "Gold (Single Trip)" and for plan "Gold".
+  - "Single Trip (Gold)" is ACCEPTED for plan "Platinum". The tier goes, the column becomes neutral, and Gold limits can be shown for a Platinum holder.
+  - Fix: drop a bracket only when its content is currency or unit words, such as "(S$)", "(SGD)" or "(per visit)". Otherwise keep its words.
+- R88-2 (Low, hiding): the tier-word test now makes ordinary headings plan columns. "Max Limit", "Max Limit (S$)" and "Core Benefits" are refused for every cover, including covers with no plan, so those sections are hidden. Consider matching "max" or "core" as a tier only when the whole heading is tier words, or when it equals a held plan.
