@@ -3664,3 +3664,66 @@ otherwise ("Silver/Gold") prices only its one-cell rows, which also fails safe.
 ## Verdict on PR #88 at `53f92d2`
 
 **Ready.**
+
+---
+
+# Round 75: PR #90 at `cee51fe` (re-join stamped rows; refresh rows seeded under an older rule)
+
+What changed, in `lib/ledger/store.ts`:
+- **Re-join.** The `sum_basis` re-join also takes rows whose `status='proposed'`, even when `updated_at` was stamped
+  (the 27 Sep join stamped 52 rows).
+- **Refresh.** A new `refreshSeededRows` runs before the join. It rewrites a machine row to what its current seed
+  says. A row qualifies only when all of these hold: `origin<>'person'`, `status<>'rejected'`, `updated_at=created_at`,
+  the seed key or legacy key matches, and the seed's `familyMemberId` equals the row's.
+
+## Checks
+
+- **A person's figure is not overwritten: OK, with one Low caveat (R75-1).** The only edit path is PATCH
+  `/api/ledger` → `updateLedgerRow`, which always stamps `updated_at=now()`. Any edit defaults the row to
+  `confirmed` unless the request says otherwise (app/api/ledger/route.ts:73-78). So:
+  - The refresh never touches an edited or confirmed-by-click row: both have a stamped `updated_at`.
+  - The re-join's new `status='proposed'` clause can only reach an edited row if a client sends an edit together with
+    `status:"proposed"`. No UI does that today (I searched `app/`, `components/`).
+  - Rows the household added are `origin='person'` and excluded from both.
+- **Scope: OK.** Both passes are scoped to `account_id`. The refresh needs the seed's person to equal the row's
+  person, so it can never move a row to another person. The re-join still needs the row's owner's contract to hold
+  the document, and the stored basis to be one of that contract's cover amounts, as in round 61.
+- **Idempotent: OK.** The refresh skips rows that already equal their seed. It does not stamp `updated_at`, so a row
+  stays the machine's. `sum_basis` is only overwritten when the seed carries one; otherwise the join decides.
+- **FWD liability row:** the new DB test covers it. The untouched row becomes `other` with no amount. Once a person
+  changes it, it stays theirs.
+- **Stored-data rewrite:** this rewrites `coverage_rules` on production (`amount`, `event_type` and `sum_basis` of
+  machine rows), so the merge needs DC's explicit yes.
+
+## Findings
+
+**R75-1 (Low).** The API still accepts an edit together with `status:"proposed"`. Such a row would then be re-joined
+over the person's typed basis. Either ignore `status:"proposed"` when the same request edits a figure, or make the
+re-join clause require that the basis is one the machine wrote (see option (b) below).
+
+**R75-2 (Info; this matters for option (b)).** `confirmed` does **not** mean that a person confirmed the row. Wording
+rows are seeded `status:"confirmed"` unless the benefit needs confirmation (store.ts:173), and certificate rows are
+seeded `proposed` (store.ts:191). So the 27 Sep-stamped percentage rows that this PR leaves alone are probably
+machine rows seeded `confirmed`, not figures a person typed.
+
+## View on option (b): re-join confirmed rows whose basis is a different cover's amount
+
+- **Do not use status as the test.** Per R75-2, status cannot tell a hand-typed figure from a machine join.
+- **Use time instead.** The stamped `updated_at` can tell them apart.
+  - The old join stamped each row within seconds of its seeding (live: 52 rows within 12 seconds).
+  - A person's PATCH lands whenever they edit.
+- **Recommended rule.** Re-join a machine row (`origin<>'person'`) whose stored basis equals one of its contract's
+  cover amounts and whose `updated_at - created_at` is under 60 seconds. Leave every other stamped row alone. This
+  also closes R75-1.
+- **Why fix them.** Those rows overstate claimable amounts (a percentage of S$1,000,000 instead of S$600,000), which
+  is the worst-bug class. Fixing them matters more than keeping a figure nobody typed.
+- **For DC's 4 live rows,** check their `updated_at - created_at` with a read-only query. A gap of seconds means it was
+  the old join: re-join them. A gap of minutes or more means a person may have typed it: show the row as "this
+  percentage may be of the wrong cover" for DC to decide, and never change it silently.
+- Either way it is a production data change, so it needs DC's yes.
+
+## Verdict on PR #90 at `cee51fe`
+
+**Ready on code.** No other person's rows and no person's typed figure can be overwritten through the UI. The merge
+rewrites stored ledger rows, so it needs DC's explicit yes. For option (b), I recommend the time-gap rule above
+rather than overriding confirmed rows.
