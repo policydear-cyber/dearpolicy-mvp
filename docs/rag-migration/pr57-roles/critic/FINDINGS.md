@@ -3962,3 +3962,14 @@ Probed `columnProblem` on 76cf9d2 locally (tsx), no DB, no paid calls.
   - "Single Trip (Gold)" is ACCEPTED for plan "Platinum". The tier goes, the column becomes neutral, and Gold limits can be shown for a Platinum holder.
   - Fix: drop a bracket only when its content is currency or unit words, such as "(S$)", "(SGD)" or "(per visit)". Otherwise keep its words.
 - R88-2 (Low, hiding): the tier-word test now makes ordinary headings plan columns. "Max Limit", "Max Limit (S$)" and "Core Benefits" are refused for every cover, including covers with no plan, so those sections are hidden. Consider matching "max" or "core" as a tier only when the whole heading is tier words, or when it equals a held plan.
+
+## R89 — PR #94 delta 76cf9d2 → 8d1c7fc (one rule for plan columns)
+
+**Verdict: READY** (no wrong-plan path found; one Low left open to track).
+
+Probed `columnProblem` on 8d1c7fc locally (22 cases, tsx), no DB and no paid calls.
+
+- R88-1 is fixed. "Gold (Annual)" is refused for the plans "Gold (Single Trip)" and "Gold", and "Single Trip (Gold)" is refused for "Platinum". For a cover that prints a plan, only an exact-words column passes. "Plan A (S$)", "Plan A Per Visit", "Gold (SGD)", "Gold US$", "Gold HK$" and "Gold RM" all still match.
+- R88-2 is moot under the new rule. "Max Limit" is refused for a plan holder and neutral for a no-plan cover. The coordinator accepts over-refusal, and it is not widespread.
+- No-plan covers: a column that is in the document's plan list or says "Plan"/"Option" is refused, and a lone column is neutral. That is fine.
+- R89-1 (Low, person scope, not plan): `UNIT_TOKENS` drops adult/child and `PER` drops "per person"/"per family". So "Gold Child" and "Gold Per Family" pass for any Gold holder, and child or family limits can attach to an adult. Rows show the column label ("(Gold Child)", `components/benefit-table-coverage.tsx:130`), so the figure is labelled, not silent. Bare "Adult"/"Child" columns were already neutral before this delta. Revisit before chat reads amounts from table rows. Either keep adult/child and person/family in the heading words, or carry them as a row qualifier the chat must state.
