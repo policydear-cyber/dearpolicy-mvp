@@ -464,6 +464,14 @@ async function main() {
     assert.deepEqual(r50("Wrist (Other Fracture)\t20%", 20, "Ah Kow", "S$400,000"), []);
     assert.deepEqual(r50("Wrist (Other Fracture)\t20%", 20), ["S$80,000"]);
   });
+  await check("R52: a cap on the row's next line stops the card; 'greater than' as a row label does not", () => {
+    const house: Household = { ...SI_HOUSE, documents: [{ ...SI_HOUSE.documents[0], pages: [...SI_HOUSE.documents[0].pages, { page: 9, text: "Schedule\n(% of Sum Insured)\n- Equals to or greater than 8%\t100%\n•\tDeath due to natural catastrophe\t15% of Sum Insured\nor up to S$50,000, whichever is lesser\n•\tDisappearance\t100% of Sum Insured" }] }, SI_HOUSE.documents[1]] };
+    const one = (quote: string, percent: number) => verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022", quote, percent)] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
+    assert.deepEqual(one("Death due to natural catastrophe\t15% of Sum Insured", 15), []);
+    assert.deepEqual(one("- Equals to or greater than 8%\t100%", 100), ["S$400,000"]);
+    assert.deepEqual(one("Disappearance\t100% of Sum Insured", 100), ["S$400,000"]);
+  });
+
   await check("R50-4: a later heading ends the cover's section", () => {
     assert.deepEqual(r50("Specialist visit\t20%", 20), []);
   });
@@ -600,6 +608,16 @@ async function main() {
       assert.equal(one("of 100% of the Sum Insured, up to a maximum amount of $400,000", 100, "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), 0);
       assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, cl), 0);
       assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, dl), 1);
+    });
+    await check("snapshot R52: a cap on the next line stops the card; burns rows labelled 'greater than' still work out", () => {
+      const one = (doc: string, quote: string, percent: number, line = "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022") => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "x", person: "Desmond", document: di(doc), quote, percentOf: { percent, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
+      assert.deepEqual(one("Product Summary.pdf", "Death due to natural catastrophe\t15% of Sum Insured", 15), []);
+      assert.deepEqual(one("Product Summary.pdf", "Comatose State Lump Sum Benefit\t15% of Sum Insured or", 15), []);
+      assert.deepEqual(one("Product Summary.pdf", "- Equals to or greater than 8%\t100%", 100), ["S$600,000"]);
+      // Control: an uncapped row on the same kind of line still works out.
+      assert.deepEqual(one("Product Summary.pdf", "Hip\t75%", 75), []);
+      assert.deepEqual(one("Benefit Summary.pdf", "Hip\t75%", 75), ["S$450,000"]);
     });
     await check("snapshot E1/E3: the unreadable file's text is not sent; the CI II files say they are linked to nobody", () => {
       const lib = renderLibrary(real);

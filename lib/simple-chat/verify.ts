@@ -106,8 +106,21 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
   const end = e < 0 ? pageText.length : e;
   return { start, end, text: pageText.slice(start, end) };
 }
-/** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. */
-const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever|lesser|greater|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+/** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. "Greater
+ * than 8%" on a burns row is a row label, not a limit (R52-2); "whichever is the greater" is. */
+const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+/** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
+ * up to the next row, bullet or numbered item (R52-1). */
+function rowWithContinuation(pageText: string, offset: number): string {
+  const row = rowLine(pageText, offset);
+  const rest = pageText.slice(row.end + 1).split("\n");
+  const more: string[] = [];
+  for (const l of rest.slice(0, 3)) {
+    if (!l.trim() || /^\s*(?:[•●▪*#^\-–]|\(?[a-z0-9]{1,3}[.)]\s)/i.test(l) || /\t/.test(l)) break;
+    more.push(l);
+  }
+  return [row.text, ...more].join(" ");
+}
 /** The sum a percentage row is a percentage of (Critic round 50), read only above the row's own line on its page:
  * - the nearest "% of S$5,000" or "Limit: S$5,000" heading gives that sum;
  * - the nearest table heading "(% of Sum Insured)" (in parentheses, as a column heading prints it) gives "sum_insured";
@@ -125,12 +138,13 @@ function rowBase(pageText: string, rowOffset: number): { value: number; raw: str
   // "percentage of Comatose State Sum Insured", "% of the Benefit Amount": a base this check cannot know.
   for (const m of above.matchAll(/(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!(?:S\$|SGD|US\$|\$))([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b/gi)) heads.push({ at: m.index ?? 0, base: null });
   const nearest = heads.sort((a, b) => b.at - a.at)[0];
-  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*$/i.test(row.text.trim()) && row.text.length <= 90 && !CAPPED.test(row.text)) {
-    // A table line such as "Death due to Accident	100% of Sum Insured" names its own base.
-    return "sum_insured";
+  const whole = rowWithContinuation(pageText, rowOffset);
+  if (CAPPED.test(whole)) return null;
+  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\b/i.test(row.text)) {
+    // A table line such as "Death due to Accident	100% of Sum Insured" names its own base; it never takes the table's.
+    return /\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*$/i.test(row.text.trim()) && row.text.length <= 90 ? "sum_insured" : null;
   }
   if (!nearest) return null;
-  if (CAPPED.test(row.text)) return null;
   return nearest.base;
 }
 
