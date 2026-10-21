@@ -898,6 +898,20 @@ async function main() {
     assert.equal(cards(gp, [none({ bill: "$800" })], ["GP bill was $800, can he claim"]).length, 0, "Q3 the document prints a GP limit, whatever the model said");
     const physio = R59("Travel8.pdf", "Personal Accident Benefits\nHip\t75%\nOverseas medical expenses\nPhysiotherapy and chiropractic treatment\nBusiness plan\nS$1,000 per trip");
     assert.equal(cards(physio, [none({ bill: "$800" })], ["his physio bill was $800"]).length, 0, "R78-1 the care's figures a few lines below its name");
+    // TE #91 N1-N9: what counts as a figure for GP, polyclinic, doctor or dental care in a document that may be his.
+    const kindCard = (text: string, written: string, extra: Partial<Household["documents"][number]> = {}) => cards(R59("Accident8.pdf", PA, [doc(8, "Other.pdf", "Other", [{ page: 1, text }], extra)]), [none({ bill: "$800" })], [written]).length;
+    assert.equal(cards(house, [none({ bill: "$800" })], ["the bill was $800, can he claim"]).length, 0, "N1 the bill's kind is not said");
+    assert.equal(kindCard("Polyclinic\t20 per visit", "his polyclinic bill was $800"), 0, "N2 polyclinic");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "the family doctor bill was $800"), 0, "N3 a family doctor is GP care");
+    assert.equal(kindCard("OUTPATIENT MEDICARE\nDoctor consultation\t30", "GP bill was $800"), 0, "N4 a doctor consultation under an outpatient heading");
+    assert.equal(kindCard("Consultation\t30", "GP bill was $800"), 0, "N4 a consultation is GP care");
+    assert.equal(kindCard("OUTPATIENT MEDICARE\nBenefits\nTable\nSee schedule\n30", "GP bill was $800"), 1, "N4 control: a figure four lines below the heading is another row");
+    assert.equal(kindCard("Clinical treatment by a registered medical practitioner\tS$40 per visit", "GP bill was $800"), 0, "N5 a medical practitioner, matched as such (not by 'Clinical')");
+    assert.equal(kindCard("Clinical trials\t40", "GP bill was $800"), 1, "N5 control: 'Clinical' alone is not a clinic");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "GP bill was $800", { linkedPeople: ["Lim Mei Mei"] }), 1, "N6 another person's document");
+    assert.equal(kindCard("General Practitioner panel list updated 2025", "GP bill was $800"), 1, "N7 a year is not a figure");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "GP bill was $800", { processingStatus: "failed" }), 1, "N8 an unreadable document");
+    assert.equal(kindCard("Dental treatment due to accident\t300", "the dental bill was $800"), 0, "N9 dental");
     assert.equal(cards(R59("Travel9.pdf", "Physiotherapy is not covered.\nOther text\nMore text\nStill more\nS$1,000 per trip"), [none({ bill: "$800" })], ["his physio bill was $800"]).length, 1, "control: a figure further down is another row");
     const q12 = verifyAnswer(gp, { bottomLine: "Covered up to S$30 per visit.", nextSteps: [], question: null, statements: [limit({ bill: "$800" }), none({ bill: "$800" })] }, ["GP bill was $800"]).answer;
     assert.equal(q12.bottomLine!.startsWith("Your documents list"), true, "Q12 the not-covered finding never headlines beside a limit that takes the bill");

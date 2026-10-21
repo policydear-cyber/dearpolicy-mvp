@@ -503,7 +503,7 @@ function billUncovered(st: ModelStatement, written: string[]): Billed | null {
 }
 /** What a bill was for, as the household wrote it, and how the documents name a benefit for that kind of bill. */
 const BILL_KINDS: [RegExp, RegExp][] = [
-  [/\bGPs?\b|general\s+practitioner|\bclinic\b|polyclinic|family\s+doctor/i, /\bGPs?\b|general\s+practitioner|\bclinic|outpatient/i],
+  [/\bGPs?\b|general\s+practitioner|\b(?:poly)?clinics?\b|\bdoctors?\b/i, /\bGPs?\b|general\s+practitioner|medical\s+practitioner|\b(?:poly)?clinics?\b|\bdoctors?\b|\bconsultations?\b|outpatient/i],
   [/\bA\s*&\s*E\b|emergency/i, /\bA\s*&\s*E\b|emergency/i],
   [/specialist/i, /specialist/i],
   [/dental|dentist/i, /dental|dentist/i],
