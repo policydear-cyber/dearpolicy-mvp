@@ -177,7 +177,7 @@ export default function CoveragePage(){
               <div className="benefit-head"><strong>{row.eventLabel}</strong>{row.detail?<small>{row.detail}</small>:null}</div>
               {alt?null:<p className={row.hasFigure?"pays-cell":"muted-cell"}>{amountLine(row)}</p>}
             </div>
-            {row.hasFigure&&isToConfirm(row)?<p className="coverage-unconfirmed" data-testid="coverage-to-confirm">To confirm: plans like this usually include this, but your documents don&rsquo;t confirm it yet.</p>:null}
+            {row.hasFigure&&isToConfirm(row)?<p className="coverage-unconfirmed" data-testid="coverage-to-confirm">To confirm: the schedule prints this amount, but its wording hasn&rsquo;t been read to confirm what it pays for.</p>:null}
             {alt?<AlternativeAmountsBlock alternatives={alt} rowId={plans.length>1?"":row.id}/>:null}
             {!alt&&glance.lines.length?<p className="coverage-conditions">{glance.lines.join(" · ")}{glance.more?` · ${glance.more} more condition${glance.more===1?"":"s"} below`:""}</p>:null}
             <p className="coverage-plan">{plans.join(" or ")}{!alt&&row.insurer?` · ${row.insurer}`:""}</p>

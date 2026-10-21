@@ -44,6 +44,23 @@ const pageRef = (page: number | null | undefined) => page == null ? "" : ` · p.
 /** For comparing two renderings of one sentence: markup, quotes, case, spacing and end punctuation do not count. */
 const norm = (s: string) => s.replace(/[*_`#>]/g, "").replace(/[“”"‘’']/g, "").replace(/\s+/g, " ").trim().replace(/[.;:,!?]+$/, "").toLowerCase();
 
+/** The content words of a sentence (amounts kept), for telling when one sentence only says another again in other words. */
+const STOP = new Set("a an and are as at be by for from her his if in is it its of on or so the their this to was were with your you".split(" "));
+const words = (s: string) => norm(s).split(/[^a-z0-9$,.%]+/).map((w) => w.replace(/[.,]+$/, "")).filter((w) => w && !STOP.has(w));
+const NEGATION = /\b(not|no|never|none|nobody|nothing|dont|doesnt|didnt|isnt|arent|wasnt|werent|cant|cannot|wont|wouldnt|hasnt|havent|couldnt|shouldnt|mustnt|neither|nor)\b/;
+const LIMITS = new Set("only unless except excluded exclusion without until after before".split(" "));
+/** Whether most of `part`'s words are already in `whole`: a restatement, not new information. A figure (any word with
+ * a digit) that `whole` does not have always makes it new. */
+const restates = (part: string, whole: string, share = 0.7) => {
+  const p = words(part), w = new Set(words(whole));
+  if (p.some((x) => /\d/.test(x) && !w.has(x))) return false;
+  // Nor is it when one says no or not and the other doesn't, or one carries a limit (only, unless, until…) the other lacks.
+  const all = words(whole);
+  if (NEGATION.test(p.join(" ")) !== NEGATION.test(all.join(" "))) return false;
+  if ([...p.filter((x) => LIMITS.has(x) && !w.has(x)), ...all.filter((x) => LIMITS.has(x) && !p.includes(x))].length) return false;
+  return p.length > 0 && p.filter((x) => w.has(x)).length / p.length >= share;
+};
+
 /** Sentences of the prose, split only at a full stop, ! or ? followed by a capital or an opening quote. */
 const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
 
@@ -57,7 +74,7 @@ const withoutFooterClause = (c: string) => c.replace(/;\s*[^;]*\bnot a payment o
 function Qualifiers({ s }: { s: AnswerStatement }) {
   const said = norm(s.text);
   const conditions = (s.conditions ?? []).map(norm);
-  const basis = s.basis && !said.includes(norm(s.basis)) ? s.basis : null;
+  const basis = s.basis && !said.includes(norm(s.basis)) && !restates(s.basis, s.text, 0.75) ? s.basis : null;
   const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
     {basis ? <p className="answer-card-basis">{basis}</p> : null}
@@ -117,7 +134,7 @@ function WhereFrom({ statements, citations, sources, idFor, detailsRef }: { stat
 /** The short answer: bottom line (only when the server marked a real outcome and it carries its qualifier), one card
  * per amount, other statements as short points, any sentence of the prose no statement covers, and the source detail
  * collapsed underneath. `prose` is the answer's own text (content, then details): the cards never drop any of it. */
-export function AnswerCards({ answer, render, sources, prose = [] }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[] }) {
+export function AnswerCards({ answer, render, sources, prose = [], after }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[]; after?: React.ReactNode }) {
   const statements = answer.statements ?? [];
   const uid = useId();
   const where = useRef<HTMLDetailsElement>(null);
@@ -138,7 +155,19 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
   const summary = answer.summary?.trim() ? render(answer.summary) : "";
   const showSummary = !bottomLine && summary && !isCovered(summary);
   const alreadyShown = new Set([...(showSummary ? sentences(summary) : []), ...(bottomLine ? sentences(render(bottomLine)) : [])].map(norm));
-  const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s))))];
+  // A sentence that only says the bottom line again in other words, says that drawn either/or amounts are alternatives,
+  // or is one of the next steps shown under the answer, is not repeated; the full answer still has every word.
+  const eitherDrawn = statements.filter((s) => s.group?.kind === "either_or").length > 1;
+  const steps = (answer.nextSteps ?? []).map((t) => norm(render(t)));
+  // Against the bottom line a sentence is hidden only when it adds no word at all (Critic R48-1): "…if admitted",
+  // "…subject to approval" or "…once discharged" all stay.
+  const repeats = (s: string) => (!!bottomLine && restates(s, render(bottomLine), 1))
+    || (eitherDrawn && /\b(alternatives?|never (added|both)|not a total)\b/i.test(s) && s.length < 90)
+    // A sentence that adds anything to a step (a condition, a deadline, a warning) is kept.
+    || steps.some((t) => t === norm(s) || restates(s, t, 0.8));
+  const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s)) && !repeats(s)))];
+  // An answer with no amount whose points are still to confirm: the bottom line is marked so, not drawn like a finding.
+  const toConfirm = !!bottomLine && !statements.some((s) => s.amount) && statements.some((s) => s.kind === "uncertainty");
   const illustrations = statements.some((s) => s.amount?.illustration);
   const amounts = statements.some((s) => s.amount);
   const fullProse = prose.map(render).filter((t) => t.trim());
@@ -183,11 +212,13 @@ export function AnswerCards({ answer, render, sources, prose = [] }: { answer: S
     </div>);
   }
   return <div className="answer-cards">
-    {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
+    {bottomLine ? <p className={`answer-bottom-line${toConfirm ? " to-confirm" : ""}`} data-testid="answer-bottom-line">{toConfirm ? <span className="answer-flag">To confirm</span> : null}{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
     {blocks}
     {/* What the prose says that no statement covers stays in view, in its own words. */}
     {remaining.length ? <div className="answer-remaining" data-testid="answer-remaining"><b>Also in this answer</b>{remaining.map((s, i) => <p key={i}>{s}</p>)}</div> : null}
+    {/* What to do next sits with the answer, above the collapsed detail. */}
+    {after}
     <div className="answer-more">
       <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
       {fullProse.length ? <details className="answer-full" data-testid="answer-full"><summary>Full answer</summary>{fullProse.map((t, i) => <p key={i}>{t}</p>)}</details> : null}

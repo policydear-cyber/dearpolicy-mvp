@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
 import { customerError } from "@/components/customer-text";
+import { HomeAttention } from "@/components/home-attention";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string;count:number;policyNames:string[];derived:boolean};
@@ -45,8 +46,12 @@ export default function DashboardPage(){
  // per-person protection grid -- just the next step.
  const documentCount=(data?.quality?.personalDocs??0)+(data?.quality?.referenceDocs??0)+(data?.unclaimed?.length??0);
  const emptyPortfolio=!loading&&!data?.error&&!!data&&documentCount===0;
+ const returning=!!data&&!data.error&&documentCount>0;
  return <div className="page dashboard-page">
-  <header className="page-header portfolio-hero"><div><div className="eyebrow">YOUR FAMILY PORTFOLIO</div><h1>Know what your family has. Know what to do next.</h1><p className="lead">DearPolicy shows what your uploaded policies cover, with the page each answer comes from, ready for when you need it.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary">Upload documents</Link><Link href="/chat" className="button primary">Ask DearPolicy</Link></div></header>
+  {/* A returning household lands on what changed, what needs them and a box to ask; the welcome is for a first visit. */}
+  {returning?<header className="page-header portfolio-hero compact"><div><div className="eyebrow">YOUR FAMILY PORTFOLIO</div><h1>Your family&rsquo;s cover at a glance</h1></div><div className="hero-actions"><Link href="/policies" className="button secondary">Upload documents</Link></div></header>
+  :<header className="page-header portfolio-hero"><div><div className="eyebrow">YOUR FAMILY PORTFOLIO</div><h1>Know what your family has. Know what to do next.</h1><p className="lead">DearPolicy shows what your uploaded policies cover, with the page each answer comes from, ready for when you need it.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary">Upload documents</Link><Link href="/chat" className="button primary">Ask DearPolicy</Link></div></header>}
+  {returning&&<HomeAttention memberId={active?.id}/>}
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy could not load your portfolio.</strong><span>Something went wrong reaching your data.</span><small>Your documents are untouched. Please try refreshing in a moment — if this keeps happening, contact support.</small></div>}
   <section className="member-strip"><div className="member-strip-title"><strong>Viewing</strong><span>Choose a family member</span></div><div className="member-pills">{data?.family?.map(m=><button key={m.id} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}<Link className="member-pill add" href="/family">+ Add person</Link></div></section>
   {!emptyPortfolio&&<>
