@@ -2989,3 +2989,53 @@ acceptable because it is what that page prints.
 - R60-2 lets the new move rule borrow another person's or another product's line and condition.
 - Both are tight guards with controls, and R60-3 is a one-character regex fix.
 - Every R59 item is fixed.
+
+# Round 61: review of PR #85 at `1b93474` (re-join Coverage rows stored on the wrong cover)
+
+Method: read the diff (`lib/ledger/store.ts` seedLedger, plus a DB regression case), `coverageForLedgerRow` and
+`coverageForBenefit`, the person-edit path (store.ts:106) and the `seedLedger` callers. The DB suite was not run,
+because database suites are out of scope for this role.
+
+## Answers to the three questions
+
+- **Can it move another person's or product's rows?** No.
+  - The SELECT is scoped to `account_id=$1`.
+  - Each row is matched only to a contract whose `ownerId` equals the row's `family_member_id` and which contains the
+    row's `policy_id`.
+  - The new basis comes from `coverageForLedgerRow` on that same person's contract, the same join new rows already use.
+  - Only rows whose stored basis equals one of *that* contract's cover amounts are touched. A printed fixed limit such as
+    S$5,000 is left alone, and the test covers this.
+- **Is it idempotent?** Yes.
+  - After the update the stored basis equals the join, so the next run takes `continue`.
+  - A cleared row (NULL) leaves the `sum_basis IS NOT NULL` set, and the earlier unbased-join block re-tries it each run
+    with the same result.
+  - `updated_at` is not touched (there is no trigger on coverage_rules), so the row stays machine-made and a re-read still
+    replaces it.
+  - Person edits set `updated_at=now()` (store.ts:106), so confirmed, rejected or edited rows are excluded by
+    `updated_at=created_at`, and the test covers this.
+- **Does it rewrite stored data?** **Yes.**
+  - It UPDATEs `coverage_rules.sum_basis` on live rows the next time `seedLedger` runs after deploy. That covers the
+    dashboard load, `/api/ledger`, chat workflow and ingest, and so includes DC's real household.
+  - It is derived machine data, not anything a person typed, and it is the same kind of write the existing join above it
+    already makes.
+  - It is still a data correction that runs automatically on production, so **merging it is DC's yes for that change**.
+    The coordinator should say that plainly when asking.
+  - The old (wrong) S$1,000,000 bases are overwritten and are not kept anywhere, but they can be recomputed from the code.
+
+## Notes (Low, not blocking)
+
+- **R61-1:** when the join is ambiguous (no single cover fits) and the contract's covers have different amounts, the
+  basis is cleared. A row that showed an amount then shows only its percentage. That is consistent with how new rows are
+  joined and better than a possibly wrong cover, but it is a visible change: some rows may lose a figure rather than
+  gain the right one.
+- **R61-2:** a document-printed fixed limit that happens to equal one of the contract's cover amounts (for example "% of
+  S$350,000" where a cover is also S$350,000) would be treated as joined and re-joined. No such case exists in this
+  household.
+- **R61-3:** there is one UPDATE per changed row on every `seedLedger` call until it settles, then none. Concurrent calls
+  write the same value, which is harmless.
+
+## Verdict on PR #85 at `1b93474`
+
+**Ready on the code.** Its scope is limited to the person's own contract, and it is idempotent. Because it rewrites
+stored Coverage data on production when it runs, the merge needs DC's explicit yes, with a one-line explanation that
+the accident rows will switch from S$1,000,000 to S$600,000 and a few ambiguous rows may show only their percentage.
