@@ -612,7 +612,6 @@ function lineWithCondition(household: Household, c: Checked, quotes: string[]): 
   const cover = sectionOf(from, c.found!.page, c.found!.offset, covers);
   const fromPage = from.pages.find((p) => p.page === c.found!.page)!.text;
   const label = new Set(labelWords(rowLine(fromPage, c.found!.offset).text));
-  const people = (d: HouseholdDocument) => [...d.linkedPeople].map(baseName).sort().join("|");
   for (const q of quotes) for (let di = 0; di < household.documents.length; di++) {
     const d = household.documents[di];
     if (di === c.found!.docIndex || unreadable(d) || !d.linkedPeople.length || people(d) !== people(from)) continue;
@@ -631,13 +630,16 @@ function lineWithCondition(household: Household, c: Checked, quotes: string[]): 
   return hits.size === 1 ? [...hits.values()][0] : null;
 }
 
+/** The people a document is linked to, as one key. */
+const people = (d: HouseholdDocument) => [...d.linkedPeople].map(baseName).sort().join("|");
 /** Whether a condition's quoted words state a condition of the statement (release-set B1, B5, H2):
  * - printed on the statement's own page; a footnote ("*This Benefit can only be claimed ...") only for a row that carries
  *   the same footnote mark;
  * - or printed elsewhere in the statement's own document, in the same section (the 365-day and visible-wound terms of the
  *   personal accident schedule a few pages on). A footnote never travels to another page;
- * - or, for a statement quoting a certificate line under a cover heading ("GROUP LIVING CARE" above a member's
- *   S$350,000), printed in any document's section for that same cover (the Living Care 90-day waiting period).
+ * - or, for a statement quoting a certificate line that names a household member under a cover heading ("GROUP LIVING
+ *   CARE" above a member's S$350,000), printed in the section for that same cover of a document linked to the same
+ *   people (the Living Care 90-day waiting period), R62-1.
  * A condition from another document's row is never put on this one (the Benefit Summary's "Core or Voluntary" on the
  * Product Summary's wrist row). */
 function conditionApplies(household: Household, found: Found, quote: string): boolean {
@@ -662,7 +664,12 @@ function conditionApplies(household: Household, found: Found, quote: string): bo
   const lineNo = page.text.slice(0, found.offset).split("\n").length - 1;
   const head = headingsOf(page.text).filter((h) => h.line < lineNo).at(-1);
   if (!head) return false;
-  return household.documents.some((d, di) => di !== found.docIndex && !unreadable(d) && placesIn(di).some((f) => !footnote(f) && sectionOf(d, f.page, f.offset, covers) === head.cover));
+  // Only for a line naming a household member, and only from a document linked to the same people (R62-1: a travel
+  // policy linked to one spouse never lends its age rule to the other's group certificate line).
+  const own = new Set(tokens(lineOf(page.text, found.offset)));
+  if (!household.members.some((m) => { const t = tokens(baseName(m.name)); return t.length > 0 && t.every((w) => own.has(w)); })) return false;
+  if (!doc.linkedPeople.length) return false;
+  return household.documents.some((d, di) => di !== found.docIndex && !unreadable(d) && people(d) === people(doc) && placesIn(di).some((f) => !footnote(f) && sectionOf(d, f.page, f.offset, covers) === head.cover));
 }
 /** A lettered sub-benefit title within a cover's section ("A. Death due to Accident", "M. Comatose State Lump Sum
  * Benefit", "J, Accidental Hospital Recuperation Benefit", "C. ... (continued)"): a short title-case line with no figures. Numbered lines are a schedule's rows ("7. Loss

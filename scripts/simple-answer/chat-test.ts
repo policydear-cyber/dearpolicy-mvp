@@ -788,6 +788,16 @@ async function main() {
     assert.deepEqual(moved({ ...once, pages: [{ page: 9, text: once.pages[0].text.replace("BENEFIT 2: GROUP PERSONAL ACCIDENT", "BENEFIT 1: GROUP TERM LIFE") }] }), [["S$250", "Test Summary", []]], "another cover");
   });
 
+  await check("R62-1: a certificate line takes another document's condition only from a document linked to the same people, for a line naming a member", () => {
+    const travel = (linkedPeople: string[]) => doc(7, "Travel.pdf", "Test Travel", [{ page: 2, text: "PERSONAL ACCIDENT\nBenefits are reduced by 50% for an Insured Person aged 70 or above." }], { linkedPeople });
+    const age = { text: "Halved at 70.", quote: "Benefits are reduced by 50% for an Insured Person aged 70 or above." };
+    const kept = (house: Household, quote = "Lim Ah Kow\tS$600,000\tAs of 01/01/2026") => r59(house, [st({ kind: "amount", text: "Sum insured.", person: "Ah Kow", document: "D4", quote, amount: "S$600,000", conditions: [age] })]).answer.statements!.filter((x) => x.amount).map((x) => x.conditions);
+    assert.deepEqual(kept({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, travel(["Lim Mei Mei"])] }), [[]], "another person's travel policy");
+    assert.deepEqual(kept({ ...FIX_HOUSE, documents: [...FIX_HOUSE.documents, travel(["Lim Ah Kow"])] }), [["Halved at 70."]], "control: same people");
+    const unnamed = { ...FIX_HOUSE, documents: [...FIX_HOUSE.documents.map((d, k) => (k === 3 ? { ...d, pages: [{ page: 1, text: d.pages[0].text.replace("Lim Ah Kow\tS$600,000", "Member 1\tS$600,000") }] } : d)), travel(["Lim Ah Kow"])] };
+    assert.deepEqual(kept(unnamed, "Member 1\tS$600,000\tAs of 01/01/2026"), [[]], "a line naming no member");
+  });
+
   await check("app-run: a question set goes through runSimpleChat turn by turn with the conversation so far, and replays free", async () => {
     const answers = [
       { bottomLine: "Ah Kow has a fracture benefit.", statements: [st({ kind: "amount", text: "Wrist fracture.", person: "Ah Kow", document: "D1", quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" } })], nextSteps: [], question: null },
