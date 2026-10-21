@@ -2734,3 +2734,38 @@ worst case, after the household is already gone. That is acceptable.
 ## Verdict on PR #84 at `97ceaae`
 
 **Ready.** The scope is safe, and a failure cannot block or corrupt the deletion. R54-1 to R54-4 are follow-ups.
+
+# Round 55: recheck of PR #82 at `7089ddd` (R52-1 to R52-3)
+
+Method: as in round 52. Every `%` line of every snapshot document was quoted at 897a8a0 and at 7089ddd and the results
+diffed. The targeted probes were rerun. No model calls.
+
+## Confirmed fixed
+
+- **R52-1:** PS p13 "Death due to natural catastrophe 15% of Sum Insured" with the cap on the next line now gets no card,
+  whether the quote is the row alone or both lines. The separate "S$50,000" card still shows. PS and BS comatose rows
+  get no card.
+- **R52-2:** BS p7 and PS p12 burns rows give cards again (head ≥8% 100% is S$600,000, body 15–20% 75% is S$450,000).
+  The whole-snapshot diff shows no other change: no new refusals and no lost cards. The Evidence Reviewer figures, PS
+  fractures on S$5,000, dismemberment rows and split-line rows are unchanged.
+- **R52-3:** handling it with a prompt rule (the instalment terms as their own fact quoting BS p5) is acceptable. The
+  S$900,000 total is right, and borrowing a condition from another document on the server would be worse. The server
+  does not enforce it; the release set will show whether the model does it.
+
+## Finding
+
+**R55-1 (High, wrong amount; pre-existing, already at 741aba9): a row with two percentages accepts either.** Burns rows
+print a threshold and a payout on one line ("- Equals to or greater than 8%\t100%"). `checkAmount` only asks that the
+stated percent appears somewhere on the row line. So a model statement of 8% gives a **S$48,000** card where the
+document pays 100% (S$600,000). Likewise 5% on "2% but less than 5%\t50%" gives S$30,000, and 40% on "≥40%\t50%" gives
+S$240,000.
+
+The model would have to misread the row, but catching exactly that is this check's job, and R52-2 has just made these
+rows computable again. Fix:
+- When the row line prints more than one percentage, accept only the last one (the compensation column).
+- Or refuse when the stated percent sits inside "greater than / less than / at least … %".
+- Add one burns control with the threshold percent.
+
+## Verdict on PR #82 at `7089ddd`
+
+**Not ready yet, one small fix:** R55-1. R50-1 to R50-4 and R52-1 to R52-3 are all fixed.
