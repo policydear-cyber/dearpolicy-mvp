@@ -537,6 +537,108 @@ async function main() {
     assert.doesNotMatch(answer.bottomLine ?? "", /103/);
   });
 
+  // App-path run of 21 Oct (24/32): the checks dropped correct, printed facts. Each fix keeps its wrong-amount guard.
+  const doc = (n: number, name: string, product: string, pages: { page: number; text: string }[], extra: Partial<Household["documents"][number]> = {}): Household["documents"][number] =>
+    ({ ...HOUSE.documents[0], policyId: `bbbbbbbb-0000-0000-0000-00000000000${n}`, name, productName: product, pages, ...extra });
+  const FIX_HOUSE: Household = { ...HOUSE, documents: [
+    doc(1, "Schedule.pdf", "Test CI", [{ page: 3, text: "Policy Schedule\nAssured\t: Lim Ah Kow\nIdentity Number\t: S1234567A\n: Singapore Dollar\nInstalment Premium\t: 470.85\tCurrency\nEntry Age\t: 38\nBasic Benefits\tSum Assured\nCritical Illness Benefit\t300,000.00\nDeath Benefit\t5,000.00" }]),
+    doc(2, "Unsigned.pdf", "Test Unsigned", [{ page: 1, text: "Death Benefit\t5,000.00" }, { page: 2, text: "Six currency options are available: SGD, USD\nCurrency\t: SGD\nDeath Benefit\t7,000.00" }]),
+    doc(3, "Wording.pdf", "Test Wording", [
+      { page: 1, text: "BENEFIT 1: GROUP TERM LIFE\nTerm life pays on death.\nClaims must be made within 90 days of death.\n*This Benefit can only be claimed once." },
+      { page: 2, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nSimple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\nLoss of one eye\t100% of Sum Insured\nHip\t75%\nLeft hip\t50%\nRight hip\t50%\nA Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously.\nHospital cash\tS$100 per day, maximum 30 days" },
+      { page: 3, text: "The loss must result within 365 days of the Accident.\n*Only for marked rows." },
+    ]),
+    doc(4, "Certificate.pdf", "Test Certificate", [{ page: 1, text: "TEST GROUP INSURANCE SCHEME (GROUP POLICY NO. G00750)\nGROUP TERM LIFE(POLICY NO. 9)\nLim Ah Kow\tS$1,000,000\tAs of 01/01/2026\nGROUP PERSONAL ACCIDENT(POLICY NO. 9)\nLim Ah Kow\tS$600,000\tAs of 01/01/2026\nClaims hotline 6827 8000\nReference\t600000" }]),
+    doc(5, "output_2026.pdf", "", [{ page: 1, text: "unreadable" }], { productName: null, processingStatus: "failed", linkedPeople: [], uploadedFor: "Lim Ah Kow" }),
+    doc(6, "Split.pdf", "Test Split", [{ page: 1, text: "GROUP PERSONAL ACCIDENT(POLICY NO. 9)\nLim Ah Kow\tSee below\nS$600,000" }]),
+  ] };
+  const fixAnswer = (statements: ModelStatement[], more: Partial<ModelAnswer> = {}, written: string[] = []) => verifyAnswer(FIX_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements, ...more }, written);
+  const amounts = (a: ReturnType<typeof fixAnswer>["answer"]) => a.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
+
+  await check("APP-1 currency: a schedule's unsigned figures take the one currency its page declares; nothing else does", () => {
+    const { answer, report } = fixAnswer([
+      st({ kind: "amount", text: "Death benefit.", person: "Ah Kow", document: "D1", quote: "Death Benefit\t5,000.00", amount: "S$5,000" }),
+      st({ kind: "amount", text: "Premium.", person: "Ah Kow", document: "D1", quote: "Instalment Premium\t: 470.85", amount: "470.85" }),
+      st({ kind: "amount", text: "Same figure, no currency on its page.", document: "D2", quote: "Death Benefit\t5,000.00", amount: "5,000.00" }),
+      st({ kind: "amount", text: "A number not written as an amount.", document: "D1", quote: "Entry Age\t: 38", amount: "S$38" }),
+      st({ kind: "amount", text: "A page listing currency options declares none.", document: "D2", quote: "Death Benefit\t7,000.00", amount: "S$7,000" }),
+      st({ kind: "amount", text: "Another currency than the page's.", document: "D1", quote: "Critical Illness Benefit\t300,000.00", amount: "US$300,000" }),
+    ]);
+    assert.deepEqual(amounts(answer), ["S$5,000", "S$470.85"]);
+    assert.ok(answer.statements!.filter((x) => x.amount).every((x) => x.amount!.currencyResolved));
+    assert.equal(report.dropped.filter((d) => d.kind === "amount").length, 4);
+  });
+
+  await check("APP-2 row: a percentage quoted from its table heading is read as the one row its words name, never a guess", () => {
+    const { answer } = fixAnswer([
+      st({ kind: "amount", text: "A hip fracture pays 75% of the limit.", person: "Ah Kow", document: "D3", quote: "Simple Fracture Benefit Limit: S$5,000", percentOf: { percent: 75, baseAmount: "S$5,000" } }),
+      st({ kind: "amount", text: "The left or right hip pays 50%.", person: "Ah Kow", document: "D3", quote: "Simple Fracture Benefit Limit: S$5,000", percentOf: { percent: 50, baseAmount: "S$5,000" } }),
+      st({ kind: "amount", text: "A fracture pays 75%.", person: "Ah Kow", document: "D3", quote: "Simple Fracture Benefit Limit: S$5,000", percentOf: { percent: 75, baseAmount: "S$5,000" } }),
+    ]);
+    assert.deepEqual(amounts(answer), ["S$3,750"]);
+    assert.equal(answer.statements!.find((x) => x.amount)!.source!.page, 2);
+    assert.match(answer.citations.find((c) => c.excerpt === "Hip 75%")?.excerpt ?? "", /^Hip 75%$/);
+  });
+
+  await check("TE-EXTRA sum insured: the person's own line must print the sum insured, not a later line the quote reaches", () => {
+    const eye = (baseDocument: string, baseQuote: string) => st({ kind: "amount", text: "Loss of one eye.", person: "Ah Kow", document: "D3", quote: "Loss of one eye\t100% of Sum Insured", percentOf: { percent: 100, baseAmount: "S$600,000", baseDocument, baseQuote } });
+    assert.deepEqual(amounts(fixAnswer([eye("D4", "Lim Ah Kow\tS$600,000")]).answer), ["S$600,000"]);
+    assert.deepEqual(amounts(fixAnswer([eye("D6", "Lim Ah Kow ... S$600,000")]).answer), []);
+  });
+
+  await check("APP-3 conditions: same section of the same document, or a certificate cover's own section; never a footnote elsewhere", () => {
+    const { answer, report } = fixAnswer([
+      st({ kind: "amount", text: "Hip fracture.", person: "Ah Kow", document: "D3", quote: "Hip\t75%", percentOf: { percent: 75, baseAmount: "S$5,000" }, conditions: [
+        { text: "Within 365 days.", quote: "The loss must result within 365 days of the Accident." },
+        { text: "Claim within 90 days.", quote: "Claims must be made within 90 days of death." },
+        { text: "Marked rows only.", quote: "*Only for marked rows." },
+      ] }),
+      st({ kind: "amount", text: "Term life sum insured.", person: "Ah Kow", document: "D4", quote: "Lim Ah Kow\tS$1,000,000", amount: "S$1,000,000", conditions: [
+        { text: "Claim within 90 days.", quote: "Claims must be made within 90 days of death." },
+        { text: "Within 365 days.", quote: "The loss must result within 365 days of the Accident." },
+        { text: "Once only.", quote: "*This Benefit can only be claimed once." },
+      ] }),
+    ]);
+    assert.deepEqual(answer.statements!.filter((x) => x.amount).map((x) => x.conditions), [["Within 365 days."], ["Claim within 90 days."]]);
+    assert.deepEqual(report.conditionsLeftOut, ["Claim within 90 days.", "Marked rows only.", "Within 365 days.", "Once only."]);
+  });
+
+  await check("APP-4 prose: printed phone, policy and code numbers, file names, 'dated 2022' and 'No.' stay; money and IDs never do", () => {
+    const { answer, report } = fixAnswer([st({ kind: "fact", text: "The scheme number is on the certificate.", document: "D4", quote: "GROUP POLICY NO. G00750" })], {
+      bottomLine: "Your group policy is No. G00750 and the certificate is dated 2022. Call Singlife (6827 8000) to check. The unreadable file is output_2026.pdf. Policy No. G99999 is another. It pays 5000 dollars. His ID is S1234567A. Call 1000000 now. The reference is 600000.",
+      nextSteps: ["Call 6827 8000 to claim.", "Call 6827 9999 to claim."],
+    });
+    assert.equal(answer.bottomLine, "Your group policy is No. G00750 and the certificate is dated 2022. Call Singlife (6827 8000) to check. The unreadable file is output_2026.pdf.");
+    assert.deepEqual(answer.nextSteps, ["Call 6827 8000 to claim."]);
+    assert.equal(report.sentencesLeftOut.length, 6);
+  });
+
+  await check("APP-5 files: a point about a file is stated from the library's record, never the model's words", () => {
+    const { answer, report } = fixAnswer([
+      st({ kind: "fact", text: "D5 could not be read and is linked to Ah Kow.", document: "D5" }),
+      st({ kind: "fact", text: "The other files (D1, D2) were read.", document: null }),
+      st({ kind: "fact", text: "D1 pays a lot on death.", document: "D1" }),
+    ]);
+    assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), [
+      "output_2026.pdf could not be read (status: failed), so nothing in it was used. It is not linked to anyone in DearPolicy; it can be linked on the Documents page. It was uploaded for Lim Ah Kow.",
+      "Of your 6 uploaded files, 5 were read and 1 could not be read (output_2026.pdf).",
+    ]);
+    assert.equal(report.dropped.length, 1);
+  });
+
+  await check("APP-6 stay: a daily benefit is worked out only for a stay the household wrote, from the quoted start day and cap", () => {
+    const daily = (stayDays: number, quote = "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously.", amount = "$30") =>
+      st({ kind: "amount", text: "Daily hospital cash.", person: "Ah Kow", document: "D3", quote, amount, perDay: { stayDays } });
+    const cards = (s: ModelStatement, written: string[]) => fixAnswer([s], {}, written).answer.statements!.filter((x) => x.kind === "calculation").map((x) => [x.amount?.text ?? null, x.text]);
+    assert.deepEqual(cards(daily(12), ["he was in hospital 12 days"]), [["$60", "For a 12-day stay, this works out to 2 days of the daily benefit."]]);
+    assert.deepEqual(cards(daily(45), ["in hospital forty-five days"]).length, 0);
+    assert.deepEqual(cards(daily(45), ["in hospital 45 days after a fall"]), [["$900", "For a 45-day stay, this works out to 30 days of the daily benefit."]]);
+    assert.deepEqual(cards(daily(8), ["8 days in hospital"]), [[null, "A 8-day stay ends before this daily benefit starts, so it pays nothing for that stay."]]);
+    assert.deepEqual(cards(daily(12), ["he was in hospital 21 days"]), []);
+    assert.deepEqual(cards(daily(12), []), []);
+    assert.deepEqual(cards(daily(12, "Hospital cash\tS$100 per day, maximum 30 days", "S$100"), ["12 days"]), []);
+  });
+
   await check("app-run: a question set goes through runSimpleChat turn by turn with the conversation so far, and replays free", async () => {
     const answers = [
       { bottomLine: "Ah Kow has a fracture benefit.", statements: [st({ kind: "amount", text: "Wrist fracture.", person: "Ah Kow", document: "D1", quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" } })], nextSteps: [], question: null },

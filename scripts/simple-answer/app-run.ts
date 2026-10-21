@@ -87,7 +87,17 @@ export function asMarkdown(turns: AppTurn[], meta: Record<string, unknown>): str
   for (const t of turns) {
     lines.push(`## ${t.id}: ${t.question}`, "");
     if (t.error) { lines.push(`ERROR: ${t.error}`, ""); continue; }
-    lines.push(t.text ?? "", "");
+    // The cards as the app shows them: amount, conditions and how an illustration was worked out (graders need all three).
+    const a = t.answer as (StructuredAnswer & { statements?: { personName?: string | null; amount?: { text: string } | null; text: string; conditions?: string[]; basis?: string | null; source?: { policyName: string; page: number } | null }[] }) | undefined;
+    if (a?.statements) {
+      lines.push(a.bottomLine || a.summary || "");
+      for (const s of a.statements) {
+        lines.push(`- ${s.personName ? s.personName + ": " : ""}${s.amount ? s.amount.text + " — " : ""}${s.text}${s.source ? ` (${s.source.policyName}, page ${s.source.page})` : ""}`);
+        for (const c of s.conditions ?? []) lines.push(`  - only if: ${c}`);
+        if (s.basis) lines.push(`  - worked out: ${s.basis}`);
+      }
+      lines.push(...a.nextSteps.map((n) => `Next: ${n}`), ...a.questions.map((q) => q.text), "");
+    } else lines.push(t.text ?? "", "");
     const dropped = [...(t.report?.dropped ?? []).map((d) => `${d.kind}: ${d.why}: ${d.text}`), ...(t.report?.sentencesLeftOut ?? []).map((x) => `money in prose: ${x}`), ...(t.report?.questionsLeftOut ?? []).map((x) => `extra question: ${x}`), ...(t.report?.conditionsLeftOut ?? []).map((x) => `unquoted condition: ${x}`)];
     if (dropped.length) lines.push("<details><summary>Left out by the server</summary>", "", ...dropped.map((d) => `- ${d}`), "", "</details>", "");
     lines.push(`_${t.ms != null ? (t.ms / 1000).toFixed(1) + " s" : ""}${t.usd ? ` · US$${t.usd.toFixed(4)}` : ""}_`, "");
