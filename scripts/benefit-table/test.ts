@@ -565,6 +565,35 @@ for (const [layout, hip, wrist] of [
     assert.equal(rowOf(read1({ benefit: "Hip", value: 75, page: 2, quote: hip })).figure.kind, "none", "an unread limit under the row gives no amount");
   });
 }
+// Critic R97: a row's own cap line that starts with a cap word or connective is never cut off, even when it looks like
+// an item marker ("max. ") or has its own percentage ("or 200% of premiums paid").
+for (const [name, rowText, capLine, benefitName, value] of [
+  ["max.", "Hip\t75% of Sum Insured", "max. S$50,000", "Hip", 75],
+  ["Max.", "Hip\t75% of Sum Insured", "Max. S$50,000", "Hip", 75],
+  ["or 200% of premiums", "Death\t100% of Sum Insured", "or 200% of premiums paid, whichever is lower", "Death", 100],
+] as const) {
+  const probe: SourceDoc = { id: "probe-r97", name: "Probe.pdf", readable: true, pages: [
+    { page: 1, text: `GROUP PERSONAL ACCIDENT\n${rowText}\n${capLine}\nKnee\t10% of Sum Insured` },
+    { page: 2, text: `GROUP PERSONAL ACCIDENT\n${rowText}\nnote one\nnote two\nnote three\n${capLine}` },
+  ] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  const quote = rowText.replace("\t", " ");
+  test(`R97 (${name}): the row's own cap line, unread, gives no amount, never the uncapped figure`, () => {
+    const r = read1({ benefit: benefitName, value, page: 1, quote });
+    assert.equal(r.benefits[0].capUnread, true);
+    assert.equal(rowOf(r).figure.kind, "none", figureText(rowOf(r).figure));
+  });
+  if (name !== "or 200% of premiums") test(`R97 (${name}): the cap line read is kept and applied`, () => {
+    const r = read1({ benefit: benefitName, value, page: 1, quote, cap: 50000, capQuote: capLine });
+    const f = rowOf(r).figure;
+    assert.equal(f.kind === "worked_out" && f.amount, 50000, figureText(f) + JSON.stringify(r.dropped));
+  });
+  test(`R97 (${name}) backstop: a cap line past the lines read still marks the row capped`, () => {
+    const r = read1({ benefit: benefitName, value, page: 2, quote });
+    assert.equal(rowOf(r).figure.kind, "none", figureText(rowOf(r).figure));
+  });
+}
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
   const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;

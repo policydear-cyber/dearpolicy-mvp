@@ -68,35 +68,36 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-/** Text that goes on with the same row: it starts lower-case, with a bracket or with a connective ("or up to S$50,000,
- * whichever is lesser", "subject to a maximum of ..."), never with a new row's label, bullet or number. */
-const continues = (text: string) => /^[ \t,;:]*(?:[a-z(]|(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b)/.test(text)
-  || /^[ \t,;:]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b/i.test(text);
 // A line that starts its own row is never read as going on with the one above, even when it starts lower-case or with
 // "(": an item marker ("(b)", "ii.", "3)"), its own percentage, its own label and figure, or tab-separated cells (Critic R96-1).
 const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
-const CONNECTIVE = /^[ \t,;:]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b/i;
-const startsRow = (text: string, sameLine = false) => ITEM_MARKER.test(text) || /\d\s*%/.test(text)
+// A line that starts with a connective or a cap word ("or", "up to", "max.", "limit") always goes on with the row (Critic R97).
+const CONNECTIVE = /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|min(?:imum)?|limit(?:ed)?|not\s+(?:to\s+)?exceed(?:ing)?|capped)\b/i;
+/** Text that goes on with the same row: it starts lower-case, with a bracket or with a connective ("or up to S$50,000,
+ * whichever is lesser", "subject to a maximum of ..."), never with a new row's label, bullet or number. */
+const continues = (text: string) => /^[ \t,;:]*[a-z(]/.test(text) || CONNECTIVE.test(text);
+const startsRow = (text: string, sameLine = false) => !CONNECTIVE.test(text) && (ITEM_MARKER.test(text) || /\d\s*%/.test(text)
   || (!sameLine && /\S\t+\S/.test(text))
-  || (!CONNECTIVE.test(text) && /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/.test(text));
+  || /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/.test(text));
 /** The row as printed: the quoted words (by their place on the page), the rest of their line when it goes on with the row,
- * and up to three following lines that go on with it. A line that starts another row ends it (Critic R95-1, R95-2). */
-function rowSegment(pageText: string, start: number, end: number): string {
+ * and up to three following lines that go on with it. A line that starts another row ends it (Critic R95-1, R95-2).
+ * next: the first line not joined, so a cap word starting it still marks the row as capped (Critic R97 backstop). */
+function rowSegment(pageText: string, start: number, end: number): { text: string; next: string } {
   const lineEnd = (i: number) => { const e = pageText.indexOf("\n", i); return e < 0 ? pageText.length : e; };
   let seg = pageText.slice(start, end);
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
-    if (!continues(tail) || startsRow(tail, true)) return seg;
+    if (!continues(tail) || startsRow(tail, true)) return { text: seg, next: tail };
     seg += tail;
   }
   let pos = lineEnd(end);
   for (let k = 0; k < 3 && pos < pageText.length; k++) {
     const line = pageText.slice(pos + 1, lineEnd(pos + 1));
-    if (!line.trim() || !continues(line) || startsRow(line)) break;
+    if (!line.trim() || !continues(line) || startsRow(line)) return { text: seg, next: line };
     seg += " " + line;
     pos = lineEnd(pos + 1);
   }
-  return seg;
+  return { text: seg, next: pageText.slice(pos + 1, lineEnd(pos + 1)) };
 }
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -130,7 +131,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     return at(f);
   };
-  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : src.excerpt; };
+  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, next: "" }; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
@@ -193,7 +194,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) { out.dropped.push({ what: label, why: "quote holds more than one row" }); continue; }
     if (pays === "percent") {
-      const row = segmentOf(source);
+      const { text: row, next } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
       if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))) {
@@ -201,7 +202,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
         capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
-          || CAPPED.test(row);
+          || CAPPED.test(row) || CONNECTIVE.test(next);
       }
     }
     // Day counts are figures too: one the quote does not print is not kept.
