@@ -3865,3 +3865,16 @@ R81-1 fixed (`lib/policies/benefit-catalog.ts:1176`). The life-cover TPD join no
 No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
 
 Verdict: **READY** (after DC's yes for the production row rewrite).
+
+## Round 83: PR #93 (Haiku 5.5 price entry), head 67367e6 on main d280550
+
+Diff: `lib/ai/providers.ts` (one entry plus a comment) and two offline checks in `scripts/simple-answer/offline-test.ts`. Read-only review; no paid call.
+
+The price matches the published rate (claude-api skill, Haiku 5.5 section). There are two rate cards chosen by prompt length: $0.10 / $0.50 per MTok up to 100K prompt tokens, and $0.50 / $2.50 above. Cache reads are 0.1x input ($0.05 on the long card), 5-minute cache writes 1.25x and 1-hour writes 2x. The simple chat's library is about 230K tokens, so every call is on the long card. Using the long card for every call can only over-count a short prompt, never under-count.
+
+Cost guard. `anthropicRequest` caches the library with `ttl: "5m"`, and `callUsd` charges cache writes at 1.25x input, which is right for 5-minute writes. `runSet` (`scripts/simple-answer/app-run.ts:48-50`) checks the worst case before every call: the full prefix written to cache, plus fresh input, plus `MAX_OUTPUT_TOKENS` 8000, the cap that includes thinking. Prefix tokens are estimated at length/2.5, which stays conservative even with Haiku 5.5's tokenizer counting about 30% more tokens. `--max-usd` is refused above the authorised cap. A run therefore stops before a call that could pass its cap.
+
+- **R83-1 (Low)** `lib/simple-chat/model.ts:55-56` sends `betas: ["server-side-fallback-2026-07-01"], fallbacks: "default"` for every model. The skill says Haiku 5.5 has no server-side fallback: with `"default"` a declined request simply stays declined (no 400, no extra spend), and a model list would return a 400. So there is no overspend or failure today. Omitting `fallbacks` and the beta header for `claude-haiku-5-5` would match the documented use; this can wait for a later PR.
+- Note: for Opus and Sonnet runs, a server-side fallback is billed at the fallback model's rates, while `callUsd` prices every call at the requested model's rates. A fallback to a dearer model such as Opus 4.8 ($5/$25 against Opus 5.5's $4/$20) would be under-counted for that call. This is not new in #93 and does not apply to Haiku.
+
+Verdict: **READY.** R83-1 is optional.
