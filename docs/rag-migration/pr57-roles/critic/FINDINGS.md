@@ -3936,3 +3936,15 @@ No wrong-amount regression found. New, all Low:
 - **R86-3 (Low)** `benefitTableLive()` runs a `to_regclass` query on every `pendingDocumentCount`, `seedLedger` and `readDocumentIntoLedger` call. It is cheap, but it is called on every dashboard and Coverage load; it could be cached per instance once the tables exist.
 
 Verdict: **READY.** R86-1 to R86-3 are optional, and nothing is switched on until DC sets DEARPOLICY_BENEFIT_TABLE and applies the SQL.
+
+## R87 — PR #94 delta 824823f → 41ab81e (R86-1, R86-3, strict Correct-field amount)
+
+**Verdict: NOT READY** (one Medium, one-line fix).
+
+Probed locally (tsx, `columnProblem` and `parseAmount` on 41ab81e); no DB, no paid calls.
+
+- **R87-1 (Medium, wrong amount backstop weakened)** `lib/benefit-table/assemble.ts:125-127`. `UNIT_WORDS` strips "annual", "annually", "trip", "lifetime" and "policy" from both sides of `samePlan`. These words name plan variants in travel, not units. Cover plan "Annual Gold" with a section column "Gold" (the single-trip column, a tier name, so a plan column) was refused at 824823f and is now ACCEPTED, so single-trip limits can be shown for an annual-plan holder. Same for "Plan A Annual" vs "Plan A". Fix: keep only currency tokens and words that follow "per" (or sit in brackets) in the strip list; drop annual, annually, trip, lifetime, policy. "Plan A (S$)" and "Plan A Per Visit" still match.
+- R86-1 otherwise fixed: "Plan A (S$)" and "Plan A Per Year" now match "Plan A"; "Plan B" vs "Plan A" still refused.
+- R86-3 fixed: `tableReady` caches a yes per `Db` in a WeakSet; `appDb` is a module constant (`lib/benefit-table/app.ts:15`), so it hits. A no is re-checked. Fine.
+- Amount parsing (`lib/benefit-table/amount.ts`): correct. Refuses 0, "250k", "1.5 million", "1,0000", "$1,00", "12.345", "USD 1000". Accepts "S$ 1,000", "1,500,000.00". The preview shows the exact amount before Save, Save is disabled when invalid, and the route (`z.number().positive()`) and `setConfirmation` (`<= 0`) both refuse 0. No issues.
+- R87-2 (Low, pre-existing, not from this delta): a column such as "Annual Gold" or "Single Trip Gold" is not judged a plan column (`namesPlan`, not all tier words), so it is neutral and accepted for any cover. The trip type in travel tables has no guard. Worth a follow-up, not blocking.
