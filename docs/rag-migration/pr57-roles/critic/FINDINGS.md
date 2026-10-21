@@ -4252,3 +4252,22 @@ I re-ran all 52 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
   - Add I2 and I4 as tests.
 
 I found nothing else. If the next delta only adds this condition and its tests, I will mark it READY on that delta.
+
+## R104 — PR #96 delta ee7d121 → 7326b4f (R103-1 "whichever" condition)
+
+**Verdict: READY.** Every path I have found reads the row's own cap or withholds the amount.
+
+- The delta only adds `otherWhichever`. Like `otherPercent` and `otherMoney`, it can only withhold an amount, never show one. The exemption for a leading item marker only removes "1." from the numbers counted.
+- I re-ran all 59 layouts plus J1 ("1. Hip 75% … or up to S$50,000, whichever is lesser"), with tsx, no DB and no paid calls.
+  - I2 and I4 now withhold.
+  - The rows that still show an amount are the correct own-cap reads: N4, C2, C6, E5, F5, G4, I6, I7 and J1 (each 50,000). The others are the deliberate bounds already accepted:
+    - F7 and G6: the next row is "Ambulance Cost S$500".
+    - H4: the cap belongs to Knee.
+    - H8: the cap is on the 4th plain line, outside the 3-line window.
+- Known, accepted over-refusal (safe):
+  - an untabbed neighbour with cap words withholds the row above it (COVERAGE-PLAN line 79);
+  - a base figure in the quote with a tied cap (I5) withholds;
+  - a per-family maximum under the cap (G7) withholds.
+- Residual limits, not blockers:
+  - The 3-line window (H8).
+  - The detection is wording-based, so a cap phrase with no cap word at all would not be caught.
