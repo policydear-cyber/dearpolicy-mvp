@@ -4042,3 +4042,27 @@ Probed with the chat-test fixture (tsx, no DB, no network, no paid calls). benef
 - Exemption is by identity only. A statement keeps unfiltered words only when its text exactly equals a server label, and labels can no longer carry money (names pre-checked; a plan may be a bare number only). So a model sentence that copies a label gains nothing.
 - Correct amounts still survive: Hip S$450,000 (now worded "75% of the sum insured"), Ankle S$2,500, Ambulance Up to S$500, Hospital cash S$50 (for child only), and Surrender value S$12,400 (projected, not guaranteed). In each case the model's own text carried full-width money.
 - No open findings on #95.
+
+## R94 — PR #96 at b4ed730 (row names with policy numbers; `nameStatesMoney`)
+
+**Verdict: NOT READY** (one Medium; small fix).
+
+Probed `nameStatesMoney` on 23 names (tsx, no DB, no paid calls).
+
+- The fix works for its own case. "GROUP POLICY NO. G007500", "POLICY NO.3037850" and "Plan 300" now pass.
+- Real money is still caught when it has a currency sign, thousands commas, a size word, or a dollar/SGD/USD word. Caught: "S$1,000,000", "Death 1,000,000", "1.5 million", "RM500", "HK$ 800", "Fracture 5k", "SGD 500", "500 dollars", "€500" and "£500".
+- **R94-1 (Medium, money in a label)** `lib/benefit-table/chat.ts` `nameStatesMoney`: a bare amount with money context gets through. These all PASS as names:
+  - "Accidental Death 1000000"
+  - "Death benefit of 600000"
+  - "Hospital cash 200 per day"
+  - "Hospital cash 200/day"
+  - "Benefit up to 5000"
+  - "Room & Board 300"
+  - "Death 1 000 000"
+
+  Once a row is labelled, its name skips the money filter (serverWords), so for example "Hospital cash 200 per day (…): paid per day." could show beside a different figure (another plan's S$300). Fix ideas, keeping policy and plan numbers allowed:
+  - In benefit, cover and product names (not plan), count as money any number of 2 or more digits followed by "per"/"/" plus a period word (day, visit, year, …), or preceded by "up to", "limit", "max(imum)" or "of".
+  - Also count as money any standalone number of 4 or more digits (including "1 000 000") that is not glued to letters, not after "No."/"number"/"#", and not a year 19xx/20xx.
+  - Add those 7 names as test cases.
+- Low: "₹ 500" is not read as money (₹ is missing from the currency symbols). This is outside the SGD/USD/MYR/HKD scope, so it is a note only.
+- app-run `--table` is a script, not on the app path; reviewed for scope only.
