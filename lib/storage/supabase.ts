@@ -172,6 +172,16 @@ export async function createClaimEvidenceSignedUrl(storageKey: string): Promise<
   return data.signedUrl;
 }
 
+/** A short-lived signed link to one policy file, for the household's own Preview
+ * (app/api/policies/[id]/file/route.ts, which re-checks ownership, lifecycle and
+ * the scan on every request before calling this). `download` makes the browser
+ * save the file under that name instead of showing it. */
+export async function createPolicyFileSignedUrl(storageKey: string, download?: string): Promise<string | null> {
+  const { data, error } = await client().storage.from(BUCKET).createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS, download ? { download } : undefined);
+  if (error) throw new Error(`Could not create a signed URL for the policy file: ${error.message}`);
+  return data.signedUrl;
+}
+
 // --- Household export (checkpoint 6): see lib/storage/local.ts's own
 // comment on this domain. Its own private bucket -- never public, never a
 // long-lived signed URL; app/api/household/export/[id]/download/route.ts

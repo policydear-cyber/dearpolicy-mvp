@@ -434,7 +434,7 @@ export default function PoliciesPage() {
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")].join(" · ")}</span>}
               {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? "Ready" : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
@@ -479,13 +479,22 @@ export default function PoliciesPage() {
               : <><small>Try reading it again. If it still can’t be read, delete it and upload a clearer copy or the original file.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try reading it again"}</button></div></>}</div>)}
 
           {/* Its numbers and the actions on it come last. */}
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
   </div>;
+}
+
+/** Opens the stored file itself, so a person can see which document this is when its file name says nothing. The
+ * server checks the household and the security scan on every open (app/api/policies/[id]/file); it is offered only once
+ * the scan has cleared the file, as the server requires. A Word file can't be shown in a browser, so it downloads. */
+function PreviewLink({ policy }: { policy: Pick<Policy, "id" | "original_filename" | "product_name"> }) {
+  const word = /\.docx$/i.test(policy.original_filename ?? "");
+  return <a className="mini-button" href={`/api/policies/${policy.id}/file`} target="_blank" rel="noopener noreferrer"
+    aria-label={`${word ? "Download" : "Preview"} ${documentName(policy)}`}>{word ? "Download" : "Preview"}</a>;
 }
 
 /** The stored reason a document could not be read, in household words. The

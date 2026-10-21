@@ -125,6 +125,11 @@ export async function createClaimEvidenceSignedUrl(_storageKey: string): Promise
   return null;
 }
 
+/** No signed links on local disk: the Preview route streams the bytes itself. */
+export async function createPolicyFileSignedUrl(_storageKey: string, _download?: string): Promise<string | null> {
+  return null;
+}
+
 // --- Household export (checkpoint 6): a versioned, deterministic JSON
 // snapshot of everything a household is entitled to export (see
 // lib/household/export.ts). Its own root, entirely separate from policy
