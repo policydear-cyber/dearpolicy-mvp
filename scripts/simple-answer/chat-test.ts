@@ -440,6 +440,34 @@ async function main() {
     assert.equal(pa.statements!.filter((x) => x.amount).length, 0);
   });
 
+  // Critic round 50 probes (each gave a card on 741aba9).
+  const R50_HOUSE: Household = { ...SI_HOUSE, documents: [
+    { ...SI_HOUSE.documents[0], pages: [
+      ...SI_HOUSE.documents[0].pages,
+      { page: 9, text: "M. Comatose State Lump Sum Benefit\nDuration of Comatose State\tBenefit amount as percentage of Comatose State Sum Insured\nAt least 6 months\t50%\nComatose State sum insured will be 15% of the Sum Insured or maximum of $50,000, whichever is the lesser." },
+      { page: 10, text: "C. Advance Payment Benefit\nthe Company may pay an advance payment\nof 100% of the Sum Insured, up to a maximum amount of $400,000. The balance of the Sum Insured shall be paid later." },
+      { page: 11, text: "OUTPATIENT MEDICARE POLICY\nSchedule\n(% of Sum Insured)\nSpecialist visit\t20%" },
+    ] },
+    SI_HOUSE.documents[1],
+  ] };
+  const r50 = (quote: string, percent: number, person = "Mei Ling", base = "S$400,000", line = "Tan Mei Ling\tS$400,000\tAs of 06/10/2022") =>
+    verifyAnswer(R50_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI(person, base, line, quote, percent)] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
+  await check("R50-1: a joined passage never makes a later sentence the base; a heading naming another base is never worked out", () => {
+    assert.deepEqual(r50("At least 6 months\t50% ... Comatose State sum insured will be 15% of the Sum Insured", 50), []);
+    assert.deepEqual(r50("At least 6 months\t50% ... Comatose State sum insured will be 15% of the Sum Insured", 15), []);
+    assert.deepEqual(r50("Comatose State sum insured will be 15% of the Sum Insured", 15), []);
+  });
+  await check("R50-2: a percentage with a cap or a balance paid later is never worked out", () => {
+    assert.deepEqual(r50("of 100% of the Sum Insured, up to a maximum amount of $400,000", 100), []);
+  });
+  await check("R50-3: the quoted base line must name the person", () => {
+    assert.deepEqual(r50("Wrist (Other Fracture)\t20%", 20, "Ah Kow", "S$400,000"), []);
+    assert.deepEqual(r50("Wrist (Other Fracture)\t20%", 20), ["S$80,000"]);
+  });
+  await check("R50-4: a later heading ends the cover's section", () => {
+    assert.deepEqual(r50("Specialist visit\t20%", 20), []);
+  });
+
   await check("B1: a condition is kept only with its own quote from the statement's document", () => {
     const { answer, report } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
       st({ ...pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022"), conditions: [
@@ -562,6 +590,16 @@ async function main() {
       assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$450,000");
       assert.equal(run("(a) Sight in at least one eye\t100%", "Product Summary.pdf", 100, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$600,000");
       assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$1,000,000", "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), null);
+    });
+    await check("snapshot R50: the comatose rows, the advance payment cap and another person's line give no card", () => {
+      const bsI = di("Benefit Summary.pdf");
+      const one = (quote: string, percent: number, line: string, person = "Desmond") => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "x", person, document: bsI, quote, percentOf: { percent, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.filter((x) => x.amount).length;
+      const dl = "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022", cl = "Ong Pei Lin Charmaine\tS$600,000\tAs of 06/10/2022";
+      assert.equal(one("At least 6 months\t50% ... Comatose State sum insured will be 15% of the Sum Insured", 50, dl), 0);
+      assert.equal(one("of 100% of the Sum Insured, up to a maximum amount of $400,000", 100, "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), 0);
+      assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, cl), 0);
+      assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, dl), 1);
     });
     await check("snapshot E1/E3: the unreadable file's text is not sent; the CI II files say they are linked to nobody", () => {
       const lib = renderLibrary(real);

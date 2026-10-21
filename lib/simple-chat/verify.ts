@@ -99,16 +99,39 @@ type Checked = { s: ModelStatement; found: Found | null; amount: { value: number
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
-/** The sum a percentage on this page is a percentage of: the nearest "% of S$5,000" or "Limit: S$5,000" printed above
- * (or in) the quoted row on the same page; "sum_insured" when the nearest heading is "% of Sum Insured". */
-function rowBase(pageText: string, end: number): { value: number; raw: string } | "sum_insured" | null {
-  const above = pageText.slice(0, end);
-  let best: { at: number; value: number; raw: string } | null = null;
+/** Where the row's own line starts and ends: the line holding the first quoted words. */
+function rowLine(pageText: string, offset: number): { start: number; end: number; text: string } {
+  const start = pageText.lastIndexOf("\n", offset - 1) + 1;
+  const e = pageText.indexOf("\n", offset);
+  const end = e < 0 ? pageText.length : e;
+  return { start, end, text: pageText.slice(start, end) };
+}
+/** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. */
+const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever|lesser|greater|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+/** The sum a percentage row is a percentage of (Critic round 50), read only above the row's own line on its page:
+ * - the nearest "% of S$5,000" or "Limit: S$5,000" heading gives that sum;
+ * - the nearest table heading "(% of Sum Insured)" (in parentheses, as a column heading prints it) gives "sum_insured";
+ * - a heading naming another base ("percentage of Comatose State Sum Insured") gives null: never worked out.
+ * The row itself may print "100% of Sum Insured" on a short table line with no limit on it. Prose ("will be 15% of the
+ * Sum Insured", "100% of the Sum Insured, up to a maximum amount of $400,000") is never a base. */
+function rowBase(pageText: string, rowOffset: number): { value: number; raw: string } | "sum_insured" | null {
+  const row = rowLine(pageText, rowOffset);
+  const above = pageText.slice(0, row.start);
+  type Head = { at: number; base: { value: number; raw: string } | "sum_insured" | null };
+  const heads: Head[] = [];
   for (const re of [/%\s*of\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi, /\blimit\s*:?\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi])
-    for (const m of above.matchAll(re)) if (!best || (m.index ?? 0) > best.at) best = { at: m.index ?? 0, value: valueOf(m[1]), raw: m[1] };
-  const si = [...above.matchAll(/%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)/gi)].at(-1);
-  if (si && (!best || (si.index ?? 0) > best.at)) return "sum_insured";
-  return best ? { value: best.value, raw: best.raw } : null;
+    for (const m of above.matchAll(re)) heads.push({ at: m.index ?? 0, base: { value: valueOf(m[1]), raw: m[1] } });
+  for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
+  // "percentage of Comatose State Sum Insured", "% of the Benefit Amount": a base this check cannot know.
+  for (const m of above.matchAll(/(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!(?:S\$|SGD|US\$|\$))([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b/gi)) heads.push({ at: m.index ?? 0, base: null });
+  const nearest = heads.sort((a, b) => b.at - a.at)[0];
+  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*$/i.test(row.text.trim()) && row.text.length <= 90 && !CAPPED.test(row.text)) {
+    // A table line such as "Death due to Accident	100% of Sum Insured" names its own base.
+    return "sum_insured";
+  }
+  if (!nearest) return null;
+  if (CAPPED.test(row.text)) return null;
+  return nearest.base;
 }
 
 type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]>; base?: Base } | { ok: false; why: string; asFact?: boolean };
@@ -126,14 +149,24 @@ function coverName(line: string): string | null {
 function headingsOf(pageText: string): { line: number; cover: string }[] {
   return pageText.split("\n").flatMap((l, i) => { const letters = l.replace(/[^A-Za-z]/g, ""); const c = letters.length >= 8 && letters === letters.toUpperCase() ? coverName(l) : null; return c ? [{ line: i, cover: c }] : []; });
 }
-/** The cover a table row sits under: the last heading line, on this page above the row or on an earlier page, that names one
- * of `covers`. */
+/** Whether a line is a section heading: "BENEFIT 2: GROUP PERSONAL ACCIDENT", an all-capital title ("OUTPATIENT MEDICARE
+ * POLICY", "DISABILITY INCOME"), or a standalone line naming a cover. A scheme title line ("MINDEF & MHA GROUP INSURANCE
+ * VOLUNTARY SCHEME") names the whole document, not a section. */
+function sectionHeading(line: string, covers: Set<string>): string | null {
+  const c = coverName(line);
+  if (!c || /\bscheme\b/.test(c)) return null;
+  if (covers.has(c)) return c;
+  const letters = line.replace(/[^A-Za-z]/g, "");
+  return /^\s*benefit\s*\d+\s*[:.-]/i.test(line) || (letters.length >= 8 && letters === letters.toUpperCase()) ? `other:${c}` : null;
+}
+/** The section a table row sits under (R50-4): the last heading, on this page above the row or on an earlier page. Any
+ * heading counts, so a later "OUTPATIENT MEDICARE POLICY" ends the personal accident section. */
 function sectionOf(doc: HouseholdDocument, page: number, offset: number, covers: Set<string>): string | null {
   let last: string | null = null;
   for (const p of doc.pages) {
     if (p.page > page) break;
     const text = p.page === page ? p.text.slice(0, offset) : p.text;
-    for (const l of text.split("\n")) { const c = coverName(l); if (c && covers.has(c)) last = c; }
+    for (const l of text.split("\n")) { const h = sectionHeading(l, covers); if (h) last = h; }
   }
   return last;
 }
@@ -157,8 +190,11 @@ function sumInsuredBase(st: ModelStatement, found: Found, household: Household, 
   const page = bdoc.pages.find((p) => p.page === bf.page)!;
   const lines = page.text.split("\n");
   const who = tokens(person);
-  const at = lines.findIndex((l) => { const have = new Set(tokens(l)); return who.every((w) => have.has(w)) && moneyFiguresIn(l).some((f) => sameValue(f.value, want.value)); });
-  if (at < 0) return { ok: false, why: "the sum insured is not printed on a line naming the person" };
+  // The quoted line itself must name the person and print the amount (R50-3): another person's line never counts.
+  const at = page.text.slice(0, bf.offset).split("\n").length - 1;
+  const own = lines[at] ?? "";
+  const have = new Set(tokens(own));
+  if (!who.every((w) => have.has(w)) || !moneyFiguresIn(own).some((f) => sameValue(f.value, want.value))) return { ok: false, why: "the quoted sum insured is not on a line naming the person" };
   const heads = headingsOf(page.text);
   const head = heads.filter((h) => h.line < at).at(-1);
   if (!head) return { ok: false, why: "no cover heading above the sum insured" };
@@ -175,9 +211,10 @@ function checkAmount(st: ModelStatement, found: Found, household: Household, per
   const doc = household.documents[found.docIndex];
   if (st.percentOf && st.percentOf.percent > 0) {
     const pct = st.percentOf.percent;
-    if (!new RegExp(`(?<![\\d.])${String(pct).replace(".", "\\.")}\\s?(?:%|per\\s?cent)`, "i").test(found.excerpt)) return { ok: false, why: "the percentage is not in the quoted words" };
     const page = doc.pages.find((p) => p.page === found.page)!;
-    const printed = rowBase(page.text, found.offset + found.excerpt.replace(/…$/, "").length);
+    // The percentage must be printed on the row's own line (the first quoted words), not in a later joined passage.
+    if (!new RegExp(`(?<![\\d.])${String(pct).replace(".", "\\.")}\\s?(?:%|per\\s?cent)`, "i").test(rowLine(page.text, found.offset).text)) return { ok: false, why: "the percentage is not on the quoted row" };
+    const printed = rowBase(page.text, found.offset);
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);
       if (!b.ok) return { ok: false, why: b.why, asFact: true };
