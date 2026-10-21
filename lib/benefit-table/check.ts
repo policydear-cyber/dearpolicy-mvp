@@ -8,14 +8,16 @@
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { locateQuote } from "@/lib/simple-chat/verify";
+import { CAPPED, locateQuote, rowWithContinuation } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
 export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
 export type CheckedCover = ReadCover & { source: Source; currency: string | null };
-export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; droppedConditions: string[] };
+/** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
+ * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
+export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[] };
 export type Dropped = { what: string; why: string };
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
   covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[] };
@@ -62,6 +64,18 @@ export function dateOnPage(date: string | null, pageText: string): string | null
   return digits.every((d) => page.includes(String(Number(d)))) ? date : null;
 }
 const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
+export const CAP_WORDS = /\bup\s+to\b|\bmaximum\b|\bmax\.|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b/i;
+/** The row's last line on its page and the lines that continue it ("15% of Sum Insured or" / "up to S$50,000, whichever
+ * is lesser"), up to the next row, bullet or numbered item, as the chat's own checks read it. */
+const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+function rowAndContinuation(pageText: string, excerpt: string): string {
+  const lines = excerpt.split("\n").map((l) => l.trim()).filter(Boolean);
+  const last = lines.at(-1) ?? excerpt;
+  const at = pageText.indexOf(excerpt.trim()) >= 0 ? pageText.indexOf(excerpt.trim()) + excerpt.trim().length - 1 : pageText.indexOf(last);
+  return at < 0 ? excerpt : `${excerpt} ${rowWithContinuation(pageText, at)}`;
+}
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -139,12 +153,27 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       if (!words) continue;
       (find(words, null) ? conditions : droppedConditions).push(words);
     }
+    // A percentage's printed cap is kept only when its words, with the figure, are printed in the row itself or the lines
+    // that continue it (never a neighbouring row's limit); a cap that
+    // is claimed but not found, or a row whose words say it is capped with no cap read, gets no worked-out amount.
+    let cap: number | null = null, capSource: Source | null = null, capUnread = false;
+    if (pays === "percent") {
+      const claimed = num(b.cap);
+      const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
+      if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(rowAndContinuation(pageText(source.page), source.excerpt)).includes(flat(s.excerpt))) {
+        cap = claimed; capSource = s;
+      } else {
+        if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
+        capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
+          || CAPPED.test(rowAndContinuation(pageText(source.page), source.excerpt));
+      }
+    }
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
     const fromDay = day(b.fromDay), maxDays = day(b.maxDays);
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
-      percentOf, baseAmount, baseQuote: str(b.baseQuote),
-      fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, droppedConditions });
+      percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
+      fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions });
   }
   return out;
 }

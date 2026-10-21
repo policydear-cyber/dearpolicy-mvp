@@ -31,6 +31,7 @@ const HOUSE: Household = {
       { page: 2, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nCompensation Schedule (% of Sum Insured)\nHip\t75%\nWrist\t20%" },
       { page: 4, text: "BENEFIT 5: GROUP TERM LIFE\nCompensation Schedule (% of Sum Insured)\nKnee\t40%" },
       { page: 3, text: "Simple Fracture Benefit Limit: S$5,000\nCompensation (% of S$5,000)\nAnkle\t50%\nAmbulance Cost\tUp to S$500 per incident\nChild\nHospital cash\tS$50 per day" },
+      { page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nAdvance Payment Benefit 100% Sum Insured (up to S$400,000)" },
     ]),
     doc(ILP, "Policy illustration.pdf", [{ page: 1, text: "Lim Ah Kow\tSum assured S$100,000\nNon-Guaranteed Surrender Value S$12,400" }]),
   ],
@@ -46,6 +47,7 @@ const termsR = checkReading(src(HOUSE.documents[1]), reading("scheme_terms", "Gr
   b({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", page: 2, quote: "Hip 75%" }),
   b({ benefit: "Ankle", pays: "percent", value: 50, percentOf: "fixed_amount", baseAmount: 5000, baseQuote: "Compensation (% of S$5,000)", page: 3, quote: "Ankle 50%" }),
   b({ section: "Life", benefit: "Knee", pays: "percent", value: 40, percentOf: "sum_insured", page: 4, quote: "Knee 40%" }),
+  b({ benefit: "Advance Payment Benefit", pays: "percent", value: 100, percentOf: "sum_insured", cap: 400000, capQuote: "(up to S$400,000)", page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" }),
   b({ benefit: "Ambulance Cost", pays: "up_to", value: 500, page: 3, quote: "Ambulance Cost Up to S$500 per incident" }),
   b({ section: "Hospital", column: "Child", benefit: "Hospital cash", pays: "per_day", value: 50, page: 3, quote: "Hospital cash S$50 per day" }),
 ]));
@@ -185,8 +187,17 @@ test("real names carry policy and scheme numbers: their rows keep their amounts"
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.dropped));
   assert.match(r.amounts[0].text, /POLICY NO\. 3037850\)\): up to this limit\.$/);
-  assert.ok(!nameStatesMoney("Section 150 Plan 300"));
-  for (const money of ["Death S$1,000,000", "Cover 1,000,000", "Death 1 million", "Benefit of 500 dollars", "Death $500", "Death S＄１,０００"]) assert.ok(nameStatesMoney(money), money);
+  for (const name of ["GROUP POLICY NO. G007500", "POLICY NO.3037850", "Plan 300", "Plan 1000", "Plan 5000 Plus", "Option 2A", "Group Term Life (Policy 0012345678)", "Scheme 2026",
+    "Policy No: 23-456789-01", "Certificate 000123", "SG-2026-001234", "12 Critical Illnesses", "Section 4.2.1", "Hospital & Surgical (Ward B1)", "Coverage against 37 critical illnesses"])
+    assert.ok(!nameStatesMoney(name), name);
+  for (const money of ["Death S$1,000,000", "Cover 1,000,000", "Death 1 million", "Benefit of 500 dollars", "Death $500", "Death S＄１,０００",
+    // Critic R94
+    "Accidental Death 1000000", "Death benefit of 600000", "Hospital cash 200 per day", "Hospital cash 200/day", "Benefit up to 5000", "Room & Board 300", "Death 1 000 000",
+    // Test engineer, #96
+    "one million dollars", "Sum insured: 300000", "Accidental death 200000", "1 000 000", "SGD 200000", "200000 dollars", "1.5m", "Lump sum 5k", "200,000.00", "Plan 300 (S$300 a day)", "1.000.000", "500000"])
+    assert.ok(nameStatesMoney(money), money);
+  assert.ok(!nameStatesMoney("300", true) && !nameStatesMoney("Plan 5000 Plus", true), "a plan may be a bare number");
+  assert.ok(nameStatesMoney("S$300", true) && nameStatesMoney("300 per day", true));
 });
 test("money in full-width digits is money: left out of the bottom line, next steps and facts (R92-1)", () => {
   const parsed = readModelAnswer({ bottomLine: "Your death cover pays S$１,０００,０００.", nextSteps: ["Claim S＄５００ now.", "Call the insurer."], question: null, statements: [
@@ -209,6 +220,18 @@ test("the same row named twice is given once (R91-3)", () => {
   const r = answer([{ row: id, person: "Lim Ah Kow", text: "Hip." }, { row: id, person: "Lim Ah Kow", text: "Hip again." }]);
   assert.equal(r.amounts.length, 1);
   assert.equal(r.dropped.length, 0);
+});
+test("a capped percentage gives the printed cap, checked against the words that print it", () => {
+  const lim = answer([{ row: idOf("Lim Ah Kow", "Advance Payment Benefit"), person: "Lim Ah Kow", text: "Advance payment." }]);
+  assert.match(lim.amounts[0]?.amount ?? "", /400,000/, JSON.stringify(lim.dropped));
+  assert.match(lim.amounts[0].text, /: 100% of the sum insured, up to this limit\.$/);
+  assert.doesNotMatch(JSON.stringify(lim.statements), /600,000/);
+  const tan = answer([{ row: idOf("Tan Mei Ling", "Advance Payment Benefit"), person: "Tan Mei Ling", text: "Advance payment." }]);
+  // Under its cap, the worked-out amount is the Coverage page's; the chat's own checks never work out a capped
+  // percentage (verify.ts R52), so the chat names the row without an amount and says one was left out.
+  assert.equal(tan.amounts.length, 0);
+  assert.ok(tan.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+  assert.doesNotMatch(JSON.stringify(tan.statements), /600,000|400,000/);
 });
 test("a non-guaranteed value is said to be projected", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Surrender value"), person: "Lim Ah Kow", text: "The surrender value." }]);

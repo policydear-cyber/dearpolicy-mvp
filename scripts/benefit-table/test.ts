@@ -433,6 +433,77 @@ test("R89-1: a column's child, adult or per-family words travel with the row as 
   assert.equal(planCase("Gold", "Gold").rows[0].qualifier, null);
 });
 
+// A percentage with a printed cap: the amount is never more than the cap (run-02 showed S$1,000,000 for "100% Sum
+// Insured (up to S$400,000)").
+const capped: SourceDoc = { id: "capped", name: "Product summary.pdf", readable: true, pages: [
+  { page: 5, text: "GROUP TERM LIFE\nAdvance Payment Benefit 100% Sum Insured (up to S$400,000)\nTerminal Illness 100% of Sum Insured" },
+  { page: 6, text: "GROUP PERSONAL ACCIDENT\nComatose State Lump Sum Benefit 15% of Sum Insured or\nup to S$50,000, whichever is lesser\nBurns 10% of Sum Insured, maximum $5,000\n\n\n" +
+    "x".repeat(600) + "\nAnother benefit up to S$1,000" },
+  { page: 7, text: "GROUP PERSONAL ACCIDENT\nIntensive Care Benefit: an additional 20% of the Sum Insured\nsubject to a maximum amount of S$25,000 per life.\n• Next item 10% of Sum Insured" },
+] };
+const capRead = (o: Record<string, unknown>) => checkReading(capped, doc("product_summary", [], [benefit({ pays: "percent", percentOf: "sum_insured", ...o })]));
+const capLinks = (r: ReturnType<typeof capRead>) => [...new Set(r.benefits.map((b) => b.section))].map((sec) => ({ section: sectionKeyOf("capped", { section: sec, column: null }), cover: sec === "GROUP TERM LIFE" ? gtl : gpa, why: "x" }));
+const capRows = (r: ReturnType<typeof capRead>, id = "a") => assembleTable([certReading, r], family, capLinks(r)).people.find((p) => p.id === id)!.rows;
+test("caps: a percentage over its printed cap shows the cap, with the cap's own words", () => {
+  const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)", cap: 400000, capQuote: "(up to S$400,000)" });
+  assert.equal(r.benefits[0].cap, 400000);
+  const row = capRows(r)[0];
+  assert.equal(row.figure.kind === "worked_out" && row.figure.amount, 400000, figureText(row.figure));
+  assert.ok(row.figure.kind === "worked_out" && row.figure.capped);
+  assert.match(figureText(row.figure), /100% of S\$500,000 .* is more than the most it pays, so up to S\$400,000/);
+  assert.equal(row.capSource?.page, 5);
+});
+test("caps: a percentage under its cap is worked out as usual, and says the limit", () => {
+  const r = capRead({ section: "GROUP PERSONAL ACCIDENT", benefit: "Comatose State Lump Sum Benefit", value: 15, page: 6, quote: "Comatose State Lump Sum Benefit 15% of Sum Insured or up to S$50,000, whichever is lesser", cap: 50000, capQuote: "up to S$50,000, whichever is lesser" });
+  const lim = capRows(r)[0], tan = capRows(r, "b")[0];
+  assert.equal(lim.figure.kind === "worked_out" && lim.figure.amount, 30000, figureText(lim.figure));
+  assert.match(figureText(lim.figure), /within its limit of S\$50,000/);
+  assert.equal(tan.figure.kind === "worked_out" && tan.figure.amount, 15000);
+});
+test("caps: words that say capped with no cap read give no amount, never the uncapped figure", () => {
+  for (const o of [
+    { benefit: "Advance Payment Benefit", section: "GROUP TERM LIFE", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" },
+    { benefit: "Burns", section: "GROUP PERSONAL ACCIDENT", value: 10, page: 6, quote: "Burns 10% of Sum Insured, maximum $5,000" },
+  ]) {
+    const r = capRead(o);
+    assert.equal(r.benefits[0].capUnread, true);
+    const row = capRows(r)[0];
+    assert.equal(row.figure.kind, "none", figureText(row.figure));
+    assert.match(figureText(row.figure), /up to a limit printed with it on p\d/);
+  }
+});
+test("caps: a cap whose words are not next to the row, not on its page, or not the claimed figure is refused, and no amount is shown", () => {
+  const base = { section: "GROUP PERSONAL ACCIDENT", benefit: "Comatose State Lump Sum Benefit", value: 15, page: 6, quote: "Comatose State Lump Sum Benefit 15% of Sum Insured or up to S$50,000, whichever is lesser" };
+  for (const bad of [{ cap: 1000, capQuote: "Another benefit up to S$1,000" }, { cap: 400000, capQuote: "(up to S$400,000)" }, { cap: 60000, capQuote: "up to S$50,000, whichever is lesser" }, { cap: 50000, capQuote: null }]) {
+    const r = capRead({ ...base, ...bad });
+    assert.equal(r.benefits[0].cap, null, JSON.stringify(bad));
+    assert.match(r.dropped.map((d) => d.why).join(";"), /not printed in the row/);
+    assert.equal(capRows(r)[0].figure.kind, "none");
+  }
+  // The row above's limit is never this row's, even on the next line: the claimed cap is refused and no amount is shown.
+  const ti = capRead({ section: "GROUP TERM LIFE", benefit: "Terminal Illness", value: 100, page: 5, quote: "Terminal Illness 100% of Sum Insured", cap: 400000, capQuote: "(up to S$400,000)" });
+  assert.equal(ti.benefits[0].cap, null);
+  assert.equal(capRows(ti)[0].figure.kind, "none");
+});
+test("caps: a limit printed on the lines that continue the row is read as a cap too", () => {
+  const r = capRead({ section: "GROUP PERSONAL ACCIDENT", benefit: "Intensive Care Benefit", value: 20, page: 7, quote: "Intensive Care Benefit: an additional 20% of the Sum Insured" });
+  assert.equal(r.benefits[0].capUnread, true);
+  assert.equal(capRows(r)[0].figure.kind, "none");
+  const ok = capRead({ section: "GROUP PERSONAL ACCIDENT", benefit: "Intensive Care Benefit", value: 20, page: 7, quote: "Intensive Care Benefit: an additional 20% of the Sum Insured", cap: 25000, capQuote: "subject to a maximum amount of S$25,000 per life" });
+  const f = capRows(ok)[0].figure;
+  assert.equal(f.kind === "worked_out" && f.amount, 25000, figureText(f));
+  const next = capRead({ section: "GROUP PERSONAL ACCIDENT", benefit: "Next item", value: 10, page: 7, quote: "Next item 10% of Sum Insured" });
+  assert.equal(capRows(next)[0].figure.kind, "worked_out", "the row above's limit is not this row's");
+});
+test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
+  const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
+  const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;
+  assert.equal(capRows(old)[0].figure.kind, "none");
+  const plain = capRead({ section: "GROUP TERM LIFE", benefit: "Terminal Illness", value: 100, page: 5, quote: "Terminal Illness 100% of Sum Insured" });
+  const f = capRows(plain)[0].figure;
+  assert.equal(f.kind === "worked_out" && f.amount, 500000);
+});
+
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 if (failures.length) process.exit(1);

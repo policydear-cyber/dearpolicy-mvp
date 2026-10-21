@@ -26,6 +26,7 @@ export type ReadBenefit = {
   section: string | null; column: string | null; benefit: string; pays: (typeof PAYS)[number]; value: number | null;
   period: (typeof PERIODS)[number] | null; basis: (typeof BASES)[number] | null; asOf: string | null;
   percentOf: (typeof PERCENT_OF)[number] | null; baseAmount: number | null; baseQuote: string | null;
+  cap: number | null; capQuote: string | null;
   fromDay: number | null; maxDays: number | null; conditions: string[]; page: number; quote: string;
 };
 export type Reading = {
@@ -56,6 +57,7 @@ export const READING_SCHEMA = object({
     period: { anyOf: [{ type: "string", enum: PERIODS }, { type: "null" }] },
     basis: { anyOf: [{ type: "string", enum: BASES }, { type: "null" }] }, asOf: nullable("string"),
     percentOf: { anyOf: [{ type: "string", enum: PERCENT_OF }, { type: "null" }] }, baseAmount: nullable("number"), baseQuote: nullable("string"),
+    cap: nullable("number"), capQuote: nullable("string"),
     fromDay: nullable("integer"), maxDays: nullable("integer"),
     conditions: { type: "array", items: { type: "string" } },
     page: { type: "integer" }, quote: { type: "string" },
@@ -82,6 +84,7 @@ benefits: every row that says what is paid or held, or that something is not cov
 - basis: "guaranteed" or "non_guaranteed" when the document says so for this figure; "illustrated" for a projected figure or one at an assumed rate of return; null when it says neither.
 - asOf: the date a value or figure is printed for, as printed; null otherwise.
 - percentOf: for a percentage, what the page says it is a percentage of: "sum_insured" when it says sum insured or sum assured or coverage amount; "fixed_amount" when it prints a figure ("% of S$5,000"), and then baseAmount is that figure and baseQuote the exact words that print it; "other" otherwise. null for other rows.
+- cap and capQuote: for a percentage, the most it pays when the row prints one ("100% of Sum Insured (up to S$400,000)", "15% of Sum Insured or up to S$50,000, whichever is lesser", "up to a maximum amount of $400,000"): cap is that figure as a plain number and capQuote the exact words that print it, with the figure in full. null for both when the row prints no such limit.
 - fromDay and maxDays: for a daily benefit, the first paid day and the most days, as printed.
 - conditions: the conditions printed for this row (its footnote, its heading's "due to Accident", its own "only if ..."), each as exact words from this document. Never a condition from another row.
 - page and quote: the page and the exact words of the row, with its figure. Copy the words as they appear, including odd spacing or line breaks within a table row. Never shorten with "..." inside a figure.

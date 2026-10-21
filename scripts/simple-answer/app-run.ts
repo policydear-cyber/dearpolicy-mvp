@@ -6,7 +6,7 @@
  *   Replay (free):    ... --replay <earlier results.json>   (re-checks the recorded model JSON with today's server checks)
  *   Paid:             ... --paid --model anthropic:claude-sonnet-5-5 --run-id <id> --max-usd <cap> --out <dir>
  *   Benefit table:    add --table <benefit-table run dir> to answer with the table that run read (scripts/benefit-table/read.ts):
- *                     its recorded readings and links are assembled with today's code, nothing is read again
+ *                     its recorded model output is checked and assembled with today's code, nothing is read again
  *
  * A paid call is admitted only if it fits under the cap with no cache hit and a maximum-length answer. One call per turn,
  * no retries; a failed turn ends its conversation. Output holds real household text, so --out must be outside git. */
@@ -23,7 +23,8 @@ import { answerAsText, type VerifyReport } from "@/lib/simple-chat/verify";
 import type { StructuredAnswer } from "@/components/answer-cards";
 import { AUTHORISED_CAP_USD, loadQuestions, type Question } from "./compare";
 import { assembleTable, type BenefitTable } from "@/lib/benefit-table/assemble";
-import type { CheckedReading } from "@/lib/benefit-table/check";
+import { checkReading, type CheckedReading } from "@/lib/benefit-table/check";
+import { mergeReadings } from "@/lib/benefit-table/completeness";
 import type { SectionLink } from "@/lib/benefit-table/reading";
 import { chatRows, renderTable } from "@/lib/benefit-table/chat";
 
@@ -86,15 +87,26 @@ function prefixTokens(household: Household, table: BenefitTable | null): number 
   return tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(household)) + (table ? tokensOf(renderTable(chatRows(table, household))) : 0);
 }
 
-/** The table a benefit-table run read: its recorded readings (page checks included) and links, assembled with today's
- * code for this household's members, as the app does. No model call. */
+/** The table a benefit-table run read: its recorded model output (each document's reading and page re-reads), checked
+ * and assembled with today's code for this household's members, as the app does, with the run's links. No model call. */
 export function tableFromRun(dir: string, household: Household): BenefitTable {
-  const run = JSON.parse(readFileSync(resolve(dir, "table.json"), "utf8")) as { readings?: CheckedReading[] };
-  if (!Array.isArray(run.readings)) throw new Error(`${dir}/table.json holds no readings`);
+  const readings: CheckedReading[] = [];
+  for (const d of household.documents) {
+    const raw = resolve(dir, `raw-${d.policyId}.json`);
+    if (!existsSync(raw)) continue;
+    const doc = { id: d.policyId, name: d.name, readable: d.processingStatus === "ready", pages: d.pages };
+    let reading = checkReading(doc, (JSON.parse(readFileSync(raw, "utf8")) as { json: unknown }).json);
+    for (const p of d.pages) {
+      const pageRaw = resolve(dir, `raw-${d.policyId}-p${p.page}.json`);
+      if (existsSync(pageRaw)) reading = mergeReadings(reading, checkReading(doc, (JSON.parse(readFileSync(pageRaw, "utf8")) as { json: unknown }).json));
+    }
+    readings.push(reading);
+  }
+  if (!readings.length) throw new Error(`${dir} holds no recorded readings for this household's documents`);
   const linksPath = resolve(dir, "links.json");
   const links = existsSync(linksPath) ? ((JSON.parse(readFileSync(linksPath, "utf8")) as { json?: { links?: SectionLink[] } }).json?.links ?? []) : [];
   const family = household.members.map((m, i) => ({ id: `m${i}`, display_name: m.name.replace(/\s*\([^)]*\)\s*$/, "") }));
-  return assembleTable(run.readings, family, links);
+  return assembleTable(readings, family, links);
 }
 
 /** A model that answers with the JSON an earlier run recorded, turn by turn, so today's server checks can be re-run free. */

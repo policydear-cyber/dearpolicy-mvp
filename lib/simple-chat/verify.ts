@@ -195,10 +195,10 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
 }
 /** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. "Greater
  * than 8%" on a burns row is a row label, not a limit (R52-2); "whichever is the greater" is. */
-const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+export const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
  * up to the next row, bullet or numbered item (R52-1). */
-function rowWithContinuation(pageText: string, offset: number): string {
+export function rowWithContinuation(pageText: string, offset: number): string {
   const row = rowLine(pageText, offset);
   const rest = pageText.slice(row.end + 1).split("\n");
   const more: string[] = [];
