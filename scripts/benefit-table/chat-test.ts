@@ -156,6 +156,31 @@ test("a row for a child says so with its amount (R89-1)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Hospital cash"), person: "Lim Ah Kow", text: "Hospital cash is paid per day." }]);
   assert.match(r.amounts[0]?.text ?? "", /^Hospital cash \(.*\), for child only: paid per day\.$/);
 });
+test("a percentage of the sum insured says so (R91-1)", () => {
+  const r = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }]);
+  assert.match(r.amounts[0]?.text ?? "", /: 75% of the sum insured, worked out\.$/);
+  const a = answer([{ row: idOf("Lim Ah Kow", "Ankle"), person: "Lim Ah Kow", text: "Ankle." }]);
+  assert.match(a.amounts[0]?.text ?? "", /: 50% of the amount printed, worked out\.$/);
+});
+test("a plan or benefit name with a number of 100 or more keeps its amount and its name (R91-2)", () => {
+  const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan, benefit: r.benefit === "Ambulance Cost" ? "Ambulance Cost 2026 Section 150" : r.benefit }));
+  const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Ambulance." }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }], named);
+  assert.equal(r.amounts.length, 2, JSON.stringify(r.statements));
+  assert.match(r.amounts[0].text, /^Ambulance Cost 2026 Section 150 \(Group Scheme, Group Personal Accident, plan 300\): up to this limit\.$/);
+  assert.match(r.amounts[0].amount, /500/);
+  assert.match(r.amounts[1].amount, /450,000/);
+  assert.doesNotMatch(JSON.stringify(r.statements), /[\uff10-\uff19]/);
+});
+test("the same row named twice is given once (R91-3)", () => {
+  const id = idOf("Lim Ah Kow", "Hip");
+  const r = answer([{ row: id, person: "Lim Ah Kow", text: "Hip." }, { row: id, person: "Lim Ah Kow", text: "Hip again." }]);
+  assert.equal(r.amounts.length, 1);
+  assert.equal(r.dropped.length, 0);
+});
+test("a model sentence in full-width digits is never turned into money", () => {
+  const { kept } = keepLabelledAmounts([{ text: "Pays ＳＧＤ ９９９．", amount: null }], { dropped: [], labels: [] });
+  assert.equal(kept[0].text, "Pays ＳＧＤ ９９９．");
+});
 test("a non-guaranteed value is said to be projected", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Surrender value"), person: "Lim Ah Kow", text: "The surrender value." }]);
   assert.match(r.statements.find((s) => /surrender/i.test(s.text))?.text ?? "", /^Surrender value \(SaveMore\): projected, not guaranteed\.$/);
@@ -178,7 +203,7 @@ test("statements that are not amounts pass through unchanged", () => {
 });
 
 /** One chat turn through runSimpleChat with a scripted model, this household and (or without) its table. */
-async function turn(reply: (call: SimpleModelCall) => unknown, table: boolean) {
+async function turn(reply: (call: SimpleModelCall) => unknown, table: boolean | ReturnType<typeof tableWith>) {
   const calls: SimpleModelCall[] = [];
   const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call(c) { calls.push(c); return { json: reply(c), stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
   const context = { request: { accountId: HOUSE.accountId, familyMemberId: null, question: "I broke my hip, how much?", submittedQuestion: "I broke my hip, how much?" },
@@ -186,7 +211,7 @@ async function turn(reply: (call: SimpleModelCall) => unknown, table: boolean) {
     conversation: { id: "c1", account_id: HOUSE.accountId, family_member_id: null, title: "t", revision: 1, state: { subjects: {} } }, token: {}, holdings: [] } as unknown as ChatContext;
   const saved: { answer: { statements?: { amount: { text: string } | null; text: string }[] }; state: { simpleChat: { turns: { report: { dropped: { why: string }[] } }[] } } }[] = [];
   await runSimpleChat(context, {}, { model, household: async () => HOUSE, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false,
-    table: async () => (table ? tableWith() : null), today: () => new Date("2026-10-21T04:00:00Z") });
+    table: async () => (table === true ? tableWith() : table || null), today: () => new Date("2026-10-21T04:00:00Z") });
   return { call: calls[0], saved: saved[0] };
 }
 async function integration() {
@@ -213,6 +238,15 @@ async function integration() {
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
     assert.match(t.saved.state.simpleChat.turns[0].report.dropped.map((d) => d.why).join(";"), /no table row/);
     assert.ok((t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
+  });
+  await atest("in the app's chat turn, a plan named with a number keeps its amount through every check (R91-2)", async () => {
+    const t0 = tableWith();
+    const named = { ...t0, people: t0.people.map((p) => ({ ...p, rows: p.rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan })) })) };
+    const t = await turn(hip, named);
+    const shown = (t.saved.answer.statements ?? []).filter((s) => s.amount);
+    assert.equal(shown.length, 1, JSON.stringify(t.saved.answer.statements));
+    assert.match(shown[0].amount!.text, /450,000/);
+    assert.match(shown[0].text, /plan 300\): 75% of the sum insured, worked out\.$/);
   });
   await atest("in the app's chat turn, a made-up row is dropped and the household is told an amount was left out", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "amount", text: "made up", person: "Lim Ah Kow", document: null, quote: null, amount: "S$777", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: "R99" }] }), true);

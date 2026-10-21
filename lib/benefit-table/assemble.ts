@@ -34,6 +34,8 @@ export type TableRow = {
   /** For a percentage row: the percentage, the base it was worked out on, and whether that base is the household's
    * correction rather than a printed figure. */
   percent: number | null; base: number | null; baseCorrected: boolean;
+  /** What a percentage row's percentage is of: the person's sum insured, or a fixed amount printed with it. */
+  percentOf: CheckedBenefit["percentOf"] | null;
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -205,7 +207,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure: figureFor(b, c, r.kind === "illustration"), fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
-        percent: b.pays === "percent" ? b.value : null,
+        percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected" });
     }
