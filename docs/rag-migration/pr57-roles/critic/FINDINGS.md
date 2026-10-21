@@ -2471,3 +2471,24 @@ Hidden harmlessly: "may claim" for "can claim", and "too" or "also".
 
 **Not ready yet:** fix R48-1. It is a few words in the same two constants. Everything else from round 47 stands, with
 or without #79.
+
+---
+
+# Round 49: PR #81 at `00a06ff`, re-check of round 48
+
+Only `components/answer-cards.tsx` (2 lines) and the phone e2e spec changed.
+
+- **R48-1: fixed.** Against the bottom line, `restates(s, bottomLine, 1)` hides a sentence only when every content word is
+  already in the bottom line. So "…if admitted", "…subject to approval" and "…once discharged" each add a word and are
+  shown. "couldnt", "shouldnt", "mustnt", "neither" and "nor" are now in NEGATION, so "Ah Kow couldn’t claim…" is shown.
+  The new R48 phone check asserts all four, and that a word-for-word repeat of the bottom line is still hidden.
+- **Expectation change: legitimate.** The removed assertion expected the to-confirm summary sentence ("…usually includes
+  a hospital benefit, but her documents don’t confirm it or print an amount.") to be hidden under the bottom line ("Not
+  confirmed yet: plans like … usually include a hospital benefit, but her documents don’t print one."). That sentence adds
+  "confirm" and "amount", so it is not a pure repeat. Showing it costs one near-duplicate line. Hiding it is the class of
+  error rounds 47 and 48 were about. The "said once" intent is still checked for an exact repeat by the R48 test, and the
+  next-step direction (R47-1) is unchanged and still checked.
+
+## Verdict on PR #81 at `00a06ff`
+
+**Ready to merge**, with or without #79 (no shared files; stop texts match both).
