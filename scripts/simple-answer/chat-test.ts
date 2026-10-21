@@ -867,6 +867,119 @@ async function main() {
     assert.deepEqual(got.filter((x) => x.amount).map((x) => [x.kind, x.amount!.text, x.amount!.illustration]), [["calculation", "S$100", true]], "B11 the percentage is worked out, with no bill card");
   });
 
+  await check("Live GP bill: an uncovered bill is shown as the household wrote it, only when nothing that may be the person's prints that kind of care", () => {
+    const PA = "Personal Accident Benefits\nHip\t75%\nFor claims matters, please contact the Customer Service Hotline at 6123 4567.";
+    const house = R59("Accident5.pdf", PA);
+    const none = (ofBill: { bill: string } | null, kind: ModelStatement["kind"] = "not_found", person = "Ah Kow", text = "No cover in Ah Kow's documents pays a GP bill.") => st({ kind, text, person, ofBill });
+    const cards = (h: Household, s: ModelStatement[], written: string[]) => r59(h, s, written).answer.statements!.filter((x) => x.id.endsWith("-bill"));
+    const got = cards(house, [none({ bill: "$800" })], ["ah kow tripped on the kerb, GP bill was $800, can he claim"]);
+    assert.deepEqual(got.map((x) => [x.kind, x.amount ?? null, x.text]), [["not_found", null, "The $800 bill you gave is not shown to be covered by Lim Ah Kow's documents; only the insurer can confirm."]]);
+    assert.equal(cards(house, [none({ bill: "$800" })], ["the GP bill was $800."])[0].text.startsWith("The $800 bill"), true, "the sentence's full stop is not part of the bill");
+    assert.equal(cards(house, [none({ bill: "800 dollars" })], ["the GP bill was 800 dollars"])[0].text.startsWith("The bill of 800 dollars you gave"), true, "R77-5 / Q10 wording");
+    assert.equal(cards(house, [none({ bill: "$900" })], ["GP bill was $800"]).length, 0, "a bill the household never wrote");
+    assert.equal(cards(house, [none({ bill: "$300 + $500" })], ["the GP bill was $300 + $500"]).length, 0, "several figures");
+    assert.equal(cards(house, [none(null)], ["GP bill was $800"]).length, 0, "no bill given on the point");
+    assert.equal(cards(house, [none({ bill: "$800" }, "fact")], ["GP bill was $800"]).length, 0, "only a not_found point says a bill is uncovered");
+    assert.equal(cards(house, [none({ bill: "$800" }, "uncertainty")], ["GP bill was $800"]).length, 0, "an uncertainty never says a bill is uncovered");
+    assert.equal(cards(house, [none({ bill: "$800" })], ["my premium is $800 a year; can he claim the GP visit?"]).length, 0, "Q4 a premium is not a bill");
+    assert.equal(cards(house, [none({ bill: "$800" })], ["my premium bill is $800 a year; can he claim the GP visit?"]).length, 0, "Q4 a premium bill is still a premium");
+    assert.equal(cards(house, [none({ bill: "$800" })], ["GP visit, $800, can he claim"]).length, 0, "a figure not written as a bill, charge or cost");
+    assert.equal(cards(house, [none({ bill: "$800" })], ["GP bill was $800", "my premium is $800"]).length, 1, "control: the bill is the message that calls it a bill");
+    assert.equal(cards(house, [none({ bill: "$800" })], ["he paid $800, can he claim"]).length, 0, "the bill's kind of care is not known");
+    assert.equal(cards(house, [none({ bill: "$800" }), none({ bill: "$800" }, "not_found", "Ah Kow", "Outpatient Medicare is not on his certificate.")], ["GP bill was $800"]).length, 1, "Q5 one card per bill");
+    assert.equal(cards(house, [none({ bill: "$800" }, "not_found", "Tan Ah Beng")], ["GP bill was $800"]).length, 0, "Q6 a person not in the household");
+    assert.equal(cards(house, [none({ bill: "$800" }, "not_found", null as unknown as string)], ["GP bill was $800"]).length, 0, "no person named");
+    assert.equal(cards(house, [none({ bill: "RM800" })], ["the GP bill in KL was RM800"])[0].text.startsWith("The RM800 bill"), true, "Q11 the bill keeps the household's currency");
+    // TE #91 Q1-Q3, Critic R77-1: a document that may be the person's prints a figure for that kind of care.
+    const gp = R59("Outpatient9.pdf", "Benefits Limits Per Visit\n(S$)\nNon-Panel General Practitioner\t30");
+    const limit = (ofBill: { bill: string } | null) => st({ kind: "amount", text: "GP visits are covered up to a limit.", person: "Ah Kow", document: "D7", quote: "Non-Panel General Practitioner\t30", amount: "30", ofBill });
+    assert.equal(cards(gp, [limit(null), none({ bill: "$800" })], ["GP bill was $800, can he claim"]).filter((x) => x.kind === "not_found").length, 0, "Q1 a GP limit shown without ofBill");
+    assert.equal(cards(gp, [limit({ bill: "$800" }), none({ bill: "$800" })], ["his 2 GP visits came to $800, can he claim"]).length, 0, "Q2 / R77-1 P2 the limit's bill card refused, no uncovered card either");
+    assert.equal(cards(gp, [none({ bill: "$800" })], ["GP bill was $800, can he claim"]).length, 0, "Q3 the document prints a GP limit, whatever the model said");
+    const physio = R59("Travel8.pdf", "Personal Accident Benefits\nHip\t75%\nOverseas medical expenses\nPhysiotherapy and chiropractic treatment\nBusiness plan\nS$1,000 per trip");
+    assert.equal(cards(physio, [none({ bill: "$800" })], ["his physio bill was $800"]).length, 0, "R78-1 the care's figures a few lines below its name");
+    // TE #91 N1-N9: what counts as a figure for GP, polyclinic, doctor or dental care in a document that may be his.
+    const kindCard = (text: string, written: string, extra: Partial<Household["documents"][number]> = {}) => cards(R59("Accident8.pdf", PA, [doc(8, "Other.pdf", "Other", [{ page: 1, text }], extra)]), [none({ bill: "$800" })], [written]).length;
+    assert.equal(cards(house, [none({ bill: "$800" })], ["the bill was $800, can he claim"]).length, 0, "N1 the bill's kind is not said");
+    assert.equal(kindCard("Polyclinic\t20 per visit", "his polyclinic bill was $800"), 0, "N2 polyclinic");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "the family doctor bill was $800"), 0, "N3 a family doctor is GP care");
+    assert.equal(kindCard("OUTPATIENT MEDICARE\nDoctor consultation\t30", "GP bill was $800"), 0, "N4 a doctor consultation under an outpatient heading");
+    assert.equal(kindCard("Consultation\t30", "GP bill was $800"), 0, "N4 a consultation is GP care");
+    assert.equal(kindCard("OUTPATIENT MEDICARE\nBenefits\nTable\nSee schedule\n30", "GP bill was $800"), 1, "N4 control: a figure four lines below the heading is another row");
+    assert.equal(kindCard("Clinical treatment by a registered medical practitioner\tS$40 per visit", "GP bill was $800"), 0, "N5 a medical practitioner, matched as such (not by 'Clinical')");
+    assert.equal(kindCard("Clinical trials\t40", "GP bill was $800"), 1, "N5 control: 'Clinical' alone is not a clinic");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "GP bill was $800", { linkedPeople: ["Lim Mei Mei"] }), 1, "N6 another person's document");
+    assert.equal(kindCard("General Practitioner panel list updated 2025", "GP bill was $800"), 1, "N7 a year is not a figure");
+    assert.equal(kindCard("Non-Panel General Practitioner\t30", "GP bill was $800", { processingStatus: "failed" }), 1, "N8 an unreadable document");
+    assert.equal(kindCard("Dental treatment due to accident\t300", "the dental bill was $800"), 0, "N9 dental");
+    assert.equal(cards(R59("Travel9.pdf", "Physiotherapy is not covered.\nOther text\nMore text\nStill more\nS$1,000 per trip"), [none({ bill: "$800" })], ["his physio bill was $800"]).length, 1, "control: a figure further down is another row");
+    const q12 = verifyAnswer(gp, { bottomLine: "Covered up to S$30 per visit.", nextSteps: [], question: null, statements: [limit({ bill: "$800" }), none({ bill: "$800" })] }, ["GP bill was $800"]).answer;
+    assert.equal(q12.bottomLine!.startsWith("Your documents list"), true, "Q12 the not-covered finding never headlines beside a limit that takes the bill");
+    assert.deepEqual(q12.statements!.filter((x) => x.id.endsWith("-bill")).map((x) => x.kind), ["calculation"], "Q12 only the limit's bill card");
+    assert.equal(cards(house, [none({ bill: "$800" }, "not_found", "Ah Kow", "No cover pays the $800 GP bill.")], ["GP bill was $800"]).length, 1, "Q8 the finding's own figure is left out; the card still names the bill");
+    const ae = R59("Outpatient6.pdf", "Benefits Limits Per Visit\n(S$)\nLocal Emergency Outpatient Treatment for Illness\t100");
+    const aeLimit = st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100", ofBill: { bill: "US$800" } });
+    assert.equal(cards(ae, [aeLimit, none({ bill: "US$800" }, "not_found", "Ah Kow", "No cover pays the A&E bill.")], ["the A&E bill was US$800"]).length, 0, "R77-1 P3 a foreign-currency bill beside an A&E limit");
+    const other = R59("Accident6.pdf", PA, [doc(8, "Kid.pdf", "Kid GP", [{ page: 1, text: "Benefits Limits Per Visit\n(S$)\nNon-Panel General Practitioner\t30" }], { linkedPeople: ["Mei Mei"] })]);
+    assert.equal(cards(other, [none({ bill: "$800" })], ["GP bill was $800"]).length, 1, "R77-3 another member's GP document is not his");
+    // Each guard on its own: an amount shown for him that takes the bill, names that kind of care, or is a capped or per-visit sum.
+    const pa = R59("Accident7.pdf", "Personal Accident Benefits\nDeath Benefit\tS$5,000\nAmbulance Cost\tUp to S$500 per incident", [doc(8, "Kid2.pdf", "Kid clinic", [{ page: 1, text: "Panel clinic visit\tS$50" }], { linkedPeople: ["Mei Mei"] })]);
+    const amt = (quote: string, amount: string, ofBill: { bill: string } | null = null, document = "D7") => st({ kind: "amount", text: "x", person: "Ah Kow", document, quote, amount, ofBill });
+    assert.equal(cards(pa, [none({ bill: "$800" })], ["GP bill was $800"]).length, 1, "control: nothing of his prints GP care");
+    assert.equal(cards(pa, [amt("Death Benefit\tS$5,000", "S$5,000"), none({ bill: "$800" })], ["GP bill was $800"]).length, 1, "control: an unrelated amount");
+    assert.equal(cards(pa, [amt("Death Benefit\tS$5,000", "S$5,000", { bill: "$800" }), none({ bill: "$800" })], ["GP bill was $800"]).filter((x) => x.kind === "not_found").length, 0, "an amount the model set the bill against");
+    assert.equal(cards(pa, [amt("Panel clinic visit\tS$50", "S$50", null, "D8"), none({ bill: "$800" })], ["GP bill was $800"]).length, 0, "an amount for that kind of care");
+    assert.equal(cards(pa, [amt("Ambulance Cost\tUp to S$500 per incident", "S$500"), none({ bill: "$800" })], ["GP bill was $800"]).length, 0, "a capped, per-incident amount");
+    // Q9 / R77-2: a dropped bottom line leads with the finding about the bill, even beside a fracture amount.
+    const q9 = r59(house, [st({ kind: "amount", text: "Hip fracture.", person: "Ah Kow", document: "D7", quote: "Hip\t75%", percentOf: { percent: 75, baseAmount: "S$5,000" } }), none({ bill: "$800" })], ["he fell, broke his hip, GP bill was $800"]).answer;
+    const fell = verifyAnswer(house, { bottomLine: "The $800 GP bill is not shown to be covered.", nextSteps: ["Call the Customer Service Hotline at 6123 4567.", "Give written notice of a claim within 120 days."], question: null, statements: [none({ bill: "$800" })] }, ["GP bill was $800, can he claim"]).answer;
+    assert.equal(fell.bottomLine, "No cover in Ah Kow's documents pays a GP bill.", "the finding, not 'Here is what your documents say'");
+    assert.deepEqual(fell.nextSteps, ["Call the Customer Service Hotline at 6123 4567.", "Give written notice of a claim within 120 days."], "a printed hotline and a deadline in days are not money");
+    const side = verifyAnswer(house, { bottomLine: "It is $800.", nextSteps: [], question: null, statements: [none(null, "not_found", "Ah Kow", "The documents do not say whether physiotherapy is covered.")] }, ["GP bill was $800"]).answer;
+    assert.equal(side.bottomLine, "Here is what your documents say.", "R77-2 a side not_found never headlines");
+    assert.equal(q9.bottomLine, "No cover in Ah Kow's documents pays a GP bill.", "Q9 the finding leads over a fracture amount");
+  });
+
+  // TE-EXTRA (#91): the "not shown to be covered" card never appears where a cover for that bill may exist.
+  const probe91: string[] = [];
+  {
+    const GP = "Benefits Limits Per Visit\n(S$)\nNon-Panel General Practitioner\t30\nFor claims matters, please contact the Customer Service Hotline at 6123 4567.";
+    const FREE = "Personal Accident Benefits\nHip\t75%\nFor claims matters, please contact the Customer Service Hotline at 6123 4567.";
+    const gp = R59("Outpatient9.pdf", GP), free = R59("Accident9.pdf", FREE);
+    const none = (bill: string | null = "$800", person = "Ah Kow", text = "No cover in Ah Kow's documents pays a GP bill.") => st({ kind: "not_found", text, person, ofBill: bill ? { bill } : null });
+    const limit = (ofBill: { bill: string } | null) => st({ kind: "amount", text: "GP visits are covered up to a limit.", person: "Ah Kow", document: "D7", quote: "Non-Panel General Practitioner\t30", amount: "30", ofBill });
+    const uncovered = (h: Household, s: ModelStatement[], written: string[]) => r59(h, s, written).answer.statements!.filter((x) => x.id.endsWith("-bill") && x.kind === "not_found");
+    const expect = (label: string, got: { text: string; amount?: unknown }[], n: number, starts?: string) => {
+      const ok = got.length === n && got.every((x) => (x.amount ?? null) === null) && (!starts || got[0]?.text.startsWith(starts));
+      if (!ok) probe91.push(label);
+      console.log(`${ok ? "ok" : "PROBE FAIL"} - TE-EXTRA #91 ${label}: ${got.length} card(s) ${JSON.stringify(got.map((x) => x.text.slice(0, 60)))}`);
+    };
+    const other = (name: string, text: string, extra: Partial<Household["documents"][number]> = {}) => ({ ...free, documents: [...free.documents, { ...free.documents.at(-1)!, policyId: "cccccccc-0000-0000-0000-000000000009", name, pages: [{ page: 1, text }], ...extra }] });
+    // My first-round probes, now asserted.
+    expect("Q1 a GP limit shown without ofBill", uncovered(gp, [limit(null), none()], ["GP bill was $800, can he claim"]), 0);
+    expect("Q2 a GP limit whose bill card is refused (two visits)", uncovered(gp, [limit({ bill: "$800" }), none()], ["his 2 GP visits came to $800, can he claim"]), 0);
+    expect("Q3 the model says not found, the document prints a GP limit", uncovered(gp, [none()], ["GP bill was $800, can he claim"]), 0);
+    expect("Q4 a premium, not a bill", uncovered(free, [none()], ["my premium is $800 a year; can he claim the GP visit?"]), 0);
+    expect("Q5 two findings, one bill", uncovered(free, [none(), none("$800", "Ah Kow", "Outpatient Medicare is not on his certificate.")], ["GP bill was $800"]), 1);
+    expect("Q6 a person not in the household", uncovered(free, [none("$800", "Tan Ah Beng")], ["GP bill was $800"]), 0);
+    expect("Q8 the finding's own figure", uncovered(free, [none("$800", "Ah Kow", "No cover pays the $800 GP bill.")], ["GP bill was $800"]), 1, "The $800 bill");
+    expect("Q9 a fracture amount beside it (card allowed)", uncovered(free, [st({ kind: "amount", text: "Hip fracture.", person: "Ah Kow", document: "D7", quote: "Hip\t75%", percentOf: { percent: 75, baseAmount: "S$5,000" } }), none()], ["he fell, broke his hip, GP bill was $800"]), 1);
+    expect("Q10 800 dollars", uncovered(free, [none("800 dollars")], ["the GP bill was 800 dollars"]), 1, "The bill of 800 dollars");
+    expect("Q12 the limit takes the bill", uncovered(gp, [limit({ bill: "$800" }), none()], ["GP bill was $800"]), 0);
+    // New: other ways a document can print the cover without the household's word for it.
+    expect("N1 the bill's kind is not said", uncovered(free, [none()], ["the bill was $800, can he claim"]), 0);
+    expect("N2 polyclinic bill, document prints 'Polyclinic 20'", uncovered(other("Clinic.pdf", "Polyclinic\t20 per visit"), [none()], ["his polyclinic bill was $800"]), 0);
+    expect("N3 family doctor bill, document prints a GP limit", uncovered(gp, [none()], ["the family doctor bill was $800"]), 0);
+    expect("N4 GP bill, document prints 'Outpatient Medicare' with 'Doctor consultation 30' below", uncovered(other("Medicare.pdf", "OUTPATIENT MEDICARE\nDoctor consultation\t30"), [none()], ["GP bill was $800"]), 0);
+    expect("N5 GP bill, document prints 'Clinical treatment by a doctor S$40'", uncovered(other("Doctor.pdf", "Clinical treatment by a registered medical practitioner\tS$40 per visit"), [none()], ["GP bill was $800"]), 0);
+    expect("N6 a GP figure only in another person's document (card allowed)", uncovered(other("Spouse.pdf", "Non-Panel General Practitioner\t30", { linkedPeople: ["Lim Mei Mei"] }), [none()], ["GP bill was $800"]), 1);
+    expect("N7 GP named only beside a year (card allowed)", uncovered(other("Notes.pdf", "General Practitioner panel list updated 2025"), [none()], ["GP bill was $800"]), 1);
+    expect("N8 a GP figure in an unreadable document (card allowed)", uncovered(other("Scan.pdf", "Non-Panel General Practitioner\t30", { processingStatus: "failed" }), [none()], ["GP bill was $800"]), 1);
+    expect("N9 dental bill, document prints 'Dental treatment 300'", uncovered(other("Dental.pdf", "Dental treatment due to accident\t300"), [none("$800", "Ah Kow", "No cover pays a dental bill.")], ["the dental bill was $800"]), 0);
+    expect("N10 A&E bill, document prints 'Accident & Emergency 100'", uncovered(other("AE.pdf", "Accident & Emergency treatment\t100"), [none("$800", "Ah Kow", "No cover pays an A&E bill.")], ["the A&E bill was $800"]), 0);
+    expect("N11 GP bill, document prints 'GP\tS$30' in a document linked to nobody", uncovered(other("Scheme.pdf", "GP\tS$30", { linkedPeople: [] }), [none()], ["GP bill was $800"]), 0);
+  }
+
   await check("TE #88 mutations: each table and bill rule holds on its own", () => {
     const one = (text: string, quote: string, amount: string) => amounts(r59(R59("Table3.pdf", text), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount })]).answer);
     assert.deepEqual(one("Premium (S$) payable\nSpecialist\t100", "Specialist\t100", "100"), [], "a heading inside a line");
@@ -1050,9 +1163,27 @@ async function main() {
       ] }).answer.statements!.filter((x) => x.amount).map((x) => [x.amount!.text, x.conditions]);
       assert.deepEqual(lc, [["S$350,000", ["Survive 30 days."]]]);
     });
+    await check("snapshot live GP bill: the scheme prints a GP limit, so no 'not covered' card; the finding and the printed claim contact stay", () => {
+      // The contact is read from the stored claims page, never written here (no insurer names or addresses in the source).
+      const claims = real.documents.flatMap((d) => d.pages).find((p) => /Claims and Enquiries/.test(p.text) && /Customer\s+Service\s+Hotline at \d{4} \d{4}/.test(p.text))!.text;
+      const phone = /\b\d{4} \d{4}\b/.exec(claims)![0], email = /[\w.]+@[\w.]+\.com/.exec(claims)![0];
+      const a = verifyAnswer(real, { bottomLine: "Not shown to be covered: the scheme's GP benefit is Outpatient Medicare, which is not on his certificate.", question: null,
+        nextSteps: [`Call the Customer Service Hotline at ${phone} or email ${email}.`, "Give written notice of the claim within 120 days of the fall."],
+        statements: [
+          st({ kind: "fact", text: "A benefit applies only if its policy is on the certificate.", person: self, document: di("Benefit Summary.pdf"), quote: "A Benefit is only applicable to you if the Policy containing the Benefit is specifically stated in Part 1 of this Certificate" }),
+          st({ kind: "fact", text: "Written notice of a claim is due within 120 days.", person: self, document: di("Benefit Summary.pdf"), quote: "You must give us written notice of a claim within one hundred and twenty (120) days of the event giving rise to the claim" }),
+          st({ kind: "not_found", text: "No cover on his certificate pays a GP bill.", person: self, ofBill: { bill: "$800" } }),
+        ] }, ["he tripped on the kerb, GP bill was $800, can he claim"]).answer;
+      assert.equal(a.bottomLine!.startsWith("Not shown to be covered"), true);
+      assert.deepEqual(a.statements!.map((x) => [x.kind, x.amount ?? null]), [["fact", null], ["fact", null], ["not_found", null]], "TE #91 Q3: the household's documents print a GP limit, so the server never adds 'not covered'");
+      assert.equal(a.nextSteps.length, 2, "the hotline and email the documents print and a deadline in days are kept");
+      const physio = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "not_found", text: "No cover pays a physio bill.", person: self, ofBill: { bill: "$800" } })] }, ["his physio bill was $800"]).answer;
+      assert.equal(physio.statements!.filter((x) => x.id.endsWith("-bill")).length, 0, "R78-1 his travel policy prints physiotherapy cover over several lines");
+    });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
   assert.deepEqual(probeFails, [], "TE-EXTRA #88 wrong-amount probes");
+  assert.deepEqual(probe91, [], "TE-EXTRA #91 uncovered-bill probes");
   console.log(`${passed} checks passed`);
 }
 

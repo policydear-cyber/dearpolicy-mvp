@@ -182,7 +182,7 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -482,6 +482,58 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
 }
 
+type Billed = { raw: string; kind: RegExp | null };
+/** Where the household wrote a bill figure in this conversation, as money ("$800", "800 dollars"), or null. */
+function billWritten(bill: number, written: string[]): { q: string; value: number; currency: string; raw: string } | null {
+  return written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
+    ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).map((m) => ({ ...m, raw: m.raw.trim().replace(/[.,;:!?]+$/, "") })).find((m) => sameValue(m.value, bill)) ?? null;
+}
+/** The bill the household gave, as they wrote it, for a "not_found" point that says no cover in the documents pays it (the
+ * GP bill of $800 when Outpatient Medicare is not on the certificate): one figure the household wrote in this conversation. */
+function billUncovered(st: ModelStatement, written: string[]): Billed | null {
+  const nums = numbersIn(st.ofBill?.bill ?? "");
+  if (nums.length !== 1 || nums[0] <= 0) return null;
+  const m = billWritten(nums[0], written);
+  if (!m?.raw) return null;
+  // The figure must be written as a bill, charge or cost ("GP bill was $800"), never a premium or a sum (TE #91 Q4).
+  const at = m.q.indexOf(m.raw);
+  const near = m.q.slice(Math.max(0, at - 40), at + m.raw.length + 25);
+  if (at < 0 || !/\b(?:bills?|billed|charged?|charges|costs?|cost\s+me|invoice|receipt|fees?|paid|came\s+to)\b/i.test(near) || /\b(?:premium|instalment|sum\s+(?:insured|assured)|coverage|cover|savings?|salary)\b/i.test(near)) return null;
+  return { raw: m.raw, kind: BILL_KINDS.find(([said]) => said.test(m.q))?.[1] ?? null };
+}
+/** What a bill was for, as the household wrote it, and how the documents name a benefit for that kind of bill. */
+const BILL_KINDS: [RegExp, RegExp][] = [
+  [/\bGPs?\b|general\s+practitioner|\b(?:poly)?clinics?\b|\bdoctors?\b/i, /\bGPs?\b|general\s+practitioner|medical\s+practitioner|\b(?:poly)?clinics?\b|\bdoctors?\b|\bconsultations?\b|outpatient/i],
+  [/\bA\s*&\s*E\b|emergency/i, /\bA\s*&\s*E\b|emergency/i],
+  [/specialist/i, /specialist/i],
+  [/dental|dentist/i, /dental|dentist/i],
+  [/physio/i, /physio/i],
+  [/\bx-?ray|\blab(?:oratory)?\b|scan\b|diagnostic/i, /x-?ray|laborator|diagnostic|scan/i],
+];
+const billPhrase = (raw: string) => (/^[^\d\s]/.test(raw) ? `The ${raw} bill` : `The bill of ${raw}`);
+/** Whether a bill can be said to be uncovered for a person (TE #91, Critic R77): it never can when an amount shown for
+ * them takes a bill, comes from a per-visit or per-claim row, or names the same kind of care; nor when a document that may
+ * be theirs prints a figure for that kind of care (their GP limit, whatever the model said); nor when the bill's kind is
+ * not known or the person is not a household member. Leaning safe, the model's own finding then stands without the card. */
+function billMayBeUncovered(household: Household, c: Checked, checked: Checked[]): boolean {
+  const kind = c.billed?.kind;
+  if (!kind || !c.person) return false;
+  const theirs = (p: string | null) => !p || p === c.person;
+  for (const o of checked) {
+    if (!o.amount || !theirs(o.person) || !o.found) continue;
+    const page = household.documents[o.found.docIndex].pages.find((p) => p.page === o.found!.page)?.text ?? "";
+    const row = rowLine(page, o.found.offset).text;
+    if (o.s.ofBill || kind.test(`${row} ${o.found.excerpt}`) || /\bper\s+(?:visit|claim|incident)\b|\bup\s+to\b/i.test(`${row} ${o.found.excerpt}`) || moneyTable(page, o.found.offset)?.perVisit) return false;
+  }
+  return !household.documents.some((d) => !unreadable(d) && (!d.linkedPeople.length || d.linkedPeople.some((p) => baseName(p) === c.person)) &&
+    d.pages.some((p) => {
+      // The care's name with a figure on its line or the next three: a table can print the name and its figures on
+      // separate lines ("Physiotherapy" over its limits, Critic R78-1).
+      const lines = p.text.split("\n");
+      return lines.some((l, i) => kind.test(l) && lines.slice(i, i + 4).some((x) => /\d/.test(x.replace(/\b(?:19|20)\d\d\b/g, ""))));
+    }));
+}
+
 /** How much of a bill the household gave a per-visit or per-claim limit could cover (the A&E bill of $800 against
  * Outpatient Medicare's S$100 limit per visit): the card shows the limit and says whether the bill is above or within it,
  * with no worked figure (what is paid or left over), and the bill as the household wrote it. Only
@@ -498,8 +550,7 @@ function billAgainst(st: ModelStatement, found: Found, household: Household, amo
   // A count may have words between it and what it counts ("her 2 A&E visits", R72-2); a plural visit or claim, or "twice",
   // means more than one whatever the words.
   const MANY = /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple|both)\s+(?:[^\s\d]+\s+){0,3}(?:days|nights|weeks|months|times)\b|\b(?:visits|claims|bills|admissions|sessions|consultations|trips|twice)\b/i;
-  const mention = written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
-    ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).find((m) => sameValue(m.value, bill));
+  const mention = billWritten(bill, written);
   if (!mention || (mention.currency !== "$" && SIGN[mention.currency] !== sign) || MANY.test(mention.q)) return null;
   const raw = mention.raw.trim();
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!.text;
@@ -887,8 +938,15 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       }
       checked.push({ s: st, found, amount: null, person, note: null });
     } else {
-      checked.push({ s: st, found, amount: null, person, note: null });
+      checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
+  }
+  // A bill set against a limit is never also said to be uncovered for the same person, and one bill gets one card.
+  const carded = new Set<string>();
+  for (const c of checked) {
+    const key = `${c.person}:${c.billed?.raw}`;
+    c.uncovered = c.billed && !carded.has(key) && billMayBeUncovered(household, c, checked) ? c.billed.raw : null;
+    if (c.uncovered) carded.add(key);
   }
   // What a source says about the person it is used for: not linked to them, or replaced by a later version.
   for (const c of checked) {
@@ -935,6 +993,11 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const statements: AnswerStatement[] = [];
   // One card per quoted row: a second statement quoting the same words on the same page (without an amount) adds nothing.
   const seenRows = new Set<string>();
+  const uncoveredCard = (c: Checked, i: number) => {
+    if (!c.uncovered) return;
+    const said = `${billPhrase(c.uncovered)} you gave is not shown to be covered by ${c.person}'s documents; only the insurer can confirm.`;
+    statements.push({ id: `s${i + 1}-bill`, kind: "not_found", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null });
+  };
   checked.forEach((c, i) => {
     if (c.found && !c.amount) {
       const key = `${c.found.docIndex}:${c.found.page}:${squash(c.found.excerpt).text}`;
@@ -945,7 +1008,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     let text = withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
-    if (!text) return;
+    // A finding left with no words (its only sentence stated money) still shows the bill it says is uncovered (TE #91 Q8).
+    if (!text) { uncoveredCard(c, i); return; }
     const conditions = (c.conditions ?? []).map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, read)).filter(Boolean);
     let source: AnswerStatement["source"] = null;
     if (c.found && doc) {
@@ -981,15 +1045,16 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     if (c.bill) {
       const b = c.bill, limit = b.text.replace(/^Up to /, "");
       const said = b.within
-        ? `The ${b.bill} bill you gave is within the ${limit} limit, so it could be reimbursed up to the bill, subject to any co-payment; the insurer decides what is paid.`
-        : `The ${b.bill} bill you gave is above the ${limit} limit, so it could be reimbursed only up to ${limit}, subject to any co-payment; the insurer decides what is paid.`;
+        ? `${billPhrase(b.bill)} you gave is within the ${limit} limit, so it could be reimbursed up to the bill, subject to any co-payment; the insurer decides what is paid.`
+        : `${billPhrase(b.bill)} you gave is above the ${limit} limit, so it could be reimbursed only up to ${limit}, subject to any co-payment; the insurer decides what is paid.`;
       statements.push({
         id: `s${i + 1}-bill`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: { text: b.text, currencyResolved: b.currencyResolved, illustration: true },
-        basis: `the ${b.bill} bill you gave, set against the ${limit} limit printed in the document; how the co-payment comes off is not stated`,
+        basis: `${billPhrase(b.bill).replace(/^The/, "the")} you gave, set against the ${limit} limit printed in the document; how the co-payment comes off is not stated`,
         conditions, asOf: null, source, group: null,
       });
     }
+    uncoveredCard(c, i);
   });
   for (const members of notTotals) {
     const who = members[0].person;
@@ -1008,6 +1073,11 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   report.questionsLeftOut.push(...asked.slice(1));
   const question = asked.length ? withoutMoney(asked[0], report.sentencesLeftOut, read) : "";
   const shownAmounts = statements.filter((s) => s.amount).length;
+  // The finding about a bill the household gave leads a dropped bottom line, unless an amount shown for that person may
+  // pay it (Critic R77-2, TE #91 Q9).
+  const finding = checked.find((c) => c.uncovered);
+  const findingText = finding ? statements.find((x) => x.id === `s${checked.indexOf(finding) + 1}`)?.text : undefined;
+  if (!bottomLine && findingText) bottomLine = findingText;
   if (!bottomLine) {
     // Built here, without another model call, from the first amount card: whose it is and what the model said it is for.
     const first = statements.find((x) => x.amount);
