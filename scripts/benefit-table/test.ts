@@ -18,7 +18,7 @@ const cert: SourceDoc = { id: "cert", name: "Certificate.pdf", readable: true, p
   "GROUP PERSONAL ACCIDENT\nLim Wei Jie\tS$200,000\tAs of 01/01/2024\nTan Mei Ling\tS$100,000\tAs of 01/01/2024" }] };
 const terms: SourceDoc = { id: "terms", name: "Scheme terms.pdf", readable: true, pages: [
   { page: 1, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nCompensation Schedule (% of Sum Insured)\nArm, Elbow or Wrist (Other Fracture)\t20%\nThis Benefit can only be claimed under the Core Scheme." },
-  { page: 2, text: "Simple Fracture Benefit Limit: S$5,000\nCompensation (% of S$5,000)\nArm, Elbow or Wrist#\t25%\n# Fractures of thumb and finger are not covered\nAmbulance Cost up to $500 per incident" },
+  { page: 2, text: "Simple Fracture Benefit Limit: S$5,000\nCompensation (% of S$5,000)\nArm, Elbow or Wrist#\t25%\n# Fractures of thumb and finger are not covered\nAmbulance Cost\tup to $500 per incident" },
   { page: 3, text: "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days\nTravel\tClassic\tBusiness\nTrip cancellation\tS$5,000\tS$10,000" },
 ] };
 const cover = (person: string, coverName: string, sumInsured: number | null, quote: string) => ({ person, product: "Group Scheme", cover: coverName, plan: null, sumInsured, asOf: "01/01/2024", page: 1, quote });
@@ -595,7 +595,7 @@ for (const [name, rowText, capLine, benefitName, value] of [
   });
 }
 // Critic R98-1 (D1): a tab-laid row whose label starts with a cap word is its own row, not the row above's cap line.
-test("R98-1 (D1): 'Maximum Disablement' on the next tab row never caps Hip", () => {
+test("R98-1 (D1): 'Maximum Disablement' on the next tab row never caps Hip, and Hip withholds its amount", () => {
   const probe: SourceDoc = { id: "probe-r98", name: "Probe.pdf", readable: true, pages: [
     { page: 1, text: "GROUP PERSONAL ACCIDENT\nHip\t75%\nMaximum Disablement\t20% up to S$5,000" },
   ] };
@@ -604,8 +604,8 @@ test("R98-1 (D1): 'Maximum Disablement' on the next tab row never caps Hip", () 
   const claimed = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%", cap: 5000, capQuote: "up to S$5,000" });
   assert.equal(claimed.benefits[0].cap, null);
   assert.equal(rowOf(claimed).figure.kind, "none");
-  const plain = rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%" })).figure;
-  assert.equal(plain.kind === "worked_out" && plain.amount, 150000, figureText(plain));
+  // A line below that starts with a cap word may be Hip's limit, so Hip withholds its amount (coordinator's fail-safe rule).
+  assert.equal(rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%" })).figure.kind, "none");
   const own = rowOf(read1({ benefit: "Maximum Disablement", value: 20, page: 1, quote: "Maximum Disablement 20% up to S$5,000", cap: 5000, capQuote: "up to S$5,000" })).figure;
   assert.equal(own.kind === "worked_out" && own.amount, 5000, figureText(own));
 });
@@ -664,6 +664,34 @@ for (const [name, text, capQuote] of [
     assert.equal(claimed.benefits[0].cap, null);
     assert.equal(rowOf(claimed).figure.kind, "none");
   }
+});
+// TE L22-L23: a two-column line whose rest holds Hip's own cap and then the next row. A claimed cap in the part before
+// the next row is Hip's; with none claimed, Hip withholds its amount, never S$450,000 uncapped.
+for (const [layout, line, quote] of [
+  ["L22", "Hip\t75% up to S$50,000\tWrist\t20% up to S$5,000", "Hip 75%"],
+  ["L23", "Hip 75% up to S$50,000    Wrist 20% up to S$5,000", "Hip 75%"],
+] as const) test(`TE ${layout}: the rest of the row's line is never ignored`, () => {
+  const probe: SourceDoc = { id: "probe-l22", name: "Probe.pdf", readable: true, pages: [{ page: 1, text: `GROUP PERSONAL ACCIDENT\n${line}` }] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  assert.equal(rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote })).figure.kind, "none");
+  const own = rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote, cap: 50000, capQuote: "up to S$50,000" })).figure;
+  assert.equal(own.kind === "worked_out" && own.amount, 50000, figureText(own));
+  const wrong = read1({ benefit: "Hip", value: 75, page: 1, quote, cap: 5000, capQuote: "up to S$5,000" });
+  assert.equal(wrong.benefits[0].cap, null, "Wrist's cap is never Hip's");
+  assert.equal(rowOf(wrong).figure.kind, "none");
+});
+// Critic R100 F1-F3: an upper-case line under the row that carries a cap word may go on with the row's own cap.
+for (const [name, line] of [
+  ["F1", "Payable up to S$50,000 per accident"],
+  ["F2", "Which is payable up to S$50,000"],
+  ["F3", "Per accident limit S$50,000"],
+] as const) test(`R100 ${name}: "${line}" under the row withholds the uncapped amount`, () => {
+  const probe: SourceDoc = { id: "probe-r100", name: "Probe.pdf", readable: true, pages: [{ page: 1, text: `GROUP PERSONAL ACCIDENT\nHip\t75% of Sum Insured\n${line}` }] };
+  const r = checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", benefit: "Hip", value: 75, page: 1, quote: "Hip 75% of Sum Insured" })]));
+  assert.equal(r.benefits[0].capUnread, true);
+  const row = assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  assert.equal(row.figure.kind, "none", figureText(row.figure));
 });
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
