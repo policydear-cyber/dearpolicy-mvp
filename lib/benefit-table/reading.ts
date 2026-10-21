@@ -61,6 +61,7 @@ document:
 covers: only from pages that name a person with their cover. One row per person per cover line: the person as printed, the product (the policy or scheme), the cover (the line's own name, for example a group scheme's separate covers), the plan if printed, the sum insured as a plain number (600000 for "S$600,000"; null when none is printed), the "as of" or start date printed for it, the page, and the exact line as quote.
 
 benefits: every row that says what a benefit pays or that it is not covered. Leave out definitions, exclusions on their own, contact details and premiums.
+- Be complete: go through every page and every table, row by row. A schedule of 20 rows (a fracture, dismemberment, sight or burns scale) gives 20 rows here, one per printed line, never a summary or a sample. When two documents print the same benefit, each document's rows are listed from that document.
 - section: the heading of the cover or policy the row is printed under, as printed (for example "BENEFIT 2: GROUP PERSONAL ACCIDENT" or "Section 3 Personal accident"). Look back across earlier pages for the heading that is still in force. null only when the whole document is one cover with no such heading.
 - column: when a table prints different figures in different columns (plans such as Classic and Business, or Adult and Child), one row per column, with the column heading as printed. null when there is one figure.
 - benefit: the row's own label, as printed, with its sub-heading when the label alone is unclear ("Simple Fracture: Arm, Elbow, Wrist or Ribs").

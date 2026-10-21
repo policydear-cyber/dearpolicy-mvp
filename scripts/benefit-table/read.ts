@@ -4,6 +4,8 @@
  *   Estimate (free):  node --import tsx scripts/benefit-table/read.ts --household-file snapshot.json [--max-usd 2]
  *   Paid:             ... --paid --model anthropic:claude-sonnet-5-5 --run-id <id> --max-usd <cap> --out <dir>
  *   Replay (free):    ... --replay <dir>   (re-runs today's checks and table on the recorded model output)
+ *   Part re-read:     ... --paid ... --only "<file>,<file>" --reuse <earlier dir>   (reads only those documents; the
+ *                     others use the earlier run's recorded readings, which the output says)
  *
  * A call is admitted only if the run stays under the cap with its whole input and a maximum-length output. One call per
  * document plus one linking call, no retries. Output holds real household text, so --out must be outside git. */
@@ -110,9 +112,18 @@ async function main() {
 
   const readings: CheckedReading[] = [];
   const usage: { call: string; input: number; output: number; usd: number; ms: number; stopReason: string | null; model: string }[] = [];
+  const only = arg("--only")?.split(",").map((s) => s.trim()).filter(Boolean);
+  const reuse = arg("--reuse");
+  if (only && !reuse) throw new Error("--only needs --reuse <earlier run dir> for the other documents");
   for (const w of worst) {
     let reply: Reply;
-    if (paid) {
+    if (paid && only && !only.includes(w.d.name)) {
+      const earlier = resolve(reuse!, `raw-${w.d.id}.json`);
+      if (!existsSync(earlier)) { say(`${w.d.name}: not read, and no earlier reading to reuse`); continue; }
+      reply = JSON.parse(readFileSync(earlier, "utf8")) as Reply;
+      writeFileSync(rawPath(w.d.id), JSON.stringify({ ...reply, reusedFrom: earlier }, null, 1));
+      say(`${w.d.name}: reused the reading recorded in ${earlier} (not read again)`);
+    } else if (paid) {
       if (spent + usdOf(price, w.input, READ_MAX_OUTPUT) > maxUsd) { say(`Stopped before ${w.d.name}: its worst case would pass the cap`); break; }
       try {
         reply = await callModel(choice, { system: READING_PROMPT, user: renderDocument(w.d), schema: READING_SCHEMA, maxTokens: READ_MAX_OUTPUT });
