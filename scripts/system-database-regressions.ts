@@ -1953,6 +1953,39 @@ async function main(){
       await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary]]);
       await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary]]);
     });
+    await test("A scheme benefit summary read as an unconfirmed certificate is the scheme's wording, so its wrist row joins the either/or",async()=>{
+      // Live, 21 Oct (main 176313e): Coverage showed only the S$1,250 wrist. The S$120,000 reading (20% of the accident
+      // cover) is in the scheme's Benefit Summary, which the reader labelled a certificate. It names nobody's cover
+      // (not confirmed, authority 30), so it owned no contract, and as a "certificate" it was never taken as wording
+      // either: its rows belonged to no one's cover.
+      const member=people[2].id,cert=uuid(703000),productSummary=uuid(703001),benefitSummary=uuid(703002);
+      const doc=(id:string,role:string,confirmed:boolean,authority:number,policyNumber:string|null,product:string)=>db.query(
+        "INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$7,$6,'G-EGS2','Group Insurance',$4,$5,$8,'ready',$9,$9,'scan_clean')",
+        [id,account,member,role,confirmed,policyNumber,product,authority,id+".pdf"]);
+      await doc(cert,"certificate",true,95,"EGS-2","Example Group Scheme Two");
+      await doc(productSummary,"product_summary",false,40,null,"Example Group Two");
+      await doc(benefitSummary,"certificate",false,30,null,"Example Group Two");
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$4,$5,'ai_name_match',1.0),($2,$4,$5,'scheme_reference_match',0.9),($3,$4,$5,'scheme_reference_match',0.9)",[cert,productSummary,benefitSummary,member,account]);
+      await db.query("INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified) VALUES($1,$2,$3,'Death',1000000,'SGD','GROUP TERM LIFE',1,'GROUP TERM LIFE S$1,000,000',true),($1,$2,$3,'Personal Accident',600000,'SGD','GROUP PERSONAL ACCIDENT',1,'GROUP PERSONAL ACCIDENT S$600,000',true)",[account,cert,member]);
+      const ids=(await db.query<{id:string}>(
+        `INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES
+         ($1,$2,'Example Group Two','Arm , Elbow, Wrist or Ribs',ARRAY['bodily_injury']::text[],ARRAY[]::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','[]'::jsonb,'[]'::jsonb,false,true),
+         ($1,$3,'Group Personal Accident','Arm, Elbow, Wrist or Ribs (Other Fracture)',ARRAY['bodily_injury']::text[],ARRAY[]::text[],'sum_insured',0.2,null,8,'Arm, Elbow, Wrist or Ribs (Other Fracture) 20%','[]'::jsonb,'[]'::jsonb,false,true)
+         RETURNING id::text`,[account,productSummary,benefitSummary])).rows.map(r=>r.id);
+      await seedLedger(account);
+      const ledger=(await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+member))).json()).rows as {policyId:string|null;alternatives:{options:{amountText:string}[]}|null}[];
+      const wrist=ledger.filter(r=>r.policyId===productSummary||r.policyId===benefitSummary);
+      assert.ok(wrist.length>=1,"Coverage lists the wrist");
+      for(const r of wrist)assert.deepEqual(r.alternatives?.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort(),"Coverage: the wrist is one either/or, never S$1,250 alone");
+      const listed=(await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+member))).json()).benefits as {id:string;alternatives:{options:{amountText:string}[]}|null}[];
+      for(const b of listed.filter(b=>ids.includes(b.id)))
+        assert.deepEqual(b.alternatives?.options.map(o=>o.amountText).sort(),["S$1,250","S$120,000"].sort(),"Benefits: the same group");
+      await db.query("DELETE FROM policy_benefits WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+      await db.query("DELETE FROM policy_coverages WHERE policy_id=$1",[cert]);
+      await db.query("DELETE FROM policy_members WHERE policy_id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+      await db.query("DELETE FROM policies WHERE id=ANY($1::uuid[])",[[cert,productSummary,benefitSummary]]);
+    });
     await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",

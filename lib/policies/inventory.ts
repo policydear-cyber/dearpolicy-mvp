@@ -44,6 +44,14 @@ export type PolicyContract = {
   ownershipBasis:"evidence"|"declared";
 };
 export const referenceRoles=new Set(["policy_wording","product_summary","benefit_guide","benefit_summary","rider"]);
+/** Roles of a personal document. One that proves nobody's cover (a scheme's "Benefit Summary" read as a certificate,
+ * naming no insured person) is the scheme's own wording, the same as a product summary. */
+const personalRoles=new Set(["certificate","personal_schedule"]);
+/** Whether a document can be read as the wording of a contract someone owns. */
+export function servesAsReference(doc:Pick<InventoryDocument,"document_role"|"personal_coverage_confirmed">){
+  const role=doc.document_role??"";
+  return referenceRoles.has(role)||(!doc.personal_coverage_confirmed&&personalRoles.has(role));
+}
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
 export function productIdentity(value:string|null|undefined){
   const normal=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
@@ -71,7 +79,7 @@ export function referenceMatchReason(owner:InventoryDocument,reference:Inventory
   const no=(reason:string)=>({matches:false,reason});
   if(owner.id===reference.id)return yes("Same document: one PDF holding both the personalised part and the wording.");
   if(reference.personal_coverage_confirmed)return no("This is someone's personalised evidence, which is never reused as reference wording.");
-  if(!referenceRoles.has(reference.document_role??""))return no("Document role \""+(reference.document_role??"none")+"\" is not a wording role ("+[...referenceRoles].join(", ")+").");
+  if(!servesAsReference(reference))return no("Document role \""+(reference.document_role??"none")+"\" is not a wording role ("+[...referenceRoles].join(", ")+").");
   const insurer=canonicalDeathInsurer(owner.insurer);
   if(!insurer)return no("The owned document has no recognised insurer, so no wording can be bound to it.");
   if(insurer!==canonicalDeathInsurer(reference.insurer))return no("Insurer differs: owned \""+(owner.insurer??"none")+"\" vs wording \""+(reference.insurer??"none")+"\".");
@@ -169,7 +177,7 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
   const personal=documents.filter(d=>d.personal_coverage_confirmed);
   const products=[...new Set([...personal.flatMap(d=>[d.product_name,...d.products]),...coverages.map(c=>c.productName)].filter((p):p is string=>!!p))];
   const issuers=[...new Set(personal.map(d=>d.insurer).filter((p):p is string=>!!p))];
-  for(const doc of documents.filter(d=>!d.personal_coverage_confirmed&&referenceRoles.has(d.document_role??""))){
+  for(const doc of documents.filter(d=>!d.personal_coverage_confirmed&&servesAsReference(d))){
     const header=" "+doc.header.toLowerCase().replace(/[^a-z0-9]+/g," ")+" ";
     if(!doc.insurer){
       const matches=issuers.filter(name=>name.length>=3&&header.includes(" "+name.toLowerCase().replace(/[^a-z0-9]+/g," ")+" "));
