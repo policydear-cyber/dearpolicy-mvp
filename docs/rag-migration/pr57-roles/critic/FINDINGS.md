@@ -4121,3 +4121,17 @@ Probed `checkReading` on 17 layouts (tsx, no DB, no paid calls).
 - **R97-2 (blocker, uncapped figure)** `startsRow`'s own-percentage test runs before the connective check.
   - C3b: "Death\t100% of Sum Insured\nor 200% of premiums paid, whichever is lower" ends the row at line 1, `capUnread=false`, and 100% of the sum insured is shown although the row pays the lower of the two.
 - Fix for both: when a line starts with a connective or cap word (add `max\.?`, `min\.?`, `maximum`, `limit` to `CONNECTIVE`), it always continues the row and `startsRow` is not consulted. Belt and braces: compute `capUnread` also from the next line when it starts with a connective or cap word, even if it was not joined. Add C1, C3b and C8 as tests.
+
+## R98 — PR #96 delta db6b313 → fa2044f (connective lines always continue; capUnread backstop)
+
+**Verdict: NOT READY, with a one-line fix.** Every other probed path fails safe.
+
+I re-ran all 19 earlier layouts plus 2 new ones (tsx, no DB, no paid calls).
+
+- R97-1 and R97-2 are fixed. "max. S$50,000" and "Max. S$50,000" (C1, C8) and "or 200% … whichever is lower" (C3b) now give `capUnread=true`, so no amount is shown.
+- All earlier cases still hold: the neighbour cap is refused in N1, N2, N3, B1 to B5 and D2. The row's own cap is read in N4, C2 and C6. The rest (N5, C4, C5, C7, C9) withhold an amount.
+- **R98-1 (wrong amount, narrow)** `check.ts` `startsRow`: `!CONNECTIVE.test(text)` now overrides every new-row signal, tab cells included. A next row whose label starts with a cap word joins this one.
+  - D1: "Hip\t75%\nMaximum Disablement\t20% up to S$5,000" takes cap 5000, so Hip shows S$5,000 (the neighbour's limit).
+  - One-line fix: keep the tab-cells test outside the connective override, i.e. `(!sameLine && /\S\t+\S/.test(text)) || (!CONNECTIVE.test(text) && (…rest…))`. C3b has no tab cells, so it still continues.
+  - Add D1 as a test.
+- Judged against the coordinator's fail-safe bar: with R98-1 fixed, every open path I found either reads the row's own cap or withholds the amount (`capUnread`). Neighbour rows that are lettered, numbered, lower-case, tabbed or on the same line are refused, and a quote spanning two rows is dropped.
