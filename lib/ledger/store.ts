@@ -15,7 +15,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { statedCurrencyCode } from "@/lib/format/currency";
+import { formatMoney,statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -205,6 +205,15 @@ export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:str
     conditions:[],requirements:[],needsReview:false};
   return coverageForBenefit({...contract,coverages:contract.coverages.filter(c=>c.amount!=null&&c.amount>0)},stub);
 }
+/** Rows changed within a minute of this many other machine-made rows were changed by a machine, not a person. */
+const MACHINE_BATCH=5;
+const WRONG_COVER_NOTE="This may be worked out from the wrong cover";
+/** The note for a changed row whose sum insured is another cover's, or null when it already says so. */
+function wrongCoverNote(stored:number,basis:number|null,currency:string,conditions:string[]|null){
+  if((conditions??[]).some(c=>c.startsWith(WRONG_COVER_NOTE)))return null;
+  const money=(v:number)=>formatMoney(v,currency);
+  return WRONG_COVER_NOTE+": "+money(stored)+" is the sum insured of another cover"+(basis!=null?"; the cover this pays under is "+money(basis):"")+". Check it before relying on it.";
+}
 async function refreshSeededRows(accountId:string,seeds:Seed[]){
   if(!seeds.length)return;
   const legacyOf=(s:Seed)=>s.seedKey.replace(/\|member:[^|]+$/,"");
@@ -292,12 +301,18 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // A machine-made row whose basis is one of its contract's cover amounts was joined, not printed, so it is joined
   // again: moved to the cover it pays under, or cleared when that cannot be told. A basis no cover carries (a fixed
   // limit the document printed) is left alone.
-  // An older version of this join wrote updated_at (live: 52 rows "changed" within 12 seconds of one seeding on 27 Sep),
-  // so updated_at alone cannot tell a person's edit. A person who changes a figure also confirms the row (PATCH
-  // /api/ledger), so a row still "proposed" holds no figure of theirs and is joined again like an untouched one. A row
-  // that was changed and is confirmed may hold their figure, and is left alone.
-  const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string}>(
-    "SELECT id,policy_id,family_member_id,event_type,detail,cause,note,sum_basis::text FROM coverage_rules WHERE account_id=$1 AND pays_kind='percent_of_sum' AND sum_basis IS NOT NULL AND policy_id IS NOT NULL AND origin<>'person' AND (updated_at=created_at OR status='proposed')",[accountId]);
+  // An older version of this join wrote updated_at (live: 52 rows stamped within 12 seconds, 29 minutes after one
+  // seeding on 27 Sep), so updated_at alone cannot tell a person's edit. Neither can status: wording rows are seeded
+  // confirmed, and an edit can be sent as "proposed" (Critic R75-1, R75-2). What a person cannot do is change dozens of
+  // rows within a minute: a row stamped together with at least MACHINE_BATCH other machine-made rows was stamped by a
+  // machine and is joined again like an untouched one. Any other changed row may hold a person's figure: it is never
+  // changed silently; it says it may be worked out from the wrong cover.
+  const joined=await query<{id:string;policy_id:string;family_member_id:string;event_type:string;detail:string|null;cause:string|null;note:string|null;sum_basis:string;currency:string;conditions:string[]|null;machine:boolean}>(
+    `SELECT c.id,c.policy_id,c.family_member_id,c.event_type,c.detail,c.cause,c.note,c.sum_basis::text,c.currency,c.conditions,
+       (c.updated_at=c.created_at OR (SELECT count(*) FROM coverage_rules o WHERE o.account_id=c.account_id AND o.id<>c.id AND o.origin<>'person'
+          AND o.updated_at<>o.created_at AND o.updated_at BETWEEN c.updated_at-interval '60 seconds' AND c.updated_at+interval '60 seconds')>=$2) AS machine
+     FROM coverage_rules c WHERE c.account_id=$1 AND c.pays_kind='percent_of_sum' AND c.sum_basis IS NOT NULL AND c.policy_id IS NOT NULL AND c.origin<>'person' AND c.status<>'rejected'`,
+    [accountId,MACHINE_BATCH]);
   for(const row of joined.rows){
     const contract=contracts.find(c=>c.ownerId===row.family_member_id&&[...c.documents,...c.references].some(d=>d.id===row.policy_id));
     if(!contract)continue;
@@ -308,6 +323,11 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     if(basis===stored)continue;
     // Clearing applies only when the covers carry different amounts: then the stored one may be the wrong one.
     if(basis==null&&new Set(contract.coverages.filter(c=>c.amount!=null&&c.amount>0).map(c=>Number(c.amount))).size<2)continue;
+    if(!row.machine){
+      const note=wrongCoverNote(stored,basis,row.currency,row.conditions);
+      if(note)await query("UPDATE coverage_rules SET conditions=array_append(coalesce(conditions,ARRAY[]::text[]),$3) WHERE account_id=$1 AND id=$2",[accountId,row.id,note]);
+      continue;
+    }
     await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,basis]);
   }
   // Round 10: one lookup for the keys already in the ledger and one insert for

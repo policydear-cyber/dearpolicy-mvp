@@ -1900,13 +1900,27 @@ async function main(){
       assert.equal(await basis(printed),5000,"A fixed limit the document printed is not replaced by a cover");
       assert.equal(await basis(edited),1000000,"A row a person changed keeps their figure");
       assert.equal(await basis(death),1000000,"A death row stays on the life cover");
-      // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, so 52 untouched rows looked
-      // changed and kept S$1,000,000. A person who changes a figure also confirms the row; one still "proposed" is joined again.
-      const touched=await row("dismemberment","accident","Loss of speech, joined by an older version");
-      await db.query("UPDATE coverage_rules SET sum_basis=1000000,status='proposed',updated_at=created_at+interval '29 minutes' WHERE id=$1",[touched]);
+      // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, 29 minutes after seeding, on 52
+      // rows within 12 seconds, so they looked changed and kept S$1,000,000 -- the confirmed accidental death among them.
+      // Rows stamped together like that were stamped by a machine, whatever their status, and are joined again.
+      const batch=await Promise.all(["Death due to Accident, joined by an older version","Loss of speech, joined by an older version",
+        "Loss of sight, joined by an older version","Loss of a thumb, joined by an older version","Loss of a toe, joined by an older version",
+        "Third degree burns, joined by an older version"].map((note,i)=>row(i===0?"accidental_death":"dismemberment","accident",note)));
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,status=CASE WHEN id=$2 THEN 'confirmed' ELSE 'proposed' END,updated_at=created_at+interval '29 minutes' WHERE id=ANY($1::uuid[])",[batch,batch[0]]);
+      // Critic R75-1: one row changed on its own and sent back as "proposed" may still hold a person's figure.
+      const lone=await row("dismemberment","accident","Loss of a finger, changed on its own");
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,status='proposed',updated_at=created_at+interval '3 hours' WHERE id=$1",[lone]);
       await seedLedger(account);
-      assert.equal(await basis(touched),600000,"A proposed row an older join stamped is moved to the personal accident cover");
-      assert.equal(await basis(edited),1000000,"A changed, confirmed row still keeps its figure");
+      for(const id of batch)assert.equal(await basis(id),600000,"A row stamped with a batch by an older join is moved to the personal accident cover, confirmed or not");
+      const kept=async(id:string)=>(await db.query<{sum_basis:string;conditions:string[]}>("SELECT sum_basis::text,conditions FROM coverage_rules WHERE id=$1",[id])).rows[0];
+      for(const id of [edited,lone]){
+        const k=await kept(id);
+        assert.equal(Number(k.sum_basis),1000000,"A row changed on its own keeps its figure, whatever its status");
+        assert.equal(k.conditions.filter(c=>/may be worked out from the wrong cover/.test(c)).length,1,"…and says once that it may be worked out from the wrong cover");
+        assert.match(k.conditions.find(c=>/wrong cover/.test(c))!,/S\$1,000,000.*S\$600,000/);
+      }
+      await seedLedger(account);
+      assert.equal((await kept(lone)).conditions.filter(c=>/wrong cover/.test(c)).length,1,"The note is not added twice");
 
       // Live release set (20 Oct): a travel wording's third-party liability row ("if you are liable for accidental death,
       // injury or damage to other people", one figure per plan column) showed as the person's own "Accidental death
