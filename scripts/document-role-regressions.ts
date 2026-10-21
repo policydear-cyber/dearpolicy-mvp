@@ -68,6 +68,18 @@ async function main() {
     assert.equal(deterministicDocumentRole(nameLine, null), "certificate");
   });
 
+  await t("1/3 control (R53-1): definitions are not names", () => {
+    const definitions = doc(
+      "CERTIFICATE OF INSURANCE PART 2: HIGHLIGHTS OF COVER\nInsured Person: any member of the Scheme\nLife Assured: the person named in Part 1",
+      "Plan A Sum Insured: S$100,000\nPlan B Sum Insured: S$50,000",
+    );
+    assert.equal(deterministicDocumentRole(definitions, null), "benefit_guide");
+    const master = doc("Harbour Group Insurance Summary\nMaster Policy No. G123400\nInsured Person: any eligible employee of the company");
+    assert.notEqual(deterministicDocumentRole(master, null), "personal_schedule");
+    const definedHolder = doc("Your travel insurance summary\nPolicy number : TRV2026-00012345\nPolicyholder: means the person who bought this policy");
+    assert.notEqual(deterministicDocumentRole(definedHolder, null), "personal_schedule");
+  });
+
   // 2. A cover letter sent with the policy
   const letter = "Mr Lim Wei Jie\tCustomer Service\nBlk 1 Example Road\tHotline: (65) 6000 0000\n1 March 2026\nDear Mr Lim\nYour Example Critical Illness Policy is now ready\nHere's your policy document for your safekeeping.";
   const signOff = "Thank you for choosing Example Life.\nYours sincerely\nA Person\nHead of Operations";

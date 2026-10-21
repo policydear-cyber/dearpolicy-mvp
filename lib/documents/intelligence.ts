@@ -66,15 +66,21 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
   // A personal summary ("Your travel insurance summary") prints the policy's own number (not a group scheme's) and the
   // person it is for ("Your name : Lim Wei Jie"), not just the words.
   if (/\b(?:insurance|policy)\s+summary\b/.test(t)
-    && /(?<!group\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
-    && /\b(?:policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured)\b[^\n:]{0,20}:[ \t]*[a-z][a-z.'-]+[ \t,]+[a-z]/.test(t)) return "personal_schedule";
+    && /(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
+    && new RegExp(String.raw`\b(?:policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t)) return "personal_schedule";
   return null;
 }
 
+/** A printed person's name after a label ("Life Assured: Lim Wei Jie"), not a definition ("any eligible employee",
+ * "the person named in Part 1"). Lower-case text. */
+const PERSON_VALUE = String.raw`(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as)\b)[a-z][a-z.'-]+[ \t,]+[a-z]`;
+const NAMED_PERSON = new RegExp(String.raw`\b(?:life assured|insured member|insured person)\s*:[ \t]*` + PERSON_VALUE);
+
 /** Part 1 of a certificate: who is insured and for how much, in any of the ways a certificate prints it. */
 function partOneParticulars(text: string) {
-  if (/particulars of insured|insured person'?s? name|name of (?:the )?insured|\b(?:life assured|insured member|insured person)\s*:[ \t]*[a-z]/.test(text)) return true;
-  if (/sum (?:assured|insured)\s*:?[ \t]*(?:s\$|sgd)?[ \t]*\d[\d,]{3,}/.test(text)) return true;
+  if (/particulars of insured|insured person'?s? name|name of (?:the )?insured/.test(text)) return true;
+  // A sum assured counts only beside a named person: a plan table in Part 2 prints sums too.
+  if (NAMED_PERSON.test(text)) return true;
   // A name line with an amount and the date it took effect ("Lim Wei Jie  S$500,000  As of 01/02/2023").
   return text.split("\n").some((line) => /(?:s\$|sgd)\s?\d[\d,]{3,}/.test(line) && /\bas of \d|effective date\s*:?\s*\d/.test(line));
 }
