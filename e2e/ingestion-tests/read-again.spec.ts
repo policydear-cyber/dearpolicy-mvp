@@ -144,3 +144,69 @@ test.describe.serial("Read again on a ready document", () => {
     expect((await sql<{ u: string; s: string }>("SELECT updated_at::text u,processing_status s FROM policies WHERE id=$1", [doc.id]))[0]).toEqual({ u: before, s: "ready" });
   });
 });
+
+test.describe.serial("Read again after a correction: the name moved from one person to another", () => {
+  let page: Page;
+  const printed = personName("Morgan"), wrong = printed, right = name("Morgan-Real");
+  const file = `${name("read-again-fix")}.pdf`;
+  const ids: Record<string, string> = {};
+  let doc: Policy;
+  const card = () => page.locator(`[data-policy-id="${doc.id}"]`);
+  const links = async () => sql<{ family_member_id: string; source: string }>("SELECT family_member_id::text,source FROM policy_members WHERE policy_id=$1 ORDER BY family_member_id", [doc.id]);
+
+  test.beforeAll(async ({ browser }) => {
+    page = await (await browser.newContext()).newPage(); await page.goto("/");
+    const started = await api(page, "/api/household/start", { method: "POST", body: { name: name("ReadAgainFix-Household") } });
+    expect(started.status, JSON.stringify(started.body)).toBe(200);
+    // The same household as above, whose hour of re-reads the limit test used up: start a fresh hour.
+    await sql("DELETE FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
+  });
+  test.afterAll(async () => {
+    if (doc) await api(page, `/api/policies/${doc.id}`, { method: "DELETE" });
+    for (const id of Object.values(ids)) await api(page, `/api/family/${id}`, { method: "DELETE" });
+  });
+
+  test("TE-EXTRA: the reading matches the printed name to A; the household removes A and links the name to B by hand", async () => {
+    await page.goto("/family");
+    for (const [who, rel] of [[wrong, "spouse"], [right, "child"]] as const) {
+      await page.locator("#fm-new-name").fill(who);
+      await page.locator("#fm-new-relationship").selectOption(rel);
+      await page.getByRole("button", { name: "+ Add person" }).click();
+      await expect(page.locator(".profile-add-panel [role=status]")).toContainText("Profile added");
+    }
+    for (const m of (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family) if (m.display_name === wrong || m.display_name === right) ids[m.display_name] = m.id;
+    expect(Object.keys(ids)).toHaveLength(2);
+    await page.goto("/policies");
+    await page.locator(".upload-form input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf",
+      buffer: await certificatePdf({ label: "read-again-fix", policyNumber: "RA-2002", insuredNames: [printed], amounts: [90000] }) });
+    await page.getByRole("button", { name: /Upload/ }).first().click();
+    await expect.poll(async () => (await policies(page)).find((p) => p.original_filename === file)?.processing_status, { timeout: 240_000, intervals: [1500] }).toBe("ready");
+    doc = (await policies(page)).find((p) => p.original_filename === file)!;
+    expect((await links()).filter((l) => l.family_member_id === ids[wrong]).map((l) => l.source), "the reading matched the printed name to A").toEqual(["ai_name_match"]);
+
+    // Remove A (the covers picker's save; a document must cover someone, so the save names B), then answer
+    // "Who is this?" with B on the card.
+    const removed = await api(page, "/api/policies/link-person", { method: "POST", body: { policyId: doc.id, assignments: [{ familyMemberId: ids[right], planTier: null }] } });
+    expect(removed.status, JSON.stringify(removed.body)).toBeLessThan(300);
+    expect((await links()).map((l) => l.family_member_id), "A is removed").not.toContain(ids[wrong]);
+    await page.goto("/policies");
+    await card().locator(`select[id="who-${doc.id}-${printed}"]`).selectOption({ label: right });
+    await expect.poll(async () => (await links()).map((l) => `${l.family_member_id}:${l.source}`), { timeout: 30_000 }).toEqual([`${ids[right]}:user_declared`]);
+  });
+
+  test("TE-EXTRA: Read again keeps B, does not bring A back, and does not ask about the name", async () => {
+    await sql("UPDATE policies SET document_role='product_summary' WHERE id=$1", [doc.id]);
+    await page.goto("/policies");
+    await card().getByRole("button", { name: "Read again", exact: true }).click();
+    await card().getByRole("button", { name: "Confirm read again" }).click();
+    await expect.poll(async () => (await sql<{ r: string; s: string }>("SELECT document_role r,processing_status s FROM policies WHERE id=$1", [doc.id]))[0], { timeout: 240_000, intervals: [1500] })
+      .toEqual({ r: "certificate", s: "ready" });
+    expect.soft((await links()).map((l) => `${l.family_member_id}:${l.source}`), "only B, as the household's own link").toEqual([`${ids[right]}:user_declared`]);
+    const covers = await sql<{ family_member_id: string; amount: string }>("SELECT family_member_id::text,amount::text FROM policy_coverages WHERE policy_id=$1", [doc.id]);
+    expect.soft(covers.map((c) => c.family_member_id), "the certificate's cover is B's, not A's").toEqual([ids[right]]);
+    const now = (await policies(page)).find((p) => p.id === doc.id)!;
+    expect.soft(now.detected_people.map((p) => [p.name, p.matchedFamilyMemberId]), "the printed name stays matched to B").toEqual([[printed, ids[right]]]);
+    await page.goto("/policies");
+    await expect.soft(card()).not.toContainText(`“${printed}” is named in it`);
+  });
+});
