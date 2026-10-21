@@ -4230,3 +4230,25 @@ I re-ran all 44 earlier layouts plus 8 new ones (tsx, no DB, no paid calls).
 - Add H2 and H3 as tests.
 
 With these two fixed, every path I have found either reads the row's own cap or withholds the amount.
+
+## R103 — PR #96 delta dc62892 → ee7d121 (otherMoney, connective-label skip)
+
+**Verdict: NOT READY. One condition is left, in the same "whichever is lower" class.**
+
+I re-ran all 52 earlier layouts plus 7 new ones (tsx, no DB, no paid calls).
+- H2 and H3 now withhold, and so do I1 (the second figure on a joined next line) and I3 (SGD).
+- I6 (the cap repeated at the same value) still reads 50,000.
+- I7 ("Orthopaedic 20% …" after Hip's cap on the same line) is cut correctly and reads Hip's own 50,000.
+- G7 ("subject to a maximum of S$100,000 per family" under the cap) and I5 (a base figure in the quote) now withhold. That is safe over-refusal.
+
+- **R103-1 (second limit missed outside the joined text)**: a tied cap is accepted while a "whichever is lower" second limit is printed where `otherMoney` doesn't look.
+  - I2: "Hip\t75% of Sum Insured up to S$50,000\nper accident, or S$500 per day, whichever is lower".
+    - The next line starts with "per", so it is not joined. It is in `near`, but `near` is only read when no cap is tied.
+    - The result is cap 50,000 accepted.
+  - I4: "… up to S$50,000 or 500 per day, whichever is lower". The second figure has no currency sign, so `otherMoney` misses it.
+  - Fix (one condition): when a cap is tied, withhold the amount if row + near contains "whichever" and any number other than the claimed cap and the row's own percentage(s).
+    - E5 ("(or up to S$50,000, whichever is lesser)") still reads.
+    - This also covers H3 regardless of the currency sign.
+  - Add I2 and I4 as tests.
+
+I found nothing else. If the next delta only adds this condition and its tests, I will mark it READY on that delta.
