@@ -97,9 +97,11 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
     // A tab cell holding its own label and then a cell with its own percentage is the next row ("Hip\t75%\tWrist\t20% up
-    // to S$5,000"): its limit is that row's, not near this one (follow-up to TE L22 control).
+    // to S$5,000"): its limit is that row's, not near this one (follow-up to TE L22 control). A label with a cap word
+    // ("Payable up to\t50% of S$100,000") or starting with a connective ("Or\t10% …") may be this row's limit, so it
+    // stays near (Critic R105, TE layout 32).
     const nextRowCells = tail.match(/^\t+([A-Z][^\t%\d]*)\t+[^\t]*\d\s*%/);
-    if (!nextRowCells || CONNECTIVE.test(nextRowCells[1])) near.push(tail);
+    if (!nextRowCells || CONNECTIVE.test(nextRowCells[1]) || NEAR_CAP.test(nextRowCells[1])) near.push(tail);
     // In a two-column extraction the rest of the line may hold the next row (TE L19-L23): only the part before the next
     // tab cell or the next label with a percentage can be this row's.
     const cell = tail.split("\t").find((c) => c.trim()) ?? "";
