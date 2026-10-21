@@ -28,6 +28,12 @@ export type TableRow = {
   personId: string; person: string; coverKey: string; product: string; cover: string; plan: string | null;
   benefit: string; section: string | null; column: string | null; pays: CheckedBenefit["pays"]; figure: Figure;
   fromDay: number | null; maxDays: number | null; conditions: string[]; source: Source; baseSource: Source | null; linkWhy: string;
+  /** Who or what the column's figure is for when its heading says so ("child", "per family"): dropped when matching the
+   * column to a plan, so it must be shown with the figure and said in any answer (Critic R89-1). */
+  qualifier: string | null;
+  /** For a percentage row: the percentage, the base it was worked out on, and whether that base is the household's
+   * correction rather than a printed figure. */
+  percent: number | null; base: number | null; baseCorrected: boolean;
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -128,6 +134,12 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
 const UNIT_TOKENS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "hkd", "myr", "adult", "adults", "child", "children", "plan", "plans", "option", "options"]);
 const PER = /\bper\s+(?:policy\s+|calendar\s+)?(?:visit|day|week|month|year|annum|trip|journey|incident|event|claim|accident|disability|person|insured|family)\b/gi;
 export const headingWords = (s: string | null) => norm((s ?? "").replace(/\$/g, " ").replace(PER, " ")).split(" ").filter((t) => t && !UNIT_TOKENS.has(t)).join(" ");
+const QUALIFIER = /\b(?:adults?|child(?:ren)?|per\s+(?:person|insured|family))\b/gi;
+/** The qualifier words of a column heading, in its own spelling ("Child", "per family"), or null. */
+export const qualifierOf = (column: string | null) => {
+  const found = [...new Set((column ?? "").match(QUALIFIER)?.map((q) => q.toLowerCase().replace(/\s+/g, " ")) ?? [])];
+  return found.length ? found.join(", ") : null;
+};
 const within = (a: string, b: string) => ` ${b} `.includes(` ${a} `);
 
 /** Each document's plan list (see above), as heading words. */
@@ -192,7 +204,10 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     for (const p of people) for (const c of p.covers.filter((x) => x.coverKey === l.cover)) {
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure: figureFor(b, c, r.kind === "illustration"), fromDay: b.fromDay, maxDays: b.maxDays,
-        conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why });
+        conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
+        percent: b.pays === "percent" ? b.value : null,
+        base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
+        baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected" });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };

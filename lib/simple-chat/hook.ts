@@ -21,10 +21,22 @@ import { simpleChatModel } from "./flag";
 import { loadHousehold, renderLibrary, type Household } from "./library";
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
+import type { BenefitTable } from "@/lib/benefit-table/assemble";
+import { amountsFromRows, chatRows, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
-export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date };
+export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
+  /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
+  table?: (accountId: string) => Promise<BenefitTable | null> };
+
+/** The signed-in household's benefit table when DEARPOLICY_BENEFIT_TABLE is live, otherwise null. */
+async function liveTable(accountId: string): Promise<BenefitTable | null> {
+  const { appDb, benefitTableLive } = await import("@/lib/benefit-table/app");
+  if (!(await benefitTableLive())) return null;
+  const { tableFor } = await import("@/lib/benefit-table/service");
+  return (await tableFor(appDb, accountId)).table;
+}
 
 /** Opens or continues the conversation; who the question is about is left to the model and the checks. */
 export async function prepareSimpleChat(request: ChatRequest): Promise<ChatContext> {
@@ -68,21 +80,25 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const household = await (deps.household ?? loadHousehold)(request.accountId);
   if (household.accountId !== request.accountId) throw new Error("The library read is for another household; refusing to answer");
   const history = await (deps.history ?? conversationTurns)(request.accountId, conversation.id);
+  const table = await (deps.table ?? liveTable)(request.accountId);
+  const rows = table ? chatRows(table, household) : null;
   const started = Date.now();
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
-    reply = await model.call({ library: renderLibrary(household), history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
+    reply = await model.call({ library: renderLibrary(household) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
-  const parsed = readModelAnswer(reply.json);
+  // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
+  const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household) : { json: reply.json, report: null };
+  const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
   const prior = conversation.state as SimpleChatState;
-  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage), ms: Date.now() - started, report }].slice(-12);
+  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage), ms: Date.now() - started, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
   const next: SimpleChatState = { ...prior, intent: "policy_question", simpleChat: { turns } };
   delete next.pending;
   await opts.check?.();

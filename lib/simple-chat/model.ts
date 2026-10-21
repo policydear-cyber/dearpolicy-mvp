@@ -3,10 +3,11 @@
  * prompt caching; OpenAI goes through the app's existing hosted call (lib/ai/providers.ts). Tests pass their own
  * SimpleModel, so nothing here is called offline. */
 import type { ModelChoice } from "@/lib/ai/providers";
-import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "./prompt";
+import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT, TABLE_ANSWER_SCHEMA } from "./prompt";
 
 export type Turn = { role: "user" | "assistant"; text: string };
-export type SimpleModelCall = { library: string; history: Turn[]; question: string };
+/** `withRows`: the library carries the benefit table, and each statement names its row (lib/benefit-table/chat.ts). */
+export type SimpleModelCall = { library: string; history: Turn[]; question: string; withRows?: boolean };
 export type SimpleUsage = { input: number; cacheWrite: number; cacheRead: number; output: number };
 export type SimpleModelReply = { json: unknown; stopReason: string | null; model: string; usage: SimpleUsage };
 export type SimpleModel = { choice: ModelChoice; call(args: SimpleModelCall): Promise<SimpleModelReply> };
@@ -50,7 +51,7 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
       { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } },
     ],
     messages: [...alternating(args.history).map((t) => ({ role: t.role, content: t.text })), { role: "user" as const, content: args.question }],
-    output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: SIMPLE_ANSWER_SCHEMA as unknown as Record<string, unknown> } },
+    output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
     // Server-side refusal fallback (routes a declined request to a fallback model within the same call).
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default" as const,
@@ -96,7 +97,7 @@ export function openaiModel(choice: ModelChoice): SimpleModel {
       const reply = await hostedStructuredCompletion(choice, {
         system: SIMPLE_SYSTEM_PROMPT + "\n\n" + args.library,
         user: (earlier ? `<conversation_so_far>\n${earlier}\n</conversation_so_far>\n\n` : "") + args.question,
-        jsonSchema: SIMPLE_ANSWER_SCHEMA, maxOutputTokens: MAX_OUTPUT_TOKENS,
+        jsonSchema: args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA, maxOutputTokens: MAX_OUTPUT_TOKENS,
       });
       return {
         json: reply.truncated ? null : parseJson(reply.content), stopReason: reply.truncated ? "max_tokens" : reply.resolved.finishReason,

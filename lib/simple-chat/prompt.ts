@@ -117,3 +117,11 @@ export type ModelStatement = {
   ofBill?: { bill: string } | null;
 };
 export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; nextSteps: string[]; question: string | null };
+
+/** The same answer with each statement's benefit-table row (lib/benefit-table/chat.ts): used only when the household's
+ * benefit table is shown with the documents. */
+export const TABLE_ANSWER_SCHEMA = (() => {
+  const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
+  return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
+    items: { ...st, required: [...st.required, "row"], properties: { ...st.properties, row: nullable("string") } } } } };
+})();
