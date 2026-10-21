@@ -3039,3 +3039,40 @@ because database suites are out of scope for this role.
 **Ready on the code.** Its scope is limited to the person's own contract, and it is idempotent. Because it rewrites
 stored Coverage data on production when it runs, the merge needs DC's explicit yes, with a one-line explanation that
 the accident rows will switch from S$1,000,000 to S$600,000 and a few ambiguous rows may show only their percentage.
+
+# Round 62: recheck of PR #82 at `844e968` (R60-1 to R60-3, plus the owner's question on certificate-line conditions)
+
+Method: as in round 60. All earlier probes and the snapshot sweep were rerun, with new probes for the certificate-line
+condition path.
+
+## Confirmed fixed
+
+- **R60-1:** "Child Education Fund Benefit S$250", "Ambulance Cost Up to S$10,000" and "Compassionate … S$5,000" give no
+  card. The legitimate H7 mobility-aid row still gives "Up to S$10,000".
+- **R60-2:** no card moves to a Charmaine-only document or to the unlinked CI plan. The legitimate moves (S$250
+  recuperation to the BS line with the 24-hour condition, child education to the BS line with its age condition) still
+  work.
+- **R60-3:** the home-rehab wheelchair condition is no longer kept on the "J, Accidental Hospital Recuperation" card.
+- **No other change:** the snapshot sweep matches, and every round 52–59 probe gives the same result as at fa0ef79.
+
+## The owner's question: yes, restrict it (R62-1)
+
+**R62-1 (Medium-High, cross-person borrowed condition; present since 39ab335, missed in round 59).** The certificate-line
+path in `conditionApplies` accepts a condition from *any* document whose section heading names the same cover.
+- A travel policy linked only to Charmaine, headed "PERSONAL ACCIDENT", prints "The benefit is reduced by 50% for an
+  Insured Person aged 70 or above."
+- That condition is kept on **Desmond's** group PA certificate line (S$600,000).
+- My round 59 probe used "SECTION 2: PERSONAL ACCIDENT", which `coverName` does not read as that cover, so it passed by
+  accident.
+- I could not make the owner's exact case (a BS "BENEFIT 2: GROUP PERSONAL ACCIDENT" summary row taking another
+  document's condition) borrow in this household. The path allows it all the same.
+
+Fix (small): take the cross-document path only when
+- the statement's line names a household member (the certificate's "Name S$… As of …" line), as the owner proposes; and
+- the other document has the same non-empty linked people as the statement's document, the same guard R60-2 uses.
+
+Add the Charmaine-travel control.
+
+## Verdict on PR #82 at `844e968`
+
+**Not ready, one small fix:** R62-1. Everything from R59 and R60 is fixed and confirmed.
