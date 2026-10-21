@@ -3838,3 +3838,18 @@ Cross-household scope: OK. accountId comes from `requireHouseholdContext`, and t
 Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
 
 Verdict: **NOT READY until R80-1 is fixed** (database-side guard). R80-2 and R80-3 are optional.
+
+## Round 81: PR #92 delta, head 06feac8 (R80 fixes, TPD on the life cover)
+
+Read-only review of the diff. TPD wording checked in DC's snapshot locally (not committed); no DB suite run.
+
+R80-1 fixed. `ledgerReadUnderway` (`lib/ledger/extract.ts:364`) skips the refresh in three cases: an in-process read; a queued, extracting or indexing document updated within 30 minutes; and a ready document still due for its ledger read. The last case covers an upload's own read at `ingest.ts:941`, since the document is already ready with `ledger_read_at` NULL while it reads. A reprocess goes back to queued, so the second case covers it. A backed-off document does not hold the refresh. These are all the statuses the code writes (queued, extracting, indexing, ready, failed). R80-2 is fixed (duration logged) and so is R80-3 (map pruned above 1,000 entries).
+
+TPD join (`lib/policies/benefit-catalog.ts:1170-1178`). The DC case is right. GTL "Total and Permanent Disability Benefit (TPD) 100% of Sum Insured" (Product Summary p5, Benefit Summary p3) has no disability cover on the contract, so it joins the single life cover, S$1,000,000, matching the Evidence Reviewer. "TPD due to Accident" (150%, Benefit Summary p5), "Mobility aid upon accidental total & permanent disablement" (p8) and the travel policy's personal-accident TPD all name an accident, so they stay off the life sum. The join needs exactly one life/death cover with a figure, so two life lines resolve to nothing.
+
+- **R81-1 (Medium, wrong-amount risk, cheap hardening)** The TPD trigger can come from the quote alone, and the only accident check is a word search over the benefit's name and quote. Benefit Summary p10, "N. Natural Catastrophe", reads: "If an Insured Person sustains bodily injury as a result of an Accident due to a Natural Catastrophe, which ... results in death or Total and Permanent Disability from the date of loss, we will pay an additional fifteen percent (15%) of the Sum Insured or S$50,000, whichever is lesser." Suppose a row is named "Natural Catastrophe", its quote is the contiguous second part ("results in death or Total and Permanent Disability ... fifteen percent (15%) of the Sum Insured"), it has no `requires: accident`, and no product-name match placed it first. That row has a TPD trigger and no "accident"/"injur" word, so it joins GTL: 15% of S$1,000,000 instead of the personal accident S$600,000. Before this change it resolved to no cover and showed no figure. Fix: join to the life cover only when the benefit's own name states TPD (the claim-events TPD pattern on `benefitName`), not when the quote alone does. DC's GTL row ("Total and Permanent Disability Benefit (TPD)") still joins. Add the Natural Catastrophe shape as a test (it should resolve to no life cover).
+- **R81-2 (Low)** A document that is ready and due but that nothing reads holds the refresh back until a reader picks it up. The dashboard's `after()` read does that on any dashboard load, so this resolves itself. Note only.
+
+Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **NOT READY until R81-1 is in** (one condition plus one test). R81-2 is note only.
