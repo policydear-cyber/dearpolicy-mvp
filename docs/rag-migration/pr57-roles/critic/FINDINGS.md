@@ -2551,3 +2551,47 @@ Fix: track every heading, and accept only when the last one matches.
 
 **Not ready:** fix R50-1 and R50-2 (wrong or unqualified amounts) before any paid app-path run. R50-3 and R50-4 are
 small. The approach is sound.
+
+---
+
+# Round 51: PR #83 at `d883368` (document roles)
+
+Method: code read of the `lib/documents` changes. I ran `documents:role-test` locally (tsx, with zod installed in a
+scratch folder) and ran the main and #83 rules on all 8 snapshot documents (kept out of Git), plus 5 new layout probes.
+No database, model or production read.
+
+- **The test can fail and does:** 10/10 pass on #83, and the same file fails 6 of 10 on main.
+- **Snapshot roles change exactly as reported, and nothing else moves:**
+  - Benefit Summary: certificate → benefit_guide.
+  - The FWD summary (…053): policy_wording → personal_schedule.
+  - The FWD wording (…157): endorsement → policy_wording.
+  - The CI II pack (5e58ea7d…): insurer_letter → personal_schedule. `correspondenceRole` is now null because page 3
+    opens with "Policy Schedule".
+  - Product Summary, Certificate, the CI II illustration and the failed invoice are unchanged.
+
+## Findings
+
+**R51-1 (Medium): a generic group summary can become a personal schedule.** The new `personalDocumentTitle` rule needs
+"insurance/policy summary" plus a printed policy number. The `personal` guard is met by any "policy no." together with
+"sum insured". So "Harbour Group Insurance Summary / Group Policy No. G123400 / … The Sum Insured is shown in your
+certificate." is now `personal_schedule`; on main it was null. Generic terms labelled as personal proof is the same error
+class as the Benefit Summary. Fix: skip a *group* policy number, and require a person field with a value on the same
+page (policyholder, insured person or life assured, then ":" and a name).
+
+**R51-2 (Medium, could hide personal cover): the Part 2-only test only recognises three Part 1 phrasings.** A combined
+certificate whose Part 1 says "Life Assured: …" or "Sum Assured S$…" with an effective date, followed by "CERTIFICATE OF
+INSURANCE PART 2: HIGHLIGHTS OF COVER", is now `benefit_guide`. Main had `certificate`. That would drop a person's
+documented cover. DC's own certificate uses "Particulars of Insured Person(s)" and is unaffected. Fix: count a
+certificate as Part 1 present when it prints any personal field (life assured, insured member, name of insured, a name
+line with an amount and "As of"/effective date). Then add this layout as a control.
+
+**R51-3 (Low): a letter that encloses any titled page is no longer correspondence.** That is right for the CI II welcome
+pack, and for a renewal letter enclosing new "Policy Wording" (now policy_wording). But a claim letter that attaches a copy
+of the policy schedule is now a `personal_schedule`, a second copy of existing cover. It is acceptable because the
+schedule is real; the duplicate-handling path should cope.
+
+## Verdict on PR #83 at `d883368`
+
+**Not ready yet:** tighten R51-1 and R51-2. Both are small regex conditions, and each needs one control case. The four
+real fixes are correct and nothing else in this household moves. After merge, DC still needs to re-read the four
+documents (as the report says).
