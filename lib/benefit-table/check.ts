@@ -101,7 +101,8 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
     // tab cell or the next label with a percentage can be this row's.
     const cell = tail.split("\t").find((c) => c.trim()) ?? "";
     // The next row starts with an upper-case label; "or 10% of annual salary" is this row's second limit (Critic R101-2).
-    const next = cell.search(/\s+[A-Z][^%\d]*\d+(?:\.\d+)?\s*%/);
+    // A label never starts with a connective: "Or 10% of annual salary" is still this row's (Critic R102-2).
+    const next = [...cell.matchAll(/\s+([A-Z][^%\d]*\d+(?:\.\d+)?\s*%)/g)].find((m) => !CONNECTIVE.test(m[1]))?.index ?? -1;
     const own = next < 0 ? cell : cell.slice(0, next);
     otherPercent = PERCENT.test(own);
     if (CONNECTIVE.test(own) && !PERCENT.test(own)) seg += own;
@@ -230,8 +231,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
       const tied = s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
-      if (tied && otherPercent) {
-        out.dropped.push({ what: label, why: `cap ${claimed} printed with another percentage limit; no amount is worked out for it` });
+      // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
+      // limit too (Critic R102-1).
+      const otherMoney = [...flat(row).matchAll(/(?:s\$|us\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/g)].some((m) => Number(m[1].replace(/,/g, "")) !== claimed);
+      if (tied && (otherPercent || otherMoney)) {
+        out.dropped.push({ what: label, why: `cap ${claimed} printed with another limit; no amount is worked out for it` });
         capUnread = true;
       } else if (tied) {
         cap = claimed; capSource = s;
