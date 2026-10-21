@@ -4087,3 +4087,21 @@ Probed `checkReading` and `nameStatesMoney` (tsx, no DB, no paid calls).
   - Add N1, N3, N4 and N5 as tests (tab and space layouts).
 - Low (not new): a cap printed once for a section ("All benefits subject to a maximum of S$100,000 per policy year") is not read, so rows under it are worked out uncapped (N7). Worth a follow-up.
 - Low: `nameStatesMoney` now refuses "Benefit 365 days" and "ICU 500". That hides amounts but is safe.
+
+## R96 — PR #96 delta 99b7a5c → 2eeccc5 (row anchored on quote offset; continuation rule; names by role)
+
+**Verdict: NOT READY** (one blocker left in the continuation rule).
+
+Probed `checkReading` on 11 page layouts and `nameStatesMoney` on 11 names (tsx, no DB, no paid calls).
+
+- R95-1 is fixed. With a tab row, N4 (cap read) gives cap 50,000. N5 (cap not read) gives `capUnread=true`, so no uncapped amount.
+- R95-2 is fixed for capitalised rows: N1 (space layout), N2 (tabs) and B5 (two rows on one line) refuse the neighbour's cap. N3 (a two-row quote) is dropped.
+- **R96-1 (blocker, a cap from a neighbouring row)** `lib/benefit-table/check.ts` `continues`: a line that starts lower-case or with "(" counts as a continuation. So the next row is read as part of this one when items are lettered or numbered, which is common in policy wordings. Hip takes Wrist's S$5,000 cap in all of these:
+  - B1 "(a) Hip 75%\n(b) Wrist 20% up to S$5,000" gives cap 5000.
+  - B2 "a) Hip 75%\nb) Wrist 20% up to S$5,000" gives cap 5000.
+  - B3 "(i) Hip 75%\n(ii) Wrist 20% up to S$5,000" gives cap 5000.
+  - B4 lower-case rows "hip fracture 75%\nwrist fracture 20% up to S$5,000" gives cap 5000.
+
+  Fix: a line is never a continuation when it starts with an item marker (`^\s*\(?([a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s`) or holds its own percentage, figure-with-label or tab-separated cells. Add B1 to B4 as tests. With the cap left unread (B6), `capUnread` is already true, so only the claimed-cap path is open.
+- Names by role are fine for the R94-1 shapes. "Death 1000000", "Accident 50000" and "Accidental Death 200000" in product or cover names are refused. "Shield 360", "MER 1500" and "Smart Life 100" pass. Benefit names keep the strict rule ("Room & Board 300" is refused) and allow counts ("Benefit 365 days").
+- Low: a 4-digit amount in a product or cover name passes ("Accidental Death 5000"). This is accepted as the cost of product numbers.
