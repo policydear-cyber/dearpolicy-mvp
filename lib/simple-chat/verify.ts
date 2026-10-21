@@ -158,13 +158,15 @@ function tableCurrency(pageText: string, offset: number): string | null {
 /** The "(S$)" table a row sits in (R68-1, R68-3): the heading line is above the row, and nothing between them ends the
  * table: another unit heading ("(Days)", "(%)", "(Visits)") or a line of prose (a sentence, or a long line). `perVisit`
  * is whether the heading's own lines just above it say "Limit(s) Per Visit" (or claim, incident, event, admission). */
-function moneyTable(pageText: string, offset: number): { perVisit: boolean } | null {
+function moneyTable(pageText: string, offset: number): { perVisit: boolean; plans: number } | null {
   const lines = (pageText ?? "").slice(0, offset).split("\n");
   lines.pop();
-  let table: { perVisit: boolean } | null = null;
+  let table: { perVisit: boolean; plans: number } | null = null;
   lines.forEach((l, i) => {
     if (/^[ \t]*\((?:S\$|SGD\$?|SG\$)\)[ \t]*$/.test(l)) {
-      table = { perVisit: /\blimits?\s+per\s+(?:visit|claim|incident|event|admission)\b/i.test(lines.slice(Math.max(0, i - 3), i).join(" ")) };
+      const head = lines.slice(Math.max(0, i - 3), i).join(" ");
+      // The plan columns the heading names ("Plan A	Plan B"): a row with one figure per plan column is priced per plan (R72-1).
+      table = { perVisit: /\blimits?\s+per\s+(?:visit|claim|incident|event|admission)\b/i.test(head), plans: new Set([...head.matchAll(/\bPlan\s+([A-Z0-9])\b/g)].map((m) => m[1])).size };
       return;
     }
     if (/^[ \t]*\([^)]{1,15}\)[ \t]*$/.test(l) || /\((?:days?|%|months?|years?|weeks?|times|visits?|sessions?)\)/i.test(l) || l.trim().length > 90 || /[.:]\s*$/.test(l)) table = null;
@@ -409,10 +411,16 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     const pageText = doc.pages.find((p) => p.page === found.page)?.text ?? "";
     const table = tableCurrency(pageText, found.offset);
     const declared = pageCurrency(pageText) ?? table;
+    const columns = table ? moneyTable(pageText, found.offset)!.plans : 0;
     const signed = figures[0]?.currency;
     // Under a table's own currency heading, a whole figure alone in a value cell ("...for Illness	100") is an amount too.
     const rows = pageText.slice(rowLine(pageText, found.offset).start).split("\n").slice(0, found.excerpt.split("\n").length).join("\n");
-    const cells = table ? [...rows.matchAll(/\t[ ]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)[ ]*(?=\t|$)/gm)].map((m) => Number(m[1].replace(/,/g, ""))) : [];
+    // A row prices its figure only when it prints one, or one under each plan column: "Physiotherapy	80	12" under "Limit
+    // Per Visit / Max visits" holds a count beside the limit, and no cell of it is read as money (R72-1).
+    const cells = table ? rows.split("\n").flatMap((line) => {
+      const own = [...line.matchAll(/\t[ ]*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)[ ]*(?=\t|$)/g)].map((m) => Number(m[1].replace(/,/g, "")));
+      return own.length === 1 || (columns > 1 && own.length === columns) ? own : [];
+    }) : [];
     const inQuote = (v: number) => numbersIn(found.excerpt).some((n) => sameValue(n, v));
     if (!declared || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
     const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value)) ?? [...found.excerpt.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,]*\d)/g)].find((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
@@ -420,7 +428,7 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
     // "Per visit" and "per (policy) year" say how often a sum applies, not what is counted; "limit" never makes a count money (R68-1).
     const counted = label.replace(/\bper\s+(?:policy\s+)?(?:year|visit|annum)\b/gi, " ");
-    if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?|plans?|co-?insurance|sessions?|visits?|period|term|survival|waiting)\b/i.test(counted) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|co-?payment|deductible|excess)\b/i.test(counted)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
+    if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?|plans?|co-?insurance|sessions?|visits?|claims|stays?|admissions?|nights?|period|term|survival|waiting)\b/i.test(counted) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|co-?payment|deductible|excess)\b/i.test(counted)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
     return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
@@ -487,7 +495,9 @@ function billAgainst(st: ModelStatement, found: Found, household: Household, amo
   const sign = amount.text.replace(/^Up to\s+/i, "").replace(/[\d,.\s]+$/, "");
   // The bill is a figure the household wrote as money, in their own currency ("$800" stays theirs; "US$80" or "RM800"
   // never meets an S$ limit), for one visit or claim: "$300 for 2 visits" is not set against a per-visit limit (R68-2/3).
-  const MANY = /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple)\s+(?:visits|claims|days|nights|weeks|months|sessions|times)\b/i;
+  // A count may have words between it and what it counts ("her 2 A&E visits", R72-2); a plural visit or claim, or "twice",
+  // means more than one whatever the words.
+  const MANY = /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple|both)\s+(?:[^\s\d]+\s+){0,3}(?:days|nights|weeks|months|times)\b|\b(?:visits|claims|bills|admissions|sessions|consultations|trips|twice)\b/i;
   const mention = written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
     ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).find((m) => sameValue(m.value, bill));
   if (!mention || (mention.currency !== "$" && SIGN[mention.currency] !== sign) || MANY.test(mention.q)) return null;

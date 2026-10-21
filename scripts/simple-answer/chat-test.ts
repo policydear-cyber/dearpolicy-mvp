@@ -829,7 +829,7 @@ async function main() {
     const one = (row: string, amount: string) => amounts(r59(R59("Counts.pdf", head + row), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: row, amount })]).answer);
     for (const [row, amount] of [["Visits per year\t12", "12"], ["Age limit\t65", "65"], ["Visit limit\t12", "12"], ["Physio sessions\t6", "6"], ["Co-insurance\t20", "20"], ["Plan\t2", "2"], ["Survival period\t30", "30"], ["Policy term\t20", "20"]])
       assert.deepEqual(one(row, amount), [], row);
-    assert.deepEqual(one("Annual Limits Per Policy Year\t1,000\t500", "1,000"), ["S$1,000"], "control: an annual limit is money");
+    assert.deepEqual(amounts(r59(R59("Counts.pdf", "Plan A\tPlan B\n" + head + "Annual Limits Per Policy Year\t1,000\t500"), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Annual Limits Per Policy Year\t1,000\t500", amount: "1,000" })]).answer), ["S$1,000"], "control: an annual limit under plan columns is money");
     assert.deepEqual(one("Co-payment per visit\t10", "10"), ["S$10"], "control: a co-payment per visit is money");
     assert.deepEqual(amounts(r59(R59("Prose.pdf", "Benefits Limits Per Visit\n(S$)\nThe benefits below are paid as stated in the schedule.\nSpecialist\t100"), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Specialist\t100", amount: "100" })]).answer), [], "prose ends the table");
     const bill = (written: string, ofBill: string) => r59(R59("Outpatient2.pdf", head), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100", ofBill: { bill: ofBill } })], [written]).answer.statements!.filter((x) => x.kind === "calculation").length;
@@ -837,6 +837,34 @@ async function main() {
     assert.equal(bill("the bill was RM800", "800"), 0, "another currency");
     assert.equal(bill("it was $800 for 3 visits", "$800"), 0, "several visits");
     assert.equal(bill("the bill was S$800", "800"), 1, "control: the limit's own currency");
+  });
+
+  await check("R72: a '(S$)' row with several figures is priced only under plan columns; a bill for several visits gets no card", () => {
+    const one = (text: string, quote: string, amount: string) => amounts(r59(R59("Counts2.pdf", text), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount })]).answer);
+    const visits = "Benefits\tLimit Per Visit\tMax visits\n(S$)\nPhysiotherapy\t80\t12";
+    assert.deepEqual(one(visits, "Physiotherapy\t80\t12", "12"), [], "R72-1 a count beside the limit");
+    assert.deepEqual(one(visits, "Physiotherapy\t80\t12", "80"), [], "R72-1 no cell of a two-figure row without plan columns");
+    const plans = "Plan A\tPlan B\nBenefits Limits Per Visit\n(S$)\nAnnual Limits Per Policy Year\t1,000\t500";
+    assert.deepEqual(one(plans, "Annual Limits Per Policy Year\t1,000\t500", "500"), ["S$500"], "control: one figure per plan column");
+    assert.deepEqual(one("Plan A\tPlan B\nBenefits Limits Per Visit\n(S$)\nSpecialist\t100\t50\t3", "Specialist\t100\t50\t3", "3"), [], "more figures than plan columns");
+    assert.deepEqual(one("Plan A\tPlan B\nBenefits Limits Per Visit\n(S$)\nClinic 3\t100", "Clinic 3\t100", "3"), [], "a number in the label is not a plan column's cell");
+    const head = "Benefits Limits Per Visit\n(S$)\nLocal Emergency Outpatient Treatment for Illness\t100\n";
+    for (const [row, amount] of [["Maximum claims\t3", "3"], ["Hospital stay limit (per admission)\t30", "30"], ["Hotel nights\t5", "5"], ["Admissions per year\t2", "2"]])
+      assert.deepEqual(one(head + row, row, amount), [], row);
+    const bill = (written: string) => r59(R59("Outpatient3.pdf", head), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100", ofBill: { bill: "$800" } })], [written]).answer.statements!.filter((x) => x.id.endsWith("-bill")).length;
+    for (const w of ["$800 for her 2 A&E visits", "she paid $800 over both visits", "$800 for two A&E trips", "it came to $800 after she went twice", "$800 across 3 separate days"]) assert.equal(bill(w), 0, w);
+    assert.equal(bill("her bill was $800"), 1, "control: one bill");
+    assert.equal(bill("she went to A&E once and the bill was $800"), 1, "control: one visit");
+    // TE 0b8e364 B7: the "Limits Per Visit" heading counts only within the three lines above "(S$)".
+    const far = "Benefits Limits Per Visit\nPlan A\nPlan B\nPlan C\n(S$)\nLocal Emergency Outpatient Treatment for Illness\t100";
+    const cards = (text: string, s: ModelStatement) => r59(R59("Outpatient4.pdf", text), [s], ["her bill was $800"]).answer.statements!;
+    const lim = st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100", ofBill: { bill: "$800" } });
+    assert.equal(cards(far, lim).filter((x) => x.id.endsWith("-bill")).length, 0, "B7 a per-visit heading four lines up");
+    assert.equal(cards(far.replace("Plan A\n", ""), lim).filter((x) => x.id.endsWith("-bill")).length, 1, "B7 control: three lines up");
+    // TE 0b8e364 B11: a worked-out percentage under a per-visit table is an illustration, and takes no bill card.
+    const pct = st({ kind: "amount", text: "Physio.", person: "Ah Kow", document: "D7", quote: "Physiotherapy\t50%", percentOf: { percent: 50, baseAmount: "S$200" }, ofBill: { bill: "$800" } });
+    const got = cards("Benefits Limits Per Visit, 80% of S$200\n(S$)\nPhysiotherapy\t50%", pct);
+    assert.deepEqual(got.filter((x) => x.amount).map((x) => [x.kind, x.amount!.text, x.amount!.illustration]), [["calculation", "S$100", true]], "B11 the percentage is worked out, with no bill card");
   });
 
   await check("TE #88 mutations: each table and bill rule holds on its own", () => {
@@ -851,7 +879,7 @@ async function main() {
     const lim = (ofBill: string) => st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100", ofBill: { bill: ofBill } });
     assert.equal(calc(table, lim("$800"), ["her bill was $800"]).length, 0, "a 'limits per visit' line below the figure");
     const good = "Benefits Limits Per Visit\n(S$)\nLocal Emergency Outpatient Treatment for Illness\t100";
-    assert.equal(calc(good, lim("$300 + $500"), ["the bills were $300 + $500"]).length, 0, "several figures");
+    assert.equal(calc(good, lim("$300 + $500"), ["the bill was $300 + $500"]).length, 0, "several figures");
     const made = calc(good, lim("$800"), ["her bill was $800"]);
     assert.equal(made.length, 1);
     assert.equal(made[0].amount!.illustration, true, "a bill card is an illustration");
