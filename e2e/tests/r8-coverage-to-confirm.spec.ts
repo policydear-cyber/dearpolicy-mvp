@@ -34,13 +34,13 @@ const policies = [PA, LIFE].map((id, i) => ({ id, product_name: i ? "Family Shie
   page_count: 4, processing_error: null, created_at: "2026-10-01T00:00:00Z", linked_people: [{ id: "m1", name: "Alex Tan", relationship: "self", source: "ai_name_match" }],
   detected_people: [], tier_options: [], named_tiers: [] }));
 
-async function mock(page: Page, ledgerRows = rows) {
+async function mock(page: Page, ledgerRows = rows, library = policies) {
   await page.route("**/api/**", async (route) => {
     const p = new URL(route.request().url()).pathname;
     if (p === "/api/ledger") return json(route, { rows: ledgerRows, family, reading: { pending: 0, inProgress: false, documents: [] } });
     if (p === "/api/benefits") return json(route, { benefits });
     if (p === "/api/family") return json(route, { family });
-    if (p === "/api/policies") return json(route, { documentSafetyMode: "malware_scan", policies });
+    if (p === "/api/policies") return json(route, { documentSafetyMode: "malware_scan", policies: library });
     if (p === "/api/auth/signout") return json(route, { ok: true });
     return json(route, {});
   });
@@ -99,4 +99,20 @@ test("R32-4: signing out clears the device-only 'Not in my family' answers", asy
   await page.getByRole("button", { name: "Sign out" }).first().click();
   await page.waitForURL(/\/login/);
   expect(await page.evaluate(() => localStorage.getItem("dearpolicy.notFamily"))).toBeNull();
+});
+
+test("a summary used as matching wording for someone's plan names them, not \"Covers nobody yet\"", async ({ page }) => {
+  const ref = (id: string, name: string, linked: { id: string; name: string; relationship: string; source: string }[]) =>
+    ({ ...policies[0], id, product_name: name, document_role: "product_summary", personal_coverage_confirmed: false, document_authority_label: "Reference", linked_people: linked });
+  await mock(page, rows, [
+    ref("00000000-0000-0000-0000-0000000000e3", "Shield Summary", [{ id: "m1", name: "Alex Tan", relationship: "self", source: "scheme_reference_match" }, { id: "m2", name: "Grace Tan", relationship: "child", source: "scheme_reference_match" }]),
+    ref("00000000-0000-0000-0000-0000000000e4", "Travel brochure", []),
+  ]);
+  await page.goto("/policies");
+  const summary = page.locator(".document-card").filter({ hasText: "Shield Summary" }).getByTestId("covers-picker");
+  await expect(summary).toContainText("Used for Alex Tan, Grace Tan");
+  await expect(summary).not.toContainText("nobody");
+  await expect(summary.getByRole("button", { name: "Change" })).toBeVisible();
+  // A reference document linked to nobody at all still says so.
+  await expect(page.locator(".document-card").filter({ hasText: "Travel brochure" }).getByTestId("covers-picker")).toContainText("Covers nobody yet");
 });
