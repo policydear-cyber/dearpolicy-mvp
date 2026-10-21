@@ -79,6 +79,31 @@ export function locateQuote(household: Household, quote: string, preferred: numb
   return null;
 }
 
+const wordsOf = (s: string) => s.toLowerCase().match(/[a-z]+|\d[\d,]*(?:\.\d+)?/g) ?? [];
+/** A table row the page's text split over two lines in a different order ("Mobility aid upon Accidental Total & Up to
+ * S$10,000" / "Permanent Disablement*", release-set H7): every word and figure of the quote on one line and the next,
+ * on one page. The excerpt is those two lines as stored. A quote of fewer than four words, or two places that fit, gives
+ * none. */
+function acrossTwoLines(household: Household, quote: string): Found | null {
+  const want = wordsOf(quote.replace(/\s*(?:\.{3}|…)\s*/g, " "));
+  if (want.length < 4) return null;
+  const hits: Found[] = [];
+  household.documents.forEach((d, di) => {
+    if (unreadable(d)) return;
+    for (const p of d.pages) {
+      const lines = p.text.split("\n");
+      let at = 0;
+      for (let i = 0; i + 1 < lines.length; i++) {
+        const start = at; at += lines[i].length + 1;
+        const have = new Set(wordsOf(`${lines[i]} ${lines[i + 1]}`));
+        if (want.every((w) => have.has(w)) && !want.every((w) => new Set(wordsOf(lines[i])).has(w)))
+          hits.push({ docIndex: di, page: p.page, excerpt: `${lines[i].trim()} ${lines[i + 1].trim()}`.replace(/[ \t]+/g, " "), offset: start + (lines[i].length - lines[i].trimStart().length) });
+      }
+    }
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
 // ------------------------------------------------------------------ amounts
 const CENT = (n: number) => Math.round(n * 100);
 const sameValue = (a: number, b: number) => CENT(a) === CENT(b);
@@ -112,7 +137,14 @@ export function pageCurrency(pageText: string): string | null {
     // A page listing the currencies a policy can be in ("Six currency options are available: SGD, USD, ...") declares none.
     if (new RegExp(String.raw`currency\s+options|currencies\s+are\s+available`, "i").test(t)) return null;
   }
-  return said.size === 1 ? [...said][0] : null;
+  if (said.size !== 1) return null;
+  const code = [...said][0];
+  // "All amounts are in Singapore dollars unless stated otherwise", or any figure or name of another currency on the page
+  // (a row "(in US$)"): the page does not settle a figure's currency (R59-5).
+  if (/\bunless\s+(?:otherwise\s+)?(?:stated|specified|shown|indicated)\b/i.test(t)) return null;
+  if (moneyFiguresIn(t).some((f) => f.currency !== "$" && f.currency !== code)) return null;
+  if (CURRENCY_NAMES.some(([other, name]) => other !== code && new RegExp(String.raw`(?:${name})`, "i").test(t)) || /US\$|HK\$|(?<![A-Z])A\$|RM\s?\d|€|£|¥/.test(t) || (code !== "SGD" && /(?<![A-Z])S\$/.test(t))) return null;
+  return code;
 }
 /** A figure printed without a sign but written as an amount: grouped thousands ("300,000.00", "1,000") or two decimals
  * ("470.85"). A count, a code or a percentage never is. */
@@ -180,16 +212,16 @@ type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]>; base?: Ba
 const PCTS = /(?<![\d.])(\d+(?:\.\d+)?)\s?(?:%|per\s?cent)/gi;
 const LABEL_STOP = new Set(["and", "the", "for", "due", "with", "from", "any", "one", "per", "all", "his", "her", "its", "of", "to", "or", "in", "on", "an", "by"]);
 const labelWords = (s: string) => s.toLowerCase().replace(/\d+/g, " ").split(/[^a-z]+/).filter((w) => w.length >= 3 && !LABEL_STOP.has(w));
-/** The table row a percentage statement means when its quote is the table's heading or the wording around it rather than
- * the row itself (release-set B4 quoted "Simple Fracture Benefit Limit: S$5,000" for the hip row; H1 quoted the wording's
- * "one hundred and fifty percent (150%)"). It is the one table line, in the quoted document first and then in the others,
- * that ends in the stated percentage (or "<percentage> of Sum Insured") and whose label words all appear in the
- * statement's own words or quote (or at least two of them do). Two or more such lines in a document: none is chosen. */
+/** The table row a percentage statement means when its quote is the table's heading rather than any row (release-set B4
+ * quoted "Simple Fracture Benefit Limit: S$5,000" for the hip row). Only when neither the quote nor its line prints a
+ * percentage: a quoted row whose percentage is not the stated one is refused, never moved (R59-1, R55-1). It is the one
+ * table line in the quoted document that ends in the stated percentage (or "<percentage> of Sum Insured") and whose
+ * distinct label words all appear in the statement's own text. Two or more such lines: none is chosen. */
 function rowFor(st: ModelStatement, found: Found, household: Household): Found | null {
   const pct = st.percentOf!.percent;
-  const said = new Set(labelWords(`${st.text} ${st.quote ?? ""}`));
-  const order = [found.docIndex, ...household.documents.map((_, i) => i).filter((i) => i !== found.docIndex)];
-  for (const di of order) {
+  if ((st.quote ?? "").match(PCTS)) return null;
+  const said = new Set(labelWords(st.text));
+  for (const di of [found.docIndex]) {
     const doc = household.documents[di];
     if (unreadable(doc)) continue;
     const hits: Found[] = [];
@@ -202,9 +234,8 @@ function rowFor(st: ModelStatement, found: Found, household: Household): Found |
         const last = pcts.at(-1);
         if (!last || Number(last[1]) !== pct) continue;
         if (!/^\s*(?:of\s+(?:the\s+)?sum\s+(?:insured|assured))?\s*$/i.test(line.slice((last.index ?? 0) + last[0].length))) continue;
-        const words = labelWords(line.slice(0, last.index));
-        const overlap = words.filter((w) => said.has(w)).length;
-        if (!words.length || (overlap < words.length && overlap < 2)) continue;
+        const words = [...new Set(labelWords(line.slice(0, last.index)))];
+        if (!words.length || !words.every((w) => said.has(w))) continue;
         const lead = line.length - line.trimStart().length;
         hits.push({ docIndex: di, page: page.page, excerpt: line.trim().replace(/[ \t]+/g, " "), offset: start + lead });
       }
@@ -308,7 +339,7 @@ function checkAmount(st: ModelStatement, quoted: Found, household: Household, pe
     const ownPcts = (f: Found) => [...rowLine(household.documents[f.docIndex].pages.find((p) => p.page === f.page)!.text, f.offset).text.matchAll(PCTS)].map((m) => Number(m[1]));
     let found = quoted;
     if (ownPcts(found).at(-1) !== pct) {
-      const row = rowFor(st, quoted, household);
+      const row = ownPcts(found).length ? null : rowFor(st, quoted, household);
       if (!row) return { ok: false, why: "the percentage is not the quoted row's own figure" };
       found = row;
     }
@@ -352,35 +383,60 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     const declared = pageCurrency(doc.pages.find((p) => p.page === found.page)?.text ?? "");
     const signed = figures[0]?.currency;
     if (!declared || !plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || (signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
-    return { ok: true, amount: { value, text: formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
+    const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value));
+    // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
+    const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
+    if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?)\b/i.test(label) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured)\b/i.test(label)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
+    return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
   }
-  const cur = currencyOf(raw, found.excerpt);
-  return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
+  // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
+  const printed = moneyFiguresIn(found.excerpt).find((f) => sameValue(f.value, value))!;
+  const cur = currencyOf(printed.raw ?? raw, found.excerpt);
+  return { ok: true, amount: { value, text: upTo(found.excerpt, printed.raw ? found.excerpt.indexOf(printed.raw) : -1) + formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
+}
+/** "Up to " when the quoted words print the figure as a limit ("Up to S$500 per incident", "up to maximum of $500",
+ * "funeral expenses of up to $2,000"): a cap is never shown as a plain amount (Evidence Reviewer, 21 Oct: B1, C2, D1, H10). */
+const CAP_BEFORE = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)(?:\s+(?:a\s+)?(?:maximum|max\.?))?(?:\s+(?:amount\s+)?of)?\s*:?\s*$/i;
+function upTo(excerpt: string, at: number): string {
+  return at >= 0 && CAP_BEFORE.test(excerpt.slice(Math.max(0, at - 40), at)) ? "Up to " : "";
 }
 
-/** What a stay of the given length could pay under a daily benefit (release-set B3, H4), from the quoted words alone: the
- * daily amount ("$30 per day"), the day payment starts ("after the 10th day", "from the 11th day") and the most days it
- * pays ("up to a maximum of thirty (30) days", "Max: 30 days"). The stay must be a number of days the household wrote.
- * Null when any of these is not printed in the quote and the row's own lines. */
+/** What a stay of the given length could pay under a daily benefit (release-set B3, H4), from the quoted words alone. It
+ * is worked out only when the row and its own lines print exactly one daily figure ("$30 per day"), one day payment starts
+ * ("after the 10th day", "from the 11th day"), one most-days figure ("up to a maximum of thirty (30) days", "Max: 30
+ * days"), no other number of days, and no other day rule ("less than", "minimum", "at least", "per admission", "per
+ * policy year", intensive care), R59-2. The stay must be one the household described as a stay ("in hospital 12 days",
+ * "a 12-day stay"), R59-3. Anything less shows the daily benefit as printed. */
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fourteen: 14, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60 };
+const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitted|warded|stayed|stay(?:ing)?\s+in\s+(?:the\s+)?hospital)`;
 function stayDaysWritten(asked: string[], days: number): boolean {
-  return asked.some((q) => [...q.matchAll(/\b(\d{1,3}|[a-z]+)[\s-]*(?:days?|nights?)\b/gi)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days));
+  const n = String.raw`(\d{1,3}|${Object.keys(NUMBER_WORDS).join("|")})`;
+  const res = [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"), new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi")];
+  return asked.some((q) => res.some((re) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days)));
 }
+const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   const stay = st.perDay?.stayDays;
   if (!stay || !Number.isInteger(stay) || stay < 1 || stay > 366 || !stayDaysWritten(asked, stay)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!;
-  const text = `${found.excerpt} ${rowWithContinuation(page.text, found.offset)}`.replace(/\s+/g, " ");
-  const daily = moneyFiguresIn(text).some((f) => sameValue(f.value, amount.value) && /^\s*(?:per|a|each)\s+day\b/i.test(text.slice(text.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
-  const after = /\bafter\s+the\s+(\d+)\s*(?:st|nd|rd|th)?\s+day\b/i.exec(text);
-  const from = /\bfrom\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+(?:to\s+\S+\s+)?day\b/i.exec(text);
-  const max = /\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/i.exec(text);
-  if (!daily || !max || (!after === !from)) return null;
-  const unpaid = after ? Number(after[1]) : Number(from![1]) - 1;
-  const most = Number(max[1]);
+  // The row with its own continuing lines, or the quote when it reaches further; each rule is read once.
+  const row = rowWithContinuation(page.text, found.offset).replace(/\s+/g, " ");
+  const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
+  const rule = squash(row).text.includes(squash(quoted).text) ? row : quoted;
+  if (OTHER_DAY_RULE.test(rule)) return null;
+  const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
+  if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
+  const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+day\b/gi)];
+  const maxes = [...rule.matchAll(/\bmax(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b/gi)];
+  if (starts.length !== 1 || maxes.length !== 1) return null;
+  const startDay = Number(starts[0][2]), most = Number(maxes[0][1]);
+  // Every number of days printed is one of these two: "(30) days" and "10th day" only.
+  const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+days?\b/gi)].map((m) => Number(m[1]));
+  if (dayNumbers.some((d) => d !== startDay && d !== most)) return null;
+  const unpaid = starts[0][1].toLowerCase() === "after" ? startDay : startDay - 1;
   const payable = Math.max(0, Math.min(stay - unpaid, most));
   const value = Math.round(amount.value * payable * 100) / 100;
-  const sign = amount.text.replace(/[\d,.\s]+$/, "");
+  const sign = amount.text.replace(/^up to\s+/i, "").replace(/[\d,.\s]+$/, "");
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
 }
 
@@ -521,6 +577,45 @@ function allCovers(household: Household): Set<string> {
   if (!c) { c = new Set(household.documents.filter((d) => !unreadable(d)).flatMap((d) => d.pages.flatMap((p) => headingsOf(p.text).map((h) => h.cover)))); coversOf.set(household, c); }
   return c;
 }
+/** Every page of a document that prints the words: the same sentence can open each cover's section ("If an Insured Person
+ * dies ..."). */
+function placesOf(household: Household, di: number, quote: string): Found[] {
+  return household.documents[di].pages.flatMap((p) => onPage(household, di, p, quote));
+}
+/** Every place one page prints the words: "This Benefit can only be claimed ..." closes each sub-benefit on a page. */
+function onPage(household: Household, di: number, page: HouseholdDocument["pages"][number], quote: string): Found[] {
+  const out: Found[] = [];
+  let text = page.text;
+  for (let n = 0; n < 20; n++) {
+    const f = locateQuote({ ...household, documents: [{ ...household.documents[di], pages: [{ ...page, text }] }] }, quote, 0);
+    if (!f) break;
+    out.push({ ...f, docIndex: di, excerpt: f.excerpt });
+    // Blank what was matched (same length, so offsets hold) and look again.
+    text = text.slice(0, f.offset) + " ".repeat(Math.min(text.length, f.offset + 1) - f.offset) + text.slice(f.offset + 1);
+  }
+  return out;
+}
+/** The line a printed amount moves to when its condition is printed only in another document (Evidence Reviewer, 21 Oct:
+ * B1's S$250 recuperation card cited the Product Summary row, while its 24-hour stay condition is on the Benefit Summary
+ * page that also prints the $250): the one line, on a page that prints one of the card's conditions, that prints the same
+ * figure. Null when there is none or more than one, and then the card stays as quoted. */
+function lineWithCondition(household: Household, c: Checked, quotes: string[]): Found | null {
+  const value = c.amount!.value;
+  const hits = new Map<string, Found>();
+  for (const q of quotes) for (let di = 0; di < household.documents.length; di++) {
+    if (di === c.found!.docIndex || unreadable(household.documents[di])) continue;
+    for (const f of placesOf(household, di, q)) {
+      const text = household.documents[di].pages.find((p) => p.page === f.page)!.text;
+      let at = 0;
+      for (const line of text.split("\n")) {
+        const start = at; at += line.length + 1;
+        if (moneyFiguresIn(line).some((m) => sameValue(m.value, value))) hits.set(`${di}:${f.page}:${start}`, { docIndex: di, page: f.page, excerpt: line.trim().replace(/[ \t]+/g, " "), offset: start + (line.length - line.trimStart().length) });
+      }
+    }
+  }
+  return hits.size === 1 ? [...hits.values()][0] : null;
+}
+
 /** Whether a condition's quoted words state a condition of the statement (release-set B1, B5, H2):
  * - printed on the statement's own page; a footnote ("*This Benefit can only be claimed ...") only for a row that carries
  *   the same footnote mark;
@@ -535,23 +630,45 @@ function conditionApplies(household: Household, found: Found, quote: string): bo
   const page = doc.pages.find((p) => p.page === found.page);
   if (!page) return false;
   const lineOf = (text: string, offset: number) => { const start = text.lastIndexOf("\n", offset - 1) + 1; const end = text.indexOf("\n", offset); return text.slice(start, end < 0 ? undefined : end); };
-  const where = locateQuote({ ...household, documents: [{ ...doc, pages: [page] }] }, quote, 0);
-  if (where) {
-    const mark = FOOTNOTE.exec(lineOf(page.text, where.offset))?.[1];
-    if (!mark) return true;
-    // The row is the statement's line, with the mark printed after its first character (a row label such as "Ambulance Cost*").
-    return lineOf(page.text, found.offset).trimStart().slice(1).includes(mark);
-  }
   const covers = allCovers(household);
-  const footnote = (f: Found) => { const d = household.documents[f.docIndex]; return FOOTNOTE.test(lineOf(d.pages.find((p) => p.page === f.page)!.text, f.offset)); };
-  // Every page that prints the words: the same sentence can open each cover's section ("If an Insured Person dies ...").
-  const placesIn = (di: number) => household.documents[di].pages.flatMap((p) => { const f = locateQuote({ ...household, documents: [{ ...household.documents[di], pages: [p] }] }, quote, 0); return f ? [{ ...f, docIndex: di }] : []; });
   const here = sectionOf(doc, found.page, found.offset, covers);
-  if (placesIn(found.docIndex).some((f) => !footnote(f) && sectionOf(doc, f.page, f.offset, covers) === here)) return true;
+  const hereSub = subBenefitOf(doc, found.page, found.offset, covers);
+  const onThisPage = onPage(household, found.docIndex, page, quote);
+  for (const where of onThisPage) {
+    const mark = FOOTNOTE.exec(lineOf(page.text, where.offset))?.[1];
+    if (!mark) { if (subBenefitOf(doc, where.page, where.offset, covers) === hereSub) return true; continue; }
+    // The row is the statement's line, with the mark printed after its first character (a row label such as "Ambulance Cost*").
+    if (lineOf(page.text, found.offset).trimStart().slice(1).includes(mark)) return true;
+  }
+  if (onThisPage.length) return false;
+  const footnote = (f: Found) => { const d = household.documents[f.docIndex]; return FOOTNOTE.test(lineOf(d.pages.find((p) => p.page === f.page)!.text, f.offset)); };
+  const placesIn = (di: number) => placesOf(household, di, quote);
+  if (placesIn(found.docIndex).some((f) => !footnote(f) && sectionOf(doc, f.page, f.offset, covers) === here && subBenefitOf(doc, f.page, f.offset, covers) === hereSub)) return true;
   const lineNo = page.text.slice(0, found.offset).split("\n").length - 1;
   const head = headingsOf(page.text).filter((h) => h.line < lineNo).at(-1);
   if (!head) return false;
   return household.documents.some((d, di) => di !== found.docIndex && !unreadable(d) && placesIn(di).some((f) => !footnote(f) && sectionOf(d, f.page, f.offset, covers) === head.cover));
+}
+/** A lettered sub-benefit title within a cover's section ("A. Death due to Accident", "M. Comatose State Lump Sum
+ * Benefit", "C. ... (continued)"): a short title-case line with no figures. Numbered lines are a schedule's rows ("7. Loss
+ * of ... both hands"), not sub-benefits. */
+const SUB_BENEFIT = /^\s*[A-Z][.)]\s+([A-Z][A-Za-z&'’\/,\- ()]{2,80}?)\s*$/;
+/** The sub-benefit a passage sits under, within its section (R59-4): conditions never travel between sub-benefits. Empty
+ * when the passage is at the cover's own level. */
+function subBenefitOf(doc: HouseholdDocument, page: number, offset: number, covers: Set<string>): string {
+  let sub = "";
+  for (const p of doc.pages) {
+    if (p.page > page) break;
+    const text = p.page === page ? p.text.slice(0, offset) : p.text;
+    const lines = p.text.split("\n");
+    text.split("\n").forEach((l, i) => {
+      if (sectionHeading(l, covers) ?? schemeSection(l, lines.slice(i + 1, i + 4), covers)) { sub = ""; return; }
+      const m = SUB_BENEFIT.exec(l);
+      const title = m?.[1].replace(/\(\s*continued\s*\)/i, "").trim().toLowerCase();
+      if (title && title.split(/\s+/).length <= 8) sub = title;
+    });
+  }
+  return sub;
 }
 
 /** Whether every excerpt sits on the same line of the same page. */
@@ -645,7 +762,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const aboutFiles = new Set<number>();
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
-    const found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) : null;
+    const found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
@@ -686,17 +803,25 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const doc = household.documents[c.found.docIndex];
     const notes: string[] = [];
     if (c.person && doc.linkedPeople.length && !doc.linkedPeople.some((p) => baseName(p) === c.person)) notes.push(`This document is not linked to ${c.person} in your library.`);
+    else if (c.person && !doc.linkedPeople.length) notes.push("This document is not linked to anyone in your library.");
     if (doc.supersededAt) notes.push(`This document was replaced by a later version on ${doc.supersededAt.slice(0, 10)}.`);
     c.note = notes.join(" ") || null;
   }
   // A condition is kept only when its quoted words are printed on the statement's own page, and, when they are a footnote
   // ("*This Benefit can only be claimed ..."), only for a row that carries the same footnote mark (release-set B1).
   for (const c of checked) {
-    c.conditions = c.s.conditions.flatMap((x) => {
-      if (c.found && x.quote && conditionApplies(household, c.found, x.quote)) return [x.text];
-      report.conditionsLeftOut.push(x.text);
-      return [];
-    });
+    const fits = (f: Found | null) => c.s.conditions.filter((x) => f && x.quote && conditionApplies(household, f, x.quote));
+    let kept = fits(c.found);
+    const away = c.s.conditions.filter((x) => !kept.includes(x) && x.quote && c.found && !placesOf(household, c.found.docIndex, x.quote).length && household.documents.some((d, di) => !unreadable(d) && placesOf(household, di, x.quote!).length));
+    // A printed amount whose own condition is printed only in another document is moved to that document's line for the
+    // same figure, so it never stands without the condition (B1's S$250). A worked-out amount never moves.
+    if (c.found && c.amount && !c.amount.illustration && away.length) {
+      const line = lineWithCondition(household, c, away.map((x) => x.quote!));
+      const moved = line ? plainAmount({ ...c.s, quote: line.excerpt }, line, household) : null;
+      if (line && moved?.ok && fits(line).length > kept.length) { c.found = line; c.amount = moved.amount; kept = fits(line); }
+    }
+    c.conditions = kept.map((x) => x.text);
+    report.conditionsLeftOut.push(...c.s.conditions.filter((x) => !kept.includes(x)).map((x) => x.text));
   }
   // Either/or is drawn only for one person's amounts printed on one line (one row) of one page: alternatives the model
   // groups across rows or documents (ambulance cost and the recuperation benefit are separate benefits) are separate
@@ -765,7 +890,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const who = members[0].person;
     const shown = members.filter((m) => statements.some((s) => s.amount?.text === m.amount!.text && s.personName === m.person));
     if (shown.length < 2) continue;
-    const text = `${shown.map((m) => m.amount!.text).join(", ").replace(/, ([^,]*)$/, " and $1")}${who ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
+    const text = `${shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text)).join(", ").replace(/, ([^,]*)$/, " and $1")}${who ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
     statements.push({ id: `not-total-${statements.length + 1}`, kind: "uncertainty", text, fullText: text, conditions: [] });
   }
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
