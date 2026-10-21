@@ -12,7 +12,7 @@ type Confirmation={status:"confirmed"|"corrected";sumInsured:number|null;printed
 type Cover={personId:string;coverKey:string;product:string;cover:string;plan:string|null;riderOf:string|null;policyNumber:string|null;
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
   source:Source;confirmation:Confirmation|null};
-type Row={coverKey:string;benefit:string;section:string|null;column:string|null;figureText:string;figure:{kind:string};
+type Row={coverKey:string;benefit:string;section:string|null;column:string|null;qualifier?:string|null;figureText:string;figure:{kind:string};
   fromDay:number|null;maxDays:number|null;conditions:string[];source:Source;baseSource:Source|null;linkWhy:string};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Section={key:string;document:string;section:string|null;column:string|null;examples:string[]};
@@ -128,7 +128,7 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
             <ul className="benefit-list">{rows.map((r,i)=><li className="benefit-item coverage-row" key={i} data-testid="table-row">
               <div className="coverage-top">
                 <div className="benefit-head"><strong>{r.benefit}</strong>{r.section?<small>{r.section}{r.column?` (${r.column})`:""}</small>:null}</div>
-                <p className={r.figure.kind==="none"?"muted-cell":"pays-cell"}>{r.figureText.replace(/^./,ch=>ch.toUpperCase())}</p>
+                <p className={r.figure.kind==="none"?"muted-cell":"pays-cell"}>{r.figureText.replace(/^./,ch=>ch.toUpperCase())}{r.qualifier?<strong data-testid="row-qualifier"> (for {r.qualifier})</strong>:null}</p>
               </div>
               {days(r)||r.conditions.length?<p className="coverage-conditions">{[days(r),...r.conditions.slice(0,2)].filter(Boolean).join(" · ")}{r.conditions.length>2?` · ${r.conditions.length-2} more below`:""}</p>:null}
               <details className="source-details"><summary>{r.conditions.length?"Conditions and source":"Source"}</summary>

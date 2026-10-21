@@ -3,7 +3,7 @@
  *   npm run benefit-table:test */
 import assert from "node:assert/strict";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { assembleTable, figureText, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 
 let passed = 0;
@@ -419,6 +419,18 @@ test("R85-6: a correction applies to every copy of the person's cover", () => {
   assert.equal(covers.length, 2);
   assert.ok(covers.every((c) => c.sumInsured === 300000 && c.confirmation?.status === "corrected"));
   assert.deepEqual(covers.map((c) => c.confirmation!.printed).sort(), [200000, 250000]);
+});
+
+test("R89-1: a column's child, adult or per-family words travel with the row as its qualifier", () => {
+  assert.equal(qualifierOf("Gold Child"), "child");
+  assert.equal(qualifierOf("Gold Per Family"), "per family");
+  assert.equal(qualifierOf("Plan A (Adult) per person"), "adult, per person");
+  assert.equal(qualifierOf("Gold"), null);
+  assert.equal(qualifierOf(null), null);
+  const rows = planCase("Gold", "Gold Child").rows;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].qualifier, "child");
+  assert.equal(planCase("Gold", "Gold").rows[0].qualifier, null);
 });
 
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
