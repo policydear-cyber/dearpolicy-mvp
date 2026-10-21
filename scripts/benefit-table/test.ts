@@ -349,11 +349,25 @@ test("R85-1: plan A is not plan B, though one name is inside the other", () => {
   assert.equal(planCase("Gold Plus", "Gold").rows.length, 0);
 });
 test("R86-1: a plan column with a currency or unit still matches its plan, and only its plan", () => {
-  for (const col of ["Plan A (S$)", "Plan A Per Visit", "Plan A Annual Limit", "Plan A - SGD"]) {
+  for (const col of ["Plan A (S$)", "Plan A Per Visit", "Plan A - SGD", "Plan A [SGD] per policy year"]) {
     assert.equal(planCase("A", col).rows.length, 1, col);
     assert.equal(planCase("B", col).rows.length, 0, col);
   }
   assert.equal(planCase("Max", "Max").rows.length, 1, "a plan named like a unit word");
+});
+test("R87: annual, single-trip and lifetime variants are different plans", () => {
+  assert.equal(planCase("Gold", "Annual Gold").rows.length, 0);
+  assert.equal(planCase("Annual Gold", "Gold").rows.length, 0);
+  assert.equal(planCase("Annual Gold", "Annual Gold").rows.length, 1);
+  assert.equal(planCase("Annual Gold", "Annual Gold (S$)").rows.length, 1);
+  assert.equal(planCase("Plan A", "Plan A Annual").rows.length, 0);
+  assert.equal(planCase("Single Trip Classic", "Annual Classic").rows.length, 0);
+  assert.equal(planCase("Lifetime Shield", "Shield").rows.length, 0);
+  assert.equal(planCase(null, "Single Trip Gold").rows.length, 0, "a variant column for a cover with no plan");
+  assert.equal(planCase("Healthy", "Annual Healthy", ["Annual Healthy"]).rows.length, 0, "a household plan inside a longer column");
+  assert.equal(planCase("Healthy", "Annual Healthy").rows.length, 0, "the person's own plan inside a longer column");
+  assert.equal(planCase("A", "Plan A (Adult)").rows.length, 1, "words in brackets are not the plan's name");
+  assert.equal(planCase("B", "Plan A (Adult)").rows.length, 0);
 });
 test("R85-1: a plan column is refused for a cover that prints no plan", () => {
   const c = planCase(null, "Plan B");

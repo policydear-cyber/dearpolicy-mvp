@@ -121,19 +121,24 @@ const PLAN_WORDS = new Set(["plan", "plans", "option", "options", "tier", "class
 /** Names a column can carry that are plan or tier names wherever they appear. */
 const TIER_NAMES = new Set(["basic", "standard", "classic", "enhanced", "premier", "premium", "elite", "deluxe", "superior", "executive", "business",
   "bronze", "silver", "gold", "platinum", "diamond", "lite", "plus", "max", "essential", "comprehensive", "core", "prestige", "signature"]);
-/** Currency and unit words a column heading carries besides the plan's name ("Plan A (S$)", "Plan A Per Visit"). */
-const UNIT_WORDS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "per", "visit", "day", "days", "week", "month", "year", "annual", "annually", "policy",
-  "lifetime", "trip", "incident", "event", "claim", "limit", "limits", "maximum", "amount", "amounts", "benefit", "benefits", "payable", "sum", "insured"]);
-const planTokens = (s: string | null) => norm(s).split(" ").filter((t) => t && !PLAN_WORDS.has(t) && !UNIT_WORDS.has(t));
+/** What a column heading says besides the plan's name: anything in brackets ("Plan A (S$)"), anything from "per" on
+ * ("Plan A Per Visit") and currency words. Nothing else is dropped: "Annual", "Single Trip", "Lifetime" or "Policy" can
+ * name a plan variant, so "Annual Gold" is not "Gold". */
+const CURRENCY_WORDS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "hkd", "myr"]);
+const planTokens = (s: string | null) => norm((s ?? "").replace(/\([^)]*\)|\[[^\]]*\]/g, " ").replace(/\bper\b.*$/is, " "))
+  .split(" ").filter((t) => t && !PLAN_WORDS.has(t) && !CURRENCY_WORDS.has(t));
 const samePlan = (a: string | null, b: string | null) => { const x = planTokens(a), y = planTokens(b); return x.length > 0 && x.join(" ") === y.join(" "); };
 /** A column that names a plan: a plan some cover in the household holds, a column called "Plan …"/"Option …", a single
  * letter or roman numeral, or a tier name. Any other column ("Adult", "Child", "Per Visit") says nothing about the plan. */
 function namesPlan(column: string, plans: (string | null)[]): boolean {
   const words = norm(column).split(" ").filter(Boolean);
-  if (plans.some((p) => samePlan(column, p))) return true;
   if (words.some((w) => PLAN_WORDS.has(w))) return true;
-  const rest = planTokens(column);
-  return rest.length === 1 && (/^[a-z]$/.test(rest[0]) || /^(i|ii|iii|iv|v|vi)$/.test(rest[0]) || TIER_NAMES.has(rest[0])) || rest.length > 0 && rest.every((w) => TIER_NAMES.has(w));
+  const rest = planTokens(column), text = ` ${rest.join(" ")} `;
+  // A column that carries a plan name anywhere ("Annual Gold", "Single Trip Classic") names that plan, variant and all,
+  // and so does a column that is part of a plan's name ("Shield" beside a "Lifetime Shield" plan).
+  if (plans.some((p) => { const t = planTokens(p); return t.length > 0 && rest.length > 0 && (text.includes(` ${t.join(" ")} `) || ` ${t.join(" ")} `.includes(text)); })) return true;
+  if (rest.some((w) => TIER_NAMES.has(w))) return true;
+  return rest.length === 1 && (/^[a-z]$/.test(rest[0]) || /^(i|ii|iii|iv|v|vi)$/.test(rest[0]));
 }
 /** A plan column belongs to a cover only when it is that cover's plan, word for word ("Plan A" is not "Plan B"); a plan
  * column is refused for a cover with no plan; a column that names no plan is neutral. */
