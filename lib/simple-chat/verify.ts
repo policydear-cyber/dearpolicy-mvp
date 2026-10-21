@@ -182,7 +182,7 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; uncovered?: string | null };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -482,6 +482,19 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
 }
 
+/** Where the household wrote a bill figure in this conversation, as money ("$800", "800 dollars"), or null. */
+function billWritten(bill: number, written: string[]): { q: string; value: number; currency: string; raw: string } | null {
+  return written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
+    ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).map((m) => ({ ...m, raw: m.raw.trim().replace(/[.,;:!?]+$/, "") })).find((m) => sameValue(m.value, bill)) ?? null;
+}
+/** The bill the household gave, as they wrote it, for a "not_found" point that says no cover in the documents pays it (the
+ * GP bill of $800 when Outpatient Medicare is not on the certificate): one figure the household wrote in this conversation. */
+function billUncovered(st: ModelStatement, written: string[]): string | null {
+  const nums = numbersIn(st.ofBill?.bill ?? "");
+  if (nums.length !== 1 || nums[0] <= 0) return null;
+  return billWritten(nums[0], written)?.raw.trim() || null;
+}
+
 /** How much of a bill the household gave a per-visit or per-claim limit could cover (the A&E bill of $800 against
  * Outpatient Medicare's S$100 limit per visit): the card shows the limit and says whether the bill is above or within it,
  * with no worked figure (what is paid or left over), and the bill as the household wrote it. Only
@@ -498,8 +511,7 @@ function billAgainst(st: ModelStatement, found: Found, household: Household, amo
   // A count may have words between it and what it counts ("her 2 A&E visits", R72-2); a plural visit or claim, or "twice",
   // means more than one whatever the words.
   const MANY = /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple|both)\s+(?:[^\s\d]+\s+){0,3}(?:days|nights|weeks|months|times)\b|\b(?:visits|claims|bills|admissions|sessions|consultations|trips|twice)\b/i;
-  const mention = written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
-    ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).find((m) => sameValue(m.value, bill));
+  const mention = billWritten(bill, written);
   if (!mention || (mention.currency !== "$" && SIGN[mention.currency] !== sign) || MANY.test(mention.q)) return null;
   const raw = mention.raw.trim();
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!.text;
@@ -887,9 +899,11 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       }
       checked.push({ s: st, found, amount: null, person, note: null });
     } else {
-      checked.push({ s: st, found, amount: null, person, note: null });
+      checked.push({ s: st, found, amount: null, person, note: null, uncovered: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
   }
+  // A bill set against a limit is never also said to be uncovered: the two would contradict each other.
+  if (checked.some((c) => c.bill)) for (const c of checked) c.uncovered = null;
   // What a source says about the person it is used for: not linked to them, or replaced by a later version.
   for (const c of checked) {
     if (!c.found) continue;
@@ -990,6 +1004,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         conditions, asOf: null, source, group: null,
       });
     }
+    if (c.uncovered) {
+      const said = `The ${c.uncovered} bill you gave is not shown to be covered by ${c.person ? `${c.person}'s` : "these"} documents; only the insurer can confirm.`;
+      statements.push({ id: `s${i + 1}-bill`, kind: "not_found", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null });
+    }
   });
   for (const members of notTotals) {
     const who = members[0].person;
@@ -1015,7 +1033,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const said = first && !first.text.includes("prints: “") ? ` ${first.text.replace(/\s+$/, "")}` : "";
     bottomLine = first
       ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below; they are separate and not added together." : "The amount is shown below."}`
-      : statements.length ? "Here is what your documents say." : NO_ANSWER;
+      : statements.find((x) => x.kind === "not_found" && !x.id.endsWith("-bill"))?.text ?? (statements.length ? "Here is what your documents say." : NO_ANSWER);
   }
   const questions: ChatQuestion[] = question ? [{ id: "simple_question", text: question, type: "text", why: "This helps me answer from the right part of your documents." }] : [];
   const answer: StructuredAnswer = {

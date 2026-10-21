@@ -867,6 +867,25 @@ async function main() {
     assert.deepEqual(got.filter((x) => x.amount).map((x) => [x.kind, x.amount!.text, x.amount!.illustration]), [["calculation", "S$100", true]], "B11 the percentage is worked out, with no bill card");
   });
 
+  await check("Live GP bill: an uncovered bill is shown as the household wrote it, never as money a cover pays; a dropped bottom line falls back to the finding", () => {
+    const house = R59("Outpatient5.pdf", "Benefits Limits Per Visit\n(S$)\nNon-Panel General Practitioner\t30\nFor claims matters, please contact the Customer Service Hotline at 6827 8000.");
+    const none = (ofBill: { bill: string } | null, kind: ModelStatement["kind"] = "not_found") => st({ kind, text: "No cover in Ah Kow's documents pays a GP bill.", person: "Ah Kow", ofBill });
+    const cards = (s: ModelStatement[], written: string[]) => r59(house, s, written).answer.statements!.filter((x) => x.id.endsWith("-bill"));
+    const got = cards([none({ bill: "$800" })], ["ah kow tripped on the kerb, GP bill was $800, can he claim"]);
+    assert.deepEqual(got.map((x) => [x.kind, x.amount ?? null, x.text]), [["not_found", null, "The $800 bill you gave is not shown to be covered by Lim Ah Kow's documents; only the insurer can confirm."]]);
+    assert.equal(cards([none({ bill: "$800" })], ["the GP bill was $800."])[0].text.startsWith("The $800 bill"), true, "the sentence's full stop is not part of the bill");
+    assert.equal(cards([none({ bill: "$900" })], ["GP bill was $800"]).length, 0, "a bill the household never wrote");
+    assert.equal(cards([none({ bill: "$300 + $500" })], ["the bill was $300 + $500"]).length, 0, "several figures");
+    assert.equal(cards([none(null)], ["GP bill was $800"]).length, 0, "no bill given on the point");
+    assert.equal(cards([none({ bill: "$800" }, "fact")], ["GP bill was $800"]).length, 0, "only a not_found point says a bill is uncovered");
+    assert.equal(cards([none({ bill: "$800" }, "uncertainty")], ["GP bill was $800"]).length, 0, "an uncertainty never says a bill is uncovered");
+    const limit = st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote: "Non-Panel General Practitioner\t30", amount: "30", ofBill: { bill: "$800" } });
+    assert.deepEqual(cards([limit, none({ bill: "$800" })], ["her bill was $800"]).map((x) => x.kind), ["calculation"], "a bill set against a limit is never also uncovered");
+    const fell = verifyAnswer(house, { bottomLine: "The $800 GP bill is not shown to be covered.", nextSteps: ["Call the Customer Service Hotline at 6827 8000.", "Give written notice of a claim within 120 days."], question: null, statements: [none({ bill: "$800" })] }, ["GP bill was $800, can he claim"]).answer;
+    assert.equal(fell.bottomLine, "No cover in Ah Kow's documents pays a GP bill.", "the finding, not 'Here is what your documents say'");
+    assert.deepEqual(fell.nextSteps, ["Call the Customer Service Hotline at 6827 8000.", "Give written notice of a claim within 120 days."], "a printed hotline and a deadline in days are not money");
+  });
+
   await check("TE #88 mutations: each table and bill rule holds on its own", () => {
     const one = (text: string, quote: string, amount: string) => amounts(r59(R59("Table3.pdf", text), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount })]).answer);
     assert.deepEqual(one("Premium (S$) payable\nSpecialist\t100", "Specialist\t100", "100"), [], "a heading inside a line");
@@ -1049,6 +1068,19 @@ async function main() {
           conditions: [{ text: "Survive 30 days.", quote: "Upon diagnosis of any of the 37 critical illnesses, the Insured Person must survive for 30 days before a claim can be admitted." }] }),
       ] }).answer.statements!.filter((x) => x.amount).map((x) => [x.amount!.text, x.conditions]);
       assert.deepEqual(lc, [["S$350,000", ["Survive 30 days."]]]);
+    });
+    await check("snapshot live GP bill: no cover on the certificate pays it, the bill is shown as written, and the printed hotline and claim notice stay as next steps", () => {
+      const a = verifyAnswer(real, { bottomLine: "Not shown to be covered: the scheme's GP benefit is Outpatient Medicare, which is not on his certificate.", question: null,
+        nextSteps: ["Call the Singlife Customer Service Hotline at 6827 8000 or email MINDEF_insurance@singlife.com.", "Give Singlife written notice of the claim within 120 days of the fall, with the GP bill and a medical report."],
+        statements: [
+          st({ kind: "fact", text: "A benefit applies only if its policy is on the certificate.", person: self, document: di("Benefit Summary.pdf"), quote: "A Benefit is only applicable to you if the Policy containing the Benefit is specifically stated in Part 1 of this Certificate" }),
+          st({ kind: "fact", text: "Written notice of a claim is due within 120 days.", person: self, document: di("Benefit Summary.pdf"), quote: "You must give us written notice of a claim within one hundred and twenty (120) days of the event giving rise to the claim" }),
+          st({ kind: "not_found", text: "No cover on his certificate pays a GP bill.", person: self, ofBill: { bill: "$800" } }),
+        ] }, ["he tripped on the kerb, GP bill was $800, can he claim"]).answer;
+      assert.equal(a.bottomLine!.startsWith("Not shown to be covered"), true);
+      assert.deepEqual(a.statements!.map((x) => [x.kind, x.amount ?? null]), [["fact", null], ["fact", null], ["not_found", null], ["not_found", null]]);
+      assert.match(a.statements!.at(-1)!.text, /^The \$800 bill you gave is not shown to be covered by /);
+      assert.equal(a.nextSteps.length, 2, "the hotline the documents print and a deadline in days are kept");
     });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
