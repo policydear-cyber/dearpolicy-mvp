@@ -4135,3 +4135,18 @@ I re-ran all 19 earlier layouts plus 2 new ones (tsx, no DB, no paid calls).
   - One-line fix: keep the tab-cells test outside the connective override, i.e. `(!sameLine && /\S\t+\S/.test(text)) || (!CONNECTIVE.test(text) && (…rest…))`. C3b has no tab cells, so it still continues.
   - Add D1 as a test.
 - Judged against the coordinator's fail-safe bar: with R98-1 fixed, every open path I found either reads the row's own cap or withholds the amount (`capUnread`). Neighbour rows that are lettered, numbered, lower-case, tabbed or on the same line are refused, and a quote spanning two rows is dropped.
+
+## R99 — PR #96 delta fa2044f → 72fa2c5 (strict join rule plus nearby-cap backstop)
+
+**Verdict: NOT READY.** Two paths still show a wrong amount; both fixes are small.
+
+Re-ran all 21 earlier layouts plus 8 new ones (tsx, no DB, no paid calls). The 21 earlier ones all pass, including D1 (tabbed "Maximum …" neighbour) and D2. New ones that pass: E3 (cap three lines down, withheld), E4, E5 ("(or up to … whichever is lesser)" read), E6 and E7.
+
+- **R99-1 (uncapped figure)** E1: page "Hip\t75% of Sum Insured\nwhich is payable up to S$50,000", cap not read.
+  - The lower-case line no longer joins, and the backstop skips it as "its own label plus a figure" (`which is payable up to S$50,000` matches the label+figure test). The result is `capUnread=false`, so 75% of the sum insured is shown uncapped.
+  - E2 (the same row with the cap read) is withheld, which is safe.
+  - Fix: in the backstop, skip a line as its own row only when it starts upper-case (or has an item marker, its own %, or tab cells). A lower-case line is never a new row's label.
+- **R99-2 (neighbour cap)** E8: page "Hip 75%\nMaximum Disablement 20% up to S$5,000" (no tabs).
+  - "Maximum" is a connective, so the next row joins and Hip takes cap 5000. D1 is safe only because it has tabs.
+  - Fix: never accept a cap from a joined line that has its own percentage. Still mark `capUnread` for such a row, so C3b ("or 200% … whichever is lower") keeps withholding.
+- Add E1 and E8 as tests. With both fixed, every path I have found either reads the row's own cap or withholds the amount.
