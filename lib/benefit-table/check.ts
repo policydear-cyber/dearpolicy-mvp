@@ -72,6 +72,13 @@ const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
  * whichever is lesser", "subject to a maximum of ..."), never with a new row's label, bullet or number. */
 const continues = (text: string) => /^[ \t,;:]*(?:[a-z(]|(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b)/.test(text)
   || /^[ \t,;:]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b/i.test(text);
+// A line that starts its own row is never read as going on with the one above, even when it starts lower-case or with
+// "(": an item marker ("(b)", "ii.", "3)"), its own percentage, its own label and figure, or tab-separated cells (Critic R96-1).
+const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
+const CONNECTIVE = /^[ \t,;:]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b/i;
+const startsRow = (text: string, sameLine = false) => ITEM_MARKER.test(text) || /\d\s*%/.test(text)
+  || (!sameLine && /\S\t+\S/.test(text))
+  || (!CONNECTIVE.test(text) && /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/.test(text));
 /** The row as printed: the quoted words (by their place on the page), the rest of their line when it goes on with the row,
  * and up to three following lines that go on with it. A line that starts another row ends it (Critic R95-1, R95-2). */
 function rowSegment(pageText: string, start: number, end: number): string {
@@ -79,13 +86,13 @@ function rowSegment(pageText: string, start: number, end: number): string {
   let seg = pageText.slice(start, end);
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
-    if (!continues(tail)) return seg;
+    if (!continues(tail) || startsRow(tail, true)) return seg;
     seg += tail;
   }
   let pos = lineEnd(end);
   for (let k = 0; k < 3 && pos < pageText.length; k++) {
     const line = pageText.slice(pos + 1, lineEnd(pos + 1));
-    if (!line.trim() || !continues(line)) break;
+    if (!line.trim() || !continues(line) || startsRow(line)) break;
     seg += " " + line;
     pos = lineEnd(pos + 1);
   }

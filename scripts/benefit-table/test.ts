@@ -536,6 +536,35 @@ for (const [layout, sep] of [["tab", "\t"], ["space", " "]] as const) {
     assert.match(r.dropped[0].why, /more than one row/);
   });
 }
+// Critic R96-1: a lettered, numbered or lower-case row below is its own row, never a continuation of the one above.
+for (const [layout, hip, wrist] of [
+  ["(a)/(b)", "(a) Hip 75%", "(b) Wrist 20% up to S$5,000"],
+  ["a)/b)", "a) Hip 75%", "b) Wrist 20% up to S$5,000"],
+  ["(i)/(ii)", "(i) Hip 75%", "(ii) Wrist 20% up to S$5,000"],
+  ["lower-case", "hip fracture 75%", "wrist fracture 20% up to S$5,000"],
+  ["1./2.", "1. Hip 75%", "2. Wrist 20% up to S$5,000"],
+] as const) {
+  const probe: SourceDoc = { id: "probe-r96", name: "Probe.pdf", readable: true, pages: [
+    { page: 1, text: `GROUP PERSONAL ACCIDENT\n${hip}\n${wrist}\nAnkle 10%` },
+    { page: 2, text: `GROUP PERSONAL ACCIDENT\n${hip}\n(up to S$50,000, whichever is lesser)\n${wrist}` },
+  ] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  test(`R96-1 (${layout}): the next row's cap is never this row's`, () => {
+    const claimed = read1({ benefit: "Hip", value: 75, page: 1, quote: hip, cap: 5000, capQuote: "up to S$5,000" });
+    assert.equal(claimed.benefits[0].cap, null, JSON.stringify(claimed.benefits[0]));
+    assert.equal(rowOf(claimed).figure.kind, "none", "a claimed cap that is not this row's gives no amount");
+    const plain = rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote: hip })).figure;
+    assert.equal(plain.kind === "worked_out" && plain.amount, 150000, figureText(plain));
+    const own = rowOf(read1({ benefit: "Wrist", value: 20, page: 1, quote: wrist, cap: 5000, capQuote: "up to S$5,000" })).figure;
+    assert.equal(own.kind === "worked_out" && own.amount, 5000, figureText(own));
+  });
+  test(`R96-1 (${layout}): a bracketed limit under the row is still its own`, () => {
+    const r = read1({ benefit: "Hip", value: 75, page: 2, quote: hip, cap: 50000, capQuote: "up to S$50,000, whichever is lesser" });
+    assert.equal(r.benefits[0].cap, 50000, JSON.stringify(r.dropped));
+    assert.equal(rowOf(read1({ benefit: "Hip", value: 75, page: 2, quote: hip })).figure.kind, "none", "an unread limit under the row gives no amount");
+  });
+}
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
   const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;
