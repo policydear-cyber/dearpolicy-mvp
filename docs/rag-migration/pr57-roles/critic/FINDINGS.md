@@ -3853,3 +3853,15 @@ TPD join (`lib/policies/benefit-catalog.ts:1170-1178`). The DC case is right. GT
 Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
 
 Verdict: **NOT READY until R81-1 is in** (one condition plus one test). R81-2 is note only.
+
+## Round 82: PR #92 delta, head 24c3cbd (R81-1)
+
+R81-1 fixed (`lib/policies/benefit-catalog.ts:1176`). The life-cover TPD join now needs `benefitTriggerEvents(benefit.benefitName,"")` to give TPD. Only the name is lowercased and matched, so a quote alone never qualifies. "Natural Catastrophe" (death or TPD named only in its wording) no longer joins GTL. DC's "Total and Permanent Disability Benefit (TPD)" still does. The accident-word and injury guards are unchanged. Four new tests in `scripts/system-regressions.ts` cover:
+- GTL TPD joins the life cover;
+- accident TPD joins GPA;
+- a "Permanent Total Disablement" row written about an injury does not join GTL;
+- the Natural Catastrophe shape does not join GTL.
+
+No new findings. Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **READY** (after DC's yes for the production row rewrite).
