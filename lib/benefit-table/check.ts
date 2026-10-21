@@ -68,36 +68,45 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-// A line that starts its own row is never read as going on with the one above, even when it starts lower-case or with
-// "(": an item marker ("(b)", "ii.", "3)"), its own percentage, its own label and figure, or tab-separated cells (Critic R96-1).
+// A line that starts its own row is never read as going on with the one above: an item marker ("(b)", "ii.", "3)"), its
+// own percentage, its own label and figure, or tab-separated cells (Critic R96-1, R98-1).
 const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
-// A line that starts with a connective or a cap word ("or", "up to", "max.", "limit") always goes on with the row (Critic R97).
+// A following line goes on with the row only when it starts with a connective or a cap word, optionally after "(":
+// "or up to S$50,000, whichever is lesser", "(max. S$5,000)", "subject to a maximum of ...". Nothing else joins (TE L12-L14).
 const CONNECTIVE = /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|min(?:imum)?|limit(?:ed)?|not\s+(?:to\s+)?exceed(?:ing)?|capped)\b/i;
-/** Text that goes on with the same row: it starts lower-case, with a bracket or with a connective ("or up to S$50,000,
- * whichever is lesser", "subject to a maximum of ..."), never with a new row's label, bullet or number. */
-const continues = (text: string) => /^[ \t,;:]*[a-z(]/.test(text) || CONNECTIVE.test(text);
-const startsRow = (text: string, sameLine = false) => !CONNECTIVE.test(text) && (ITEM_MARKER.test(text) || /\d\s*%/.test(text)
-  || (!sameLine && /\S\t+\S/.test(text))
+const TAB_CELLS = /\S\t+\S/;
+const startsRow = (text: string) => !CONNECTIVE.test(text) && (ITEM_MARKER.test(text) || /\d\s*%/.test(text)
   || /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/.test(text));
-/** The row as printed: the quoted words (by their place on the page), the rest of their line when it goes on with the row,
- * and up to three following lines that go on with it. A line that starts another row ends it (Critic R95-1, R95-2).
- * next: the first line not joined, so a cap word starting it still marks the row as capped (Critic R97 backstop). */
-function rowSegment(pageText: string, start: number, end: number): { text: string; next: string } {
+/** How many lines below the row are looked at for a cap that was not joined to it. */
+const LINES_BELOW = 2;
+/** The row as printed: the quoted words (by their place on the page), the rest of their line unless it starts another
+ * row, and up to three following lines that start with a connective or cap word and have no tab cells.
+ * below: the text not joined (the rest of the line and the next lines), so cap words there mark the row as capped
+ * and it shows no amount rather than a neighbour's cap or an uncapped figure (Critic R97, R98; TE L12-L14). */
+function rowSegment(pageText: string, start: number, end: number): { text: string; below: string } {
   const lineEnd = (i: number) => { const e = pageText.indexOf("\n", i); return e < 0 ? pageText.length : e; };
   let seg = pageText.slice(start, end);
+  const unjoined: string[] = [];
   const tail = pageText.slice(end, lineEnd(end));
   if (tail.trim()) {
-    if (!continues(tail) || startsRow(tail, true)) return { text: seg, next: tail };
-    seg += tail;
+    if (startsRow(tail)) unjoined.push(tail);
+    else seg += tail;
   }
   let pos = lineEnd(end);
-  for (let k = 0; k < 3 && pos < pageText.length; k++) {
+  let joining = true;
+  for (let k = 0; pos < pageText.length && unjoined.length < LINES_BELOW + 1 && k < 3 + LINES_BELOW; k++) {
     const line = pageText.slice(pos + 1, lineEnd(pos + 1));
-    if (!line.trim() || !continues(line) || startsRow(line)) return { text: seg, next: line };
-    seg += " " + line;
     pos = lineEnd(pos + 1);
+    if (!line.trim()) { joining = false; continue; }
+    if (joining && k < 3 && CONNECTIVE.test(line) && !TAB_CELLS.test(line)) seg += " " + line;
+    else { joining = false; unjoined.push(line); }
   }
-  return { text: seg, next: pageText.slice(pos + 1, lineEnd(pos + 1)) };
+  // A line that plainly starts another row (an item marker, its own percentage, its own label and figure, or tab cells
+  // with a percentage or amount) has its own limit, not this row's: "Wrist 20% up to S$5,000",
+  // "Advance Payment Benefit\t100% Sum Insured (up to S$400,000)", "•\tAmbulance Cost*\tUp to S$500". Anything else
+  // with cap words ("wrist fracture: up to S$5,000") may be this row's limit, so the row shows no amount.
+  const otherRow = (l: string) => startsRow(l) || (TAB_CELLS.test(l) && /\d\s*%|(?:S\$|US\$|SGD|\$)\s?\d/.test(l));
+  return { text: seg, below: unjoined.filter((l) => !otherRow(l)).join("\n") };
 }
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -131,7 +140,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     return at(f);
   };
-  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, next: "" }; };
+  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, below: "" }; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
@@ -194,7 +203,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) { out.dropped.push({ what: label, why: "quote holds more than one row" }); continue; }
     if (pays === "percent") {
-      const { text: row, next } = segmentOf(source);
+      const { text: row, below } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
       if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))) {
@@ -202,7 +211,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
         capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
-          || CAPPED.test(row) || CONNECTIVE.test(next);
+          || CAPPED.test(row) || CAP_WORDS.test(below);
       }
     }
     // Day counts are figures too: one the quote does not print is not kept.

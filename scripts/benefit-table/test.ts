@@ -574,7 +574,7 @@ for (const [name, rowText, capLine, benefitName, value] of [
 ] as const) {
   const probe: SourceDoc = { id: "probe-r97", name: "Probe.pdf", readable: true, pages: [
     { page: 1, text: `GROUP PERSONAL ACCIDENT\n${rowText}\n${capLine}\nKnee\t10% of Sum Insured` },
-    { page: 2, text: `GROUP PERSONAL ACCIDENT\n${rowText}\nnote one\nnote two\nnote three\n${capLine}` },
+    { page: 2, text: `GROUP PERSONAL ACCIDENT\n${rowText}\nPayable once per life.\n${capLine}` },
   ] };
   const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
   const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
@@ -589,11 +589,42 @@ for (const [name, rowText, capLine, benefitName, value] of [
     const f = rowOf(r).figure;
     assert.equal(f.kind === "worked_out" && f.amount, 50000, figureText(f) + JSON.stringify(r.dropped));
   });
-  test(`R97 (${name}) backstop: a cap line past the lines read still marks the row capped`, () => {
+  test(`R97 (${name}) backstop: a cap line below a line that is not joined still marks the row capped`, () => {
     const r = read1({ benefit: benefitName, value, page: 2, quote });
     assert.equal(rowOf(r).figure.kind, "none", figureText(rowOf(r).figure));
   });
 }
+// Critic R98-1 (D1): a tab-laid row whose label starts with a cap word is its own row, not the row above's cap line.
+test("R98-1 (D1): 'Maximum Disablement' on the next tab row never caps Hip", () => {
+  const probe: SourceDoc = { id: "probe-r98", name: "Probe.pdf", readable: true, pages: [
+    { page: 1, text: "GROUP PERSONAL ACCIDENT\nHip\t75%\nMaximum Disablement\t20% up to S$5,000" },
+  ] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  const claimed = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%", cap: 5000, capQuote: "up to S$5,000" });
+  assert.equal(claimed.benefits[0].cap, null);
+  assert.equal(rowOf(claimed).figure.kind, "none");
+  const plain = rowOf(read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%" })).figure;
+  assert.equal(plain.kind === "worked_out" && plain.amount, 150000, figureText(plain));
+  const own = rowOf(read1({ benefit: "Maximum Disablement", value: 20, page: 1, quote: "Maximum Disablement 20% up to S$5,000", cap: 5000, capQuote: "up to S$5,000" })).figure;
+  assert.equal(own.kind === "worked_out" && own.amount, 5000, figureText(own));
+});
+// Test engineer L12-L14: only a line starting with a connective or cap word joins the row. A lower-case neighbour with a
+// limit is never joined, and since it may be this row's limit the row shows no amount rather than either figure.
+for (const [layout, below] of [
+  ["L12", "wrist fracture: up to S$5,000"],
+  ["L13", "wrist fracture (max S$5,000)"],
+  ["L14", "wrist fracture, max S$5,000"],
+] as const) test(`TE ${layout}: "${below}" under Hip is never Hip's cap, and Hip shows no amount`, () => {
+  const probe: SourceDoc = { id: "probe-l12", name: "Probe.pdf", readable: true, pages: [{ page: 1, text: `GROUP PERSONAL ACCIDENT\nHip 75%\n${below}` }] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  const claimed = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%", cap: 5000, capQuote: below.replace(/^wrist fracture[:,]? ?\(?|\)$/g, "") });
+  assert.equal(claimed.benefits[0].cap, null);
+  assert.equal(rowOf(claimed).figure.kind, "none", figureText(rowOf(claimed).figure));
+  const plain = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75%" });
+  assert.equal(rowOf(plain).figure.kind, "none", figureText(rowOf(plain).figure));
+});
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
   const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;
