@@ -3819,3 +3819,22 @@ Probes: `t77.ts` P1-P10 and Qa-Qi rerun on 64259c8 lib with DC's snapshot locall
 No new findings.
 
 Verdict: **READY.**
+
+## Round 80: PR #92 (refresh stored Coverage rows on open), head 4731a9a on main 55abc78
+
+Scope: `app/api/ledger/route.ts` GET, `lib/ledger/store.ts` refreshLedgerOnOpen, the regression test. Read-only review; no DB suite run.
+
+Cross-household scope: OK. accountId comes from `requireHouseholdContext`, and the throttle map is keyed by it. Every statement in `seedLedger`, `refreshSeededRows` and the joins is filtered by `account_id`. The refresh leaves `updated_at` alone, which matches #90's rules.
+
+- **R80-1 (Medium, race with reading)** `app/api/ledger/route.ts:38`. The only guard is `ledgerReadingInProgress(accountId)`, an in-memory map filled only by `readPendingDocuments` on the same server instance. It misses three cases:
+  (a) an upload's own read: `lib/rag/ingest.ts:941` calls `readDocumentIntoLedger` directly after marking the document ready, in the job's own invocation;
+  (b) the dashboard's `after()` read, which runs on whichever instance served the dashboard;
+  (c) any read on another instance.
+  `readDocumentIntoLedger` (`lib/ledger/extract.ts:257-275`) deletes the document's model rows, then re-inserts them one by one, outside a transaction. A Coverage open that lands in that window runs `seedLedger` with `existing` missing those events. `known` then lacks them, so table-parser or schedule seeds are inserted for the same events under their own seed keys. When the read finishes, nothing removes those rows: `refreshSeededRows` only updates rows whose seed is still produced, and the stale-row DELETE only covers vanished `benefit:`/`coverage:` ids. The result is two rows for one event, the model's figure and the parser's or default figure, breaking "rows the model already read outrank the table parser". Before #92, `seedLedger` ran mostly right after a read, on the same path; #92 makes it run on every Coverage open, once per 10 minutes per instance.
+  Fix: guard from the database instead of memory. Skip the refresh when any active document of the household is mid-processing (status not ready/failed), or is ready with `ledger_read_at IS NULL` and due (`pendingDocumentCount(accountId,{dueOnly:true})>0`), as well as the in-memory check. Optionally also make the model-row DELETE+INSERT in `readDocumentIntoLedger` one transaction, which closes the window for every caller.
+- **R80-2 (Low, load cost)** `seedLedger` (inventory, catalog, several queries, one UPDATE per changed row) is awaited before the rows are loaded. On serverless, cold instances make the "once per 10 minutes" per-instance throttle fire on most opens after idle. Usually only the first open pays, and after the first pass there are no row writes. Acceptable for now; consider logging its duration so a slow household shows up.
+- **R80-3 (Nit)** `refreshedOnOpen` grows with each household seen per instance; this is harmless at current scale.
+
+Merging still rewrites production rows on the next Coverage open, so it needs DC's explicit yes.
+
+Verdict: **NOT READY until R80-1 is fixed** (database-side guard). R80-2 and R80-3 are optional.
