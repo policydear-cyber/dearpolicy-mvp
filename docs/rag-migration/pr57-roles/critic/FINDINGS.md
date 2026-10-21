@@ -4285,3 +4285,8 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 - **R105-1 (narrow)** K5: "Hip\t75% of Sum Insured\tPayable up to\t50% of S$100,000" shows Hip uncapped.
   - The label cell has cap words, but it doesn't *start* with one, so `CONNECTIVE` misses it.
   - Test the label with `NEAR_CAP` (cap words anywhere, including "limit"). A real next-row label rarely contains cap words, so this costs almost nothing.
+
+## R106 — PR #96 at c07aa11: READY holds
+
+- `CONNECTIVE || NEAR_CAP` is right. My R105 "swap" would have dropped the "Or\t10% …" case (TE layout 32), so keeping both was correct.
+- I re-ran all 65 layouts. Only K5 changed, and it now withholds. Everything else is identical.
