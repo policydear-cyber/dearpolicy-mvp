@@ -10,7 +10,7 @@
  * at global.fetch only. Synthetic households and files.
  */
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server";
@@ -63,6 +63,9 @@ async function main() {
     const prototype = await doc(householdA, memberA, "prototype.pdf", pdf(2), "not_scanned_prototype");
     const photo = await doc(householdA, memberA, "IMG_4021.png", png);
     const word = await doc(householdA, memberA, "Benefits table.docx", new Uint8Array(Buffer.from("PK\x03\x04 word/document.xml synthetic", "latin1")));
+    const misnamedPdf = await doc(householdA, memberA, "scan.jpg", pdf(10));
+    const oldWord = await doc(householdA, memberA, "Claim form.doc", new Uint8Array(Buffer.from("\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1 synthetic OLE", "latin1")));
+    const huge = await doc(householdA, memberA, "huge.png", new Uint8Array(await sharp({ create: { width: 7200, height: 7200, channels: 3, background: "#ffffff" } }).png().toBuffer()));
     const pending = await doc(householdA, memberA, "pending.pdf", pdf(3), "scan_pending");
     const quarantined = await doc(householdA, memberA, "held.pdf", pdf(4), "quarantined");
     const rejected = await doc(householdA, memberA, "rejected.pdf", pdf(5), "scan_rejected");
@@ -72,7 +75,7 @@ async function main() {
     const deleted = await doc(householdA, memberA, "deleted.pdf", pdf(8));
     await pool.query(`UPDATE policies SET lifecycle_state='pending_deletion' WHERE id=$1`, [deleted.id]);
     const foreign = await doc(householdB, memberB, "their-policy.pdf", pdf(9));
-    const storageKeys = [own, prototype, photo, word, pending, quarantined, rejected, legacy, superseded, deleted, foreign].map((d) => d.storageKey);
+    const storageKeys = [own, prototype, photo, word, misnamedPdf, oldWord, huge, pending, quarantined, rejected, legacy, superseded, deleted, foreign].map((d) => d.storageKey);
 
     const { GET } = await import("@/app/api/policies/[id]/file/route");
     const open = (userId: string, id: string, household = householdA) => {
@@ -141,17 +144,41 @@ async function main() {
       assert.equal(docx.headers.get("content-disposition"), 'attachment; filename="Benefits table.docx"');
     });
 
+    await testAsync("the file's own bytes decide how it opens, not its name; an oversized photo is refused before decoding", async () => {
+      const misnamed = await open(ownerA, misnamedPdf.id);
+      assert.equal(misnamed.status, 200, "a PDF named .jpg opens as the PDF it is");
+      assert.equal(misnamed.headers.get("content-type"), "application/pdf");
+      const doc97 = await open(ownerA, oldWord.id);
+      assert.equal(doc97.status, 200);
+      assert.equal(doc97.headers.get("content-type"), "application/octet-stream", "an old .doc is never shown as a PDF");
+      assert.equal(doc97.headers.get("content-disposition"), 'attachment; filename="Claim form.doc"');
+      const big = await open(ownerA, huge.id);
+      assert.equal(big.status, 422, "a 52-megapixel photo is over sharp's input limit");
+      assertPrivate(big, "oversized");
+      await assertNoInternals(big, "oversized");
+    });
+
     // Supabase Storage, simulated at the network edge only.
     process.env.STORAGE_DRIVER = "supabase";
     process.env.SUPABASE_URL = "https://storage-test.invalid";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-not-real";
-    const signCalls: { path: string; expiresIn: number; download?: unknown }[] = [];
+    const signCalls: { path: string; expiresIn: number }[] = [];
+    const headReads: string[] = [];
     let signFailure = false;
     global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const marker = "/storage/v1/object/sign/";
       if (!url.includes(marker)) throw new Error(`unexpected network call in test: ${url}`);
-      const objectPath = decodeURIComponent(url.slice(url.indexOf(marker) + marker.length));
+      const objectPath = decodeURIComponent(url.slice(url.indexOf(marker) + marker.length).split("?")[0]);
+      if ((init?.method ?? "GET") === "GET") {
+        // The route reads only a file's first bytes through its signed link, by a range request.
+        assert.ok(url.includes("token=signed-test-token"), "only a signed link is fetched");
+        const range = /bytes=0-(\d+)/.exec(new Headers(init?.headers).get("range") ?? "");
+        assert.ok(range, "a range request, not the whole file");
+        const bytes = await readFile(path.join(storageDir, objectPath.replace(/^policy-files\//, "")));
+        headReads.push(objectPath);
+        return new Response(new Uint8Array(bytes.subarray(0, Number(range[1]) + 1)), { status: 206 });
+      }
       const body = JSON.parse(String(init?.body ?? "{}")) as { expiresIn: number };
       signCalls.push({ path: objectPath, expiresIn: body.expiresIn });
       if (signFailure) return new Response(JSON.stringify({ statusCode: "500", error: "Internal", message: `backend failure for ${objectPath}` }), { status: 500, headers: { "content-type": "application/json" } });
@@ -172,6 +199,17 @@ async function main() {
         assert.ok([401, 403, 404, 409].includes(refused.status), `refused: ${refused.status}`);
       }
       assert.equal(signCalls.length, 1, "nothing was signed for a refused request");
+      assert.deepEqual(headReads, [`policy-files/${own.storageKey}`], "only the first bytes of the opened file were read");
+    });
+
+    await testAsync("on Supabase Storage a misnamed PDF still redirects, and a file a browser can't show downloads under its name", async () => {
+      assert.equal((await open(ownerA, misnamedPdf.id)).status, 307);
+      const before = signCalls.length;
+      const res = await open(ownerA, oldWord.id);
+      assert.equal(res.status, 307);
+      assertPrivate(res, "download redirect");
+      assert.equal(signCalls.length, before + 2, "one link to read its first bytes, one to download it");
+      assert.equal(new URL(res.headers.get("location")!).searchParams.get("download"), "Claim form.doc", "the signed link saves it under its own name");
     });
 
     await testAsync("a storage failure returns a generic error with no storage key or provider message", async () => {
