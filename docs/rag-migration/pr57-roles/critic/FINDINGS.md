@@ -3973,3 +3973,26 @@ Probed `columnProblem` on 8d1c7fc locally (22 cases, tsx), no DB and no paid cal
 - R88-2 is moot under the new rule. "Max Limit" is refused for a plan holder and neutral for a no-plan cover. The coordinator accepts over-refusal, and it is not widespread.
 - No-plan covers: a column that is in the document's plan list or says "Plan"/"Option" is refused, and a lone column is neutral. That is fine.
 - R89-1 (Low, person scope, not plan): `UNIT_TOKENS` drops adult/child and `PER` drops "per person"/"per family". So "Gold Child" and "Gold Per Family" pass for any Gold holder, and child or family limits can attach to an adult. Rows show the column label ("(Gold Child)", `components/benefit-table-coverage.tsx:130`), so the figure is labelled, not silent. Bare "Adult"/"Child" columns were already neutral before this delta. Revisit before chat reads amounts from table rows. Either keep adult/child and person/family in the heading words, or carry them as a row qualifier the chat must state.
+
+## R90 — PR #95 at c719256 (chat amounts only from benefit-table rows, behind the switches)
+
+**Verdict: NOT READY** (two blockers).
+
+Probed with the PR's own chat-test fixture (tsx, model replies scripted, no DB, no network, no paid calls).
+
+What holds:
+- An amount with no row, a made-up row, or another person's row is dropped.
+- The model's own amount, quote and document are ignored.
+- A percentage is worked out on the row person's own base, and a corrected base becomes a fact.
+- Model-typed money in prose is still stripped by verify.ts.
+- With the switch off, the library, schema and flow are unchanged (`withRows` is false and `liveTable` returns null).
+
+- **R90-1 (blocker, R89-1 qualifier lost)** `lib/benefit-table/chat.ts:72` (`said`): "For child:" and "Projected, not guaranteed:" are glued onto the model's first sentence. When that sentence states money, verify.ts drops the whole sentence and the label goes with it, but the amount stays.
+  - Probe P1: row "Hospital cash (Child)" on the adult Lim, with text "Hospital cash pays S$50 a day.", shows S$50 with the text "Scheme terms prints: “Hospital cash S$50 per day”". No "child" appears anywhere.
+  - Probe P2b, with two sentences, loses the label the same way.
+  - The projected label is lost the same way (P3). There it survived only because the excerpt happened to print "Non-Guaranteed".
+  - Fix: make the qualifier and projection their own sentence, added after the money filter or kept by it (for example "This figure is for a child only."). Alternatively, refuse the statement if the label does not survive. Add a test whose model text contains money.
+- **R90-2 (blocker, wrong product or benefit label)** `chat.ts:72`: the server writes the row's figure, person and page, but the words that say what the amount is for remain the model's. Probe P4: row "Ambulance Cost" with the text "Death benefit pays this." shows "Death benefit pays this. Up to S$500". That reads as a wrong claimable amount for death. Fix: start the text with the row's own benefit and cover ("Ambulance Cost, Group Personal Accident:"), or refuse when the text names a different benefit.
+- R90-3 (Medium, hiding, decide before switching on) `lib/simple-chat/hook.ts:84,88`: `rows` is `[]` (truthy) for a household whose table has no rows yet. `renderTable` then returns "" (no instructions), but `withRows` is true, so every amount is dropped with no explanation. Documents not yet read into the table lose their amounts the same way. Either fall back to today's path when there are no rows, or say plainly that amounts are not ready yet.
+- R90-4 (Low) The row's unit is not carried. A per-day row shows "S$50" and relies on the model's text to say "a day" (P2). `statementFromRow` knows `f.unit`, so it could add "a day" or set `perDay`. The cash-value as-of date is also dropped. Pre-existing in verify.ts, but now cheap to fix.
+- Note (by design, from R89-1): an adult holder gets child-column rows. That is acceptable only while R90-1 keeps the label.
