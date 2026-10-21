@@ -3452,3 +3452,61 @@ row twice for one person (no wrong total if they dedupe by benefit id).
 ## Verdict on PR #87 at `295e13c`
 
 **Not ready: one Medium (R69-1), with a one-line fix.** Everything else from round 67 is fixed.
+
+---
+
+# Round 70: PR #89 at `9efe42a` (document Preview)
+
+What changed:
+- New `GET /api/policies/[id]/file`.
+- New `createPolicyFileSignedUrl` in `lib/storage`; the local driver returns null and the route streams the bytes.
+- A `PreviewLink` on the Documents page.
+- Regression script `scripts/policy-preview-regressions.ts` and one e2e spec.
+
+## Checks
+
+- **Cross-household access: OK.**
+  - The household comes from `requireHouseholdContext`: the server resolves it with `resolveActiveHouseholdId` and
+    checks membership.
+  - The service-connection query is scoped to `id=$1 AND account_id=$householdId AND superseded_at IS NULL AND
+    activePredicate()`.
+  - A malformed id, another household's id, a deleted or superseded document, a forged household cookie and a
+    removed member all get 404/401/403. The regression script covers each case and checks that no storage key or
+    internal detail appears in the body.
+- **Scan gate: OK.** The route uses `isPolicyProcessingAllowed`, the same gate as processing (`scan_clean` or
+  `not_scanned_prototype`). Otherwise it returns 409 JSON, and the button is offered only for those two states.
+- **Signed URLs: OK.**
+  - Created only after the checks, for the stored key read from the database (never a client value).
+  - TTL is 300 s (`SIGNED_URL_TTL_SECONDS`, which the script asserts).
+  - The bucket stays private.
+  - The redirect carries `private, no-store`, `Referrer-Policy: no-referrer` and `nosniff`.
+  - The link opens with `rel="noopener noreferrer"`.
+  - The file is served from the Supabase origin, not the app origin, so stored content cannot run script on the
+    app's origin.
+- **Headers: OK.** `Content-Disposition` filenames are sanitised (quotes, backslash, CR/LF, non-ASCII). Every
+  response, including errors, is no-store and nosniff.
+- **Dependency: OK.** `sharp` 0.35.4 is already in `package.json` and the lockfile.
+
+## Findings (all Low)
+
+**R70-1 (Low, merge order).** This PR conflicts textually with #87: both rewrite the same `document-meta` line in
+`app/policies/page.tsx` (checked with `git merge-tree`). Whichever merges second must keep Preview, Read again (with
+its note) and Delete.
+
+**R70-2 (Low, resource use).** Image previews decode the whole stored file with sharp's default `limitInputPixels`
+(about 268 MP). A very large TIFF or PNG can use most of a serverless function's memory before the resize. Suggest
+`sharp(buf, { pages: 1, limitInputPixels: 50_000_000 })`. A failure already returns the plain 500 message.
+
+**R70-3 (Low, accepted pattern).** A signed URL that was already issued stays valid for up to 300 s after the
+document is deleted. It also stays in browser history. This matches the documented claim-evidence behaviour; no new
+link is ever minted for a deleted document.
+
+**R70-4 (Low, cosmetic).**
+- The file type is decided by the file-name extension.
+- A `.doc`, `.xls` or other non-PDF file is served as `application/pdf` inline and shows as broken.
+- A PDF that was uploaded under a `.jpg` name fails in sharp and returns the 500 message.
+- No security impact, because of the nosniff header and the separate origin.
+
+## Verdict on PR #89 at `9efe42a`
+
+**Ready.** I found no cross-household path and no signed-URL leak. Resolve the #87 conflict at merge time.
