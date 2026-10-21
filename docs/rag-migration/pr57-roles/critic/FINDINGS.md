@@ -2595,3 +2595,55 @@ schedule is real; the duplicate-handling path should cope.
 **Not ready yet:** tighten R51-1 and R51-2. Both are small regex conditions, and each needs one control case. The four
 real fixes are correct and nothing else in this household moves. After merge, DC still needs to re-read the four
 documents (as the report says).
+
+# Round 52: recheck of PR #82 at `897a8a0` (R50-1 to R50-4)
+
+Method: verify.ts at 897a8a0 run offline against the real household snapshot (never committed). Every line with a `%`
+in every document was fed in as a quote with Desmond's accident base, plus targeted probes. 741aba9 was run with the
+same probes for comparison. No model calls.
+
+## Confirmed fixed
+
+- **R50-1:** the Comatose rows ("At least 6 months 50%") now get no card. The joined "… 15% of the Sum Insured" also
+  gets none. Their heading names "Comatose State Sum Insured".
+- **R50-2:** BS p4 TPD "100% of the Sum Insured, up to a maximum amount of $400,000" now gets no card. The BS p10
+  natural catastrophe prose (S$90,000 at 741aba9) now gets no card either.
+- **R50-3:** the base line quoted for Desmond must name Desmond. Charmaine's line gets no card.
+- **R50-4:** headings now end sections.
+- **Evidence Reviewer figures still hold:**
+  - BS wrist S$120,000 and hip S$450,000 for Desmond; wrist S$120,000 for Charmaine.
+  - PS wrist 25% of S$5,000 is S$1,250 and hip is S$3,750.
+  - PS p10 dismemberment rows and the BS split-line rows ("70%" / "(b) Right Hand" gives S$420,000) still work.
+  - A Term Life base on an accident row is refused.
+
+## Findings
+
+**R52-1 (High, wrong amount): a cap on the next line is still dropped.** Product Summary p13 prints "• Death due to
+natural catastrophe\t15% of Sum Insured" with "or up to S$50,000, whichever is lesser" on the *next* line. The row line
+is a short table line ending "% of Sum Insured" with no cap word on it, so Desmond gets a **S$90,000** card. The true
+amount is at most S$50,000. It stays S$90,000 even when the model quotes both lines, because `CAPPED` only tests
+`rowLine(...).text`. The bug was already there at 741aba9 (my miss in round 50). Fix: test `CAPPED` on the whole quoted
+passage and on continuation lines after the row, up to the next bullet or numbered row. A line starting "or", "up to",
+"whichever" or "subject to" always belongs to the row above. Add this row as a control.
+
+**R52-2 (Medium, needless refusal that hides amounts): burns rows now get no card.** `CAPPED` includes `greater`, and
+every burns row prints "Equals to or greater than 8%". So BS p7 and PS p12 third- and second-degree burns rows (for
+example head ≥8% 100%, which is S$600,000, or body 15–20% 75%, which is S$450,000) are now facts with no amount. At
+741aba9 they gave the right cards. Fix: drop `greater` (and `lesser`) when it is not part of "whichever is
+greater/lesser", or match only `whichever\s+is\s+(?:the\s+)?(?:greater|lesser)`. Add one burns row as a control.
+
+**R52-3 (Low, qualifier): PS p10 accident TPD "150% of Sum Insured" gives S$900,000.** The total is right. BS p5 says
+anything above $200,000 is paid as a $200,000 lump sum and the balance in three annual instalments. The card should
+carry that, as a condition from the model or a note. This is not a wrong amount.
+
+**Pre-existing, not new (Low):** PS p5 Term Life "Death 100% of Sum Insured" with Desmond's S$1,000,000 base gets no
+card, because no Term Life heading precedes it in the Product Summary. The certificate prints S$1,000,000 directly, so
+the amount is not hidden.
+
+The new prompt line (give every applicable amount separately, never only the larger, add "uncertainty" when documents
+differ) is consistent with the Evidence Reviewer's rule and with "never added".
+
+## Verdict on PR #82 at `897a8a0`
+
+**Not ready yet:** R52-1 is a wrong claimable amount, and R52-2 hides amounts that 741aba9 showed correctly. Both are
+small changes to `CAPPED` and its scope, each with one control case. R50-1 to R50-4 are fixed.
