@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable, figureText, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 
 let passed = 0;
 const failures: string[] = [];
@@ -300,6 +301,27 @@ test("a hospital plan keeps its limit, its deductible, a co-insurance percentage
   assert.equal(rows.find((r) => r.benefit === "Co-insurance")!.figure.kind, "none");
   assert.equal(rows.find((r) => r.benefit === "Ward entitlement")!.figure.kind, "none");
   assert.equal(rows.length, 4);
+});
+test("a page whose table was skipped is flagged for a re-read; a page read row by row is not", () => {
+  const scale: SourceDoc = { id: "sc", name: "Scale.pdf", readable: true, pages: [
+    { page: 1, text: "Schedule (% of Sum Insured)\nHip\t75%\nKnee\t50%\nWrist\t20%\nToe\t5%\nSkull\t100%" },
+    { page: 2, text: "Ambulance up to S$500\nRecuperation S$250\nFuneral S$2,000\nEducation S$5,000" },
+    { page: 3, text: "Definitions only, with 1 figure: 30 days" },
+  ] };
+  const read = checkReading(scale, doc("scheme_terms", [], [
+    benefit({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", page: 1, quote: "Hip 75%" }),
+    benefit({ benefit: "Ambulance", pays: "up_to", value: 500, page: 2, quote: "Ambulance up to S$500" }),
+    benefit({ benefit: "Recuperation", pays: "amount", value: 250, page: 2, quote: "Recuperation S$250" }),
+  ]));
+  assert.deepEqual(pagesToReread(scale, read).map((p) => p.page), [1]);
+  const again = checkReading(scale, doc("scheme_terms", [], [
+    benefit({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", page: 1, quote: "Hip 75%" }),
+    benefit({ benefit: "Knee", pays: "percent", value: 50, percentOf: "sum_insured", page: 1, quote: "Knee 50%" }),
+  ]));
+  const merged = mergeReadings(read, again);
+  assert.equal(merged.benefits.filter((b) => b.benefit === "Hip").length, 1);
+  assert.ok(merged.benefits.some((b) => b.benefit === "Knee"));
+  assert.equal(pagesToReread({ ...scale, readable: false }, read).length, 0);
 });
 test("a reading recorded before riders and values were added still checks", () => {
   assert.equal(certReading.covers[0].riderOf, null);

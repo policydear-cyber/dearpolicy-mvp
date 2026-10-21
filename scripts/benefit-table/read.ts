@@ -4,6 +4,8 @@
  *   Estimate (free):  node --import tsx scripts/benefit-table/read.ts --household-file snapshot.json [--max-usd 2]
  *   Paid:             ... --paid --model anthropic:claude-sonnet-5-5 --run-id <id> --max-usd <cap> --out <dir>
  *   Replay (free):    ... --replay <dir>   (re-runs today's checks and table on the recorded model output)
+ *   Page check:       add --page-check to read again, one at a time, the pages whose figures the document's reading left
+ *                     mostly unread (lib/benefit-table/completeness.ts); with --replay it re-uses the recorded page reads
  *   Part re-read:     ... --paid ... --only "<file>,<file>" --reuse <earlier dir>   (reads only those documents; the
  *                     others use the earlier run's recorded readings, which the output says)
  *
@@ -15,10 +17,12 @@ import { priceFor, type ModelChoice } from "@/lib/ai/providers";
 import { API_BASE_URL, apiKeyFromEnv } from "@/lib/simple-chat/model";
 import { checkReading, type CheckedReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable, coversOf, figureText, sectionsOf, type BenefitTable, type FamilyMember } from "@/lib/benefit-table/assemble";
-import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, renderDocument, renderLinkingInput, type SectionLink } from "@/lib/benefit-table/reading";
+import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, renderDocument, renderLinkingInput, type SectionLink } from "@/lib/benefit-table/reading";
+import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 
 export const READ_MAX_OUTPUT = 24_000;
 export const LINK_MAX_OUTPUT = 8_000;
+export const PAGE_MAX_OUTPUT = 8_000;
 /** Tokens from characters, set to run high: DC's library read 561k characters as 216k tokens (2.6 per token). */
 const tokensOf = (s: string) => Math.ceil(s.length / 2.5);
 type Price = { input: number; output: number };
@@ -139,7 +143,32 @@ async function main() {
       if (!existsSync(rawPath(w.d.id))) { say(`${w.d.name}: no recorded reading`); continue; }
       reply = JSON.parse(readFileSync(rawPath(w.d.id), "utf8")) as Reply;
     }
-    readings.push(checkReading(w.d, reply.json));
+    let reading = checkReading(w.d, reply.json);
+    if (process.argv.includes("--page-check")) {
+      const headings = [...new Set(reading.benefits.map((b) => b.section).filter((h): h is string => !!h))];
+      for (const f of pagesToReread(w.d, reading)) {
+        const pagePath = resolve(out, `raw-${w.d.id}-p${f.page}.json`);
+        let pageReply: Reply | null = null;
+        const page = { name: w.d.name, pages: w.d.pages.filter((p) => p.page === f.page) };
+        if (paid) {
+          const input = prompt + tokensOf(renderDocument(page)) + 400;
+          if (spent + usdOf(price, input, PAGE_MAX_OUTPUT) > maxUsd) { say(`${w.d.name} p${f.page}: page check stopped, its worst case would pass the cap`); continue; }
+          try {
+            pageReply = await callModel(choice, { system: READING_PROMPT, user: renderDocument(page) + pageReadingNote(f.page, headings), schema: READING_SCHEMA, maxTokens: PAGE_MAX_OUTPUT });
+          } catch (error) { say(`${w.d.name} p${f.page}: call failed: ${error instanceof Error ? error.message : String(error)}`); continue; }
+          writeFileSync(pagePath, JSON.stringify(pageReply, null, 1));
+          const usd = usdOf(price, pageReply.input, pageReply.output);
+          spent += usd;
+          usage.push({ call: `${w.d.name} p${f.page}`, input: pageReply.input, output: pageReply.output, usd, ms: pageReply.ms, stopReason: pageReply.stopReason, model: pageReply.model });
+          writeFileSync(resolve(out, "usage.json"), JSON.stringify({ spentUsd: spent, calls: usage }, null, 1));
+        } else if (existsSync(pagePath)) pageReply = JSON.parse(readFileSync(pagePath, "utf8")) as Reply;
+        if (!pageReply) continue;
+        const before = reading.benefits.length + reading.covers.length;
+        reading = mergeReadings(reading, checkReading(w.d, pageReply.json));
+        say(`${w.d.name} p${f.page} (${f.figureLines} figure lines, ${f.rowsRead} rows read): +${reading.benefits.length + reading.covers.length - before} rows${paid ? `, US$${usdOf(price, pageReply.input, pageReply.output).toFixed(4)} (total US$${spent.toFixed(4)}), stop ${pageReply.stopReason}` : ""}`);
+      }
+    }
+    readings.push(reading);
   }
 
   const sections = sectionsOf(readings);

@@ -116,3 +116,10 @@ Every section key appears exactly once.`;
 export function renderLinkingInput(sections: SectionRef[], covers: CoverType[]): string {
   return `<covers>\n${covers.map((c) => JSON.stringify({ key: c.key, product: c.product, cover: c.cover, plan: c.plan, riderOf: c.riderOf, heldBy: c.holders })).join("\n")}\n</covers>\n<sections>\n${sections.map((s) => JSON.stringify(s)).join("\n")}\n</sections>`;
 }
+
+/** For reading one page again on its own (lib/benefit-table/completeness.ts): which page, and the headings the whole
+ * document's reading found, so a row under a heading printed on an earlier page keeps that heading. */
+export function pageReadingNote(page: number, headings: string[]): string {
+  return `\n\nList the rows of page ${page} only. The rest of the document was read before; a table on this page may have been skipped, so list every row of every table on it.` +
+    (headings.length ? ` Headings found on earlier pages of this document, for "section" when one is still in force here: ${headings.map((h) => JSON.stringify(h)).join(", ")}.` : "");
+}
