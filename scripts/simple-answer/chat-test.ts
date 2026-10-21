@@ -795,7 +795,17 @@ async function main() {
   // The real household, when its snapshot is here (it is real data and lives outside the repo).
   if (existsSync(SNAPSHOT)) {
     const real = JSON.parse(readFileSync(SNAPSHOT, "utf8")) as Household;
-    const desmond = real.members.find((m) => /Desmond/.test(m.name))!.name.split(" (")[0];
+    // People are read from the snapshot by their role, so no real name is written here.
+    const nameOf = (role: string) => real.members.find((m) => m.relationship === role)!.name.split(" (")[0];
+    const self = nameOf("self"), spouse = nameOf("spouse");
+    const cert = "Certificate of Insurance.pdf";
+    /** A member's certificate line for one sum insured, from the member's name onwards, as printed. */
+    const certLine = (member: string, amount: string, sep = "\t") => {
+      const want = member.toLowerCase().split(/\s+/);
+      const line = real.documents.find((d) => d.name === cert)!.pages.flatMap((p) => p.text.split("\n")).find((l) => l.includes(`\t${amount}\t`) && want.every((w) => l.toLowerCase().includes(w)))!;
+      const cols = line.split("\t");
+      return cols.slice(cols.findIndex((c) => want.some((w) => c.toLowerCase().includes(w)))).join(sep);
+    };
     await check("snapshot: the wrist row is on stored page 13 of the Product Summary (the page prints 'Page 12 of 36')", () => {
       const f = locateQuote(real, "Arm, Elbow, Wrist or Ribs 25%", 1);
       assert.ok(f);
@@ -804,23 +814,23 @@ async function main() {
     });
     await check("snapshot C2: fracture, ambulance and recuperation stay three separate cards, never summed or a range", () => {
       const { answer } = verifyAnswer(real, {
-        bottomLine: "Desmond could get S$1,250 to S$2,000. In total that is S$2,000.", nextSteps: [], question: null,
+        bottomLine: "He could get S$1,250 to S$2,000. In total that is S$2,000.", nextSteps: [], question: null,
         statements: [
-          st({ kind: "amount", text: "Wrist fracture pays 25% of S$5,000.", person: "Desmond", document: "D2", quote: "Arm , Elbow, Wrist or Ribs 25%", percentOf: { percent: 25, baseAmount: "S$5,000" }, alternativeGroup: "a" }),
-          st({ kind: "amount", text: "Ambulance up to S$500.", person: "Desmond", document: "D1", quote: "Ambulance Cost* Up to S$500 per incident", amount: "S$500", alternativeGroup: "a" }),
-          st({ kind: "amount", text: "Recuperation S$250.", person: "Desmond", document: "D1", quote: "Accidental Hospital Recuperation Benefit* S$250", amount: "S$250", alternativeGroup: "a" }),
+          st({ kind: "amount", text: "Wrist fracture pays 25% of S$5,000.", person: self, document: "D2", quote: "Arm , Elbow, Wrist or Ribs 25%", percentOf: { percent: 25, baseAmount: "S$5,000" }, alternativeGroup: "a" }),
+          st({ kind: "amount", text: "Ambulance up to S$500.", person: self, document: "D1", quote: "Ambulance Cost* Up to S$500 per incident", amount: "S$500", alternativeGroup: "a" }),
+          st({ kind: "amount", text: "Recuperation S$250.", person: self, document: "D1", quote: "Accidental Hospital Recuperation Benefit* S$250", amount: "S$250", alternativeGroup: "a" }),
         ],
       });
       const cards = answer.statements!.filter((s) => s.amount);
       const label = "MINDEF & MHA Group Insurance (Product Summary)";
       assert.deepEqual(cards.map((s) => [s.amount!.text, s.personName, s.source!.policyName, s.source!.page, s.group]),
-        [["S$1,250", desmond, label, 13, null], ["Up to S$500", desmond, label, 13, null], ["S$250", desmond, label, 13, null]]);
+        [["S$1,250", self, label, 13, null], ["Up to S$500", self, label, 13, null], ["S$250", self, label, 13, null]]);
       assert.doesNotMatch([answer.summary, answer.bottomLine].join(" "), /2,000|to S\$/);
     });
-    await check("snapshot: Desmond's wrist 20% of sum insured and his S$600,000 sum insured are two cited facts, never multiplied", () => {
+    await check("snapshot: the self member's wrist 20% of sum insured and his S$600,000 sum insured are two cited facts, never multiplied", () => {
       const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "A wrist fracture pays 20% of the sum insured.", person: "Desmond", document: "D2", quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", percentOf: { percent: 20, baseAmount: "S$600,000" } }),
-        st({ kind: "amount", text: "Desmond's group personal accident sum insured.", person: "Desmond", document: "D3", quote: "Tan Yi Chuen, Desmond S$600,000 As of 06/10/2022", amount: "S$600,000" }),
+        st({ kind: "amount", text: "A wrist fracture pays 20% of the sum insured.", person: self, document: "D2", quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", percentOf: { percent: 20, baseAmount: "S$600,000" } }),
+        st({ kind: "amount", text: "His group personal accident sum insured.", person: self, document: "D3", quote: certLine(self, "S$600,000", " "), amount: "S$600,000" }),
       ] });
       const cards = answer.statements!.filter((s) => s.amount);
       assert.deepEqual(cards.map((s) => [s.amount!.text, s.amount!.illustration, s.source!.page]), [["S$600,000", false, 1]]);
@@ -830,18 +840,17 @@ async function main() {
     });
     await check("snapshot R36-2: the wrist row's 25% is never applied to S$600,000", () => {
       const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "Wrist pays 25%.", person: "Desmond", document: "D1", quote: "Arm , Elbow, Wrist or Ribs 25%", percentOf: { percent: 25, baseAmount: "S$600,000" } }),
+        st({ kind: "amount", text: "Wrist pays 25%.", person: self, document: "D1", quote: "Arm , Elbow, Wrist or Ribs 25%", percentOf: { percent: 25, baseAmount: "S$600,000" } }),
       ] });
       assert.equal(answer.statements!.filter((s) => s.amount).length, 0);
     });
-    const cert = "Certificate of Insurance.pdf";
     const di = (name: string) => `D${real.documents.findIndex((d) => d.name === name) + 1}`;
-    await check("snapshot B1: Charmaine's wrist shows S$1,250 (PS p13) and S$120,000 (20% of her S$600,000, BS p8), separate, BS condition only on the BS card", () => {
+    await check("snapshot B1: the spouse's wrist shows S$1,250 (PS p13) and S$120,000 (20% of her S$600,000, BS p8), separate, BS condition only on the BS card", () => {
       const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "Simple Fracture benefit for the wrist.", person: "Charmaine", document: di("Product Summary.pdf"), quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" }, alternativeGroup: "wrist",
+        st({ kind: "amount", text: "Simple Fracture benefit for the wrist.", person: spouse, document: di("Product Summary.pdf"), quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" }, alternativeGroup: "wrist",
           conditions: [{ text: "Only under the Core or Voluntary Scheme.", quote: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." }] }),
-        st({ kind: "amount", text: "Other Fracture benefit for the wrist.", person: "Charmaine", document: di("Benefit Summary.pdf"), quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", alternativeGroup: "wrist",
-          percentOf: { percent: 20, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: "Ong Pei Lin Charmaine\tS$600,000\tAs of 06/10/2022" },
+        st({ kind: "amount", text: "Other Fracture benefit for the wrist.", person: spouse, document: di("Benefit Summary.pdf"), quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", alternativeGroup: "wrist",
+          percentOf: { percent: 20, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: certLine(spouse, "S$600,000") },
           conditions: [{ text: "Only under the Core or Voluntary Scheme.", quote: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." }] }),
       ] });
       const cards = answer.statements!.filter((x) => x.amount);
@@ -850,24 +859,24 @@ async function main() {
     });
     await check("snapshot B4/B5: hip 75% and eye 100% are worked out on the Personal Accident S$600,000, never the term life S$1,000,000", () => {
       const run = (quote: string, doc: string, percent: number, base: string, line: string) => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "x", person: "Desmond", document: di(doc), quote, percentOf: { percent, baseAmount: base, baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.find((x) => x.amount)?.amount?.text ?? null;
-      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$450,000");
-      assert.equal(run("(a) Sight in at least one eye\t100%", "Product Summary.pdf", 100, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$600,000");
-      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$1,000,000", "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), null);
+        st({ kind: "amount", text: "x", person: self, document: di(doc), quote, percentOf: { percent, baseAmount: base, baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.find((x) => x.amount)?.amount?.text ?? null;
+      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$600,000", certLine(self, "S$600,000")), "S$450,000");
+      assert.equal(run("(a) Sight in at least one eye\t100%", "Product Summary.pdf", 100, "S$600,000", certLine(self, "S$600,000")), "S$600,000");
+      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$1,000,000", certLine(self, "S$1,000,000")), null);
     });
     await check("snapshot R50: the comatose rows, the advance payment cap and another person's line give no card", () => {
       const bsI = di("Benefit Summary.pdf");
-      const one = (quote: string, percent: number, line: string, person = "Desmond") => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+      const one = (quote: string, percent: number, line: string, person = self) => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
         st({ kind: "amount", text: "x", person, document: bsI, quote, percentOf: { percent, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.filter((x) => x.amount).length;
-      const dl = "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022", cl = "Ong Pei Lin Charmaine\tS$600,000\tAs of 06/10/2022";
+      const dl = certLine(self, "S$600,000"), cl = certLine(spouse, "S$600,000");
       assert.equal(one("At least 6 months\t50% ... Comatose State sum insured will be 15% of the Sum Insured", 50, dl), 0);
-      assert.equal(one("of 100% of the Sum Insured, up to a maximum amount of $400,000", 100, "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), 0);
+      assert.equal(one("of 100% of the Sum Insured, up to a maximum amount of $400,000", 100, certLine(self, "S$1,000,000")), 0);
       assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, cl), 0);
       assert.equal(one("Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", 20, dl), 1);
     });
     await check("snapshot R52: a cap on the next line stops the card; burns rows labelled 'greater than' still work out", () => {
-      const one = (doc: string, quote: string, percent: number, line = "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022") => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
-        st({ kind: "amount", text: "x", person: "Desmond", document: di(doc), quote, percentOf: { percent, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
+      const one = (doc: string, quote: string, percent: number, line = certLine(self, "S$600,000")) => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "x", person: self, document: di(doc), quote, percentOf: { percent, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.filter((x) => x.amount).map((x) => x.amount!.text);
       assert.deepEqual(one("Product Summary.pdf", "Death due to natural catastrophe\t15% of Sum Insured", 15), []);
       assert.deepEqual(one("Product Summary.pdf", "Comatose State Lump Sum Benefit\t15% of Sum Insured or", 15), []);
       assert.deepEqual(one("Product Summary.pdf", "- Equals to or greater than 8%\t100%", 100), ["S$600,000"]);
@@ -881,10 +890,12 @@ async function main() {
     });
     await check("snapshot E1/E3: the unreadable file's text is not sent; the CI II files say they are linked to nobody", () => {
       const lib = renderLibrary(real);
-      assert.match(lib, /name="output_202609281146117.pdf"[^>]*reading_status="could not be read/);
-      const bad = real.documents.find((d) => d.name === "output_202609281146117.pdf")!;
+      const bad = real.documents.find((d) => d.processingStatus === "failed")!;
+      assert.match(lib, new RegExp(`name="${bad.name.replace(/\./g, "\\.")}"[^>]*reading_status="could not be read`));
       assert.ok(!lib.includes(bad.pages[0].text.slice(0, 60)));
-      for (const name of ["817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "5e58ea7d-9ec6-4cf7-bc2e-bac50a674973.pdf"]) assert.match(lib, new RegExp(`name="${name}"[^>]*linked_people="nobody`));
+      const nobody = real.documents.filter((d) => d.processingStatus !== "failed" && !d.linkedPeople.length).map((d) => d.name);
+      assert.equal(nobody.length, 2);
+      for (const name of nobody) assert.match(lib, new RegExp(`name="${name}"[^>]*linked_people="nobody`));
     });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
