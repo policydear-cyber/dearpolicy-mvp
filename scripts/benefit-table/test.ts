@@ -328,6 +328,63 @@ test("a reading recorded before riders and values were added still checks", () =
   assert.equal(termsReading.benefits[0].basis, null);
 });
 
+// ------------------------------------------------------------------ Critic R85: plan columns, projections, duplicate covers
+/** One person's plan cover and one benefit row in a column, linked: the rows the person gets. */
+function planCase(plan: string | null, column: string, otherPlans: string[] = []) {
+  const people = ["Lim Wei Jie", "Tan Mei Ling", "Lim Kai"];
+  const lines = [plan, ...otherPlans].map((p, i) => `${people[i]}\tPlan: ${p ?? "none"}`);
+  const proof: SourceDoc = { id: "pc", name: "Schedule.pdf", readable: true, pages: [{ page: 1, text: lines.join("\n") }] };
+  const pr = checkReading(proof, { document: { kind: "personal_proof", product: "Shield", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+    covers: [plan, ...otherPlans].map((p, i) => ({ person: people[i], product: "Shield", cover: "Shield", plan: p, sumInsured: null, asOf: null, page: 1, quote: lines[i] })), benefits: [] });
+  const table: SourceDoc = { id: "pt", name: "Table.pdf", readable: true, pages: [{ page: 1, text: `Benefits\t${column}\nWard\tS$1,000` }] };
+  const tr = checkReading(table, doc("scheme_terms", [], [benefit({ section: "Benefits", column, benefit: "Ward", pays: "up_to", value: 1000, quote: "Ward S$1,000" })]));
+  const t = assembleTable([pr, tr], family, [{ section: sectionKeyOf("pt", { section: "Benefits", column }), cover: coverKeyOf({ product: "Shield", cover: "Shield", plan }), why: "x" }]);
+  return { rows: t.people[0].rows, refused: t.refusedLinks };
+}
+test("R85-1: plan A is not plan B, though one name is inside the other", () => {
+  assert.equal(planCase("A", "Plan B").rows.length, 0);
+  assert.equal(planCase("A", "Plan A").rows.length, 1);
+  assert.equal(planCase("Plan A", "A").rows.length, 1);
+  assert.equal(planCase("Gold", "Gold Plus").rows.length, 0);
+  assert.equal(planCase("Gold Plus", "Gold").rows.length, 0);
+});
+test("R85-1: a plan column is refused for a cover that prints no plan", () => {
+  const c = planCase(null, "Plan B");
+  assert.equal(c.rows.length, 0);
+  assert.match(c.refused[0].why, /prints no plan/);
+  assert.equal(planCase(null, "Business").rows.length, 0);
+  assert.equal(planCase(null, "Healthy Choice", ["Healthy Choice"]).rows.length, 0, "a plan another member holds");
+});
+test("R85-1: a column that names no plan (Adult, Child, Per Visit) is neutral", () => {
+  for (const col of ["Adult", "Child", "Per Visit", "Insured Person"]) {
+    assert.equal(planCase("A", col).rows.length, 1, col);
+    assert.equal(planCase(null, col).rows.length, 1, col);
+  }
+});
+test("R85-2: a figure whose own words say non-guaranteed or projected is shown as a projection, whatever the model said", () => {
+  const ilpPage: SourceDoc = { id: "pj", name: "Policy summary.pdf", readable: true, pages: [{ page: 1, text:
+    "Lim Wei Jie\tSum assured S$100,000\nNon-Guaranteed Surrender Value S$12,400\nTotal Maturity Value at 4.25% p.a. S$58,000\nGuaranteed Death Benefit S$100,000" }] };
+  const r = checkReading(ilpPage, { document: { kind: "personal_proof", product: "SaveMore", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Lim Wei Jie", product: "SaveMore", cover: "SaveMore", plan: null, sumInsured: 100000, asOf: null, page: 1, quote: "Lim Wei Jie Sum assured S$100,000" }],
+    benefits: [benefit({ benefit: "Surrender value", pays: "value", value: 12400, quote: "Non-Guaranteed Surrender Value S$12,400" }),
+      benefit({ benefit: "Maturity value", pays: "amount", value: 58000, quote: "Total Maturity Value at 4.25% p.a. S$58,000" }),
+      benefit({ benefit: "Death", pays: "amount", value: 100000, quote: "Guaranteed Death Benefit S$100,000" })] });
+  const t = assembleTable([r], family, [{ section: sectionKeyOf("pj", { section: null, column: null }), cover: coverKeyOf({ product: "SaveMore", cover: "SaveMore", plan: null }), why: "x" }]);
+  const kind = (name: string) => t.people[0].rows.find((x) => x.benefit === name)!.figure.kind;
+  assert.equal(kind("Surrender value"), "projected");
+  assert.equal(kind("Maturity value"), "projected");
+  assert.equal(kind("Death"), "printed");
+});
+test("R85-6: a correction applies to every copy of the person's cover", () => {
+  const two = checkReading({ ...cert, pages: [{ page: 1, text: "GROUP PERSONAL ACCIDENT\nLim Wei Jie\tS$200,000\nLim Wei Jie\tS$250,000" }] },
+    doc("personal_proof", [cover("Lim Wei Jie", "Group Personal Accident", 200000, "Lim Wei Jie S$200,000"), cover("Lim Wei Jie", "Group Personal Accident", 250000, "Lim Wei Jie S$250,000")], []));
+  const t = assembleTable([two], family, [], [{ personId: "a", coverKey: gpa, status: "corrected", sumInsured: 300000 }]);
+  const covers = t.people[0].covers;
+  assert.equal(covers.length, 2);
+  assert.ok(covers.every((c) => c.sumInsured === 300000 && c.confirmation?.status === "corrected"));
+  assert.deepEqual(covers.map((c) => c.confirmation!.printed).sort(), [200000, 250000]);
+});
+
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 if (failures.length) process.exit(1);

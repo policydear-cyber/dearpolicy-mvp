@@ -2,6 +2,7 @@
  * and a scripted model. Synthetic pages only, no household data, no network.
  *   npm run benefit-table:service-test */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
 import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
@@ -254,6 +255,13 @@ async function main() {
     const f = household();
     await readBoth(f);
     await assert.rejects(setConfirmation(f.db, A, null, "stranger", gpa, null, null), TableInputError);
+  });
+
+  await test("R85-3: with the table switched on, every old ledger read and seed stops at its first line", async () => {
+    const body = (file: string, head: string) => { const src = readFileSync(file, "utf8"), i = src.indexOf(head); assert.ok(i >= 0, head); return src.slice(i, i + 600); };
+    for (const head of ["export async function readDocumentIntoLedger(", "export async function readPendingDocuments(", "export async function pendingDocumentCount("])
+      assert.match(body("lib/ledger/extract.ts", head), /\{\n  if\(await benefitTableOwnsReading\(\)\)return/, head);
+    assert.match(body("lib/ledger/store.ts", "export async function seedLedger("), /if\(await benefitTableLive\(\)\)return \{added:0\}/);
   });
 
   console.log(`benefit-table service: ${passed} passed, ${failures.length} failed`);

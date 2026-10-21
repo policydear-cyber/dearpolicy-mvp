@@ -43,8 +43,10 @@ CREATE TABLE IF NOT EXISTS benefit_confirmations (
   PRIMARY KEY(account_id, family_member_id, cover_key)
 );
 
--- Household-member policies, as for the other household tables (sql/household-rls.sql). The app's server routes use
--- the service connection; these keep the tables closed to anyone outside the household if reached from a browser.
+-- Household members may read their own rows from a browser, never write them: every write goes through the server
+-- routes, which check the reading against the stored pages, the link against the household's own sections and covers,
+-- and the confirmation against a cover the person holds (lib/benefit-table/service.ts). The server uses the service
+-- connection, so it needs no grant here.
 DO $$
 DECLARE t text;
 BEGIN
@@ -53,15 +55,7 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS household_member_select ON public.%I', t);
     EXECUTE format('DROP POLICY IF EXISTS household_member_write ON public.%I', t);
     EXECUTE format('CREATE POLICY household_member_select ON public.%I FOR SELECT TO authenticated USING (is_household_member(account_id))', t);
-    EXECUTE format('CREATE POLICY household_member_write ON public.%I FOR ALL TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id))', t);
-    EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
-    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
+    EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated', t);
   END LOOP;
 END $$;
--- A reading may only be of a document of its own household; a confirmation may only name a person of it.
-DROP POLICY IF EXISTS household_member_write ON public.benefit_readings;
-CREATE POLICY household_member_write ON public.benefit_readings FOR ALL TO authenticated USING (is_household_member(account_id))
-  WITH CHECK (is_household_member(account_id) AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = benefit_readings.policy_id AND p.account_id = benefit_readings.account_id));
-DROP POLICY IF EXISTS household_member_write ON public.benefit_confirmations;
-CREATE POLICY household_member_write ON public.benefit_confirmations FOR ALL TO authenticated USING (is_household_member(account_id))
-  WITH CHECK (is_household_member(account_id) AND EXISTS (SELECT 1 FROM public.family_members f WHERE f.id = benefit_confirmations.family_member_id AND f.account_id = benefit_confirmations.account_id));

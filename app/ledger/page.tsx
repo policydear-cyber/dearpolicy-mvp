@@ -59,19 +59,18 @@ function sourceLabel(row:Row){
 /** With DEARPOLICY_BENEFIT_TABLE on, Coverage is the benefit table; switched off (the server answers enabled:false),
  * the ledger view below, unchanged. */
 export default function CoveragePage(){
-  // undefined while loading; "error" when the server could not answer, so the old view (which reads documents into the
-  // old ledger on its own) never opens just because the new one failed.
-  const [table,setTable]=useState<BenefitTableData|null|"error"|undefined>(undefined);
+  // undefined while loading; null (switched off, or the server could not answer) shows the ledger view. That view cannot
+  // start a second paid read: with the switch on, the ledger's reads stop on the server (lib/ledger/extract.ts).
+  const [table,setTable]=useState<BenefitTableData|null|undefined>(undefined);
   const loadTable=async()=>{
     try{
       const res=await fetch("/api/benefit-table",{cache:"no-store"});
       const data=await res.json().catch(()=>({}));
-      setTable(!res.ok?"error":data.enabled?data as BenefitTableData:null);
-    }catch{setTable("error");}
+      setTable(res.ok&&data.enabled?data as BenefitTableData:null);
+    }catch{setTable(null);}
   };
   useEffect(()=>{void loadTable();},[]);
   if(table===undefined)return <div className="page"><p className="muted" role="status">Loading your coverage…</p></div>;
-  if(table==="error")return <div className="page"><div className="alert error" role="alert"><strong>Your coverage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div></div>;
   return table?<BenefitTableCoverage data={table} reload={loadTable}/>:<LedgerCoveragePage/>;
 }
 

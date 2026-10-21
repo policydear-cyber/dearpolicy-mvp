@@ -90,9 +90,14 @@ export function sectionsOf(readings: CheckedReading[]): SectionRef[] {
   return [...map.values()];
 }
 
+/** Words that mark a figure as a projection whatever the model said: "non-guaranteed", an illustration, "projected", an
+ * assumed rate of return, "at 4.25% p.a.". Checked in the row's own quote, benefit name, section and column. */
+const PROJECTION = /\bnon[\s-]?guaranteed\b|\billustrat(?:ed|ion|ive)\b|\bprojected\b|\b(?:investment\s+)?rate\s+of\s+return\b|\bassumed\s+(?:investment\s+)?(?:rate|return)|\bat\s+\d+(?:\.\d+)?\s*%\s*(?:p\.?\s?a\b|per\s+annum|a\s+year)/i;
+export const readsAsProjection = (b: Pick<CheckedBenefit, "benefit" | "section" | "column"> & { source: { excerpt: string } }) =>
+  PROJECTION.test([b.source.excerpt, b.benefit, b.section ?? "", b.column ?? ""].join("\n"));
 function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: boolean): Figure {
   const f = baseFigure(b, cover);
-  const basis = b.basis === "non_guaranteed" || b.basis === "illustrated" ? b.basis : fromIllustration ? "illustrated" : null;
+  const basis = b.basis === "non_guaranteed" || b.basis === "illustrated" ? b.basis : fromIllustration ? "illustrated" : readsAsProjection(b) ? "non_guaranteed" : null;
   if (basis && f.kind !== "none") return { kind: "projected", amount: f.amount, currency: f.currency, basis, asOf: b.asOf };
   return f;
 }
@@ -111,13 +116,28 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   return { kind: "none", why: `${b.value}% of a base the page does not state` };
 }
 
-/** A column belongs to a cover only when it is that cover's plan; with no plan on the cover, a plan-named column is refused. */
-function columnProblem(column: string | null, cover: CoverType): string | null {
-  if (!column) return null;
-  const col = norm(column), plan = norm(cover.plan);
-  if (plan && (col.includes(plan) || plan.includes(col))) return null;
-  if (!plan) return null;
-  return `column "${column}" is not the plan "${cover.plan}" on the person's cover`;
+/** Words that name a plan column without being part of the plan's name ("Plan A", "Option 2"). */
+const PLAN_WORDS = new Set(["plan", "plans", "option", "options", "tier", "class", "category", "type"]);
+/** Names a column can carry that are plan or tier names wherever they appear. */
+const TIER_NAMES = new Set(["basic", "standard", "classic", "enhanced", "premier", "premium", "elite", "deluxe", "superior", "executive", "business",
+  "bronze", "silver", "gold", "platinum", "diamond", "lite", "plus", "max", "essential", "comprehensive", "core", "prestige", "signature"]);
+const planTokens = (s: string | null) => norm(s).split(" ").filter((t) => t && !PLAN_WORDS.has(t));
+const samePlan = (a: string | null, b: string | null) => { const x = planTokens(a), y = planTokens(b); return x.length > 0 && x.join(" ") === y.join(" "); };
+/** A column that names a plan: a plan some cover in the household holds, a column called "Plan …"/"Option …", a single
+ * letter or roman numeral, or a tier name. Any other column ("Adult", "Child", "Per Visit") says nothing about the plan. */
+function namesPlan(column: string, plans: (string | null)[]): boolean {
+  const words = norm(column).split(" ").filter(Boolean);
+  if (plans.some((p) => samePlan(column, p))) return true;
+  if (words.some((w) => PLAN_WORDS.has(w))) return true;
+  const rest = planTokens(column);
+  return rest.length === 1 && (/^[a-z]$/.test(rest[0]) || /^(i|ii|iii|iv|v|vi)$/.test(rest[0]) || TIER_NAMES.has(rest[0])) || rest.length > 0 && rest.every((w) => TIER_NAMES.has(w));
+}
+/** A plan column belongs to a cover only when it is that cover's plan, word for word ("Plan A" is not "Plan B"); a plan
+ * column is refused for a cover with no plan; a column that names no plan is neutral. */
+function columnProblem(column: string | null, cover: CoverType, plans: (string | null)[]): string | null {
+  if (!column || !namesPlan(column, plans)) return null;
+  if (cover.plan && samePlan(column, cover.plan)) return null;
+  return cover.plan ? `column "${column}" is not the plan "${cover.plan}" on the person's cover` : `column "${column}" names a plan, but the person's cover prints no plan`;
 }
 
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = []): BenefitTable {
@@ -126,10 +146,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   // it; the printed figure stays on the cover, so the page can show both.
   const staleConfirmations: Confirmation[] = [];
   for (const k of confirmations) {
-    const c = covers.find((x) => x.personId === k.personId && x.coverKey === k.coverKey);
-    if (!c) { staleConfirmations.push(k); continue; }
-    c.confirmation = { ...k, printed: c.sumInsured };
-    if (k.status === "corrected") c.sumInsured = k.sumInsured;
+    // Every copy of the cover for that person (two documents can print it with different figures) takes the household's word.
+    const held = covers.filter((x) => x.personId === k.personId && x.coverKey === k.coverKey);
+    if (!held.length) { staleConfirmations.push(k); continue; }
+    for (const c of held) {
+      c.confirmation = { ...k, printed: c.sumInsured };
+      if (k.status === "corrected") c.sumInsured = k.sumInsured;
+    }
   }
   const sections = sectionsOf(readings);
   const refusedLinks: BenefitTable["refusedLinks"] = [];
@@ -140,7 +163,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
     if (linkOf.has(l.section)) { refusedLinks.push({ link: l, why: "section linked twice" }); continue; }
     if (l.cover && !type) { refusedLinks.push({ link: l, why: "no such cover" }); continue; }
-    const problem = type ? columnProblem(section.column, type) : null;
+    const problem = type ? columnProblem(section.column, type, types.map((t) => t.plan)) : null;
     if (problem) { refusedLinks.push({ link: l, why: problem }); continue; }
     linkOf.set(l.section, l);
   }
