@@ -205,8 +205,9 @@ export function coverageForLedgerRow(contract:PolicyContract,row:{event_type:str
     conditions:[],requirements:[],needsReview:false};
   return coverageForBenefit({...contract,coverages:contract.coverages.filter(c=>c.amount!=null&&c.amount>0)},stub);
 }
-/** Rows changed within a minute of this many other machine-made rows were changed by a machine, not a person. */
-const MACHINE_BATCH=5;
+/** Rows changed within a minute of this many other machine-made rows were changed by a machine, not a person: more
+ *  than a person edits by hand in a minute (Critic R76-1). The live older join stamped 52 rows within 12 seconds. */
+const MACHINE_BATCH=20;
 const WRONG_COVER_NOTE="This may be worked out from the wrong cover";
 /** The note for a changed row whose sum insured is another cover's, or null when it already says so. */
 function wrongCoverNote(stored:number,basis:number|null,currency:string,conditions:string[]|null){

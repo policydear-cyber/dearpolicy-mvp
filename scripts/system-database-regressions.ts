@@ -1903,14 +1903,18 @@ async function main(){
       // Live, 21 Oct (main 96fa81d): an older join wrote updated_at when it set the basis, 29 minutes after seeding, on 52
       // rows within 12 seconds, so they looked changed and kept S$1,000,000 -- the confirmed accidental death among them.
       // Rows stamped together like that were stamped by a machine, whatever their status, and are joined again.
-      const batch=await Promise.all(["Death due to Accident, joined by an older version","Loss of speech, joined by an older version",
-        "Loss of sight, joined by an older version","Loss of a thumb, joined by an older version","Loss of a toe, joined by an older version",
-        "Third degree burns, joined by an older version"].map((note,i)=>row(i===0?"accidental_death":"dismemberment","accident",note)));
+      const batch=await Promise.all(["Death due to Accident, joined by an older version",
+        ...Array.from({length:21},(_,i)=>`Dismemberment item ${i+1}, joined by an older version`)]
+        .map((note,i)=>row(i===0?"accidental_death":"dismemberment","accident",note)));
       await db.query("UPDATE coverage_rules SET sum_basis=1000000,status=CASE WHEN id=$2 THEN 'confirmed' ELSE 'proposed' END,updated_at=created_at+interval '29 minutes' WHERE id=ANY($1::uuid[])",[batch,batch[0]]);
       // Critic R75-1: one row changed on its own and sent back as "proposed" may still hold a person's figure.
       const lone=await row("dismemberment","accident","Loss of a finger, changed on its own");
       await db.query("UPDATE coverage_rules SET sum_basis=1000000,status='proposed',updated_at=created_at+interval '3 hours' WHERE id=$1",[lone]);
+      // Critic R76-1: a handful of rows a person changed within one minute is not a machine's batch.
+      const handful=await Promise.all(Array.from({length:6},(_,i)=>row("dismemberment","accident",`Hand-edited item ${i+1}`)));
+      await db.query("UPDATE coverage_rules SET sum_basis=1000000,status='confirmed',updated_at=created_at+interval '2 hours' WHERE id=ANY($1::uuid[])",[handful]);
       await seedLedger(account);
+      for(const id of handful)assert.equal(await basis(id),1000000,"Rows a person changed together keep their figures");
       for(const id of batch)assert.equal(await basis(id),600000,"A row stamped with a batch by an older join is moved to the personal accident cover, confirmed or not");
       const kept=async(id:string)=>(await db.query<{sum_basis:string;conditions:string[]}>("SELECT sum_basis::text,conditions FROM coverage_rules WHERE id=$1",[id])).rows[0];
       for(const id of [edited,lone]){
