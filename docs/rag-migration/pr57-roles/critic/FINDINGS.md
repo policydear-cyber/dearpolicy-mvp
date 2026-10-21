@@ -3918,3 +3918,21 @@ What holds:
 - Note for DC's spend: with the flag on, each document costs one Sonnet 5.5 reading (up to 24K output), up to 12 page re-reads, and a household-wide linking call on each upload. Usage is recorded through `recordUsage`.
 
 Verdict: **NOT READY until R85-1 to R85-3 are fixed.** R85-1 can show another plan's figures as the person's. R85-2 is the projection backstop. R85-3 doubles paid reads with the flag on. R85-4 to R85-6 are optional.
+
+## Round 86: PR #94 delta, head 824823f (R85 fixes)
+
+Read-only review; no paid call.
+
+- **R85-1 fixed.** `assemble.ts:119-141`: plan tokens are now compared whole, with "plan/option/tier/..." removed. "Plan B" is refused for a Plan A cover, a plan column is refused for a cover with no plan, and "Adult"/"Child"/"Per Visit" are neutral. A single letter, a roman numeral, a tier name or a household plan counts as a plan column.
+- **R85-2 fixed.** `PROJECTION` checks the quote, benefit name, section and column for "non-guaranteed", "illustration", "projected", a rate of return, or "at N% p.a.". The check also applies when the model said "guaranteed", because only non_guaranteed and illustrated short-circuit it.
+- **R85-3 fixed.** The gate sits inside `readDocumentIntoLedger`, `readPendingDocuments`, `pendingDocumentCount` and `seedLedger`. With the table live, the upload, the dashboard after(), the ledger routes, chat and #92's refresh all stop paid ledger reads and default seeding.
+- **R85-4 fixed.** Any non-OK answer or fetch error shows the old view. With the flag on, that view can no longer start a paid read.
+- **R85-5 fixed.** Anon and authenticated have all rights revoked and authenticated has SELECT only. The server writes through the service connection.
+- **R85-6 fixed.** A confirmation or correction applies to every copy of the cover for that person.
+
+No wrong-amount regression found. New, all Low:
+- **R86-1 (Low, hides a benefit)** `samePlan` compares every remaining token, so a column carrying a currency or unit ("Plan A (S$)" becomes the tokens "a s", and "Plan A Per Visit" becomes "a per visit") is refused for a Plan A cover. The section then shows as unlinked instead of as the person's benefits. This is safe (no figure rather than a wrong one), but a printed "(S$)" heading is common. Consider dropping currency and unit tokens (s, sgd, usd, per, visit, claim, limit, day, year) before comparing.
+- **R86-2 (Low, product call)** With the flag on, the old ledger is frozen: no reads and no seeding. Chat and claim paths that read `coverage_rules` see nothing for documents uploaded after the switch. Confirm that is intended before DC switches the flag on.
+- **R86-3 (Low)** `benefitTableLive()` runs a `to_regclass` query on every `pendingDocumentCount`, `seedLedger` and `readDocumentIntoLedger` call. It is cheap, but it is called on every dashboard and Coverage load; it could be cached per instance once the tables exist.
+
+Verdict: **READY.** R86-1 to R86-3 are optional, and nothing is switched on until DC sets DEARPOLICY_BENEFIT_TABLE and applies the SQL.
