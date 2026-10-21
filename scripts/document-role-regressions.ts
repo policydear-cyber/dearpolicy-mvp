@@ -55,6 +55,19 @@ async function main() {
     assert.equal(detectHighConfidenceReferenceRole(combined), null);
   });
 
+  await t("1 control (R51-2): a certificate printing Part 1 as Life Assured / Sum Assured / Effective Date stays a certificate", () => {
+    const lifeAssured = doc(
+      "CERTIFICATE OF INSURANCE\nLife Assured: Lim Wei Jie\nSum Assured S$500,000\nEffective Date 01/02/2023",
+      "CERTIFICATE OF INSURANCE PART 2: HIGHLIGHTS OF COVER\nGroup Term Life benefits.",
+    );
+    assert.equal(deterministicDocumentRole(lifeAssured, null), "certificate");
+    const nameLine = doc(
+      "CERTIFICATE OF INSURANCE\nGROUP PERSONAL ACCIDENT\nLim Wei Jie\tS$600,000\tAs of 06/10/2022",
+      "CERTIFICATE OF INSURANCE PART 2: HIGHLIGHTS OF COVER\nGroup Personal Accident benefits.",
+    );
+    assert.equal(deterministicDocumentRole(nameLine, null), "certificate");
+  });
+
   // 2. A cover letter sent with the policy
   const letter = "Mr Lim Wei Jie\tCustomer Service\nBlk 1 Example Road\tHotline: (65) 6000 0000\n1 March 2026\nDear Mr Lim\nYour Example Critical Illness Policy is now ready\nHere's your policy document for your safekeeping.";
   const signOff = "Thank you for choosing Example Life.\nYours sincerely\nA Person\nHead of Operations";
@@ -91,6 +104,12 @@ async function main() {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");
     assert.notEqual(deterministicDocumentRole(generic, null), "personal_schedule");
     assert.equal(detectHighConfidenceReferenceRole(generic), "policy_wording");
+  });
+  await t("3 control (R51-1): a group scheme summary with a group policy number and no named person is not personal", () => {
+    const group = doc("Harbour Group Insurance Summary\nGroup Policy No. G123400\nThe Sum Insured is shown in your certificate.\nThe insured person means a member of the scheme.");
+    assert.notEqual(deterministicDocumentRole(group, null), "personal_schedule");
+    const noName = doc("Your travel insurance summary\nPolicy number : TRV2026-00012345\nPolicyholder:\nSum insured as stated.");
+    assert.notEqual(deterministicDocumentRole(noName, null), "personal_schedule", "a policy number without a named person is not enough");
   });
 
   // 4. A policy wording that describes endorsements
