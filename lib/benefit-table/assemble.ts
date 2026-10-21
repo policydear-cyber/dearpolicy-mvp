@@ -8,14 +8,20 @@
  *   a percentage of a fixed amount              the percentage of the figure printed on the same page;
  *   a percentage of the sum insured             the percentage of THIS person's sum insured for the linked cover;
  *   anything else                               no amount, with the reason.
- * Rows from different documents are never added together; each row stands alone. */
+ *   a fund, cash or maturity value              as printed, with the date it is printed for;
+ *   a figure the document calls non-guaranteed, or one from an illustration, is shown only as a projection, never as an
+ *   amount the person holds or will be paid.
+ * Rows from different documents are never added together; each row stands alone. A cover read from an illustration
+ * (a quotation) is not proof that the person holds it. */
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import type { CheckedBenefit, CheckedCover, CheckedReading, Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null };
 export type Figure =
-  | { kind: "printed"; amount: number; currency: string | null; unit: "lump_sum" | "up_to" | "per_day" }
+  | { kind: "printed"; amount: number; currency: string | null; unit: "lump_sum" | "up_to" | "per_day" | "per_period"; period?: string | null }
+  | { kind: "value"; amount: number; currency: string | null; asOf: string | null }
+  | { kind: "projected"; amount: number; currency: string | null; basis: "non_guaranteed" | "illustrated"; asOf: string | null }
   | { kind: "worked_out"; amount: number; currency: string | null; how: string }
   | { kind: "none"; why: string };
 export type TableRow = {
@@ -28,6 +34,8 @@ export type BenefitTable = {
   people: { id: string; name: string; covers: PersonCover[]; rows: TableRow[] }[];
   /** Covers printed for someone who is not (or not unambiguously) a family member. */
   unmatchedCovers: CheckedCover[];
+  /** Covers printed in an illustration (a quotation): not proof the person holds them. */
+  illustrationCovers: CheckedCover[];
   /** Sections no cover was linked to, with why: shown to the household, never silently dropped. */
   unlinkedSections: { section: SectionRef; why: string }[];
   /** Links refused by the server's own checks. */
@@ -35,7 +43,8 @@ export type BenefitTable = {
 };
 
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-export const coverKeyOf = (c: { product: string; cover: string; plan: string | null }) => [norm(c.product), norm(c.cover), norm(c.plan)].join("|");
+export const coverKeyOf = (c: { product: string; cover: string; plan: string | null; riderOf?: string | null }) =>
+  [norm(c.product), norm(c.cover), norm(c.plan), ...(c.riderOf ? [norm(c.riderOf)] : [])].join("|");
 export const sectionKeyOf = (documentId: string, b: { section: string | null; column: string | null }) => [documentId, norm(b.section), norm(b.column)].join("|");
 const cents = (n: number) => Math.round(n * 100) / 100;
 const money = (amount: number, currency: string | null) =>
@@ -43,8 +52,9 @@ const money = (amount: number, currency: string | null) =>
 
 /** The household's cover types and their holders, and the covers printed for nobody in the family. */
 export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
-  const covers: PersonCover[] = [], unmatched: CheckedCover[] = [];
+  const covers: PersonCover[] = [], unmatched: CheckedCover[] = [], illustration: CheckedCover[] = [];
   for (const r of readings) for (const c of r.covers) {
+    if (r.kind === "illustration") { illustration.push(c); continue; }
     const match = findFamilyMatchWithKind(c.person, family);
     if (!match) { unmatched.push(c); continue; }
     const coverKey = coverKeyOf(c);
@@ -54,12 +64,12 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[]) {
   }
   const types = new Map<string, CoverType>();
   for (const c of covers) {
-    const t = types.get(c.coverKey) ?? { key: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, holders: [] };
+    const t = types.get(c.coverKey) ?? { key: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, riderOf: c.riderOf ?? null, holders: [] };
     const name = family.find((m) => m.id === c.personId)!.display_name;
     if (!t.holders.includes(name)) t.holders.push(name);
     types.set(c.coverKey, t);
   }
-  return { covers, unmatched, types: [...types.values()] };
+  return { covers, unmatched, illustration, types: [...types.values()] };
 }
 
 /** One entry per (document, heading, column) that prints a benefit row. */
@@ -74,9 +84,16 @@ export function sectionsOf(readings: CheckedReading[]): SectionRef[] {
   return [...map.values()];
 }
 
-function figureFor(b: CheckedBenefit, cover: PersonCover): Figure {
-  if (b.pays === "amount" || b.pays === "up_to" || b.pays === "per_day")
-    return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays };
+function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: boolean): Figure {
+  const f = baseFigure(b, cover);
+  const basis = b.basis === "non_guaranteed" || b.basis === "illustrated" ? b.basis : fromIllustration ? "illustrated" : null;
+  if (basis && f.kind !== "none") return { kind: "projected", amount: f.amount, currency: f.currency, basis, asOf: b.asOf };
+  return f;
+}
+function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
+  if (b.pays === "amount" || b.pays === "up_to" || b.pays === "per_day" || b.pays === "per_period")
+    return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays, period: b.period };
+  if (b.pays === "value") return { kind: "value", amount: b.value!, currency: b.currency, asOf: b.asOf };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row" : "no figure printed" };
   if (b.percentOf === "fixed_amount" && b.baseAmount != null)
     return { kind: "worked_out", amount: cents(b.value! * b.baseAmount / 100), currency: b.currency, how: `${b.value}% of ${money(b.baseAmount, b.currency)}, printed on the same page` };
@@ -98,7 +115,7 @@ function columnProblem(column: string | null, cover: CoverType): string | null {
 }
 
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[]): BenefitTable {
-  const { covers, unmatched, types } = coversOf(readings, family);
+  const { covers, unmatched, illustration, types } = coversOf(readings, family);
   const sections = sectionsOf(readings);
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
@@ -123,15 +140,18 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!l?.cover) continue;
     for (const p of people) for (const c of p.covers.filter((x) => x.coverKey === l.cover)) {
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
-        section: b.section, column: b.column, pays: b.pays, figure: figureFor(b, c), fromDay: b.fromDay, maxDays: b.maxDays,
+        section: b.section, column: b.column, pays: b.pays, figure: figureFor(b, c, r.kind === "illustration"), fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why });
     }
   }
-  return { people, unmatchedCovers: unmatched, unlinkedSections, refusedLinks };
+  return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, refusedLinks };
 }
 
 export function figureText(f: Figure): string {
   if (f.kind === "none") return `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
-  return f.kind === "printed" ? (f.unit === "up_to" ? `up to ${m}` : f.unit === "per_day" ? `${m} a day` : m) : `${m}, worked out: ${f.how}`;
+  if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;
+  if (f.kind === "projected") return `${m} projected, ${f.basis === "non_guaranteed" ? "not guaranteed" : "an illustration"}${f.asOf ? ` (${f.asOf})` : ""}: not an amount held or payable`;
+  if (f.kind === "worked_out") return `${m}, worked out: ${f.how}`;
+  return f.unit === "up_to" ? `up to ${m}` : f.unit === "per_day" ? `${m} a day` : f.unit === "per_period" ? `${m} a ${(f.period ?? "period").replace("_", " ")}` : m;
 }

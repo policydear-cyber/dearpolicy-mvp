@@ -156,6 +156,156 @@ test("a cover printed for someone outside the family is listed, not linked", () 
   assert.ok(t.people.every((p) => p.covers.length === 0));
 });
 
+// ------------------------------------------------------------------ other kinds of policy: investment-linked with a rider,
+// endowment, annuity. Same reader schema, same checks: nothing below is specific to one product.
+const ilp: SourceDoc = { id: "ilp", name: "ILP schedule.pdf", readable: true, pages: [
+  { page: 1, text: "POLICY SCHEDULE\nPolicy Number: IL-778812\nLife Assured: Tan Mei Ling\nBasic Plan: GrowthLink Investment Plan\tSum Assured S$100,000\tPremium S$300 monthly\tCommencement 01/03/2020\n" +
+    "Rider: Early Critical Illness Accelerator (attached to GrowthLink Investment Plan)\tSum Assured S$50,000\tPremium S$45 monthly\tExpiry 01/03/2045\n" +
+    "Life Assured: Lim Wei Jie\nBasic Plan: GrowthLink Investment Plan\tSum Assured S$80,000\tPremium S$250 monthly\tCommencement 01/03/2020" },
+  { page: 2, text: "ANNUAL STATEMENT\nFund value as at 31/12/2025: S$12,345.67\nSurrender value as at 31/12/2025: S$11,900.00" },
+  { page: 3, text: "Projected fund value at age 65 at an assumed return of 4% p.a.: S$95,000 (non-guaranteed)\nEarly Critical Illness Accelerator pays 100% of the rider Sum Assured on early-stage diagnosis" },
+] };
+const ilpReading = checkReading(ilp, { document: { kind: "personal_proof", product: "GrowthLink Investment Plan", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+  covers: [
+    { person: "Tan Mei Ling", product: "GrowthLink Investment Plan", cover: "GrowthLink Investment Plan", plan: null, riderOf: null, policyNumber: "IL-778812", sumInsured: 100000, premium: 300, premiumFrequency: "monthly",
+      asOf: null, startDate: "01/03/2020", endDate: null, page: 1, quote: "Basic Plan: GrowthLink Investment Plan Sum Assured S$100,000 Premium S$300 monthly Commencement 01/03/2020" },
+    { person: "Tan Mei Ling", product: "GrowthLink Investment Plan", cover: "Early Critical Illness Accelerator", plan: null, riderOf: "GrowthLink Investment Plan", policyNumber: "IL-778812", sumInsured: 50000, premium: 45, premiumFrequency: "monthly",
+      asOf: null, startDate: null, endDate: "01/03/2046", page: 1, quote: "Rider: Early Critical Illness Accelerator (attached to GrowthLink Investment Plan) Sum Assured S$50,000 Premium S$45 monthly" },
+    { person: "Lim Wei Jie", product: "GrowthLink Investment Plan", cover: "GrowthLink Investment Plan", plan: null, riderOf: null, policyNumber: "IL-999999", sumInsured: 80000, premium: 999, premiumFrequency: "monthly",
+      asOf: null, startDate: "01/03/2020", endDate: null, page: 1, quote: "Basic Plan: GrowthLink Investment Plan Sum Assured S$80,000 Premium S$250 monthly Commencement 01/03/2020" },
+  ],
+  benefits: [
+    benefit({ section: "Fund", benefit: "Fund value", pays: "value", value: 12345.67, asOf: "31/12/2025", page: 2, quote: "Fund value as at 31/12/2025: S$12,345.67" }),
+    benefit({ section: "Fund", benefit: "Projected fund value at age 65", pays: "value", value: 95000, basis: "non_guaranteed", page: 3, quote: "Projected fund value at age 65 at an assumed return of 4% p.a.: S$95,000 (non-guaranteed)" }),
+    benefit({ section: "Early Critical Illness Accelerator", benefit: "Early-stage diagnosis", pays: "percent", value: 100, percentOf: "sum_insured", page: 3, quote: "Early Critical Illness Accelerator pays 100% of the rider Sum Assured on early-stage diagnosis" }),
+  ] });
+const ilpKey = coverKeyOf({ product: "GrowthLink Investment Plan", cover: "GrowthLink Investment Plan", plan: null });
+const riderKey = coverKeyOf({ product: "GrowthLink Investment Plan", cover: "Early Critical Illness Accelerator", plan: null, riderOf: "GrowthLink Investment Plan" });
+const ilpTable = assembleTable([ilpReading], family, [
+  { section: sectionKeyOf("ilp", { section: "Fund", column: null }), cover: ilpKey, why: "the plan's fund" },
+  { section: sectionKeyOf("ilp", { section: "Early Critical Illness Accelerator", column: null }), cover: riderKey, why: "the rider" },
+]);
+const ilpRows = (id: string) => ilpTable.people.find((p) => p.id === id)!;
+
+test("a rider is its own cover, attached to its basic plan, with its own premium and printed end date only", () => {
+  const rider = ilpRows("b").covers.find((c) => c.riderOf)!;
+  assert.equal(rider.riderOf, "GrowthLink Investment Plan");
+  assert.equal(rider.premium, 45);
+  assert.equal(rider.endDate, null); // 01/03/2046 is not printed; 2045 is
+  assert.equal(ilpRows("b").covers.find((c) => !c.riderOf)!.startDate, "01/03/2020");
+});
+test("a rider's benefit reaches only the person holding the rider, on the rider's own sum assured", () => {
+  const row = ilpRows("b").rows.find((r) => r.cover === "Early Critical Illness Accelerator")!;
+  assert.equal(row.figure.kind === "worked_out" && row.figure.amount, 50000);
+  assert.ok(!ilpRows("a").rows.some((r) => r.cover === "Early Critical Illness Accelerator"));
+});
+test("a premium or policy number not printed for that cover is not kept", () => {
+  const his = ilpRows("a").covers[0];
+  assert.equal(his.premium, null);
+  assert.equal(his.policyNumber, null);
+  assert.equal(his.sumInsured, 80000);
+});
+test("a fund value is shown with the date it is printed for", () => {
+  const row = ilpRows("b").rows.find((r) => r.benefit === "Fund value")!;
+  assert.equal(figureText(row.figure), "S$12,345.67 value as of 31/12/2025");
+});
+test("a rider with the same name on two different basic plans stays two covers", () => {
+  const twoPlans: SourceDoc = { id: "tp", name: "Two plans.pdf", readable: true, pages: [{ page: 1, text:
+    "Life Assured: Lim Wei Jie\nRider: Payer Benefit (attached to SecureLife Term)\nLife Assured: Tan Mei Ling\nRider: Payer Benefit (attached to GrowthLink Investment Plan)\nPayer Benefit waives premiums on diagnosis" }] };
+  const r = checkReading(twoPlans, { document: { kind: "personal_proof", product: null, insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+    covers: [
+      { person: "Lim Wei Jie", product: "Insurer", cover: "Payer Benefit", plan: null, riderOf: "SecureLife Term", sumInsured: null, page: 1, quote: "Rider: Payer Benefit (attached to SecureLife Term)" },
+      { person: "Tan Mei Ling", product: "Insurer", cover: "Payer Benefit", plan: null, riderOf: "GrowthLink Investment Plan", sumInsured: null, page: 1, quote: "Rider: Payer Benefit (attached to GrowthLink Investment Plan)" },
+    ],
+    benefits: [benefit({ section: "Payer Benefit", benefit: "Premium waiver", pays: "words", page: 1, quote: "Payer Benefit waives premiums on diagnosis" })] });
+  const onTerm = coverKeyOf({ product: "Insurer", cover: "Payer Benefit", plan: null, riderOf: "SecureLife Term" });
+  const t = assembleTable([r], family, [{ section: sectionKeyOf("tp", { section: "Payer Benefit", column: null }), cover: onTerm, why: "rider on the term plan" }]);
+  assert.equal(t.people.find((p) => p.id === "a")!.rows.length, 1);
+  assert.equal(t.people.find((p) => p.id === "b")!.rows.length, 0);
+});
+test("a non-guaranteed projection is never shown as an amount held or payable", () => {
+  const row = ilpRows("b").rows.find((r) => r.benefit.startsWith("Projected"))!;
+  assert.equal(row.figure.kind, "projected");
+  assert.match(figureText(row.figure), /not guaranteed: not an amount held or payable/);
+});
+
+const endowment: SourceDoc = { id: "end", name: "Endowment schedule.pdf", readable: true, pages: [{ page: 1, text:
+  "Policy Schedule\nLife Assured: Lim Wei Jie\nSmartSave 20 Endowment\tSum Assured S$20,000\tMaturity Date 01/06/2040\n" +
+  "Guaranteed Maturity Benefit S$20,000 payable on 01/06/2040\nNon-guaranteed reversionary bonus to date S$3,000\nDeath benefit: Sum Assured plus bonuses" }] };
+const endReading = checkReading(endowment, { document: { kind: "personal_proof", product: "SmartSave 20 Endowment", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+  covers: [{ person: "Lim Wei Jie", product: "SmartSave 20 Endowment", cover: "SmartSave 20 Endowment", plan: null, riderOf: null, policyNumber: null, sumInsured: 20000, premium: null, premiumFrequency: null,
+    asOf: null, startDate: null, endDate: "01/06/2040", page: 1, quote: "SmartSave 20 Endowment Sum Assured S$20,000 Maturity Date 01/06/2040" }],
+  benefits: [
+    benefit({ benefit: "Guaranteed Maturity Benefit", pays: "amount", value: 20000, basis: "guaranteed", page: 1, quote: "Guaranteed Maturity Benefit S$20,000 payable on 01/06/2040" }),
+    benefit({ benefit: "Reversionary bonus to date", pays: "value", value: 3000, basis: "non_guaranteed", page: 1, quote: "Non-guaranteed reversionary bonus to date S$3,000" }),
+    benefit({ benefit: "Death benefit", pays: "words", page: 1, quote: "Death benefit: Sum Assured plus bonuses" }),
+  ] });
+const endKey = coverKeyOf({ product: "SmartSave 20 Endowment", cover: "SmartSave 20 Endowment", plan: null });
+const endTable = assembleTable([endReading], family, [{ section: sectionKeyOf("end", { section: null, column: null }), cover: endKey, why: "the endowment" }]);
+const endRows = endTable.people.find((p) => p.id === "a")!;
+
+test("an endowment keeps its maturity date, a guaranteed amount, a non-guaranteed bonus as a projection, and plain words", () => {
+  assert.equal(endRows.covers[0].endDate, "01/06/2040");
+  assert.equal(figureText(endRows.rows.find((r) => r.benefit === "Guaranteed Maturity Benefit")!.figure), "S$20,000");
+  assert.equal(endRows.rows.find((r) => r.benefit.startsWith("Reversionary"))!.figure.kind, "projected");
+  const words = endRows.rows.find((r) => r.benefit === "Death benefit")!;
+  assert.equal(words.figure.kind, "none");
+  assert.equal(words.source.page, 1);
+});
+
+const annuity: SourceDoc = { id: "ann", name: "Annuity contract.pdf", readable: true, pages: [{ page: 1, text:
+  "Annuity Policy Schedule\nAnnuitant: Tan Mei Ling\nIncomeForLife Annuity\tSingle premium S$150,000\nMonthly annuity income: S$720 per month from age 65 for life" }] };
+const annReading = checkReading(annuity, { document: { kind: "personal_proof", product: "IncomeForLife Annuity", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+  covers: [{ person: "Tan Mei Ling", product: "IncomeForLife Annuity", cover: "IncomeForLife Annuity", plan: null, riderOf: null, policyNumber: null, sumInsured: null, premium: 150000, premiumFrequency: "single",
+    asOf: null, startDate: null, endDate: null, page: 1, quote: "IncomeForLife Annuity Single premium S$150,000" }],
+  benefits: [
+    benefit({ benefit: "Monthly annuity income", pays: "per_period", period: "month", value: 720, page: 1, quote: "Monthly annuity income: S$720 per month from age 65 for life", conditions: ["from age 65 for life"] }),
+    benefit({ benefit: "Payment with no period", pays: "per_period", value: 720, page: 1, quote: "Monthly annuity income: S$720 per month from age 65 for life" }),
+  ] });
+const annKey = coverKeyOf({ product: "IncomeForLife Annuity", cover: "IncomeForLife Annuity", plan: null });
+const annTable = assembleTable([annReading], family, [{ section: sectionKeyOf("ann", { section: null, column: null }), cover: annKey, why: "the annuity" }]);
+
+test("an annuity's payout is a payment per period, and a payment with no period is dropped", () => {
+  const row = annTable.people.find((p) => p.id === "b")!.rows[0];
+  assert.equal(figureText(row.figure), "S$720 a month");
+  assert.deepEqual(row.conditions, ["from age 65 for life"]);
+  assert.ok(annReading.dropped.some((d) => /no period/.test(d.why)));
+  assert.equal(annTable.people.find((p) => p.id === "b")!.covers[0].premium, 150000);
+});
+test("a cover read from an illustration (a quotation) is not proof that anyone holds it", () => {
+  const quote = checkReading({ ...annuity, id: "q" }, { ...(annReading as unknown as Record<string, unknown>), document: { kind: "illustration", product: null, insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Tan Mei Ling", product: "IncomeForLife Annuity", cover: "IncomeForLife Annuity", plan: null, sumInsured: null, page: 1, quote: "IncomeForLife Annuity Single premium S$150,000" }], benefits: [] });
+  const t = assembleTable([quote], family, []);
+  assert.equal(t.illustrationCovers.length, 1);
+  assert.ok(t.people.every((p) => p.covers.length === 0));
+});
+const shield: SourceDoc = { id: "hs", name: "Hospital plan schedule.pdf", readable: true, pages: [{ page: 1, text:
+  "Certificate of Insurance\nInsured: Lim Kai\nShieldCare Plan A (Private hospitals)\tPolicy year limit S$1,500,000\n" +
+  "Deductible per policy year: S$3,500\nCo-insurance: 10% of the claimable amount after the deductible\nWard entitlement: private hospital, standard room" }] };
+const shieldReading = checkReading(shield, { document: { kind: "personal_proof", product: "ShieldCare", insurer: null, namedPeople: [], plan: "A", periodFrom: null, periodTo: null },
+  covers: [{ person: "Lim Kai", product: "ShieldCare", cover: "ShieldCare Plan A", plan: "Plan A", riderOf: null, policyNumber: null, sumInsured: null, premium: null, premiumFrequency: null,
+    asOf: null, startDate: null, endDate: null, page: 1, quote: "ShieldCare Plan A (Private hospitals)" }],
+  benefits: [
+    benefit({ benefit: "Policy year limit", pays: "up_to", value: 1500000, page: 1, quote: "Policy year limit S$1,500,000" }),
+    benefit({ benefit: "Deductible per policy year", pays: "amount", value: 3500, page: 1, quote: "Deductible per policy year: S$3,500" }),
+    benefit({ benefit: "Co-insurance", pays: "percent", value: 10, percentOf: "other", page: 1, quote: "Co-insurance: 10% of the claimable amount after the deductible" }),
+    benefit({ benefit: "Ward entitlement", pays: "words", page: 1, quote: "Ward entitlement: private hospital, standard room" }),
+  ] });
+const shieldKey = coverKeyOf({ product: "ShieldCare", cover: "ShieldCare Plan A", plan: "Plan A" });
+const shieldTable = assembleTable([shieldReading], family, [{ section: sectionKeyOf("hs", { section: null, column: null }), cover: shieldKey, why: "the hospital plan" }]);
+
+test("a hospital plan keeps its limit, its deductible, a co-insurance percentage with no amount, and its ward wording", () => {
+  const rows = shieldTable.people.find((p) => p.id === "c")!.rows;
+  assert.equal(figureText(rows.find((r) => r.benefit === "Policy year limit")!.figure), "up to S$1,500,000");
+  assert.equal(rows.find((r) => r.benefit === "Co-insurance")!.figure.kind, "none");
+  assert.equal(rows.find((r) => r.benefit === "Ward entitlement")!.figure.kind, "none");
+  assert.equal(rows.length, 4);
+});
+test("a reading recorded before riders and values were added still checks", () => {
+  assert.equal(certReading.covers[0].riderOf, null);
+  assert.equal(termsReading.benefits[0].basis, null);
+});
+
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 if (failures.length) process.exit(1);

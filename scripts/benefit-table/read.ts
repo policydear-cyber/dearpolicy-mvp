@@ -51,13 +51,14 @@ export function tableMarkdown(table: BenefitTable, readings: CheckedReading[], h
     lines.push(`## ${p.name}`, "");
     if (!p.covers.length && !p.rows.length) { lines.push("No cover in the uploaded documents names this person.", ""); continue; }
     lines.push("Covers (from a personal document):", "");
-    for (const c of p.covers) lines.push(`- ${c.product} · ${c.cover}${c.plan ? ` · plan ${c.plan}` : ""}: ${c.sumInsured == null ? "no sum insured printed" : `${c.currency ?? "currency not stated"} ${c.sumInsured.toLocaleString("en-US")}`}${c.asOf ? ` (as of ${c.asOf})` : ""}. ${c.source.document} p${c.source.page}`);
+    for (const c of p.covers) lines.push(`- ${c.product} · ${c.cover}${c.riderOf ? ` (rider of ${c.riderOf})` : ""}${c.plan ? ` · plan ${c.plan}` : ""}${c.policyNumber ? ` · policy ${c.policyNumber}` : ""}: ${c.sumInsured == null ? "no sum insured printed" : `${c.currency ?? "currency not stated"} ${c.sumInsured.toLocaleString("en-US")}`}${c.premium != null ? `; premium ${c.premium.toLocaleString("en-US")}${c.premiumFrequency ? ` ${c.premiumFrequency}` : ""}` : ""}${c.asOf ? ` (as of ${c.asOf})` : ""}${c.startDate || c.endDate ? ` [${c.startDate ?? "?"} to ${c.endDate ?? "?"}]` : ""}. ${c.source.document} p${c.source.page}`);
     lines.push("", "| Cover | Benefit | Column | Figure | Conditions | Source |", "|---|---|---|---|---|---|");
     for (const r of p.rows) lines.push(`| ${r.cover} | ${r.benefit.replace(/\|/g, "/")} | ${r.column ?? ""} | ${figureText(r.figure).replace(/\|/g, "/")} | ${r.conditions.map((c) => c.replace(/\|/g, "/").slice(0, 120)).join("; ")} | ${r.source.document} p${r.source.page} |`);
     lines.push("");
   }
   lines.push("## Not on anyone's table", "");
   for (const u of table.unlinkedSections) lines.push(`- ${u.section.document}: ${u.section.section ?? "(no heading)"}${u.section.column ? ` [${u.section.column}]` : ""}, e.g. ${u.section.examples.join("; ")}. Why: ${u.why}`);
+  for (const c of table.illustrationCovers) lines.push(`- In an illustration (a quotation), not proof of cover: ${c.cover} for ${c.person}, ${c.source.document} p${c.source.page}`);
   for (const c of table.unmatchedCovers) lines.push(`- Cover printed for ${c.person} (not a family member): ${c.cover}, ${c.source.document} p${c.source.page}`);
   for (const l of table.refusedLinks) lines.push(`- Link refused (${l.why}): ${l.link.section} -> ${l.link.cover}`);
   lines.push("", "## Rows the server dropped", "");

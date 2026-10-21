@@ -10,7 +10,7 @@ import { normalizePersonName } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { locateQuote } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
-import { DOCUMENT_KINDS, PAYS, PERCENT_OF, type ReadBenefit, type ReadCover, type Reading } from "./reading";
+import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
 export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
@@ -53,6 +53,16 @@ function nameOnPage(person: string, pageText: string) {
   return words.length > 0 && words.every((w) => page.includes(` ${w} `));
 }
 
+/** A printed date ("06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
+export function dateOnPage(date: string | null, pageText: string): string | null {
+  if (!date) return null;
+  const digits = date.match(/\d+/g);
+  if (!digits) return null;
+  const page = numbersIn(pageText.replace(/[/.-]/g, " ")).map(String);
+  return digits.every((d) => page.includes(String(Number(d)))) ? date : null;
+}
+const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const int = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : null);
@@ -86,8 +96,14 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!nameOnPage(person, pageText(source.page))) { out.dropped.push({ what: label, why: "person's name not printed on that page" }); continue; }
     const sumInsured = num(c.sumInsured);
     if (sumInsured != null && !printsNumber(source.excerpt, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
-    const currency = sumInsured == null ? null : statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
-    out.covers.push({ person, product, cover, plan: str(c.plan), sumInsured, asOf: str(c.asOf), page: source.page, quote, source, currency });
+    let premium = num(c.premium);
+    if (premium != null && !printsNumber(source.excerpt, premium)) { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote; kept the cover without it` }); premium = null; }
+    const currency = sumInsured == null && premium == null ? null : statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
+    const page = pageText(source.page);
+    const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
+    out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured, premium,
+      premiumFrequency: premium == null ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
+      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency });
   }
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
@@ -99,8 +115,12 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     let value = num(b.value);
     if (value != null && !printsNumber(source.excerpt, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
-    if (["amount", "up_to", "per_day", "percent"].includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
-    if (!["amount", "up_to", "per_day", "percent"].includes(pays)) value = null;
+    const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
+    if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
+    if (!FIGURED.includes(pays)) value = null;
+    const period = pays === "per_period" && (PERIODS as readonly string[]).includes(b.period as string) ? b.period! : null;
+    if (pays === "per_period" && !period) { out.dropped.push({ what: label, why: "payment with no period" }); continue; }
+    const basis = (BASES as readonly string[]).includes(b.basis as string) ? b.basis! : null;
     const percentOf = pays === "percent" && (PERCENT_OF as readonly string[]).includes(b.percentOf as string) ? b.percentOf! : null;
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
@@ -122,7 +142,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
     const fromDay = day(b.fromDay), maxDays = day(b.maxDays);
-    out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, percentOf, baseAmount, baseQuote: str(b.baseQuote),
+    out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
+      percentOf, baseAmount, baseQuote: str(b.baseQuote),
       fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, droppedConditions });
   }
   return out;
