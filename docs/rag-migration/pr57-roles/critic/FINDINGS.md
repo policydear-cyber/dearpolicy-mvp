@@ -2796,3 +2796,25 @@ Method: as in round 53, with the same probes. role-test gives 13/13.
 ## Verdict on PR #83 at `8022bc1`
 
 **Ready.** After merge, DC re-reads the four documents, as the PR report says.
+
+# Round 57: recheck of PR #82 at `9fe083c` (R55-1)
+
+Method: as in round 55. The whole-snapshot sweep was redone with the *last* `%` on each line as the stated percent, at
+7089ddd and at 9fe083c, and the results diffed. The targeted probes were rerun.
+
+- **R55-1 fixed.** On burns rows, a stated 8%, 5% or 40% (the threshold) now gets no card. The payout figures still give
+  the right cards: head ≥8% 100% is S$600,000, body 15–20% 75% is S$450,000, and PS head 2–5% 50% is S$300,000.
+- **No other change.** The only difference in the snapshot diff is the reason wording on two 0.75% terrorism-limit
+  lines, which already had no card.
+- **Unchanged and still correct:**
+  - The Evidence Reviewer figures (BS wrist S$120,000 and hip S$450,000 for Desmond, wrist S$120,000 for Charmaine).
+  - PS fractures on S$5,000 (S$1,250 and S$3,750).
+  - Dismemberment rows and split-line rows.
+  - No card for comatose, the TPD cap or natural catastrophe (either document).
+  - Another person's base and a Term Life base are refused.
+- **Note (Low):** a row with two payout columns (for example "Plan A 50%  Plan B 30%") accepts only the last column. That
+  errs towards no card, not a wrong amount, and no such row exists in this household.
+
+## Verdict on PR #82 at `9fe083c`
+
+**Ready.** R50-1 to R50-4, R52-1 to R52-3 and R55-1 are fixed, and I found no remaining wrong-amount path.
