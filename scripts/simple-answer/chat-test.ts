@@ -10,6 +10,7 @@ import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-cha
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
 import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
 import { runSimpleChat } from "../../lib/simple-chat/hook";
+import { replayModel, runSet } from "./app-run";
 import type { ChatContext } from "../../lib/chat/workflow";
 import { guardChatAnswer } from "../../lib/chat/output-guard";
 import { enforceLiveChatMonetaryBoundary, sanitizeStoredAnswer } from "../../lib/chat/monetary-boundary";
@@ -20,8 +21,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 const SNAPSHOT = process.argv[2] ?? "/mnt/project-files/ux-live/release-set/snapshot/household.json";
 let passed = 0;
 async function check(name: string, fn: () => void | Promise<void>) { await fn(); passed++; console.log("ok - " + name); }
-const st = (s: Partial<ModelStatement> & Pick<ModelStatement, "kind" | "text">): ModelStatement =>
-  ({ person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, ...s });
+type LooseStatement = Partial<Omit<ModelStatement, "percentOf" | "conditions">> & Pick<ModelStatement, "kind" | "text"> & {
+  percentOf?: { percent: number; baseAmount: string; baseDocument?: string | null; baseQuote?: string | null } | null;
+  conditions?: (string | { text: string; quote: string | null })[];
+};
+/** A model statement; a plain-string condition has no quote of its own (so the server leaves it out). */
+const st = ({ percentOf, conditions, ...s }: LooseStatement): ModelStatement => ({
+  person: null, document: null, quote: null, amount: null, alternativeGroup: null, ...s,
+  percentOf: percentOf ? { baseDocument: null, baseQuote: null, ...percentOf } : null,
+  conditions: (conditions ?? []).map((c) => (typeof c === "string" ? { text: c, quote: null } : c)),
+});
 
 /** A made-up household: an accident plan whose fracture table is on page 13 while the page itself prints "Page 12",
  * a second document with ambulance and recuperation, and one-row alternatives. */
@@ -75,7 +84,7 @@ async function main() {
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
     const r = anthropicRequest({ provider: "anthropic", model: "claude-opus-5-5" }, { library: renderLibrary(HOUSE), history: [{ role: "assistant", text: "stray" }, { role: "user", text: "a" }, { role: "user", text: "b" }, { role: "assistant", text: "c" }], question: "q" });
-    assert.equal(r.system[1].cache_control?.ttl, "1h");
+    assert.equal(r.system[1].cache_control?.ttl, "5m");
     assert.match(r.system[1].text, /<page n="13">/);
     assert.equal(r.output_config.format.schema, SIMPLE_ANSWER_SCHEMA);
     assert.deepEqual(r.messages.map((m) => [m.role, m.content]), [["user", "a\n\nb"], ["assistant", "c"], ["user", "q"]]);
@@ -219,7 +228,7 @@ async function main() {
     assert.equal(call.history.length, 2);
     assert.ok(!call.library.includes("someone-else"));
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
-    assert.deepEqual(state.simpleChat.turns[0].usage, { input: 100100, output: 400, cached: 0 });
+    assert.deepEqual(state.simpleChat.turns[0].usage, { input: 62600, output: 400, cached: 0 });
   });
 
   await check("chat turn refuses a library read for another household", async () => {
@@ -389,8 +398,106 @@ async function main() {
     assert.deepEqual(answer.nextSteps, ["See pp. 12 to 13 for the benefits."]);
   });
 
-  await check("ledger usage counts cache writes at twice the input price", () => {
-    assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }), { input: 1210, output: 5, cached: 1000 });
+  // Release-set fixes, 21 Oct 2026 (root causes in the project folder's simple-chat-smoke/root-causes.md).
+  const SI_HOUSE: Household = { accountId: HOUSE.accountId, members: [{ name: "Lim Ah Kow", relationship: "self" }, { name: "Tan Mei Ling", relationship: "spouse" }], documents: [
+    { ...HOUSE.documents[0], policyId: "aaaaaaaa-0000-0000-0000-000000000021", name: "Scheme Summary.pdf", productName: "Test Scheme", linkedPeople: ["Lim Ah Kow", "Tan Mei Ling"], pages: [
+      { page: 1, text: "Contents\n1. Group Term Life\t2\n2. Group Personal Accident\t5" },
+      { page: 2, text: "BENEFIT 1: GROUP TERM LIFE\nDeath\t100% of Sum Insured" },
+      { page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nDeath due to Accident\t100% of Sum Insured" },
+      { page: 8, text: "Fracture due to Accident\nSchedule\n(% of Sum Insured)\nHip\t75%\nWrist (Other Fracture)\t20%\nThis Benefit can only be claimed under the Core Scheme." },
+    ] },
+    { ...HOUSE.documents[0], policyId: "aaaaaaaa-0000-0000-0000-000000000022", name: "Certificate.pdf", productName: "Test Scheme Certificate", documentRole: "certificate", linkedPeople: ["Lim Ah Kow", "Tan Mei Ling"], pages: [
+      { page: 1, text: "CERTIFICATE OF GROUP INSURANCE\nGROUP TERM LIFE(POLICY NO. 1)\nLim Ah Kow\tS$1,000,000\tAs of 06/10/2022\nTan Mei Ling\tS$1,000,000\tAs of 06/10/2022\nGROUP PERSONAL ACCIDENT(POLICY NO. 2)\nLim Ah Kow\tS$600,000\tAs of 06/10/2022\nTan Mei Ling\tS$400,000\tAs of 06/10/2022" },
+    ] },
+    { ...HOUSE.documents[0], policyId: "aaaaaaaa-0000-0000-0000-000000000023", name: "scan.pdf", productName: null, processingStatus: "failed", linkedPeople: [], pages: [{ page: 1, text: "Hospital invoice S$9,999" }] },
+  ] };
+  const pctSI = (person: string, baseAmount: string, baseQuote: string | null, quote = "Wrist (Other Fracture)\t20%", percent = 20) =>
+    st({ kind: "amount", text: "A wrist fracture pays a percentage of the sum insured.", person, document: "D1", quote, percentOf: { percent, baseAmount, baseDocument: "D2", baseQuote } });
+
+  await check("sum insured: a % of Sum Insured row is worked out on the person's own quoted sum insured for the same cover", () => {
+    const { answer } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022")] });
+    const card = answer.statements!.find((x) => x.amount)!;
+    assert.deepEqual([card.amount!.text, card.amount!.illustration, card.kind, card.personName, card.asOf, card.source!.page, card.source!.citationIds.length], ["S$80,000", true, "calculation", "Tan Mei Ling", "2022-10-06", 8, 2]);
+    assert.match(card.basis!, /20% of Tan Mei Ling's Personal Accident sum insured of S\$400,000 \(Test Scheme Certificate, page 1, as of 06\/10\/2022\)/);
+  });
+
+  await check("sum insured: another person's, another cover's or an unquoted sum insured keeps the percentage as a fact", () => {
+    for (const [why, st1] of [
+      ["another person's line", pctSI("Mei Ling", "S$600,000", "Lim Ah Kow\tS$600,000\tAs of 06/10/2022")],
+      ["another cover", pctSI("Mei Ling", "S$1,000,000", "Tan Mei Ling\tS$1,000,000\tAs of 06/10/2022")],
+      ["no quote", pctSI("Mei Ling", "S$400,000", null)],
+      ["a figure the line doesn't print", pctSI("Mei Ling", "S$450,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022")],
+      ["no person", { ...pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022"), person: null }],
+    ] as const) {
+      const { answer } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st1] });
+      assert.equal(answer.statements!.filter((x) => x.amount).length, 0, why);
+      assert.ok(answer.statements!.some((x) => x.kind === "fact" && x.source?.page === 8), why);
+    }
+    // A row under the term-life heading is worked out on the term-life sum insured only; a contents line is no heading.
+    const life = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Ah Kow", "S$1,000,000", "Lim Ah Kow\tS$1,000,000\tAs of 06/10/2022", "Death\t100% of Sum Insured", 100)] }).answer;
+    assert.equal(life.statements!.find((x) => x.amount)?.amount?.text, "S$1,000,000");
+    const pa = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Ah Kow", "S$1,000,000", "Lim Ah Kow\tS$1,000,000\tAs of 06/10/2022", "Death due to Accident\t100% of Sum Insured", 100)] }).answer;
+    assert.equal(pa.statements!.filter((x) => x.amount).length, 0);
+  });
+
+  await check("B1: a condition is kept only with its own quote from the statement's document", () => {
+    const { answer, report } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
+      st({ ...pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022"), conditions: [
+        { text: "Only under the Core Scheme.", quote: "This Benefit can only be claimed under the Core Scheme." },
+        { text: "The fracture comes from an accident.", quote: null },
+      ] }),
+      st({ kind: "fact", text: "Ah Kow has term life cover.", person: "Ah Kow", document: "D2", quote: "GROUP TERM LIFE(POLICY NO. 1)", conditions: [{ text: "Only under the Core Scheme.", quote: "This Benefit can only be claimed under the Core Scheme." }] }),
+    ] });
+    assert.deepEqual(answer.statements!.map((x) => x.conditions), [["Only under the Core Scheme."], []]);
+    assert.deepEqual(report.conditionsLeftOut, ["The fracture comes from an accident.", "Only under the Core Scheme."]);
+  });
+
+  await check("B2/B5: one question back at most; questions anywhere else are left out", () => {
+    const { answer, report } = verifyAnswer(SI_HOUSE, { bottomLine: "Mei Ling may have cover. Was it an accident?", question: "Did she lose all sight? Was the accident within a year?", nextSteps: ["Call the insurer. Do you have the report?"], statements: [
+      st({ kind: "fact", text: "The schedule lists fractures. Is it the wrist?", document: "D1", quote: "Wrist (Other Fracture)\t20%" }),
+    ] });
+    assert.deepEqual(answer.questions.map((q) => q.text), ["Did she lose all sight?"]);
+    assert.equal(answer.bottomLine, "Mei Ling may have cover.");
+    assert.deepEqual(answer.nextSteps, ["Call the insurer."]);
+    assert.equal(answer.statements![0].text, "The schedule lists fractures.");
+    assert.equal(report.questionsLeftOut.length, 4);
+  });
+
+  await check("E1: a file the app could not read is sent without its text and cannot be quoted; unlinked documents say so", () => {
+    const lib = renderLibrary(SI_HOUSE);
+    assert.doesNotMatch(lib, /Hospital invoice/);
+    assert.match(lib, /name="scan.pdf"[^>]*linked_people="nobody \(not linked to anyone in DearPolicy\)"[^>]*reading_status="could not be read \(failed\)"/);
+    const { answer } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st({ kind: "amount", text: "The invoice.", document: "D3", quote: "Hospital invoice S$9,999", amount: "S$9,999" })] });
+    assert.equal(answer.statements!.filter((x) => x.amount).length, 0);
+  });
+
+  await check("A6: an estimated premium is never shown (not printed in its quote)", () => {
+    const house = { ...SI_HOUSE, documents: [...SI_HOUSE.documents, { ...SI_HOUSE.documents[0], policyId: "aaaaaaaa-0000-0000-0000-000000000024", name: "Rates.pdf", productName: "Test Rates", pages: [{ page: 1, text: "Premium rates\nAge 41-45\tS$12 for every S$10,000 Sum Insured" }] }] };
+    const { answer } = verifyAnswer(house, { bottomLine: "You pay about S$103.70 a month.", nextSteps: [], question: null, statements: [
+      st({ kind: "amount", text: "Estimated group premium.", person: "Ah Kow", document: "D4", quote: "Age 41-45 S$12 for every S$10,000 Sum Insured", amount: "S$103.70" }),
+    ] });
+    assert.equal(answer.statements!.filter((x) => x.amount).length, 0);
+    assert.doesNotMatch(answer.bottomLine ?? "", /103/);
+  });
+
+  await check("app-run: a question set goes through runSimpleChat turn by turn with the conversation so far, and replays free", async () => {
+    const answers = [
+      { bottomLine: "Ah Kow has a fracture benefit.", statements: [st({ kind: "amount", text: "Wrist fracture.", person: "Ah Kow", document: "D1", quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" } })], nextSteps: [], question: null },
+      { bottomLine: "That is the amount below. Anything else?", statements: [], nextSteps: [], question: null },
+    ];
+    const seen: unknown[] = [];
+    const model: SimpleModel = { choice: { provider: "anthropic", model: "test" } as never, async call(args) { seen.push(args.history.length); return { json: answers[seen.length - 1], stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
+    const run = await runSet({ household: HOUSE, questions: [{ id: "Q1", turns: ["ah kow broke his wrist", "how much?"], turnIds: ["Q1", "Q2"] }], model });
+    assert.deepEqual(run.turns.map((x) => [x.id, x.error ?? null]), [["Q1", null], ["Q2", null]]);
+    assert.deepEqual(seen, [0, 2]);
+    assert.equal(run.turns[0].answer!.statements!.find((x) => x.amount)!.amount!.text, "S$1,250");
+    assert.deepEqual(run.turns[1].report!.questionsLeftOut, ["Anything else?"]);
+    const again = await runSet({ household: HOUSE, questions: [{ id: "Q1", turns: ["ah kow broke his wrist", "how much?"], turnIds: ["Q1", "Q2"] }], model: replayModel(run.turns, model.choice) });
+    assert.equal(again.turns[0].text, run.turns[0].text);
+  });
+
+  await check("ledger usage counts 5-minute cache writes at 1.25x the input price", () => {
+    assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }), { input: 1135, output: 5, cached: 1000 });
   });
 
   // The real household, when its snapshot is here (it is real data and lives outside the repo).
@@ -434,6 +541,34 @@ async function main() {
         st({ kind: "amount", text: "Wrist pays 25%.", person: "Desmond", document: "D1", quote: "Arm , Elbow, Wrist or Ribs 25%", percentOf: { percent: 25, baseAmount: "S$600,000" } }),
       ] });
       assert.equal(answer.statements!.filter((s) => s.amount).length, 0);
+    });
+    const cert = "Certificate of Insurance.pdf";
+    const di = (name: string) => `D${real.documents.findIndex((d) => d.name === name) + 1}`;
+    await check("snapshot B1: Charmaine's wrist shows S$1,250 (PS p13) and S$120,000 (20% of her S$600,000, BS p8), separate, BS condition only on the BS card", () => {
+      const { answer } = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "Simple Fracture benefit for the wrist.", person: "Charmaine", document: di("Product Summary.pdf"), quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" }, alternativeGroup: "wrist",
+          conditions: [{ text: "Only under the Core or Voluntary Scheme.", quote: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." }] }),
+        st({ kind: "amount", text: "Other Fracture benefit for the wrist.", person: "Charmaine", document: di("Benefit Summary.pdf"), quote: "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%", alternativeGroup: "wrist",
+          percentOf: { percent: 20, baseAmount: "S$600,000", baseDocument: di(cert), baseQuote: "Ong Pei Lin Charmaine\tS$600,000\tAs of 06/10/2022" },
+          conditions: [{ text: "Only under the Core or Voluntary Scheme.", quote: "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." }] }),
+      ] });
+      const cards = answer.statements!.filter((x) => x.amount);
+      assert.deepEqual(cards.map((x) => [x.amount!.text, x.source!.page, x.conditions.length, x.group, x.asOf]), [["S$1,250", 13, 0, null, null], ["S$120,000", 8, 1, null, "2022-10-06"]]);
+      assert.ok(answer.statements!.some((x) => x.kind === "uncertainty" && /not a total/.test(x.text)));
+    });
+    await check("snapshot B4/B5: hip 75% and eye 100% are worked out on the Personal Accident S$600,000, never the term life S$1,000,000", () => {
+      const run = (quote: string, doc: string, percent: number, base: string, line: string) => verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "x", person: "Desmond", document: di(doc), quote, percentOf: { percent, baseAmount: base, baseDocument: di(cert), baseQuote: line } })] }).answer.statements!.find((x) => x.amount)?.amount?.text ?? null;
+      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$450,000");
+      assert.equal(run("(a) Sight in at least one eye\t100%", "Product Summary.pdf", 100, "S$600,000", "Tan Yi Chuen, Desmond\tS$600,000\tAs of 06/10/2022"), "S$600,000");
+      assert.equal(run("Hip\t75%", "Benefit Summary.pdf", 75, "S$1,000,000", "Tan Yi Chuen, Desmond\tS$1,000,000\tAs of 06/10/2022"), null);
+    });
+    await check("snapshot E1/E3: the unreadable file's text is not sent; the CI II files say they are linked to nobody", () => {
+      const lib = renderLibrary(real);
+      assert.match(lib, /name="output_202609281146117.pdf"[^>]*reading_status="could not be read/);
+      const bad = real.documents.find((d) => d.name === "output_202609281146117.pdf")!;
+      assert.ok(!lib.includes(bad.pages[0].text.slice(0, 60)));
+      for (const name of ["817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "5e58ea7d-9ec6-4cf7-bc2e-bac50a674973.pdf"]) assert.match(lib, new RegExp(`name="${name}"[^>]*linked_people="nobody`));
     });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 

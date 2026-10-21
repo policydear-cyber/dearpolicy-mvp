@@ -5,17 +5,22 @@
  *    page text, and the document and page shown are where it was found (Evidence Reviewer, 20 Oct 2026: the baseline
  *    cited the wrist row as page 12 when it is on page 13).
  * 2. Amounts appear only on cards the server builds: a currency-signed figure printed in the quote, or a percentage the
- *    quote prints of the sum its own table heading prints on that page (worked out here, shown as an illustration). A
- *    percentage of the sum insured is never multiplied. A quote that cannot be found drops its amount or fact.
+ *    quote prints of the sum its own table heading prints on that page, or a "% of Sum Insured" row worked out on the
+ *    person's own printed sum insured for that same cover (both shown as illustrations). A quote that cannot be found drops
+ *    its amount or fact.
  * 3. The model's own sentences carry no money at all (Critic round 39): any sentence of the bottom line, a card's text, a
  *    condition, a next step or the question that states money is left out. So nothing it writes can add amounts together
  *    or give a range (release-set C2), however it is worded.
  * 4. Alternatives are drawn as either/or only when they come from one document for one person; amounts from different
- *    documents are always separate cards. */
+ *    documents are always separate cards.
+ * 5. A condition is kept only when its own quoted words are printed in the statement's document (release-set B1: a
+ *    condition from one document must not be put on another document's row).
+ * 6. At most one question back (release-set B2, B5): only the first question in "question" is kept, and questions written
+ *    anywhere else are left out. */
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
-import { documentId, type Household, type HouseholdDocument } from "./library";
+import { documentId, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
@@ -51,6 +56,8 @@ export function locateQuote(household: Household, quote: string, preferred: numb
   const order = household.documents.map((_, i) => i);
   if (preferred != null && preferred >= 0 && preferred < order.length) order.sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : a - b));
   for (const di of order) {
+    // Text of a file the app could not read is never sent to the model, so nothing may be quoted from it.
+    if (unreadable(household.documents[di])) continue;
     for (const page of household.documents[di].pages) {
       const sq = squash(page.text);
       let from = 0, start = -1, end = -1, ok = true;
@@ -87,7 +94,8 @@ function currencyOf(amountText: string, evidence: string): Currency {
 }
 const formatMoney = (sign: string, value: number) => sign + value.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 });
 
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null };
+type Base = { found: Found; cover: string; asOf: string | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[] };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -103,19 +111,80 @@ function rowBase(pageText: string, end: number): { value: number; raw: string } 
   return best ? { value: best.value, raw: best.raw } : null;
 }
 
-type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]> } | { ok: false; why: string; asFact?: boolean };
+type AmountCheck = { ok: true; amount: NonNullable<Checked["amount"]>; base?: Base } | { ok: false; why: string; asFact?: boolean };
+
+/** A cover's name as headings print it: "GROUP PERSONAL ACCIDENT(POLICY NO. 1)", "BENEFIT 2: GROUP PERSONAL ACCIDENT",
+ * and "Group Personal Accident" all read "personal accident". Null for a contents line or a line too long to be a heading. */
+function coverName(line: string): string | null {
+  // A contents line ("2. Group Personal Accident	7") names a section that starts later, so it is no heading.
+  if (/\t\s*\d+\s*$/.test(line)) return null;
+  const t = line.replace(/\(\s*(?:group\s+)?policy\s*no[^)]*\)?/gi, " ").replace(/\s+-\s+.*$/, "").replace(/^\s*(?:benefit\s*\d+\s*[:.-]|\d+\.)\s*/i, "").replace(/\t+\d+\s*$/, "");
+  const words = t.toLowerCase().replace(/[^a-z& ]+/g, " ").split(/\s+/).filter((w) => w && !["group", "policy", "insurance", "benefit", "benefits"].includes(w));
+  return words.length && words.length <= 5 && t.trim().length <= 60 ? words.join(" ") : null;
+}
+/** The covers a sum-insured document heads its lines with (all-capital lines, such as a certificate's product headings). */
+function headingsOf(pageText: string): { line: number; cover: string }[] {
+  return pageText.split("\n").flatMap((l, i) => { const letters = l.replace(/[^A-Za-z]/g, ""); const c = letters.length >= 8 && letters === letters.toUpperCase() ? coverName(l) : null; return c ? [{ line: i, cover: c }] : []; });
+}
+/** The cover a table row sits under: the last heading line, on this page above the row or on an earlier page, that names one
+ * of `covers`. */
+function sectionOf(doc: HouseholdDocument, page: number, offset: number, covers: Set<string>): string | null {
+  let last: string | null = null;
+  for (const p of doc.pages) {
+    if (p.page > page) break;
+    const text = p.page === page ? p.text.slice(0, offset) : p.text;
+    for (const l of text.split("\n")) { const c = coverName(l); if (c && covers.has(c)) last = c; }
+  }
+  return last;
+}
+const AS_OF = /\bas\s+of\s+(\d{1,2})\/(\d{1,2})\/(\d{4})\b/i;
+/** A "% of Sum Insured" row worked out on one person's own sum insured (release-set B1, B4, B5, D3). The base is accepted
+ * only when its quote is printed in the household's documents, on a line that names the person and prints that one amount
+ * with its currency, under a cover heading that is the same cover the row's table sits under in its own document (BS p8's
+ * fracture rows sit under "BENEFIT 2: GROUP PERSONAL ACCIDENT"; the certificate prints "GROUP PERSONAL ACCIDENT" above
+ * the person's S$600,000). Anything less keeps the percentage as a fact, never multiplied. */
+function sumInsuredBase(st: ModelStatement, found: Found, household: Household, person: string | null): { ok: true; value: number; raw: string; base: Base } | { ok: false; why: string } {
+  const po = st.percentOf!;
+  if (!person) return { ok: false, why: "a percentage of the sum insured needs the person it is for" };
+  if (!po.baseQuote) return { ok: false, why: "no quoted sum insured" };
+  const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
+  const bf = locateQuote(household, po.baseQuote, Number.isFinite(preferred) ? preferred : null);
+  if (!bf) return { ok: false, why: "the quoted sum insured is not in the stored pages" };
+  const want = moneyFiguresIn(po.baseAmount)[0];
+  const printed = moneyFiguresIn(bf.excerpt);
+  if (!want || printed.length !== 1 || !sameValue(printed[0].value, want.value)) return { ok: false, why: "the quoted line does not print that one sum insured with its currency" };
+  const bdoc = household.documents[bf.docIndex];
+  const page = bdoc.pages.find((p) => p.page === bf.page)!;
+  const lines = page.text.split("\n");
+  const who = tokens(person);
+  const at = lines.findIndex((l) => { const have = new Set(tokens(l)); return who.every((w) => have.has(w)) && moneyFiguresIn(l).some((f) => sameValue(f.value, want.value)); });
+  if (at < 0) return { ok: false, why: "the sum insured is not printed on a line naming the person" };
+  const heads = headingsOf(page.text);
+  const head = heads.filter((h) => h.line < at).at(-1);
+  if (!head) return { ok: false, why: "no cover heading above the sum insured" };
+  const section = sectionOf(household.documents[found.docIndex], found.page, found.offset, new Set(heads.map((h) => h.cover)));
+  if (section !== head.cover) return { ok: false, why: "the sum insured is for a different cover than the row's table" };
+  const d = AS_OF.exec(lines[at]);
+  return { ok: true, value: want.value, raw: printed[0].raw ?? po.baseAmount, base: { found: bf, cover: head.cover, asOf: d ? `${d[3]}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null } };
+}
 /** The amount a statement may show, or why it may not. An amount is a currency-signed figure printed in the quote, or a
  * percentage the quote prints of the sum its own table heading prints on the same page. A percentage of the sum insured is
  * never multiplied: the documents do not tie a benefit row to one of a person's sums insured, so the percentage is shown as
  * a fact and the sum insured as its own printed amount. */
-function checkAmount(st: ModelStatement, found: Found, household: Household): AmountCheck {
+function checkAmount(st: ModelStatement, found: Found, household: Household, person: string | null): AmountCheck {
   const doc = household.documents[found.docIndex];
   if (st.percentOf && st.percentOf.percent > 0) {
     const pct = st.percentOf.percent;
     if (!new RegExp(`(?<![\\d.])${String(pct).replace(".", "\\.")}\\s?(?:%|per\\s?cent)`, "i").test(found.excerpt)) return { ok: false, why: "the percentage is not in the quoted words" };
     const page = doc.pages.find((p) => p.page === found.page)!;
     const printed = rowBase(page.text, found.offset + found.excerpt.replace(/…$/, "").length);
-    if (printed === "sum_insured") return { ok: false, why: "a percentage of the sum insured is shown, not worked out", asFact: true };
+    if (printed === "sum_insured") {
+      const b = sumInsuredBase(st, found, household, person);
+      if (!b.ok) return { ok: false, why: b.why, asFact: true };
+      const cur = currencyOf(b.raw, b.base.found.excerpt);
+      const value = Math.round(b.value * pct) / 100;
+      return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
+    }
     const base = moneyFiguresIn(st.percentOf.baseAmount)[0]?.value ?? numbersIn(st.percentOf.baseAmount)[0];
     if (!printed || base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
     const cur = currencyOf(printed.raw, page.text);
@@ -210,6 +279,23 @@ function labelledNumbersRead(citations: ChatCitation[]): (s: string) => string {
   });
 }
 
+const FOOTNOTE = /^\s*([*#^†‡§]+)/;
+/** Whether a condition's quoted words are printed on the page the statement's quote is on, and (for a footnote) whether
+ * the statement's row carries that footnote's mark. */
+function conditionApplies(household: Household, found: Found, quote: string): boolean {
+  const doc = household.documents[found.docIndex];
+  const page = doc.pages.find((p) => p.page === found.page);
+  if (!page) return false;
+  const where = locateQuote({ ...household, documents: [{ ...doc, pages: [page] }] }, quote, 0);
+  if (!where) return false;
+  const lineOf = (offset: number) => { const start = page.text.lastIndexOf("\n", offset - 1) + 1; const end = page.text.indexOf("\n", offset); return page.text.slice(start, end < 0 ? undefined : end); };
+  const mark = FOOTNOTE.exec(lineOf(where.offset))?.[1];
+  if (!mark) return true;
+  // The row is the statement's line, with the mark printed after its first character (a row label such as "Ambulance Cost*").
+  const row = lineOf(found.offset);
+  return row.trimStart().slice(1).includes(mark);
+}
+
 /** Whether every excerpt sits on the same line of the same page. */
 function oneRow(household: Household, found: Found[]): boolean {
   const f0 = found[0];
@@ -220,9 +306,27 @@ function oneRow(household: Household, found: Found[]): boolean {
 }
 
 // ------------------------------------------------------------------ the answer
-export type VerifyReport = { dropped: { kind: string; why: string; text: string }[]; sentencesLeftOut: string[] };
+export type VerifyReport = { dropped: { kind: string; why: string; text: string }[]; sentencesLeftOut: string[]; questionsLeftOut: string[]; conditionsLeftOut: string[] };
 
 const asStrings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
+const strOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+function readPercentOf(v: unknown): ModelStatement["percentOf"] {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.percent !== "number" || typeof o.baseAmount !== "string") return null;
+  return { percent: o.percent, baseAmount: o.baseAmount, baseDocument: strOrNull(o.baseDocument), baseQuote: strOrNull(o.baseQuote) };
+}
+/** A condition without its own quote is read with quote null, and is then left out (verifyAnswer). */
+const readConditions = (v: unknown): ModelStatement["conditions"] => (Array.isArray(v) ? v : []).flatMap((c) =>
+  typeof c === "string" && c.trim() ? [{ text: c, quote: null }]
+    : c && typeof c === "object" && typeof (c as { text?: unknown }).text === "string" && (c as { text: string }).text.trim() ? [{ text: (c as { text: string }).text, quote: strOrNull((c as { quote?: unknown }).quote) }] : []);
+
+/** Whether a sentence asks something. */
+const asks = (sentence: string) => /\?["”’)\]]*\s*$/.test(sentence.trim());
+/** Text without the sentences that ask something; those are reported. Questions go only in "question" (one at most). */
+function withoutQuestions(text: string, dropped: string[]): string {
+  return sentencesOf(text ?? "").filter((x) => { const q = asks(x); if (q) dropped.push(x); return !q; }).join(" ").trim();
+}
 /** The model's JSON as a ModelAnswer, or null when it is not one. */
 export function readModelAnswer(json: unknown): ModelAnswer | null {
   if (!json || typeof json !== "object") return null;
@@ -233,8 +337,8 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
     kind: s.kind as ModelStatement["kind"], text: String(s.text),
     person: typeof s.person === "string" ? s.person : null, document: typeof s.document === "string" ? s.document : null,
     quote: typeof s.quote === "string" ? s.quote : null, amount: typeof s.amount === "string" ? s.amount : null,
-    percentOf: s.percentOf && typeof s.percentOf === "object" && typeof (s.percentOf as { percent?: unknown }).percent === "number" && typeof (s.percentOf as { baseAmount?: unknown }).baseAmount === "string" ? s.percentOf as ModelStatement["percentOf"] : null,
-    conditions: asStrings(s.conditions), alternativeGroup: typeof s.alternativeGroup === "string" && s.alternativeGroup.trim() ? s.alternativeGroup.trim() : null,
+    percentOf: readPercentOf(s.percentOf),
+    conditions: readConditions(s.conditions), alternativeGroup: typeof s.alternativeGroup === "string" && s.alternativeGroup.trim() ? s.alternativeGroup.trim() : null,
   }));
   return { bottomLine: o.bottomLine, statements, nextSteps: asStrings(o.nextSteps).slice(0, 3), question: typeof o.question === "string" && o.question.trim() ? o.question.trim() : null };
 }
@@ -247,8 +351,18 @@ function docLabel(household: Household, d: HouseholdDocument): string {
   return shared ? `${product} (${d.name.replace(/\.[a-z0-9]+$/i, "")})` : product;
 }
 
+/** How an illustration was worked out, in plain words with its sources. */
+function basisOf(household: Household, c: Checked): string {
+  const po = c.s.percentOf!;
+  if (!c.base) return `${po.percent}% of ${po.baseAmount}, worked out from the document's terms`;
+  const bdoc = household.documents[c.base.found.docIndex];
+  const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
+  const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf}), worked out from the document's terms`;
+}
+
 export function verifyAnswer(household: Household, model: ModelAnswer): { answer: StructuredAnswer; report: VerifyReport } {
-  const report: VerifyReport = { dropped: [], sentencesLeftOut: [] };
+  const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [] };
   const checked: Checked[] = [];
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
@@ -256,14 +370,14 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
-      const r = checkAmount(st, found, household);
+      const r = checkAmount(st, found, household, person);
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         // A percentage that is not worked out is kept as the printed percentage, without an amount.
         if (st.percentOf) checked.push({ s: { ...st, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found, amount: null, person, note: null });
         continue;
       }
-      checked.push({ s: st, found, amount: r.amount, person, note: null });
+      checked.push({ s: st, found, amount: r.amount, person, note: null, base: r.base ?? null });
     } else if (st.kind === "fact") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
       checked.push({ s: st, found, amount: null, person, note: null });
@@ -279,6 +393,15 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
     if (c.person && doc.linkedPeople.length && !doc.linkedPeople.some((p) => baseName(p) === c.person)) notes.push(`This document is not linked to ${c.person} in your library.`);
     if (doc.supersededAt) notes.push(`This document was replaced by a later version on ${doc.supersededAt.slice(0, 10)}.`);
     c.note = notes.join(" ") || null;
+  }
+  // A condition is kept only when its quoted words are printed on the statement's own page, and, when they are a footnote
+  // ("*This Benefit can only be claimed ..."), only for a row that carries the same footnote mark (release-set B1).
+  for (const c of checked) {
+    c.conditions = c.s.conditions.flatMap((x) => {
+      if (c.found && x.quote && conditionApplies(household, c.found, x.quote)) return [x.text];
+      report.conditionsLeftOut.push(x.text);
+      return [];
+    });
   }
   // Either/or is drawn only for one person's amounts printed on one line (one row) of one page: alternatives the model
   // groups across rows or documents (ambulance cost and the recuperation benefit are separate benefits) are separate
@@ -306,23 +429,29 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    let text = withoutMoney(c.s.text, report.sentencesLeftOut);
+    let text = withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut);
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     if (!text) return;
-    const conditions = c.s.conditions.map((x) => withoutMoney(x, report.sentencesLeftOut)).filter(Boolean);
+    const conditions = (c.conditions ?? []).map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut)).filter(Boolean);
     let source: AnswerStatement["source"] = null;
     if (c.found && doc) {
       const chunkId = `simple-${doc.policyId}-p${c.found.page}-${i + 1}`;
       citations.push({ chunkId, policyId: doc.policyId, policyName: docLabel(household, doc), insurer: doc.insurer ?? undefined, pageStart: c.found.page, pageEnd: c.found.page, documentRole: doc.documentRole ?? undefined, excerpt: c.found.excerpt, documentDate: doc.effectiveDate ?? undefined } as ChatCitation);
       source = { policyName: docLabel(household, doc), page: c.found.page, note: c.note, citationIds: [chunkId] };
+      if (c.base) {
+        const bdoc = household.documents[c.base.found.docIndex];
+        const baseId = `${chunkId}-base`;
+        citations.push({ chunkId: baseId, policyId: bdoc.policyId, policyName: docLabel(household, bdoc), insurer: bdoc.insurer ?? undefined, pageStart: c.base.found.page, pageEnd: c.base.found.page, documentRole: bdoc.documentRole ?? undefined, excerpt: c.base.found.excerpt, documentDate: bdoc.effectiveDate ?? undefined } as ChatCitation);
+        source.citationIds.push(baseId);
+      }
     }
     const kind: AnswerStatement["kind"] = c.amount ? (c.amount.illustration ? "calculation" : "benefit_terms") : c.s.kind === "fact" || c.s.kind === "amount" ? "fact" : c.s.kind;
     const gid = groupOf.get(c);
     statements.push({
       id: `s${i + 1}`, kind, text, fullText: text, personName: c.person, amount: c.amount ? { text: c.amount.text, currencyResolved: c.amount.currencyResolved, illustration: c.amount.illustration } : null,
-      basis: c.amount?.illustration && c.s.percentOf ? `${c.s.percentOf.percent}% of ${c.s.percentOf.baseAmount}, worked out from the document's terms` : null,
-      conditions, asOf: null, source, group: gid ? { id: gid, kind: "either_or", note: ALTERNATIVES_NOTE } : null,
+      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : null,
+      conditions, asOf: c.base?.asOf ?? null, source, group: gid ? { id: gid, kind: "either_or", note: ALTERNATIVES_NOTE } : null,
     });
   });
   for (const members of notTotals) {
@@ -334,9 +463,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer): { answer
   }
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
   else if (report.dropped.length) statements.push({ id: "left-out-fact", kind: "uncertainty", text: LEFT_OUT_FACT, fullText: LEFT_OUT_FACT, conditions: [] });
-  let bottomLine = withoutMoney(model.bottomLine, report.sentencesLeftOut);
-  const nextSteps = model.nextSteps.map((x) => withoutMoney(x, report.sentencesLeftOut, labelledNumbersRead(citations))).filter(Boolean);
-  const question = model.question ? withoutMoney(model.question, report.sentencesLeftOut) : "";
+  let bottomLine = withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut);
+  const nextSteps = model.nextSteps.map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, labelledNumbersRead(citations))).filter(Boolean);
+  // One question back at most: the first one the model asks; any further question is left out.
+  const asked = model.question ? sentencesOf(model.question).filter(asks) : [];
+  report.questionsLeftOut.push(...asked.slice(1));
+  const question = asked.length ? withoutMoney(asked[0], report.sentencesLeftOut) : "";
   const shownAmounts = statements.filter((s) => s.amount).length;
   if (!bottomLine) {
     // Built here, without another model call, from the first amount card: whose it is and what the model said it is for.

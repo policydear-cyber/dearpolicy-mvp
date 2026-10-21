@@ -93,14 +93,21 @@ const attr = (name: string, value: string | null | undefined) => (value ? ` ${na
 /** Documents are numbered D1, D2, ... in library order; the model cites them by that id. */
 export const documentId = (index: number) => `D${index + 1}`;
 
+/** Said for every document, so the model can tell "linked to nobody" from "not said" (release-set E1, E3). */
+export const LINKED_TO_NOBODY = "nobody (not linked to anyone in DearPolicy)";
+export const NOT_READABLE = "could not be read";
+/** Whether the app failed to read (or has not finished reading) this file; its text is not sent or quoted. */
+export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && doc.processingStatus !== "ready";
+
 export function renderDocument(doc: HouseholdDocument, index: number): string {
   const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
-    attr("linked_people", doc.linkedPeople.join(", ")) + attr("superseded", doc.supersededAt) +
-    (doc.processingStatus && doc.processingStatus !== "ready" ? attr("reading_status", doc.processingStatus) : "") + ">";
-  const pages = doc.pages.length
+    attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
+    (unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : "") + ">";
+  // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
+  const pages = !unreadable(doc) && doc.pages.length
     ? doc.pages.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`).join("\n")
     : "<no_readable_text/>";
   return `${head}\n${pages}\n</document>`;
