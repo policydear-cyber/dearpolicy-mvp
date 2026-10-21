@@ -4,6 +4,7 @@ import { normalizeCoverageCategory, normalizePersonName } from "@/lib/insurance"
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { isExcluded, notExcludedClause } from "@/lib/policies/member-exclusions";
+import { nameKey } from "@/lib/policies/name-dismissals";
 
 /** The ISO code of a currency the document printed, or null. Unlike
  * normalizeCurrencyCode() on its own, a bare "$" or an unrecognised marker is
@@ -116,6 +117,16 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
   );
 }
 
+/** Printed names on a document that the household matched to someone by hand (their link is user_declared), by
+ * name key: a re-read matches each to the same person again instead of dropping their cover. */
+export async function householdNameMatches(accountId: string, policyId: string): Promise<Map<string, string>> {
+  const rows = (await query<{ detected_name: string; member: string }>(
+    `SELECT pdp.detected_name, pdp.matched_family_member_id::text AS member FROM policy_detected_people pdp
+       JOIN policy_members pm ON pm.policy_id=pdp.policy_id AND pm.account_id=pdp.account_id AND pm.family_member_id=pdp.matched_family_member_id AND pm.source='user_declared'
+      WHERE pdp.policy_id=$1 AND pdp.account_id=$2`, [policyId, accountId])).rows;
+  return new Map(rows.map((r) => [nameKey(r.detected_name), r.member]));
+}
+
 export async function syncInsuredPersonToMember(args: { accountId:string; sourcePolicyId:string; familyMemberId:string; detectedName:string; extraction:PolicyExtraction;
   /** How the person was linked: a name match (default, 0.95), or the member the
    * uploader chose for a document naming one person no profile matched. */
@@ -128,7 +139,10 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
   if (!args.householdChoice && args.link?.source !== "user_declared" && await isExcluded(args.accountId, args.sourcePolicyId, args.familyMemberId)) return;
   const link = args.link ?? { source: "ai_name_match" as const, confidence: 0.95 };
   await query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,$4,$5)
-    ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source=EXCLUDED.source,confidence=EXCLUDED.confidence`,[args.sourcePolicyId,args.familyMemberId,args.accountId,link.source,link.confidence]);
+    ON CONFLICT(policy_id,family_member_id) DO UPDATE SET
+      -- The household's own link (user_declared) stays theirs when a re-read matches the same person by name.
+      source=CASE WHEN policy_members.source='user_declared' THEN policy_members.source ELSE EXCLUDED.source END,
+      confidence=CASE WHEN policy_members.source='user_declared' THEN policy_members.confidence ELSE EXCLUDED.confidence END`,[args.sourcePolicyId,args.familyMemberId,args.accountId,link.source,link.confidence]);
   await query(`UPDATE policy_detected_people SET matched_family_member_id=$1,confidence=$5 WHERE account_id=$2 AND policy_id=$3 AND detected_name=$4`,[args.familyMemberId,args.accountId,args.sourcePolicyId,args.detectedName,link.confidence]);
   await query(`DELETE FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND family_member_id=$3`,[args.accountId,args.sourcePolicyId,args.familyMemberId]);
   await query(`DELETE FROM premium_records WHERE account_id=$1 AND source_document_id=$2 AND family_member_id=$3`,[args.accountId,args.sourcePolicyId,args.familyMemberId]);

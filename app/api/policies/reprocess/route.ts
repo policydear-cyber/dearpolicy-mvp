@@ -9,12 +9,16 @@ import { enqueuePolicyProcessing,POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/pr
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 // Re-reading a document can take as long as the original upload; give the
 // background job room to finish inside after() rather than being cut off.
 export const maxDuration = 300;
+
+// Each re-read is a full paid reading of the document: a household gets 20 an hour.
+const rereads = createDbRateLimiter({ name: "policy-reprocess", windowMs: 60 * 60 * 1000, max: 20 });
 
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
@@ -25,6 +29,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
     const ctx = await requireHouseholdContext(request);
+    const allowance = await rereads.attempt(ctx.householdId);
+    if (!allowance.allowed) {
+      return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(allowance.retryAfterMs / 1000)) } });
+    }
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
 
     const policy = await createUserSupabaseClient(ctx.userId, async (client) => {
