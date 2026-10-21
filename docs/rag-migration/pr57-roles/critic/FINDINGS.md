@@ -3234,3 +3234,73 @@ R65-2 (Low) is accepted as is.
 ## Verdict on PR #85 at `c40fca7`
 
 **Ready.** The merge still needs DC's explicit yes because it rewrites stored data (round 61).
+
+---
+
+# Round 67: PR #87 at `d6770ea` ("Read again" on a ready document)
+
+What changed: `app/policies/page.tsx` adds a two-click "Read again" button on documents whose status is `ready`.
+It calls the existing `retryReading` and `POST /api/policies/reprocess`. The API route is unchanged. There is also a
+source-regex test in `scripts/r5-ux-regressions.ts`. I reviewed the route and the ingest path that a re-read runs
+(`lib/rag/ingest.ts`, `lib/policies/linking.ts`, `lib/policies/benefit-catalog.ts`).
+
+## What a re-read keeps (checked in code)
+
+| Item | Kept? | Where |
+|---|---|---|
+| Document id | yes | the UPDATE runs in place (reprocess route, ingest.ts:600) |
+| `user_declared` links | yes | not in the delete list at ingest.ts:616 |
+| Removals (`policy_member_exclusions`) | yes | `notExcludedClause` for upload hints and reference links; `isExcluded` in `syncInsuredPersonToMember` |
+| Dismissed names | yes | `dismissedNameKeys`, ingest.ts:647 |
+| Benefit rows a person corrected (`reviewed_at`) | yes | `replaceBenefitCatalog` keeps them and drops the fresh duplicate (benefit-catalog.ts:1074-1083) |
+| Person-edited ledger rows (`origin='person'`) | yes | ledger deletes are scoped to `origin<>'person'` |
+| **A name the household linked by hand, and coverage tiers** | **no** | see R67-1 |
+
+**Household scoping:** OK. The policy is read through the RLS client with `account_id=$householdId`, and the requeue
+UPDATE is scoped to `account_id`. Another household's id returns 404, and only server-resolved ids reach the job.
+
+**Mid-read and double-click:** OK.
+- The button only shows when `!processing && status==='ready'`.
+- A fast second request loses the atomic `UPDATE ... WHERE processing_status NOT IN (...)` and gets 409, which the
+  page shows as "This document is already being analysed." No second read starts.
+
+## Findings
+
+**R67-1 (Medium, a household choice is lost).**
+- The PR adds a tooltip at page.tsx:485: "People you chose for it stay chosen." That is not true for two kinds of
+  choice.
+- **Kind 1: a name linked by hand.** When the household links a detected name to a profile on the document,
+  `link-person` calls `syncInsuredPersonToMember` without `link`, so the row is stored as `source='ai_name_match'`
+  (link-person/route.ts:179-185, linking.ts:126).
+- **Kind 2: a tick on a row already linked by name.** A CoversPicker tick on a row already linked by name keeps
+  `ai_name_match` and only sets `benefit_tier` (coverage-assignments.ts:41-44, `ON CONFLICT DO UPDATE SET
+  benefit_tier`).
+- **What a re-read does to both.** It deletes every `ai_name_match` row first (ingest.ts:616), then re-links only
+  names the automatic matcher finds.
+- **Result for a hand-linked person.** The matcher already failed on that name, which is why the household linked it.
+  The person is dropped from the document, and their `policy_coverages` go too (ingest.ts:634).
+- **Result for a re-matched person.** The row is recreated without `benefit_tier`, so a chosen plan tier is lost.
+- Before this PR the re-read was offered only on unreadable documents, which have no such links. Putting it on ready
+  documents makes this reachable in one click.
+- **Fix (pick one):**
+  - store household name links under a source that a re-read keeps (`user_declared`, or a new source counted in
+    `named_member_ids`), and have the CoversPicker tick set that source; or
+  - make ingest keep the household-matched row and its `benefit_tier` across a re-read.
+- **Test to add:** a hand-linked name and a tier survive a re-read. Until the fix lands, remove or soften the tooltip.
+
+**R67-2 (Low, cost and rate; the API exposure is older than this PR).** Each confirmed click runs a full paid read on
+production's key: the structure extraction, the page-by-page benefit catalogue and the conditions pass. Checkpoints
+are cleared for a non-stalled re-read, so nothing is reused. `/api/policies/reprocess` has no rate limit. The only
+guard is one read in flight per document, so a member can re-read every document over and over. The route already
+accepted ready documents before this PR; the button makes it one click. Suggested: a per-household
+`createDbRateLimiter` on the route, for example a few re-reads per document per day.
+
+**R67-3 (Low, note).**
+- While a re-read runs (status `queued`/`extracting`/`indexing`), the document's cover leaves Coverage and chat.
+- A re-read that comes out worse (a role or name read differently) has no undo except reading again.
+- Answers saved from the old pages are not withdrawn. This is C1-3, already accepted, and the PR comment says so.
+
+## Verdict on PR #87 at `d6770ea`
+
+**Not ready: one Medium (R67-1).** Keep hand-linked names and tiers across a re-read (or drop the tooltip's promise
+and add the test). Then it is ready. R67-2 is advisable before launch but not blocking.
