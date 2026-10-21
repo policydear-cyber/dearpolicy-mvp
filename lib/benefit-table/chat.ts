@@ -9,7 +9,7 @@ import type { BenefitTable, TableRow } from "./assemble";
 import { figureText } from "./assemble";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember, statesMoney } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember } from "@/lib/simple-chat/verify";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null };
@@ -65,9 +65,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (!row) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
-    // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2):
-    // a plan may be a bare number ("Plan 300"), never a sum.
-    if ([row.benefit, row.product, row.cover, row.qualifier ?? ""].some(statesMoney) || moneyFiguresIn(row.plan ?? "").length) {
+    // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
+    if ([row.benefit, row.product, row.cover, row.qualifier ?? "", row.plan ?? ""].some(nameStatesMoney)) {
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
     }
     // The same row named twice is given once (Critic R91-3).
@@ -92,6 +91,15 @@ export function rowLabel(row: ChatRow): string {
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
     : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}, worked out` : null;
   return `${row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
+}
+
+/** A name states money when it prints a currency figure ("S$1,000,000", "$500"), a figure grouped in thousands
+ * ("1,000,000") or one with a size word ("1 million"). A bare number is a name's own: real names carry policy and
+ * scheme numbers ("GROUP POLICY NO. G007500", "POLICY NO.3037850") and plans are numbered ("Plan 300"). */
+export function nameStatesMoney(name: string): boolean {
+  const t = (name ?? "").normalize("NFKC");
+  return moneyFiguresIn(t).length > 0 || /\b\d{1,3}(?:,\d{3})+\b/.test(t) || /\d(?:[\d,.]*\d)?\s*(?:k|m|mn|mil|million|thousand|grand|bn|billion)\b/i.test(t)
+    || /\b(?:dollars?|SGD|USD)\b/i.test(t) && /\d/.test(t);
 }
 
 /** Applied to the checked answer: an amount whose statement is not exactly one of the server's labels lost its label to

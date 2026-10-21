@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -179,6 +179,14 @@ test("a row whose benefit, cover or plan name states money is never labelled (R9
   assert.deepEqual(r.dropped.map((d) => /name states money/.test(d.why)), [true, true, true]);
   assert.doesNotMatch(JSON.stringify(r.statements), /1,000,000|S\$300/);
   assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+});
+test("real names carry policy and scheme numbers: their rows keep their amounts", () => {
+  const named = rows.map((r) => r.product === "Group Scheme" ? { ...r, product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" } : r);
+  const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" }], named);
+  assert.equal(r.amounts.length, 2, JSON.stringify(r.dropped));
+  assert.match(r.amounts[0].text, /POLICY NO\. 3037850\)\): up to this limit\.$/);
+  assert.ok(!nameStatesMoney("Section 150 Plan 300"));
+  for (const money of ["Death S$1,000,000", "Cover 1,000,000", "Death 1 million", "Benefit of 500 dollars", "Death $500", "Death S＄１,０００"]) assert.ok(nameStatesMoney(money), money);
 });
 test("money in full-width digits is money: left out of the bottom line, next steps and facts (R92-1)", () => {
   const parsed = readModelAnswer({ bottomLine: "Your death cover pays S$１,０００,０００.", nextSteps: ["Claim S＄５００ now.", "Call the insurer."], question: null, statements: [
