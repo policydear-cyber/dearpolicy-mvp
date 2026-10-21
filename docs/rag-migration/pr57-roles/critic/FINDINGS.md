@@ -4066,3 +4066,24 @@ Probed `nameStatesMoney` on 23 names (tsx, no DB, no paid calls).
   - Add those 7 names as test cases.
 - Low: "₹ 500" is not read as money (₹ is missing from the currency symbols). This is outside the SGD/USD/MYR/HKD scope, so it is a note only.
 - app-run `--table` is a script, not on the app path; reviewed for scope only.
+
+## R95 — PR #96 at 99b7a5c (capped percentages; stricter money-in-names rule)
+
+**Verdict: NOT READY** (two blockers, both in `lib/benefit-table/check.ts` `rowAndContinuation`).
+
+Probed `checkReading` and `nameStatesMoney` (tsx, no DB, no paid calls).
+
+- R94-1 is fixed. All seven names are now refused ("Accidental Death 1000000", "Death benefit of 600000", "Hospital cash 200 per day", "Hospital cash 200/day", "Benefit up to 5000", "Room & Board 300", "Death 1 000 000"). Identifiers still pass: "G007500", "POLICY NO.3037850", "Plan 300", "Ward Class B1", "Covid-19 Benefit", "24-hour Assistance", "Group Term Life 2026", "Clause 12.1 Death". A plan of "1000 per year" is refused.
+- "whichever is greater" correctly yields no amount (N8). Readings are re-checked from raw on load (`service.ts:55`), so old readings also get `capUnread`.
+- **R95-1 (blocker, an uncapped figure still shows)** `check.ts` `rowAndContinuation`:
+  - `source.excerpt` is whitespace-normalised ("Hip 75% of Sum Insured"), but the page prints a tab ("Hip\t75% of Sum Insured"). So `pageText.indexOf(excerpt)` and `indexOf(last)` both miss, and only the excerpt is returned; the continuation line is never read.
+  - N5: page "Hip\t75% of Sum Insured\nor up to S$50,000, whichever is lesser", with no cap read, gives `capUnread=false`. The table works out 75% of the sum insured uncapped (S$450,000 on S$600,000) when the row pays at most S$50,000.
+  - N4: the same row with the cap read correctly is refused ("not printed in the row") and shows no amount, so the feature's own example fails.
+  - Fix: anchor on the located quote's page offset (the `Found` from `locateQuote`), not on `indexOf` of the normalised excerpt.
+- **R95-2 (blocker, a cap from a neighbouring row)**:
+  - N1: page "Hip 75%\nWrist 20% up to S$5,000\nAnkle 10%" (rows separated by spaces, no tabs). The Hip claim `cap 5000, capQuote "up to S$5,000"` is ACCEPTED. `rowWithContinuation` treats the next table row as a continuation, so Hip shows S$5,000 (Wrist's limit).
+  - N3: a row quote that spans two rows ("Hip 75% Wrist 20% up to S$5,000") is also accepted.
+  - Fix: a continuation line must not start a new row (a label followed by its own %/figure). The cap words must sit on the row's own line, or on a continuation that begins with or/and/up to/subject/whichever (lower-case or a connective). Refuse a row quote that holds two percentages or two row labels.
+  - Add N1, N3, N4 and N5 as tests (tab and space layouts).
+- Low (not new): a cap printed once for a section ("All benefits subject to a maximum of S$100,000 per policy year") is not read, so rows under it are worked out uncapped (N7). Worth a follow-up.
+- Low: `nameStatesMoney` now refuses "Benefit 365 days" and "ICU 500". That hides amounts but is safe.
