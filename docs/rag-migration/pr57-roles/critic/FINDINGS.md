@@ -3122,3 +3122,69 @@ outputs diffed.
 
 **Ready.** Every wrong-amount and borrowed-condition finding from rounds 50–62 is fixed, and I found no remaining
 wrong-amount path in this household or in the synthetic probes.
+
+---
+
+# Round 65: PR #85 re-review at `10f998e` (benefit summary read as a certificate)
+
+What changed since round 61 (`1b93474`): `lib/policies/inventory.ts` adds `servesAsReference()`, so any document with
+role `certificate` or `personal_schedule` and `personal_coverage_confirmed=false` is now accepted as wording
+(`referenceMatchReason` at inventory.ts:82 and the insurer/product enrichment at inventory.ts:180). One new DB
+regression test was added. `lib/ledger/store.ts` is unchanged.
+
+Checked offline with `buildContracts` on synthetic documents (scratchpad `r65/t65.ts`). Desmond has a confirmed
+certificate on group G-123, and three unconfirmed documents share the same insurer and group:
+
+| Unconfirmed document | Linked people | Bound as wording to Desmond's contract |
+|---|---|---|
+| Benefit Summary, role `certificate`, authority 30 | Desmond | yes (intended) |
+| Certificate the reader did not confirm, authority 80 | Charmaine | **yes** |
+| Personal schedule, no group number, same product name | none | no |
+
+## Findings
+
+**R65-1 (Medium, cross-person amount). inventory.ts:51-53.** The new rule accepts *any* unconfirmed personal-role
+document, not only one that names nobody. Example: a real certificate for another member whose name the reader
+failed to confirm (fact-check.ts:431 and intelligence.ts:192 both drop confirmation on weak name evidence). That
+certificate is now bound as wording to Desmond's contract, so its rows reach Desmond's Coverage ledger, the Benefits
+page and chat through `contract.references`. Its fixed figures would show as Desmond's (store.ts:236/254/271,
+api/benefits/route.ts:88/114, workflow.ts:767). At `1b93474` the same document was ignored, not mis-assigned.
+DC's snapshot does not contain such a document today; the D3 certificate is confirmed for both people.
+
+Suggested narrowing (one line): accept an unconfirmed `certificate`/`personal_schedule` as wording only when it
+proves nobody's cover. Two ways to express that:
+- `document_authority<70` (the Benefit Summary is 30);
+- no `ai_name_match` or `user_declared` link (that is, linked only by `scheme_reference_match`).
+
+Add a test: an unconfirmed certificate name-matched to another member stays out of the owner's references.
+
+**R65-2 (Low, consistency).** Other places still use only `referenceRoles`, so they treat the same document
+differently:
+- `isGroupGuide` (household-status.ts:50) does not call it a group guide.
+- The claim evidence queries (death/ci/disability/medical/travel `*-evidence.ts`, role lists near lines 212–353)
+  still skip it.
+
+This is conservative and does not produce a wrong amount. Note it only.
+
+## Checks the coordinator asked for
+
+- **Reference wording as personal proof:** No. `buildContracts` ownership is unchanged: it still needs
+  confirmed with authority ≥70, or a user declaration. The Benefit Summary only joins `references`, and its rows keep
+  the scheme-wording label: `scheme_reference_match` links are excluded from "covered" (page.tsx:542,
+  coverage-assignments.ts:9). The `personalEvidence` flag at benefit-catalog.ts:585 reads the owner's coverage row,
+  not the reference document's role.
+- **Interaction with #83:** #85 and #83 merge cleanly (`git merge-tree`); #83 touches `lib/documents/intelligence.ts`
+  and its regression script only. The two complement each other. #83 makes a *newly read* Benefit Summary
+  `benefit_guide`, which is already in `referenceRoles`. #85 covers the *stored* row that still says `certificate`
+  until it is re-read. Neither changes the other's decision.
+- **Stored-data rewrite:** The seedLedger block is unchanged. It still updates a row only when the contract is owned by
+  the row's `family_member_id` and the document is in that contract's documents or references. It still requires
+  `origin<>'person'` and `updated_at=created_at`, so it remains idempotent. The only widening is that the Benefit
+  Summary's rows are now in scope for the owner's own contract, which is the purpose of the fix. The merge still
+  rewrites stored `coverage_rules.sum_basis` on production, so it still needs DC's explicit yes (round 61).
+
+## Verdict on PR #85 at `10f998e`
+
+**Not ready: one Medium (R65-1).** The wrist either/or fix is correct for DC's household. Narrow
+`servesAsReference` to unconfirmed personal-role documents that prove nobody's cover, add the cross-member test, and
+it is ready.
