@@ -9,6 +9,8 @@ import { answerSimply, apiKeyFromEnv, buildRequest, costUsd, renderLibrary, type
 import { readHousehold, type Household, type ReadOnlyQuery } from "./household";
 import { estimateRun, loadQuestions, recordedCurrent, runComparison, sideBySide } from "./compare";
 import { buildSnapshot, pagesDigest } from "./build-snapshot";
+import { costUsd as ledgerCostUsd, priceFor } from "@/lib/ai/providers";
+import { callUsd } from "@/lib/simple-chat/model";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222";
 const P1 = "aaaaaaaa-0000-4000-8000-000000000001", P2 = "aaaaaaaa-0000-4000-8000-000000000002", P3 = "bbbbbbbb-0000-4000-8000-000000000003";
@@ -202,6 +204,26 @@ await check("CLI --paid with no key stops before any call", () => {
     { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", DEARPOLICY_ANTHROPIC_KEY: "" } });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /No API key: set DEARPOLICY_ANTHROPIC_KEY or ANTHROPIC_API_KEY/);
+});
+await check("Haiku 5.5 is priced at its long-prompt card (the library is over 100K tokens)", () => {
+  const haiku = { provider: "anthropic", model: "claude-haiku-5-5" } as const;
+  assert.deepEqual(priceFor(haiku), { input: 0.5, output: 2.5, cachedInput: 0.05 });
+  assert.deepEqual(priceFor({ ...haiku, model: "claude-haiku-5-5-20261001" }), priceFor(haiku));
+  // One cached-library call: 1 500 fresh, 230 000 read from cache, 2 500 out.
+  const u = { input: 1500, cacheRead: 230_000, cacheWrite: 0, output: 2500 };
+  assert.ok(Math.abs(callUsd(priceFor(haiku)!, u) - (1500 * 0.5 + 230_000 * 0.05 + 2500 * 2.5) / 1e6) < 1e-12);
+  assert.ok(Math.abs(ledgerCostUsd(haiku, { input: 231_500, output: 2500, cached: 230_000 })! - 0.0185) < 1e-12);
+  // Never cheaper per token than the short card it stands in for.
+  const p = priceFor(haiku)!;
+  assert.ok(p.input >= 0.1 && p.output >= 0.5 && p.cachedInput! >= 0.01);
+});
+await check("app-run estimates a Haiku 5.5 run without sending anything", () => {
+  const hhPath = join(dir, "household.json");
+  const run = spawnSync(process.execPath, ["--import", "tsx", "scripts/simple-answer/app-run.ts", "--questions", qPath, "--household-file", hhPath, "--model", "anthropic:claude-haiku-5-5"],
+    { encoding: "utf8", env: { ...process.env, ANTHROPIC_API_KEY: "", DEARPOLICY_ANTHROPIC_KEY: "", ANTHROPIC_BASE_URL: "http://127.0.0.1:9" } });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /"model": "anthropic:claude-haiku-5-5"/);
+  assert.match(run.stdout, /Estimate only\. Nothing was sent to a model\./);
 });
 console.log(`${passed} checks passed`);
 }

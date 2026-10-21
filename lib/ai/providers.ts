@@ -117,6 +117,11 @@ const PRICES:Record<string,Price>={
   // claude-api skill model table (cached 2026-10-06); used by the simple chat (lib/simple-chat).
   "anthropic:claude-opus-5-5":{input:4,output:20,cachedInput:0.2},
   "anthropic:claude-sonnet-5-5":{input:2,output:10,cachedInput:0.2},
+  // claude-api skill (checked 2026-10-21): two rate cards by prompt length, $0.10/$0.50 up to 100K prompt tokens and
+  // $0.50/$2.50 above; cache reads 0.1x input. A household's library alone is ~230K tokens, so the simple chat always
+  // pays the long card. Price has no tiers, so the long card is used for every call: a short prompt is over-counted,
+  // never under-counted, which keeps every cap and reservation on the safe side.
+  "anthropic:claude-haiku-5-5":{input:0.5,output:2.5,cachedInput:0.05},
   "gemini:gemini-2.5-flash-lite":{input:0.10,output:0.40},
   "gemini:gemini-2.5-flash":{input:0.30,output:2.50},
   "gemini:gemini-3.5-flash-lite":{input:0.30,output:2.50},
