@@ -2492,3 +2492,62 @@ Only `components/answer-cards.tsx` (2 lines) and the phone e2e spec changed.
 ## Verdict on PR #81 at `00a06ff`
 
 **Ready to merge**, with or without #79 (no shared files; stop texts match both).
+
+---
+
+# Round 50: PR #82 at `741aba9` (simple chat aiming at 32/32)
+
+Method: code read of `lib/simple-chat/**` and `scripts/simple-answer/app-run.ts`, plus a local tsx probe of `verifyAnswer`
+on the real snapshot (kept out of Git). No paid calls.
+
+**"Both paid runs used the comparison script": confirmed.** `sonnet-run/SCORES.md` names `scripts/simple-answer/compare.ts`
+as the runner, and the side-by-side header has `current: none`. So the app's checks never saw those answers. app-run.ts
+drives `runSimpleChat` with a per-call worst-case cap and writes output only to `--out`. That is the right way to measure
+what ships.
+
+**"% of Sum Insured" on the person's own sum insured: correct on the intended rows.** These match the Evidence Reviewer
+figures:
+- Desmond wrist (BS p8, 20%): S$120,000.
+- Desmond hip (75%): S$450,000.
+- Charmaine wrist: S$120,000.
+
+The Term Life S$1,000,000 offered as the base for a GPA row is refused (kept as a fact). No person means no calculation.
+
+## Findings
+
+**R50-1 (High, wrong amount): a "% of the Sum Insured" sentence below a row is taken as the row's table heading.**
+`rowBase` scans everything before the end of the whole excerpt. So a quote that joins a row to a later sentence with
+"..." makes that sentence the row's base. Probe: "At least 6 months 50% ... Comatose State sum insured will be 15% of the
+Sum Insured" (BS p10) gives **S$300,000** (50% of S$600,000). The document's benefit is 50% of the Comatose State sum
+insured, which is the lesser of 15% of S$600,000 or S$50,000. That is at most S$25,000. The row alone is correctly
+refused. Fix:
+- Find the base above the row's own line: the line holding the percentage, using the first fragment's position, not
+  the excerpt end.
+- Accept "sum_insured" only from a table heading line such as "(% of Sum Insured)". Never accept it from prose.
+- Refuse when the row's own column heading names another base ("percentage of Comatose State Sum Insured").
+
+**R50-2 (Medium-High): prose percentages are multiplied and the cap is lost.** "of 100% of the Sum Insured, up to a
+maximum amount of $400,000" (BS p4, Term Life TPD) gives a S$1,000,000 calculation card. The quote's "$400,000 maximum,
+balance paid later" is not on the card, so a qualifier is stripped. The same fix as R50-1 (a table heading only, not a
+sentence in the quote) stops it.
+
+**R50-3 (Low): the base citation can show another person's line.** With Charmaine's certificate line quoted as
+Desmond's base, Desmond still gets S$120,000. `sumInsuredBase` finds Desmond's own line on the page, but the cited base
+excerpt is Charmaine's line. Fix: require the quoted line itself to name the person.
+
+**R50-4 (Low-Medium, latent): `sectionOf` only records headings that are also certificate covers.** A section the
+certificate does not list (BS p14 "DISABILITY INCOME POLICY", p16 "OUTPATIENT MEDICARE POLICY") does not end the previous
+one, so a "% of Sum Insured" row there would inherit "living care plus". There is no such row in this household today.
+Fix: track every heading, and accept only when the last one matches.
+
+**Checked, fine:**
+- Unreadable files are sent with no text and cannot be quoted (`locateQuote` skips them).
+- `linked_people` always says "nobody" when empty.
+- Conditions must quote words on the statement's own page, and footnote conditions apply only to rows with the same mark.
+- At most one question is kept, and question sentences elsewhere are dropped.
+- The no-money-in-prose rule is unchanged.
+
+## Verdict on PR #82 at `741aba9`
+
+**Not ready:** fix R50-1 and R50-2 (wrong or unqualified amounts) before any paid app-path run. R50-3 and R50-4 are
+small. The approach is sound.
