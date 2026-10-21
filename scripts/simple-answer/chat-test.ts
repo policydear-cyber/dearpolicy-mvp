@@ -225,6 +225,7 @@ async function main() {
     assert.doesNotMatch(a.summary, /2,000/);
     const call = model.calls[0] as { library: string; question: string; history: unknown[] };
     assert.match(call.question, /This chat is about Lim Ah Kow/);
+    assert.match(call.question, /^\(Today is \d{4}-\d{2}-\d{2}\.\) /);
     assert.equal(call.history.length, 2);
     assert.ok(!call.library.includes("someone-else"));
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
@@ -798,6 +799,27 @@ async function main() {
     assert.deepEqual(kept(unnamed, "Member 1\tS$600,000\tAs of 01/01/2026"), [[]], "a line naming no member");
   });
 
+  // DC's live A&E case (21 Oct): a table's own "(S$)" heading prices its whole-figure cells; a bill is set against a per-visit limit.
+  await check("A&E: a table's currency heading prices its cells; a bill the household gave is set against a per-visit limit only", () => {
+    const table = "Benefits Limits Per Visit\t(Superior)\t(Deluxe)\n(S$)\nLocal Emergency Outpatient Treatment for Illness\t100\nCo-payment per visit\t10\nPlan code\t2045";
+    const card = (text: string, quote: string, amount: string, ofBill: { bill: string } | null = null, written: string[] = []) =>
+      r59(R59("Outpatient.pdf", text), [st({ kind: "amount", text: "x", person: "Ah Kow", document: "D7", quote, amount, ofBill })], written).answer.statements!.filter((x) => x.amount).map((x) => [x.kind, x.amount!.text]);
+    const limit = "Local Emergency Outpatient Treatment for Illness\t100";
+    assert.deepEqual(card(table, limit, "100"), [["benefit_terms", "S$100"]]);
+    assert.deepEqual(card(table, `${limit}\nCo-payment per visit\t10`, "10"), [["benefit_terms", "S$10"]], "a quote of two rows");
+    assert.deepEqual(card(table, "Plan code\t2045", "2045"), [], "a code");
+    assert.deepEqual(card(table.replace("(S$)\n", ""), limit, "100"), [], "no currency heading");
+    assert.deepEqual(card(`${limit}\n(S$)`, limit, "100"), [], "the heading is below the figure");
+    assert.deepEqual(card(`${table}\nOverseas limit\tUS$100`, limit, "100"), [], "another currency on the page");
+    assert.deepEqual(card(table, limit, "100", { bill: "$800" }, ["her bill was $800"]), [["benefit_terms", "S$100"], ["calculation", "Up to S$100"]], "a bill above the limit");
+    assert.deepEqual(card(table, limit, "100", { bill: "$60" }, ["the bill came to 60 dollars"]), [["benefit_terms", "S$100"], ["calculation", "Up to S$60"]], "a bill within the limit");
+    assert.deepEqual(card(table, limit, "100", { bill: "$800" }, ["can she claim?"]), [["benefit_terms", "S$100"]], "a bill the household never gave");
+    assert.deepEqual(card(table, limit, "100", { bill: "US$800" }, ["her bill was US$800"]), [["benefit_terms", "S$100"]], "a bill in another currency");
+    assert.deepEqual(card(table, "Co-payment per visit\t10", "10", { bill: "$800" }, ["her bill was $800"]), [["benefit_terms", "S$10"]], "a co-payment is no limit");
+    assert.deepEqual(card(table.replace("Benefits Limits Per Visit", "Benefits"), limit, "100", { bill: "$800" }, ["her bill was $800"]), [["benefit_terms", "S$100"]], "not printed as a limit");
+    assert.deepEqual(card("Ambulance\tUp to S$500 per incident", "Ambulance\tUp to S$500 per incident", "S$500", { bill: "$800" }, ["the bill was $800"]), [["benefit_terms", "Up to S$500"], ["calculation", "Up to S$500"]], "an 'Up to' cap");
+  });
+
   await check("app-run: a question set goes through runSimpleChat turn by turn with the conversation so far, and replays free", async () => {
     const answers = [
       { bottomLine: "Ah Kow has a fracture benefit.", statements: [st({ kind: "amount", text: "Wrist fracture.", person: "Ah Kow", document: "D1", quote: "Arm , Elbow, Wrist or Ribs\t25%", percentOf: { percent: 25, baseAmount: "S$5,000" } })], nextSteps: [], question: null },
@@ -922,6 +944,18 @@ async function main() {
       const nobody = real.documents.filter((d) => d.processingStatus !== "failed" && !d.linkedPeople.length).map((d) => d.name);
       assert.equal(nobody.length, 2);
       for (const name of nobody) assert.match(lib, new RegExp(`name="${name}"[^>]*linked_people="nobody`));
+    });
+    await check("snapshot live cases: the A&E limit is S$100 on the outpatient table and an S$800 bill shows at most S$100; Living Care's lump sum keeps its own conditions", () => {
+      const ae = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "A&E limit per visit.", person: spouse, document: di("Product Summary.pdf"), quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "S$100", ofBill: { bill: "$800" } }),
+        st({ kind: "amount", text: "A&E limit per visit.", person: spouse, document: di("Benefit Summary.pdf"), quote: "Local Emergency Outpatient Treatment for Illness\t100", amount: "100" }),
+      ] }, ["her bill was $800"]).answer.statements!.filter((x) => x.amount).map((x) => [x.kind, x.amount!.text, x.source!.page]);
+      assert.deepEqual(ae, [["benefit_terms", "S$100", 33], ["calculation", "Up to S$100", 33], ["benefit_terms", "S$100", 16]]);
+      const lc = verifyAnswer(real, { bottomLine: "", nextSteps: [], question: null, statements: [
+        st({ kind: "amount", text: "Living Care pays one lump sum.", person: self, document: di(cert), quote: real.documents.find((d) => d.name === cert)!.pages[0].text.split("\n").filter((l) => l.includes("S$350,000") && self.toLowerCase().split(" ").every((w) => l.toLowerCase().includes(w)))[0].split("\t").slice(1).join("\t"), amount: "S$350,000",
+          conditions: [{ text: "Survive 30 days.", quote: "Upon diagnosis of any of the 37 critical illnesses, the Insured Person must survive for 30 days before a claim can be admitted." }] }),
+      ] }).answer.statements!.filter((x) => x.amount).map((x) => [x.amount!.text, x.conditions]);
+      assert.deepEqual(lc, [["S$350,000", ["Survive 30 days."]]]);
     });
   } else console.log(`(snapshot checks skipped: ${SNAPSHOT} is not here)`);
 
