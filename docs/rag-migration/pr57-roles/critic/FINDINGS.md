@@ -2387,3 +2387,54 @@ DEARPOLICY_PREFETCH_PERSON, DEARPOLICY_SIMPLE_CHAT, DEARPOLICY_SIMPLE_CHAT_ALLOW
 DEARPOLICY_SIMPLE_CHAT_MODEL. They contain no values and no secrets. Nothing else changed, so round 43's verdict stands.
 
 **Verdict:** #80 is ready to merge. #71's readiness is unchanged (ready; switch-on still needs the one paid smoke test).
+
+---
+
+# Round 47: PR #81 at `b29be86` (designer's after-#77 work), against main `64173c7`, with and without #79
+
+Four commits: ea794bb (Coverage wording, R34-1/R34-2), 1d0feb2 (chat on a phone), d4f5f2a (upload on a phone), b29be86
+(Home for returning households). 12 files, no lib/ or SQL changes. The method was a code read, plus a local tsx probe of
+`restates()` copied from `components/answer-cards.tsx`. No build, DB or paid runs.
+
+**With and without #79.** #81 and #79 share no files. A trial merge of main + #81 + #79 is clean in both orders. The new
+stop notice (`components/answer-stopped.tsx`) matches main's stop texts and #79's: `STOPPED` matches "I couldn’t
+finish…", "I couldn’t look that up…" and "I stopped before answering…", and `TOO_BIG` matches "limit set for model use on
+a single question" and "more steps than the limit" in both wordings. Without #79, main's stop text says "ask about one
+person at a time" even when the question already names one person, while the card offers "Ask again". That is consistent
+with #79's intent, so it is fine either way.
+
+## Findings
+
+**R47-1 (Medium-High, qualifier hidden from view): the next-step de-duplication runs the wrong way.** In `AnswerCards`,
+`repeats(s)` drops a prose sentence when `restates(t, s, 0.8)` for any next step `t`, that is, when the step's words are
+inside the sentence. A sentence that adds a condition to a step is therefore hidden from "Also in this answer":
+- "Send the bill within 30 days, but only after he is discharged from hospital." is hidden by the step "Send the bill
+  within 30 days."
+- "Call the claims hotline before any treatment overseas, or the claim may be refused." is hidden by the step "Call the
+  claims hotline."
+
+The words remain only under the collapsed "Full answer", which breaks "never strip a qualifier". Fix: hide only when the
+sentence restates the step (`restates(s, t, 0.8)`) or matches it exactly.
+
+**R47-2 (Medium): a negated sentence counts as a restatement of the bottom line.** `restates(s, bottomLine)` with a 0.7
+share treats "Ah Kow is not covered for the wrist fracture." as repeating the bottom line "Ah Kow is covered for the wrist
+fracture." (5 of 6 content words), so the contradiction is hidden. "only if", "unless" and "after a 30-day waiting
+period" survive in my probes, but only because they add enough words. Fix: never treat a sentence as a restatement when
+it has a limiting word the other lacks: not, no, never, only, unless, except, excluded, without, until, after or before.
+A digit is already handled that way.
+
+**Checked, fine:**
+- Home: data comes only from household-scoped GET /api/policies (server-side name dismissals already applied) and GET
+  /api/claims. "Who is …?" also honours this device's `NOT_FAMILY_KEY`. `#doc-<id>` anchors exist. The `?ask=` question
+  is placed in the chat box, capped at 2,000 characters, and not sent.
+- Upload: the password field shows only for a PDF and is cleared when a non-PDF is chosen. The "not stored" note is kept
+  beside the field. Errors are shown under the button.
+- Coverage: R34-1 and R34-2 wording as agreed. `coverGaps` now gives the "may include … don’t confirm it yet" note when
+  the related row is only a to-confirm guess, so a guess is no longer called "found".
+- The "To confirm" flag on a bottom line appears only with no amount and at least one uncertainty point. The disclaimer
+  is hidden on a stop card only.
+
+## Verdict on PR #81 at `b29be86`
+
+**Not ready to merge yet:** fix R47-1 and R47-2. Both are small changes in `components/answer-cards.tsx`. Everything
+else is ready, and the result is the same with or without #79.
