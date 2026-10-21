@@ -348,6 +348,13 @@ test("R85-1: plan A is not plan B, though one name is inside the other", () => {
   assert.equal(planCase("Gold", "Gold Plus").rows.length, 0);
   assert.equal(planCase("Gold Plus", "Gold").rows.length, 0);
 });
+test("R86-1: a plan column with a currency or unit still matches its plan, and only its plan", () => {
+  for (const col of ["Plan A (S$)", "Plan A Per Visit", "Plan A Annual Limit", "Plan A - SGD"]) {
+    assert.equal(planCase("A", col).rows.length, 1, col);
+    assert.equal(planCase("B", col).rows.length, 0, col);
+  }
+  assert.equal(planCase("Max", "Max").rows.length, 1, "a plan named like a unit word");
+});
 test("R85-1: a plan column is refused for a cover that prints no plan", () => {
   const c = planCase(null, "Plan B");
   assert.equal(c.rows.length, 0);

@@ -121,7 +121,10 @@ const PLAN_WORDS = new Set(["plan", "plans", "option", "options", "tier", "class
 /** Names a column can carry that are plan or tier names wherever they appear. */
 const TIER_NAMES = new Set(["basic", "standard", "classic", "enhanced", "premier", "premium", "elite", "deluxe", "superior", "executive", "business",
   "bronze", "silver", "gold", "platinum", "diamond", "lite", "plus", "max", "essential", "comprehensive", "core", "prestige", "signature"]);
-const planTokens = (s: string | null) => norm(s).split(" ").filter((t) => t && !PLAN_WORDS.has(t));
+/** Currency and unit words a column heading carries besides the plan's name ("Plan A (S$)", "Plan A Per Visit"). */
+const UNIT_WORDS = new Set(["s", "sgd", "usd", "us", "rm", "hk", "per", "visit", "day", "days", "week", "month", "year", "annual", "annually", "policy",
+  "lifetime", "trip", "incident", "event", "claim", "limit", "limits", "maximum", "amount", "amounts", "benefit", "benefits", "payable", "sum", "insured"]);
+const planTokens = (s: string | null) => norm(s).split(" ").filter((t) => t && !PLAN_WORDS.has(t) && !UNIT_WORDS.has(t));
 const samePlan = (a: string | null, b: string | null) => { const x = planTokens(a), y = planTokens(b); return x.length > 0 && x.join(" ") === y.join(" "); };
 /** A column that names a plan: a plan some cover in the household holds, a column called "Plan …"/"Option …", a single
  * letter or roman numeral, or a tier name. Any other column ("Adult", "Child", "Per Visit") says nothing about the plan. */

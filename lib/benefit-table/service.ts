@@ -23,8 +23,12 @@ export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
 export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[] };
 export type OnUsage = (what: string, reply: TableReply) => Promise<void> | void;
 
+/** Once the tables exist they stay: a yes is remembered for this server instance, a no is checked again next time. */
+const readyFor = new WeakSet<Db>();
 export async function tableReady(db: Db): Promise<boolean> {
+  if (readyFor.has(db)) return true;
   const rows = await db("SELECT to_regclass('public.benefit_readings') IS NOT NULL AND to_regclass('public.benefit_links') IS NOT NULL AND to_regclass('public.benefit_confirmations') IS NOT NULL AS ok", []);
+  if (rows[0]?.ok === true) readyFor.add(db);
   return rows[0]?.ok === true;
 }
 

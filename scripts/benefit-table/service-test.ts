@@ -110,6 +110,12 @@ async function main() {
   await test("the switch's tables are checked before anything is read or shown", async () => {
     assert.equal(await tableReady(fakeDb({ tables: false }).db), false);
     assert.equal(await tableReady(fakeDb().db), true);
+    const later = fakeDb({ tables: false });
+    assert.equal(await tableReady(later.db), false, "a no is not remembered");
+    let asked = 0;
+    const counted: Db = async (sql, p) => { asked++; return fakeDb().db(sql, p); };
+    await tableReady(counted); await tableReady(counted);
+    assert.equal(asked, 1, "a yes is remembered");
   });
   await test("a document the app could not read is not sent to the model", async () => {
     const f = household(), m = scriptedModel([]);
