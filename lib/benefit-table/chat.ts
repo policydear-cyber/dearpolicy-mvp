@@ -66,7 +66,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
-    if ([row.benefit, row.product, row.cover, row.qualifier ?? ""].some((n) => nameStatesMoney(n)) || nameStatesMoney(row.plan ?? "", true)) {
+    if (nameStatesMoney(row.benefit) || nameStatesMoney(row.qualifier ?? "") || nameStatesMoney(row.product, "product") || nameStatesMoney(row.cover, "product") || nameStatesMoney(row.plan ?? "", "plan")) {
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
     }
     // The same row named twice is given once (Critic R91-3).
@@ -98,22 +98,26 @@ const ID_BEFORE = /(?:\b(?:no|nos|number|plan|option|policy|certificate|cert|sch
 const NUMBER_WORD = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twenty|thirty|forty|fifty|hundred|thousand|million|billion)\b/i;
 
 /** A name states money when it prints a currency figure ("S$1,000,000", "$500"), a figure grouped in thousands
- * ("1,000,000", "1 000 000"), a size word ("1 million", "5k"), dollars with a number ("one million dollars"), a rate
- * ("200 per day", "200/day"), a limit ("up to 5000", "of 600000"), or any other bare number of 100 or more (Critic R94,
- * TE #96). A bare number is a name's own only when it is glued to letters or signs ("G007500", "SG-2026-001234"), starts
- * with 0, is a year, or follows a word that numbers things ("Plan 300", "Policy No. 3037850"). A plan name may be a bare
- * number, so for a plan only the first five kinds count. */
-export function nameStatesMoney(name: string, plan = false): boolean {
+ * ("1,000,000", "1 000 000", "1.000.000"), a size word ("1 million", "5k"), dollars with a number ("one million dollars"),
+ * a rate ("200 per day", "200/day"), a limit or sum ("up to 5000", "of 600000", "Sum insured: 300000") or a bare figure of
+ * five or more digits ("Accidental death 200000"). A benefit's own name also states money with any other bare number of
+ * 100 or more ("Room & Board 300"), unless it counts days, visits or claims (Critic R94, TE #96). Products and covers are
+ * often named with a number ("Shield 360", "Smart Life 100", "MER 1500"), so for them, and for plans, a bare number needs
+ * one of those money cues. A number is a name's own when it is glued to letters or signs ("G007500", "SG-2026-001234"),
+ * starts with 0, is a year, or follows a word that numbers things ("Plan 300", "Policy No. 3037850"). */
+export function nameStatesMoney(name: string, role: "benefit" | "product" | "plan" = "benefit"): boolean {
   const t = (name ?? "").normalize("NFKC");
   if (moneyFiguresIn(t).length || /\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/.test(t) || /\b\d{1,3}(?:\.\d{3}){2,}\b/.test(t) || /(?<![\w.,/-])\d{1,3}(?: \d{3})+(?![\w.,/-])/.test(t)) return true;
   if (/\d(?:[\d,.]*\d)?\s*(?:k|m|mn|mil|million|thousand|grand|bn|billion|lakhs?|crores?)\b/i.test(t)) return true;
   if (/\b(?:dollars?|SGD|USD|lakhs?|crores?)\b/i.test(t) && (/\d/.test(t) || NUMBER_WORD.test(t))) return true;
   if (/\d{2,}\s*(?:per|\/|a|an|each)\s*(?:day|night|visit|week|month|year|annum|trip|accident|event)\b/i.test(t)) return true;
-  if (plan) return false;
-  if (/\b(?:up\s+to|limit|max(?:imum)?|of)\s*:?\s*\d{2,}/i.test(t)) return true;
+  if (role === "plan") return false;
+  if (/\b(?:up\s+to|limit|max(?:imum)?|of|sum\s+(?:insured|assured)|benefit\s+amount|lump\s+sum|payable)\s*:?\s*\d{2,}/i.test(t)) return true;
   for (const m of t.matchAll(/(?<![\w.,/-])\d+(?:\.\d+)?(?![\w,/-]|\.\d)/g)) {
     if (!(Number(m[0]) >= 100) || /^0\d/.test(m[0]) || /^(?:19|20)\d\d$/.test(m[0]) || ID_BEFORE.test(t.slice(0, m.index))) continue;
-    return true;
+    // A count of days, visits or claims is not money ("Benefit 365 days").
+    if (/^\s*(?:-\s*)?(?:calendar\s+)?(?:days?|nights?|weeks?|months?|years?|hours?|visits?|sessions?|claims?|times|treatments?|km|kilometres?|miles?|%)\b/i.test(t.slice(m.index! + m[0].length))) continue;
+    if (role === "benefit" || m[0].replace(/\.\d+$/, "").length >= 5) return true;
   }
   return false;
 }

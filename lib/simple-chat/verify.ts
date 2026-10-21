@@ -50,7 +50,7 @@ function squash(s: string): { text: string; at: number[] } {
 const fragmentsOf = (quote: string) => quote.split(/\s*(?:\.{3}|…)\s*/).map((f) => squash(f).text).filter((f) => f.length >= 4);
 
 /** Where a quote was found: the document, the stored page, the stored words, and where on the page they start. */
-export type Found = { docIndex: number; page: number; excerpt: string; offset: number };
+export type Found = { docIndex: number; page: number; excerpt: string; offset: number; end?: number };
 
 /** Where the quote is printed: every fragment on one page, in order. The model's document is tried first, then the rest. */
 export function locateQuote(household: Household, quote: string, preferred: number | null): Found | null {
@@ -73,7 +73,7 @@ export function locateQuote(household: Household, quote: string, preferred: numb
       }
       if (!ok) continue;
       const excerpt = page.text.slice(sq.at[start], sq.at[end - 1] + 1).replace(/[ \t]+/g, " ").trim();
-      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt, offset: sq.at[start] };
+      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt, offset: sq.at[start], end: sq.at[end - 1] + 1 };
     }
   }
   return null;

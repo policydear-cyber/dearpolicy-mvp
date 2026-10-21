@@ -495,6 +495,47 @@ test("caps: a limit printed on the lines that continue the row is read as a cap 
   const next = capRead({ section: "GROUP PERSONAL ACCIDENT", benefit: "Next item", value: 10, page: 7, quote: "Next item 10% of Sum Insured" });
   assert.equal(capRows(next)[0].figure.kind, "worked_out", "the row above's limit is not this row's");
 });
+// Critic R95 probes, in tab and space layouts: the row is read from where its quote is printed, a continuation line
+// must go on with the row (lower-case or a connective), and a quote that runs into the next row is refused.
+for (const [layout, sep] of [["tab", "\t"], ["space", " "]] as const) {
+  const probe: SourceDoc = { id: `probe-${layout}`, name: "Probe.pdf", readable: true, pages: [
+    { page: 1, text: `GROUP PERSONAL ACCIDENT\nHip${sep}75% of Sum Insured\nor up to S$50,000, whichever is lesser\nKnee${sep}10% of Sum Insured` },
+    { page: 2, text: `GROUP PERSONAL ACCIDENT\nHip${sep}75%\nWrist${sep}20% up to S$5,000\nAnkle${sep}10%` },
+    { page: 3, text: `GROUP PERSONAL ACCIDENT\nHip${sep}75%${sep}Wrist${sep}20% up to S$5,000` },
+  ] };
+  const read1 = (o: Record<string, unknown>) => checkReading(probe, doc("product_summary", [], [benefit({ section: "GROUP PERSONAL ACCIDENT", pays: "percent", percentOf: "sum_insured", ...o })]));
+  const rowOf = (r: ReturnType<typeof read1>) => assembleTable([certReading, r], family, [{ section: sectionKeyOf(probe.id, { section: "GROUP PERSONAL ACCIDENT", column: null }), cover: gpa, why: "x" }]).people.find((p) => p.id === "a")!.rows[0];
+  test(`R95 N5 (${layout}): a cap on the next line, not read, gives no amount, never 75% uncapped`, () => {
+    const r = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75% of Sum Insured" });
+    assert.equal(r.benefits[0].capUnread, true);
+    assert.equal(rowOf(r).figure.kind, "none", figureText(rowOf(r).figure));
+  });
+  test(`R95 N4 (${layout}): the same cap read is kept and applied`, () => {
+    const r = read1({ benefit: "Hip", value: 75, page: 1, quote: "Hip 75% of Sum Insured", cap: 50000, capQuote: "or up to S$50,000, whichever is lesser" });
+    assert.equal(r.benefits[0].cap, 50000, JSON.stringify(r.dropped));
+    const f = rowOf(r).figure;
+    assert.equal(f.kind === "worked_out" && f.amount, 50000, figureText(f));
+    const knee = rowOf(read1({ benefit: "Knee", value: 10, page: 1, quote: "Knee 10% of Sum Insured" })).figure;
+    assert.equal(knee.kind === "worked_out" && knee.amount, 20000, "the row after a capped row is not capped");
+  });
+  test(`R95 N1 (${layout}): the next row's limit is never this row's`, () => {
+    const r = read1({ benefit: "Hip", value: 75, page: 2, quote: "Hip 75%", cap: 5000, capQuote: "up to S$5,000" });
+    assert.equal(r.benefits[0].cap, null);
+    assert.equal(rowOf(r).figure.kind, "none");
+    const plain = rowOf(read1({ benefit: "Hip", value: 75, page: 2, quote: "Hip 75%" })).figure;
+    assert.equal(plain.kind === "worked_out" && plain.amount, 150000, figureText(plain));
+    const wrist = read1({ benefit: "Wrist", value: 20, page: 2, quote: "Wrist 20% up to S$5,000", cap: 5000, capQuote: "up to S$5,000" });
+    const wf = rowOf(wrist).figure;
+    assert.equal(wf.kind === "worked_out" && wf.amount, 5000, figureText(wf));
+    const sameLine = read1({ benefit: "Hip", value: 75, page: 3, quote: "Hip 75%", cap: 5000, capQuote: "up to S$5,000" });
+    assert.equal(sameLine.benefits[0].cap, null, "the next row on the same line is not this row's");
+  });
+  test(`R95 N3 (${layout}): a quote that runs into the next row is refused`, () => {
+    const r = read1({ benefit: "Hip", value: 75, page: 2, quote: "Hip 75% Wrist 20% up to S$5,000", cap: 5000, capQuote: "up to S$5,000" });
+    assert.equal(r.benefits.length, 0);
+    assert.match(r.dropped[0].why, /more than one row/);
+  });
+}
 test("caps: a reading recorded before caps were read still never shows an uncapped figure", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
   const old = { ...r, benefits: r.benefits.map(({ cap: _c, capQuote: _q, capSource: _s, capUnread: _u, ...b }) => b) } as unknown as typeof r;

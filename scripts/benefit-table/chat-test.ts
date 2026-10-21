@@ -188,7 +188,7 @@ test("real names carry policy and scheme numbers: their rows keep their amounts"
   assert.equal(r.amounts.length, 2, JSON.stringify(r.dropped));
   assert.match(r.amounts[0].text, /POLICY NO\. 3037850\)\): up to this limit\.$/);
   for (const name of ["GROUP POLICY NO. G007500", "POLICY NO.3037850", "Plan 300", "Plan 1000", "Plan 5000 Plus", "Option 2A", "Group Term Life (Policy 0012345678)", "Scheme 2026",
-    "Policy No: 23-456789-01", "Certificate 000123", "SG-2026-001234", "12 Critical Illnesses", "Section 4.2.1", "Hospital & Surgical (Ward B1)", "Coverage against 37 critical illnesses"])
+    "Policy No: 23-456789-01", "Certificate 000123", "SG-2026-001234", "12 Critical Illnesses", "Section 4.2.1", "Hospital & Surgical (Ward B1)", "Coverage against 37 critical illnesses", "Benefit 365 days", "Outpatient 120 visits"])
     assert.ok(!nameStatesMoney(name), name);
   for (const money of ["Death S$1,000,000", "Cover 1,000,000", "Death 1 million", "Benefit of 500 dollars", "Death $500", "Death S＄１,０００",
     // Critic R94
@@ -196,8 +196,11 @@ test("real names carry policy and scheme numbers: their rows keep their amounts"
     // Test engineer, #96
     "one million dollars", "Sum insured: 300000", "Accidental death 200000", "1 000 000", "SGD 200000", "200000 dollars", "1.5m", "Lump sum 5k", "200,000.00", "Plan 300 (S$300 a day)", "1.000.000", "500000"])
     assert.ok(nameStatesMoney(money), money);
-  assert.ok(!nameStatesMoney("300", true) && !nameStatesMoney("Plan 5000 Plus", true), "a plan may be a bare number");
-  assert.ok(nameStatesMoney("S$300", true) && nameStatesMoney("300 per day", true));
+  assert.ok(!nameStatesMoney("300", "plan") && !nameStatesMoney("Plan 5000 Plus", "plan"), "a plan may be a bare number");
+  assert.ok(nameStatesMoney("S$300", "plan") && nameStatesMoney("300 per day", "plan"));
+  // Products and covers named with a number (Test engineer, #96) keep their rows; with a money cue they do not.
+  for (const product of ["Smart Life 100", "Elite 500 Benefit", "Shield 360", "Critical Illness 150", "Saver 150", "MER 1500"]) assert.ok(!nameStatesMoney(product, "product"), product);
+  for (const product of ["Accidental Death 1000000", "Death benefit of 600000", "Sum insured: 300000", "Shield S$360", "Benefit up to 5000", "Saver 150 per day"]) assert.ok(nameStatesMoney(product, "product"), product);
 });
 test("money in full-width digits is money: left out of the bottom line, next steps and facts (R92-1)", () => {
   const parsed = readModelAnswer({ bottomLine: "Your death cover pays S$１,０００,０００.", nextSteps: ["Claim S＄５００ now.", "Call the insurer."], question: null, statements: [

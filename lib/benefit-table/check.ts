@@ -8,7 +8,7 @@
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { CAPPED, locateQuote, rowWithContinuation } from "@/lib/simple-chat/verify";
+import { CAPPED, locateQuote } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -66,15 +66,30 @@ export function dateOnPage(date: string | null, pageText: string): string | null
 const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
-export const CAP_WORDS = /\bup\s+to\b|\bmaximum\b|\bmax\.|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b/i;
-/** The row's last line on its page and the lines that continue it ("15% of Sum Insured or" / "up to S$50,000, whichever
- * is lesser"), up to the next row, bullet or numbered item, as the chat's own checks read it. */
+export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-function rowAndContinuation(pageText: string, excerpt: string): string {
-  const lines = excerpt.split("\n").map((l) => l.trim()).filter(Boolean);
-  const last = lines.at(-1) ?? excerpt;
-  const at = pageText.indexOf(excerpt.trim()) >= 0 ? pageText.indexOf(excerpt.trim()) + excerpt.trim().length - 1 : pageText.indexOf(last);
-  return at < 0 ? excerpt : `${excerpt} ${rowWithContinuation(pageText, at)}`;
+/** Text that goes on with the same row: it starts lower-case, with a bracket or with a connective ("or up to S$50,000,
+ * whichever is lesser", "subject to a maximum of ..."), never with a new row's label, bullet or number. */
+const continues = (text: string) => /^[ \t,;:]*(?:[a-z(]|(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b)/.test(text)
+  || /^[ \t,;:]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|limited|not\s+exceed(?:ing)?|capped)\b/i.test(text);
+/** The row as printed: the quoted words (by their place on the page), the rest of their line when it goes on with the row,
+ * and up to three following lines that go on with it. A line that starts another row ends it (Critic R95-1, R95-2). */
+function rowSegment(pageText: string, start: number, end: number): string {
+  const lineEnd = (i: number) => { const e = pageText.indexOf("\n", i); return e < 0 ? pageText.length : e; };
+  let seg = pageText.slice(start, end);
+  const tail = pageText.slice(end, lineEnd(end));
+  if (tail.trim()) {
+    if (!continues(tail)) return seg;
+    seg += tail;
+  }
+  let pos = lineEnd(end);
+  for (let k = 0; k < 3 && pos < pageText.length; k++) {
+    const line = pageText.slice(pos + 1, lineEnd(pos + 1));
+    if (!line.trim() || !continues(line)) break;
+    seg += " " + line;
+    pos = lineEnd(pos + 1);
+  }
+  return seg;
 }
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -89,17 +104,26 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     namedPeople: Array.isArray(d.namedPeople) ? d.namedPeople.filter((n): n is string => !!str(n)) : [], covers: [], benefits: [], dropped: [] };
   const household = asHousehold(doc);
   const pageText = (n: number) => doc.pages.find((p) => p.page === n)?.text ?? "";
+  // Where on its page each located quote is printed, for reading the row around it.
+  const placed = new Map<Source, { start: number; end: number }>();
+  const lineEndAt = (text: string, i: number) => { const e = text.indexOf("\n", i); return e < 0 ? text.length : e; };
   const find = (quote: string | null, page: number | null): Source | null => {
     if (!quote) return null;
     const f = locateQuote(household, quote, 0);
     if (!f) return null;
+    const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
+      const src: Source = { documentId: doc.id, document: doc.name, page: g.page, excerpt: g.excerpt };
+      placed.set(src, { start: g.offset, end: g.end ?? lineEndAt(pageText(g.page), g.offset) });
+      return src;
+    };
     // The page the words are on, which is shown; the model's page only breaks a tie (locateQuote takes the first page).
     if (page != null && f.page !== page) {
       const onStated = locateQuote({ ...household, documents: [{ ...household.documents[0], pages: doc.pages.filter((p) => p.page === page) }] }, quote, 0);
-      if (onStated) return { documentId: doc.id, document: doc.name, page, excerpt: onStated.excerpt };
+      if (onStated) return at({ ...onStated, page });
     }
-    return { documentId: doc.id, document: doc.name, page: f.page, excerpt: f.excerpt };
+    return at(f);
   };
+  const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : src.excerpt; };
 
   for (const c of Array.isArray(r.covers) ? r.covers : []) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
@@ -157,15 +181,20 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // that continue it (never a neighbouring row's limit); a cap that
     // is claimed but not found, or a row whose words say it is capped with no cap read, gets no worked-out amount.
     let cap: number | null = null, capSource: Source | null = null, capUnread = false;
+    // A percentage row's quote holds one row: two percentages mean it runs into the next row (R95-2, N3).
+    // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
+    const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
+    if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) { out.dropped.push({ what: label, why: "quote holds more than one row" }); continue; }
     if (pays === "percent") {
+      const row = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
-      if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(rowAndContinuation(pageText(source.page), source.excerpt)).includes(flat(s.excerpt))) {
+      if (s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))) {
         cap = claimed; capSource = s;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
         capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
-          || CAPPED.test(rowAndContinuation(pageText(source.page), source.excerpt));
+          || CAPPED.test(row);
       }
     }
     // Day counts are figures too: one the quote does not print is not kept.
