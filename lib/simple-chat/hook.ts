@@ -52,8 +52,8 @@ export async function conversationTurns(accountId: string, conversationId: strin
 }
 
 /** Who the chat was opened for, said to the model so "my" and "his" read the same way the household meant them. */
-/** Today's date, so a waiting period or a policy's start can be set against an event the household describes now. */
-const dated = (d: Date) => `(Today is ${d.toISOString().slice(0, 10)}.) `;
+/** Today's date in Singapore, so a waiting period or a policy's start can be set against an event the household describes now. */
+const dated = (d: Date) => `(Today is ${new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10)}.) `; // Singapore time (UTC+8)
 function chatFor(context: ChatContext): string {
   const p = context.family.find((f) => f.id === context.conversation.family_member_id);
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";

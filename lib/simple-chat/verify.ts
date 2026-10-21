@@ -153,9 +153,23 @@ export function pageCurrency(pageText: string): string | null {
  * a page that otherwise passes the same tests as a declared page (Outpatient Medicare's "Local Emergency Outpatient
  * Treatment for Illness	100" under "Benefits Limits Per Visit ... (S$)"). Null when there is none above the figure. */
 function tableCurrency(pageText: string, offset: number): string | null {
-  const above = (pageText ?? "").slice(0, offset);
-  if (!/^[ \t]*\((?:S\$|SGD\$?|SG\$)\)[ \t]*$/m.test(above)) return null;
-  return pageCurrency(`${pageText}\nCurrency\t: SGD`);
+  return moneyTable(pageText, offset) ? pageCurrency(`${pageText}\nCurrency\t: SGD`) : null;
+}
+/** The "(S$)" table a row sits in (R68-1, R68-3): the heading line is above the row, and nothing between them ends the
+ * table: another unit heading ("(Days)", "(%)", "(Visits)") or a line of prose (a sentence, or a long line). `perVisit`
+ * is whether the heading's own lines just above it say "Limit(s) Per Visit" (or claim, incident, event, admission). */
+function moneyTable(pageText: string, offset: number): { perVisit: boolean } | null {
+  const lines = (pageText ?? "").slice(0, offset).split("\n");
+  lines.pop();
+  let table: { perVisit: boolean } | null = null;
+  lines.forEach((l, i) => {
+    if (/^[ \t]*\((?:S\$|SGD\$?|SG\$)\)[ \t]*$/.test(l)) {
+      table = { perVisit: /\blimits?\s+per\s+(?:visit|claim|incident|event|admission)\b/i.test(lines.slice(Math.max(0, i - 3), i).join(" ")) };
+      return;
+    }
+    if (/^[ \t]*\([^)]{1,15}\)[ \t]*$/.test(l) || /\((?:days?|%|months?|years?|weeks?|times|visits?|sessions?)\)/i.test(l) || l.trim().length > 90 || /[.:]\s*$/.test(l)) table = null;
+  });
+  return table;
 }
 /** A figure printed without a sign but written as an amount: grouped thousands ("300,000.00", "1,000") or two decimals
  * ("470.85"). A count, a code or a percentage never is. */
@@ -165,7 +179,7 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
-type Bill = { value: number; text: string; currencyResolved: boolean; bill: number; within: boolean };
+type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
 type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
@@ -393,9 +407,8 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   // that declares one currency for all its figures (a policy schedule) gives that currency to a figure written as an amount.
   if (!moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value))) {
     const pageText = doc.pages.find((p) => p.page === found.page)?.text ?? "";
-    const onPage = pageCurrency(pageText);
-    const table = onPage ? null : tableCurrency(pageText, found.offset);
-    const declared = onPage ?? table;
+    const table = tableCurrency(pageText, found.offset);
+    const declared = pageCurrency(pageText) ?? table;
     const signed = figures[0]?.currency;
     // Under a table's own currency heading, a whole figure alone in a value cell ("...for Illness	100") is an amount too.
     const rows = pageText.slice(rowLine(pageText, found.offset).start).split("\n").slice(0, found.excerpt.split("\n").length).join("\n");
@@ -405,7 +418,9 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value)) ?? [...found.excerpt.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,]*\d)/g)].find((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
     // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
     const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
-    if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?)\b/i.test(label) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|limits?)\b/i.test(label)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
+    // "Per visit" and "per (policy) year" say how often a sum applies, not what is counted; "limit" never makes a count money (R68-1).
+    const counted = label.replace(/\bper\s+(?:policy\s+)?(?:year|visit|annum)\b/gi, " ");
+    if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?|plans?|co-?insurance|sessions?|visits?|period|term|survival|waiting)\b/i.test(counted) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|co-?payment|deductible|excess)\b/i.test(counted)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
     return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
@@ -460,28 +475,32 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
 }
 
 /** How much of a bill the household gave a per-visit or per-claim limit could cover (the A&E bill of $800 against
- * Outpatient Medicare's S$100 limit per visit): at most the limit, or the whole bill when it is within the limit. Only
+ * Outpatient Medicare's S$100 limit per visit): the card shows the limit and says whether the bill is above or within it,
+ * with no worked figure (what is paid or left over), and the bill as the household wrote it. Only
  * when the bill is one figure the household wrote in this conversation, in no other currency than the limit's, and the
  * limit is printed as a limit: "Up to", or a row under a "Limit(s) Per Visit/Claim/..." heading on its page. A co-payment,
  * deductible, excess or premium row is never a limit. Nothing else (co-payment, eligibility) is taken off. */
 function billAgainst(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, written: string[]): Bill | null {
-  const raw = st.ofBill?.bill?.trim() ?? "";
-  const signed = moneyFiguresIn(raw);
-  const nums = numbersIn(raw);
-  if (nums.length !== 1 || signed.length > 1) return null;
+  const nums = numbersIn(st.ofBill?.bill ?? "");
+  if (nums.length !== 1 || !(nums[0] > 0)) return null;
   const bill = nums[0];
-  if (!(bill > 0) || (signed[0] && signed[0].currency !== "$" && SIGN[signed[0].currency] !== amount.text.replace(/^Up to /, "").replace(/[\d,.\s]+$/, ""))) return null;
-  // The household wrote this figure as money ("her bill was $800", "the bill came to 800 dollars").
-  const said = written.some((q) => [...q.matchAll(/(?:S\$|SGD|\$)\s?(\d[\d,]*(?:\.\d+)?)|(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b|\bbill\b[^.?!\d]{0,30}?(\d[\d,]*(?:\.\d+)?)/gi)].some((m) => sameValue(Number((m[1] ?? m[2] ?? m[3]).replace(/,/g, "")), bill)));
-  if (!said) return null;
+  const sign = amount.text.replace(/^Up to\s+/i, "").replace(/[\d,.\s]+$/, "");
+  // The bill is a figure the household wrote as money, in their own currency ("$800" stays theirs; "US$80" or "RM800"
+  // never meets an S$ limit), for one visit or claim: "$300 for 2 visits" is not set against a per-visit limit (R68-2/3).
+  const MANY = /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple)\s+(?:visits|claims|days|nights|weeks|months|sessions|times)\b/i;
+  const mention = written.flatMap((q) => [...moneyFiguresIn(q).map((f) => ({ q, value: f.value, currency: f.currency, raw: f.raw ?? "" })),
+    ...[...q.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(?:dollars?|sgd)\b/gi)].map((m) => ({ q, value: Number(m[1].replace(/,/g, "")), currency: /sgd/i.test(m[0]) ? "SGD" : "$", raw: m[0] }))]).find((m) => sameValue(m.value, bill));
+  if (!mention || (mention.currency !== "$" && SIGN[mention.currency] !== sign) || MANY.test(mention.q)) return null;
+  const raw = mention.raw.trim();
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!.text;
   const row = rowLine(page, found.offset).text;
   if (/co-?\s?pay|deductible|excess|premium/i.test(row)) return null;
-  if (!/^Up to /.test(amount.text) && !/\blimits?\s+(?:per|for\s+each)\s+(?:visit|claim|incident|event|admission)\b/i.test(page.slice(0, found.offset))) return null;
-  const within = bill <= amount.value;
-  const value = within ? bill : amount.value;
-  const sign = amount.text.replace(/^Up to\s+/i, "").replace(/[\d,.\s]+$/, "");
-  return { value, text: `Up to ${formatMoney(sign, value)}`, currencyResolved: amount.currencyResolved, bill, within };
+  // A per-day, per-week or per-year sum is not a limit on one bill (P6, P7).
+  if (/\bper\s+(?:day|night|week|month|year|policy\s+year|annum|lifetime|admission)\b|\b(?:daily|weekly|annual|annually)\b/i.test(`${row} ${found.excerpt}`)) return null;
+  if (!/^Up to /.test(amount.text) && !moneyTable(page, found.offset)?.perVisit) return null;
+  // The bill stays as the household wrote it ("$800": its currency is theirs to say), and the card shows the limit only:
+  // never a worked figure such as what is paid or left over, since the documents do not say how the co-payment comes off.
+  return { text: `Up to ${formatMoney(sign, amount.value)}`, currencyResolved: amount.currencyResolved, bill: raw, within: bill <= amount.value };
 }
 
 // ------------------------------------------------------------------ people
@@ -950,14 +969,14 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       });
     }
     if (c.bill) {
-      const b = c.bill, sign = b.text.replace(/^Up to\s+/, "").replace(/[\d,.\s]+$/, "");
+      const b = c.bill, limit = b.text.replace(/^Up to /, "");
       const said = b.within
-        ? `The ${formatMoney(sign, b.bill)} bill is within this limit, so up to the whole bill could be covered, before any co-payment.`
-        : `Of the ${formatMoney(sign, b.bill)} bill, at most this limit could be covered, before any co-payment; the rest is not covered by this benefit.`;
+        ? `The ${b.bill} bill you gave is within the ${limit} limit, so it could be reimbursed up to the bill, subject to any co-payment; the insurer decides what is paid.`
+        : `The ${b.bill} bill you gave is above the ${limit} limit, so it could be reimbursed only up to ${limit}, subject to any co-payment; the insurer decides what is paid.`;
       statements.push({
         id: `s${i + 1}-bill`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: { text: b.text, currencyResolved: b.currencyResolved, illustration: true },
-        basis: `the ${formatMoney(sign, b.bill)} bill you gave, against the ${c.amount!.text.replace(/^Up to /, "")} limit printed in the document; the insurer decides what is paid`,
+        basis: `the ${b.bill} bill you gave, set against the ${limit} limit printed in the document; how the co-payment comes off is not stated`,
         conditions, asOf: null, source, group: null,
       });
     }
