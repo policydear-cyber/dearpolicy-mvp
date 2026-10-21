@@ -47,11 +47,17 @@ const norm = (s: string) => s.replace(/[*_`#>]/g, "").replace(/[“”"‘’']/
 /** The content words of a sentence (amounts kept), for telling when one sentence only says another again in other words. */
 const STOP = new Set("a an and are as at be by for from her his if in is it its of on or so the their this to was were with your you".split(" "));
 const words = (s: string) => norm(s).split(/[^a-z0-9$,.%]+/).map((w) => w.replace(/[.,]+$/, "")).filter((w) => w && !STOP.has(w));
+const NEGATION = /\b(not|no|never|none|nobody|nothing|dont|doesnt|didnt|isnt|arent|wasnt|werent|cant|cannot|wont|wouldnt|hasnt|havent)\b/;
+const LIMITS = new Set("only unless except excluded exclusion without until after before".split(" "));
 /** Whether most of `part`'s words are already in `whole`: a restatement, not new information. A figure (any word with
  * a digit) that `whole` does not have always makes it new. */
 const restates = (part: string, whole: string, share = 0.7) => {
   const p = words(part), w = new Set(words(whole));
   if (p.some((x) => /\d/.test(x) && !w.has(x))) return false;
+  // Nor is it when one says no or not and the other doesn't, or one carries a limit (only, unless, until…) the other lacks.
+  const all = words(whole);
+  if (NEGATION.test(p.join(" ")) !== NEGATION.test(all.join(" "))) return false;
+  if ([...p.filter((x) => LIMITS.has(x) && !w.has(x)), ...all.filter((x) => LIMITS.has(x) && !p.includes(x))].length) return false;
   return p.length > 0 && p.filter((x) => w.has(x)).length / p.length >= share;
 };
 
@@ -155,7 +161,8 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   const steps = (answer.nextSteps ?? []).map((t) => norm(render(t)));
   const repeats = (s: string) => (!!bottomLine && restates(s, render(bottomLine)))
     || (eitherDrawn && /\b(alternatives?|never (added|both)|not a total)\b/i.test(s) && s.length < 90)
-    || steps.some((t) => t === norm(s) || restates(t, s, 0.8));
+    // A sentence that adds anything to a step (a condition, a deadline, a warning) is kept.
+    || steps.some((t) => t === norm(s) || restates(s, t, 0.8));
   const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s)) && !repeats(s)))];
   // An answer with no amount whose points are still to confirm: the bottom line is marked so, not drawn like a finding.
   const toConfirm = !!bottomLine && !statements.some((s) => s.amount) && statements.some((s) => s.kind === "uncertainty");

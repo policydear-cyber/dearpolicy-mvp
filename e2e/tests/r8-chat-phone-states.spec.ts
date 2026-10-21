@@ -42,6 +42,12 @@ const ANSWERS: Record<string, unknown> = {
         amount: { text: HIGH, currencyResolved: true, illustration: true }, basis: "20% of the accident sum insured", conditions: ["The loss of use is permanent after 12 months.", "The claim is made within 30 days."],
         source: { policyName: "Group PA", page: 8, rowLabel: "Loss of use of one hand", citationIds: ["c3"] }, group: { id: "g1", kind: "either_or", note: "These are alternatives for the same injury, never a total." } },
     ] },
+  // Critic R47: sentences close to the bottom line or a step but adding "not", a condition or a warning.
+  qualifiers: { ...base,
+    summary: "Ah Kow is not covered for the wrist fracture. Send the bill within 30 days, but only after he is discharged from hospital. Call the claims hotline before any treatment overseas, or the claim may be refused.",
+    bottomLine: "Ah Kow is covered for the wrist fracture.",
+    nextSteps: ["Send the bill within 30 days.", "Call the claims hotline."],
+    statements: [{ id: "q1", kind: "fact", text: "Ah Kow has a Group PA plan.", fullText: "Ah Kow has a Group PA plan.", conditions: [] }] },
   budgetStop: { ...base, confidence: "low",
     summary: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. If the question is about several people or policies, asking about each one separately usually stays within it." },
 };
@@ -93,8 +99,10 @@ test("to confirm: the bottom line says so first, and the next step is right unde
   await expect(answer.getByTestId("answer-bottom-line")).toHaveClass(/to-confirm/);
   // The step that settles it sits with the answer, before the collapsed sources.
   expect(await topOf(answer.getByTestId("next-step"))).toBeLessThan(await topOf(answer.getByTestId("answer-where")));
-  // Said once: the summary's restatement of the bottom line and the step itself are not repeated under "Also in this answer".
-  await expect(answer.getByTestId("answer-remaining")).toHaveCount(0);
+  // Said once: the summary's restatement of the bottom line is not repeated under "Also in this answer". The sentence that
+  // adds a reason to the step stays (Critic R47-1: a sentence is hidden only when it says no more than the step).
+  await expect(answer.getByTestId("answer-remaining")).not.toContainText("usually includes a hospital benefit");
+  await expect(answer.getByTestId("answer-remaining")).toContainText("so DearPolicy can check what it pays");
   await shot(page, "1-to-confirm");
 });
 
@@ -134,4 +142,12 @@ test("budget stop on a question about one person: the same question again, not '
   await expect(stop.getByRole("button", { name: /^Ask about/ })).toHaveCount(0);
   await stop.getByRole("button", { name: "Ask again" }).click();
   await expect(page.getByLabel("Message to DearPolicy")).toHaveValue("What does Grace’s Group PA pay for a wrist fracture?");
+});
+
+test("Critic R47: a sentence that adds 'not', a condition or a warning to the bottom line or a step is never hidden", async ({ page }) => {
+  const answer = await askOnPhone(page, "qualifiers", "Is Ah Kow covered for his wrist?");
+  const remaining = answer.getByTestId("answer-remaining");
+  await expect(remaining).toContainText("Ah Kow is not covered for the wrist fracture.");
+  await expect(remaining).toContainText("but only after he is discharged from hospital");
+  await expect(remaining).toContainText("or the claim may be refused");
 });
