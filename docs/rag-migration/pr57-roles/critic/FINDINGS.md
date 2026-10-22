@@ -5109,3 +5109,40 @@ Keep every sentence that carries a reason or condition (because, unless, if, unt
 - benefit-table chat-test: 59/59
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 132: PR #104 at c9ae1f8 (delta from d21672e)
+
+**Verdict: READY.** R131-1 to R131-4 are fixed. No new findings.
+
+### R131-1: fixed
+A sentence is now dropped only when it uses ownership or exclusivity wording ("belongs/held by/owns", "X's alone/cover/policy … not Y", "only X has/is covered", "belongs only to X"). Any sentence with a reason or condition word is never dropped.
+
+My R131 probe, re-run in `scratchpad/r132/scripts/benefit-table/probe.ts`:
+
+| Sentence | Result |
+|---|---|
+| "…because no ambulance was used" | kept |
+| "…because a hairline crack is not a listed fracture" | kept |
+| "…unless she stays in hospital for 24 hours" | kept |
+| "…no cover under the travel policy" | kept |
+| "…only for Lim, not Tan, because …" | kept |
+| "They belong to Lim, not Tan Mei Ling." | dropped |
+| "Only Lim has this cover." | dropped |
+| "This is Lim's alone." | dropped |
+| "Tan has no hip benefit; it is Lim's cover, not Tan's." (Tan's own hip card is shown) | dropped |
+
+All the drops are false claims about who holds a cover, which is what this check is for. Nothing that limits or refuses a benefit is removed.
+
+### R131-2: fixed
+When `checkedRow` swaps in a twin, the named row's table conditions that are not printed on the twin's page are carried over. Each becomes its own point ("<benefit> also depends on this: …") quoting the named row's document. A carried condition that states money blocks the swap, so the refusal stands.
+
+### R131-3: fixed
+`PREMIUM_DECIDES` now needs "decides which/what", "decides if they differ or apply", "which premium applies" or "to rely on". A test shows a Premium Waiver statement is kept.
+
+### R131-4: fixed
+`DOC_COUNT` matches only a plain count ("four documents", "3 uploaded files"). "Two travel documents" is left alone.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
