@@ -138,7 +138,7 @@ const OTHER_WORDS = new RegExp([
   String.raw`(?<!singapore\s)\bdollars?\b`,
   String.raw`(?<![a-z])(?!s\$|sg\$|sgd\$)[a-z]{1,3}\$`,
   String.raw`[€£¥₹฿₩₱₫₺₽₪]|\brs\.?\s?\d`,
-  String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won|francs?|dirhams?|riyals?)\b`,
+  String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won(?!['’]t)|francs?|dirhams?|riyals?)\b`,
   String.raw`\bforeign\s+currenc|\bexchange\s+rates?\b`,
 ].join("|"), "i");
 /** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
