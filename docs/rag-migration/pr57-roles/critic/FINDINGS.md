@@ -5008,3 +5008,27 @@ The second row means DC's CI II death benefit (D8 p3) now shows as a percentage 
 - benefit-table chat-test: 51/51
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 129: PR #103 at 43515c3 (delta from 153d9e7)
+
+**Verdict: READY.** No findings.
+
+The TE's A10b fix adds two more conditions on the base for the "100% of the sum insured" fallback:
+- **The base's own lines must not be a limit, an expense or a per-event amount.** Lines containing limit, up to, maximum, expense(s) or per claim/day/event/visit/trip/accident/incident are refused.
+- **"Sum insured" or "sum assured" must appear** on the base's lines or within the ten lines above them.
+
+Both conditions only refuse more cases, so they are fail-safe.
+
+My probes (`scratchpad/r129/w.ts`):
+
+| Case | Result |
+|---|---|
+| All earlier R126 and R127 cases | still refused |
+| One-benefit schedule under a "Sum Assured" table heading | S$50,000, with its basis |
+| The same schedule without that heading | refused (fail-safe) |
+| A "… Medical Expenses limit 50,000.00" base under a "Sum Assured" heading | refused |
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
