@@ -8,13 +8,45 @@
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { CAPPED, locateQuote } from "@/lib/simple-chat/verify";
+import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
-export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[] };
+/** people: the household's member names, so a page naming another member is known (only the premium check uses it). */
+export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[]; people?: string[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
-export type CheckedCover = ReadCover & { source: Source; currency: string | null };
+/** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"),
+ * and premiumLabel the words that line prints before it ("Instalment Premium"). */
+export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null };
+
+/** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
+ * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
+ * "Instalment Premium (Life Assured 2)") is about part of the premium or another life, so it is never used (Critic R108-2,
+ * TE #97). */
+const PLAIN_PREMIUM = /^(?:(?:total|annual|yearly|monthly|quarterly|half[\s-]yearly|modal|instalment|installment)\s+)?(?:premium|instalment|installment)(?:\s+(?:paid|payable|amount))?$/i;
+/** Whether a page may name a life other than this person: another household member's name anywhere on it, a word for
+ * another insured person (spouse, child, dependant, covered members), a second or joint life, or a life line naming someone
+ * else. Fail-safe: a premium on such a page may be the other life's, so it is not used, even when it is in fact this
+ * person's (TE #97). */
+const LIFE_LINE = /\b(?:(?:joint\s+)?life\s+(?:assured|insured)|assured|insured(?:\s+person)?|policy\s*holder|proposer|owner)\b[^:\t\n/]{0,20}[:\t][ \t]*:?[ \t]*([^\t\n]+)/gi;
+const HEADER_WORD = /^(?:premiums?|sum|benefits?|cessation|commencement|date|term|plan|amount|policy|basic|rider|insured|assured)$/;
+const OTHER_INSURED = /\b(?:spouses?|wife|husband|child(?:ren)?|sons?|daughters?|dependa?ents?|covered\s+(?:members?|persons?)|insured\s+members?|family\s+members?)\b|\b(?:life\s+(?:assured|insured)|insured(?:\s+person)?|assured)\s*(?:\(?\s*(?:2|3|ii|iii|two)\s*\)?)(?![\d.])|\bsecond\s+(?:life|insured)\b|\bjoint\s+life\b/i;
+function otherLife(pageText: string, person: string, people: string[]): boolean {
+  if (OTHER_INSURED.test(pageText)) return true;
+  const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
+  const same = (name: string) => { const n = normalizePersonName(name.replace(/,/g, " ")).split(" ").filter((w) => w.length > 1); return n.every((w) => own.includes(w)) || own.every((w) => n.includes(w)); };
+  if (people.some((name) => !same(name) && nameOnPage(name, pageText))) return true;
+  return [...pageText.matchAll(LIFE_LINE)].some((m) => {
+    const named = normalizePersonName(m[1].replace(/,/g, " ")).split(" ").filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
+    // A table header ("Assured/ Premium Cessation …") is column titles, not a name.
+    if (named.some((w) => HEADER_WORD.test(w))) return false;
+    return named.length > 0 && !named.every((w) => own.includes(w)) && !own.every((w) => named.includes(w));
+  });
+}
+const premiumLineLabel = (line: string, value: number) => {
+  const at = [...line.matchAll(/\d[\d,]*(?:\.\d+)?/g)].find((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
+  return at ? line.slice(0, at.index).replace(/(?:S\$|US\$|SGD|USD|\$)\s*$/i, "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
+};
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
 export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[] };
@@ -34,10 +66,12 @@ export function numbersIn(text: string): number[] {
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
 const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
-/** The currency a page declares for its table ("Benefits (S$)"), or null. */
+/** The currency a page declares for its table ("Benefits (S$)"), or for every figure on it (a policy schedule's "Currency :
+ * Singapore Dollar", the chat's own pageCurrency), or null. */
 export function declaredCurrency(pageText: string): string | null {
   const m = pageText.match(DECLARED);
-  if (!m) return null;
+  // "All amounts in Singapore Dollar unless stated otherwise" does not settle a figure's currency (TE #97, R59-5).
+  if (!m || /\b(?:unless|otherwise|except)\b/i.test(pageText.slice(m.index!, m.index! + m[0].length + 60))) return pageCurrency(pageText);
   const word = m[1] ?? m[2];
   return /singapore/i.test(word) ? "SGD" : statedCurrencyCode(word);
 }
@@ -153,9 +187,25 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   // Where on its page each located quote is printed, for reading the row around it.
   const placed = new Map<Source, { start: number; end: number }>();
   const lineEndAt = (text: string, i: number) => { const e = text.indexOf("\n", i); return e < 0 ? text.length : e; };
+  // A label cell that wraps onto the next line ("Comprehensive Critical\t300,000.00\t269.05\nIllness Benefit"), copied
+  // whole by the model ("Comprehensive Critical\tIllness Benefit\t300,000.00\t269.05"): the row is its own line without
+  // that cell, and only when the very next line prints that cell alone, with no figure. One reading only.
+  const wrappedLabel = (quote: string) => {
+    const cells = quote.split("\t");
+    const flatten = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const hits = [];
+    for (let j = 1; j < cells.length - 1; j++) {
+      if (!/[a-z]/i.test(cells[j]) || /\d/.test(cells[j]) || !/[a-z]/i.test(cells[0])) continue;
+      const g = locateQuote(household, [...cells.slice(0, j), ...cells.slice(j + 1)].join("\t"), 0);
+      if (!g || g.excerpt.includes("\n")) continue;
+      const text = pageText(g.page), end = lineEndAt(text, g.offset);
+      if (flatten(text.slice(end + 1, lineEndAt(text, end + 1))) === flatten(cells[j])) hits.push(g);
+    }
+    return hits.length === 1 ? hits[0] : null;
+  };
   const find = (quote: string | null, page: number | null): Source | null => {
     if (!quote) return null;
-    const f = locateQuote(household, quote, 0);
+    const f = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
     if (!f) return null;
     const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
       const src: Source = { documentId: doc.id, document: doc.name, page: g.page, excerpt: g.excerpt };
@@ -181,13 +231,23 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const sumInsured = num(c.sumInsured);
     if (sumInsured != null && !printsNumber(source.excerpt, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
     let premium = num(c.premium);
-    if (premium != null && !printsNumber(source.excerpt, premium)) { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote; kept the cover without it` }); premium = null; }
-    const currency = sumInsured == null && premium == null ? null : statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
+    // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
+    let premiumSource: Source | null = null, premiumLabel: string | null = null;
+    if (premium != null && !printsNumber(source.excerpt, premium)) {
+      const at = find(str(c.premiumQuote), source.page);
+      const said = at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
+      // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
+      const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
+      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
+      else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
+    }
+    const currency = sumInsured == null && premium == null ? null
+      : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredCurrency(pageText(source.page));
     const page = pageText(source.page);
     const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
     out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured, premium,
-      premiumFrequency: premium == null ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
-      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency });
+      premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
+      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
   }
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {

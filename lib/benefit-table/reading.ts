@@ -21,7 +21,7 @@ export const BASES = ["guaranteed", "non_guaranteed", "illustrated"] as const;
 export const PERCENT_OF = ["sum_insured", "fixed_amount", "other"] as const;
 
 export type ReadCover = { person: string; product: string; cover: string; plan: string | null; riderOf: string | null; policyNumber: string | null;
-  sumInsured: number | null; premium: number | null; premiumFrequency: string | null; asOf: string | null; startDate: string | null; endDate: string | null; page: number; quote: string };
+  sumInsured: number | null; premium: number | null; premiumQuote?: string | null; premiumFrequency: string | null; asOf: string | null; startDate: string | null; endDate: string | null; page: number; quote: string };
 export type ReadBenefit = {
   section: string | null; column: string | null; benefit: string; pays: (typeof PAYS)[number]; value: number | null;
   period: (typeof PERIODS)[number] | null; basis: (typeof BASES)[number] | null; asOf: string | null;
@@ -53,7 +53,7 @@ export const READING_SCHEMA = object({
   covers: { type: "array", items: object({
     person: { type: "string" }, product: { type: "string" }, cover: { type: "string" }, plan: nullable("string"),
     riderOf: optional("string"), policyNumber: nullable("string"),
-    sumInsured: nullable("number"), premium: optional("number"), premiumFrequency: optional("string"),
+    sumInsured: nullable("number"), premium: optional("number"), premiumQuote: optional("string"), premiumFrequency: optional("string"),
     asOf: nullable("string"), startDate: optional("string"), endDate: optional("string"), page: { type: "integer" }, quote: { type: "string" },
   }) },
   benefits: { type: "array", items: object({
@@ -77,7 +77,7 @@ document:
 - kind: "personal_proof" when the document names the people it insures and what they hold (a certificate's Part 1, a policy schedule, a personal travel summary, a yearly policy or fund statement). "scheme_terms" for a group scheme's terms for every member (highlights of cover, benefit summary). "policy_wording", "product_summary", "illustration" (a pre-sale benefit illustration or quotation: it shows what might be bought, not what is held), "letter", "bill_or_receipt" or "other" otherwise. A pack can hold several parts: choose the kind by whether any page names an insured person with their cover.
 - product, insurer, plan and period exactly as printed (dates as printed); namedPeople: the insured people the document names, as printed. Never list an address, an agent or a signatory as insured.
 
-covers: only from pages that name a person with their cover. One row per person per cover line, including each rider: the person as printed, the product (the policy or scheme), the cover (the line's own name: a group scheme's separate covers, a basic plan, a rider), riderOf (for a rider, the basic plan or policy it is attached to, as printed; left out otherwise), the plan if printed, the policy number, the sum insured or sum assured as a plain number (600000 for "S$600,000"; null when none is printed), the premium and how often it is paid when the same line prints them (left out otherwise), the "as of" date, the start date and the end, expiry or maturity date as printed (each left out when not printed), the page, and the exact line as quote.
+covers: only from pages that name a person with their cover. One row per person per cover line, including each rider: the person as printed, the product (the policy or scheme), the cover (the line's own name: a group scheme's separate covers, a basic plan, a rider), riderOf (for a rider, the basic plan or policy it is attached to, as printed; left out otherwise), the plan if printed, the policy number, the sum insured or sum assured as a plain number (600000 for "S$600,000"; null when none is printed), the premium and how often it is paid when the document prints them for that person's cover, with premiumQuote the exact words that print the premium when they are not in quote (each left out otherwise), the "as of" date, the start date and the end, expiry or maturity date as printed (each left out when not printed), the page, and the exact line as quote.
 
 benefits: every row that says what is paid or held, or that something is not covered: benefits, limits, payouts, annuity or income payments, cash, surrender, fund or maturity values, bonuses. Leave out definitions, exclusions on their own and contact details.
 - Be complete: go through every page and every table, row by row. A schedule of 20 rows (a fracture, dismemberment, sight or burns scale) gives 20 rows here, one per printed line, never a summary or a sample. When two documents print the same benefit, each document's rows are listed from that document.

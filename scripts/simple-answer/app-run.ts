@@ -94,7 +94,7 @@ export function tableFromRun(dir: string, household: Household): BenefitTable {
   for (const d of household.documents) {
     const raw = resolve(dir, `raw-${d.policyId}.json`);
     if (!existsSync(raw)) continue;
-    const doc = { id: d.policyId, name: d.name, readable: d.processingStatus === "ready", pages: d.pages };
+    const doc = { id: d.policyId, name: d.name, readable: d.processingStatus === "ready", pages: d.pages, people: household.members.map((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "")) };
     let reading = checkReading(doc, (JSON.parse(readFileSync(raw, "utf8")) as { json: unknown }).json);
     for (const p of d.pages) {
       const pageRaw = resolve(dir, `raw-${d.policyId}-p${p.page}.json`);

@@ -42,11 +42,12 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
   const docs = await db(`SELECT id, original_filename, processing_status FROM policies
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
+  const people = (await family(db, accountId)).map((m) => m.display_name);
   const pages = await db("SELECT policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) ORDER BY policy_id, page_number",
     [accountId, docs.map((d) => String(d.id))]);
   return docs.map((d) => ({
     id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready",
-    pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })),
+    pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text ?? "") })), people,
   }));
 }
 

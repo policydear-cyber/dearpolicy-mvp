@@ -5,17 +5,21 @@
  * the simple chat's own checks (lib/simple-chat/verify.ts, unchanged) re-check it against the stored pages. An amount
  * statement without a row, with a row that does not exist, or with another person's row is dropped. So every amount the
  * household sees in the chat is an amount on their Coverage page, checked twice. */
-import type { BenefitTable, TableRow } from "./assemble";
+import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
+import type { Source } from "./check";
 import { figureText } from "./assemble";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
+import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string }[]; labels: string[] };
+export type RowReport = { dropped: { why: string; text: string }[]; labels: string[];
+  /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
+  days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]> };
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -25,16 +29,49 @@ const money = (n: number, currency: string | null) => `${currency ? SIGN[currenc
 const baseName = (s: string) => s.replace(/\s*\([^)]*\)\s*$/, "").trim();
 
 /** Every person's rows, numbered, with the library index of the document each row (and its base) is printed in. A row
- * whose document is not in the library (removed since) is left out. */
+ * whose document is not in the library (removed since) is left out. After the benefit rows come each person's own cover
+ * lines as the Coverage page shows them: the sum insured and the premium their personal document prints (release-set A3,
+ * A6), so those amounts too come only from a row. */
 export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   const index = new Map(household.documents.map((d, i) => [d.policyId, i]));
   const rows: ChatRow[] = [];
-  for (const p of table.people) for (const r of p.rows) {
+  const add = (r: TableRow) => {
     const docIndex = index.get(r.source.documentId);
-    if (docIndex == null) continue;
+    if (docIndex == null) return;
     rows.push({ ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null });
+  };
+  for (const p of table.people) for (const r of p.rows) add(r);
+  // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
+  const premiums = new Set<string>();
+  for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) {
+    if (r.benefit === premiumName(c)) {
+      const key = [p.id, c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
+      if (premiums.has(key)) continue;
+      premiums.add(key);
+    }
+    add(r);
   }
   return rows;
+}
+
+/** A premium row's name: the premium line's own words ("Instalment Premium"), and how often it is paid when printed. */
+const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}`;
+
+/** A cover's own printed figures as rows: its sum insured (as of the date printed with it) and its premium. A sum insured
+ * the household corrected is not printed anywhere, so that row has no amount (the Coverage page shows the correction). */
+function coverRows(c: PersonCover, person: string): TableRow[] {
+  const row = (benefit: string, figure: Figure, source: Source): TableRow => ({ personId: c.personId, person, coverKey: c.coverKey, product: c.product, cover: c.cover,
+    plan: c.plan, benefit, section: null, column: null, pays: "amount", figure, fromDay: null, maxDays: null, conditions: [], source, baseSource: null,
+    linkWhy: "the person's own cover line", qualifier: null, percent: null, base: null, baseCorrected: false, percentOf: null, capSource: null });
+  const out: TableRow[] = [];
+  if (c.sumInsured != null) {
+    const corrected = c.confirmation?.status === "corrected";
+    out.push(row(`Sum insured${c.asOf ? `, dated ${c.asOf}` : ""}`, corrected ? { kind: "none", why: "corrected by you on the Coverage page" }
+      : { kind: "printed", amount: c.sumInsured, currency: c.currency, unit: "lump_sum" }, c.source));
+  }
+  if (c.premium != null)
+    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.currency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+  return out;
 }
 
 /** The table as the model sees it: what each row is and what it shows, never a figure the Coverage page does not show. */
@@ -53,7 +90,7 @@ ${rows.map((r) => escapeText(line(r))).join("\n")}
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
 export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household): { json: unknown; report: RowReport } {
-  const report: RowReport = { dropped: [], labels: [] };
+  const report: RowReport = { dropped: [], labels: [], days: {} };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
   const statements: unknown[] = [];
@@ -73,12 +110,32 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (given.has(row.id)) continue;
     given.add(row.id);
     const st = statementFromRow(row, raw);
-    if (st) { statements.push(st); report.labels.push(String(st.text)); }
+    if (st) {
+      statements.push(st); report.labels.push(String(st.text));
+      if (row.figure.kind === "printed" && row.figure.unit === "per_day")
+        (report.days![String(st.text)] ??= []).push({ fromDay: row.fromDay, maxDays: row.maxDays, alone: dailyRateAlone(row, household) });
+    }
     else report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
   }
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
+}
+
+/** Whether a daily row's printed words (its line, the lines that continue it, and its quote) hold no limit but its most
+ * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked
+ * out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
+const MAX_DAYS = /\b(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+)?days?\b/gi;
+function dailyRateAlone(row: ChatRow, household: Household): boolean {
+  if (row.figure.kind !== "printed") return false;
+  const found = locateQuote(household, row.source.excerpt, row.docIndex);
+  const page = found && household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!found || !page) return false;
+  const words = `${rowWithContinuation(page.text, found.offset)}\n${found.excerpt}`;
+  const daily = row.figure.amount;
+  if (moneyFiguresIn(words).some((f) => Math.abs(f.value - daily) > 0.005)) return false;
+  const rest = words.replace(MAX_DAYS, " ");
+  return !CAP_WORDS.test(rest) && !/\b(?:limit|aggregate|overall|in\s+total)\b/i.test(rest);
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
@@ -123,10 +180,19 @@ export function nameStatesMoney(name: string, role: "benefit" | "product" | "pla
 }
 
 /** Applied to the checked answer: an amount whose statement is not exactly one of the server's labels lost its label to
- * the checks (or was never labelled), so its amount is refused. */
-export function keepLabelledAmounts<T extends { amount?: unknown; text: string }>(statements: T[], report: RowReport): { kept: T[]; refused: T[] } {
+ * the checks (or was never labelled), so its amount is refused. One exception: what a stay the household described could
+ * pay under a labelled daily row (the checks' own "For a 12-day stay ..." card, release-set B3, H4), kept only when every
+ * row with that label was read with the same most days and first paid day the checks found printed. */
+export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; text: string; basis?: string | null }>(statements: T[], report: RowReport): { kept: T[]; refused: T[] } {
   const labels = new Set(report.labels);
-  const refused = statements.filter((st) => st.amount && !labels.has(st.text));
+  const stayOf = (st: T) => {
+    if (!st.id?.endsWith("-stay")) return false;
+    const parent = statements.find((s) => s.id === st.id!.slice(0, -"-stay".length));
+    const rule = /paid from day (\d+), for at most (\d+) days/.exec(st.basis ?? "");
+    const rows = parent && labels.has(parent.text) ? report.days?.[parent.text] ?? [] : [];
+    return !!rule && rows.length > 0 && rows.every((r) => r.alone && r.maxDays === Number(rule[2]) && (r.fromDay == null || r.fromDay === Number(rule[1])));
+  };
+  const refused = statements.filter((st) => st.amount && !labels.has(st.text) && !stayOf(st));
   return { kept: statements.filter((st) => !refused.includes(st)), refused };
 }
 
