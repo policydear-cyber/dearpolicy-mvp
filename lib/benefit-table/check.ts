@@ -23,6 +23,20 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
  * "Instalment Premium (Life Assured 2)") is about part of the premium or another life, so it is never used (Critic R108-2,
  * TE #97). */
 const PLAIN_PREMIUM = /^(?:(?:total|annual|yearly|monthly|quarterly|half[\s-]yearly|modal|instalment|installment)\s+)?(?:premium|instalment|installment)(?:\s+(?:paid|payable|amount))?$/i;
+/** Whether a page names a life other than this person ("Life Assured 2 : …", "Insured : <someone else>", "second life"):
+ * a premium on such a page may be the other life's, so it is not used (TE #97). */
+const LIFE_LINE = /^[ \t]*(?:(?:joint\s+)?life\s+(?:assured|insured)|assured|insured(?:\s+person)?|policy\s*holder|proposer|owner)\b[^:\t\n/]{0,20}[:\t][ \t]*:?[ \t]*([^\t\n]+)/gim;
+const HEADER_WORD = /^(?:premiums?|sum|benefits?|cessation|commencement|date|term|plan|amount|policy|basic|rider|insured|assured)$/;
+function otherLife(pageText: string, person: string): boolean {
+  if (/\b(?:life\s+(?:assured|insured)|insured(?:\s+person)?|assured)\s*(?:\(?\s*(?:2|3|ii|iii|two)\s*\)?)(?![\d.])|\bsecond\s+(?:life|insured)\b|\bjoint\s+life\b/i.test(pageText)) return true;
+  const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
+  return [...pageText.matchAll(LIFE_LINE)].some((m) => {
+    const named = normalizePersonName(m[1].replace(/,/g, " ")).split(" ").filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
+    // A table header ("Assured/ Premium Cessation …") is column titles, not a name.
+    if (named.some((w) => HEADER_WORD.test(w))) return false;
+    return named.length > 0 && !named.every((w) => own.includes(w)) && !own.every((w) => named.includes(w));
+  });
+}
 const premiumLineLabel = (line: string, value: number) => {
   const at = [...line.matchAll(/\d[\d,]*(?:\.\d+)?/g)].find((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
   return at ? line.slice(0, at.index).replace(/(?:S\$|US\$|SGD|USD|\$)\s*$/i, "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
@@ -218,8 +232,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const said = at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
       // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
       const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
-      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1) { premiumSource = at; premiumLabel = said; }
-      else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line; kept the cover without it` }); premium = null; }
+      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person)) { premiumSource = at; premiumLabel = said; }
+      else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
     }
     const currency = sumInsured == null && premium == null ? null
       : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredCurrency(pageText(source.page));
