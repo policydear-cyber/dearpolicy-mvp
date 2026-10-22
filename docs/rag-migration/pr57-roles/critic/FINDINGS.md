@@ -4483,3 +4483,54 @@ Suggested fix: add `|survival\s+period|\bnot\s+(be\s+)?payable\b|\bnot\s+be\s+li
 - **The page count matches.** 96 of 229 pages are sent, which is what I estimated: 84, plus 12 new rule pages.
 - **Test coverage.** The survival-period case is added inside the existing chat-test case.
 - **Local test results:** `scripts/benefit-table/test.ts` 105/105, `chat-test.ts` 44/44.
+
+## Round 116: PR #99 at 6d01bff (Coverage with nothing to confirm)
+
+**Verdict: NOT READY.** Two findings: R116-1 is high, R116-2 is medium. Amounts, caps, qualifiers and person binding are sound. The confirmations code is safe, and so is leaving out the multi-person picker.
+
+### R116-1 (high): the conditions of each row are no longer shown anywhere on Coverage
+In `components/benefit-table-coverage.tsx`, `benefitParts` builds its detail from `rowDetail` and the figure note. `rowDetail` (`lib/benefit-table/headline.ts:42-45`) only includes the qualifier, `fromDay` and `maxDays`. Its own comment says "Conditions are on the page the row links to". As a result, `r.conditions` is not rendered, either in the key rows or in the "All N benefits" table.
+
+On main, every row showed its days plus its first two conditions, with the full list under "Conditions and source" (old lines 133-135).
+
+On run-03b, 154 of the 348 rows carry conditions. Examples:
+- "Only 1 claim is allowed under this benefit"
+- "The waiting period in Section 3.2"
+- "Each condition can only be paid once and a maximum of 6 claims"
+- the "survives at least … days" rules
+
+The amount itself is unchanged. But "S$300,000" or "Up to S$500" is now shown without the rule that limits it, and a page link is not the same as showing the rule. This breaks the "never strip a qualifier" rule, and it contradicts the PR's claim that no qualifier is lost.
+
+**Suggested fix:**
+- In "All N benefits", show each row's conditions in the name cell's `<small>`, or add a fourth cell that wraps.
+- On key rows, show the first condition and a "+N more" that points to the full list.
+- Add a test that a row's conditions text appears in the rendered table.
+
+### R116-2 (medium): unplaced parts of documents are now hidden without a word
+`assemble.ts:54` documents `unlinkedSections` as "shown to the household, never silently dropped". The new page drops that field from `BenefitTableData` and renders nothing for it. On run-03b there are 22 such parts.
+
+Leaving them out of the table and the chat is fail-safe, because no wrong amount can appear. But nothing tells the household that parts of their documents are not summarised, and hiding a documented benefit counts as a failure.
+
+**Suggested fix (no picker needed):** one line under "Also in your documents", for example: "N parts of your documents couldn't be placed under a cover, so they aren't in this summary or the chat", followed by one page link per part. Leaving auto-linking out of this PR is fine once the household is told.
+
+### Checked and sound
+- **Amounts.** `shortFigure` only re-words the figure the row already has. It uses the same unit and period wording as `assemble.figureText`.
+  - A capped worked-out amount says "Up to", and the note keeps "N% of S$base, capped".
+  - Projections are labelled "not an amount held or payable".
+  - A row with no currency says "(currency not stated)".
+  - `money` matches `assemble.ts`.
+- **Key-benefit selection.** It only orders and limits rows, and never shows a figure the row doesn't carry.
+  - It never chooses a projected row, a not-covered row, a row with no amount that isn't "as charged", or a second row with the same name.
+  - The qualifier ("for child") stays in the detail line.
+  - Every row is still in "All N benefits".
+  - Rows are filtered by `coverKey` as on main, and no row is left without a cover on run-03b (0 of 348).
+- **Person binding.** It is unchanged: rows stay under `person.rows`, and the table never reads `policy_members` or `linkedPeople`. So leaving out the multi-person upload picker changes no binding.
+- **Confirmations.** The confirm and link routes and `benefit_confirmations` are untouched, and no longer called from the page.
+  - The table still applies any stored correction. With 0 in production, that changes nothing.
+  - One consequence: a stored correction can no longer be undone from the page.
+- **The new report route.** It requires a household member, is off unless the table is live for the account, takes at most 1,000 characters, writes one log line, and changes nothing.
+
+### Tests (run locally)
+- `headline-test`: 12/12
+- `test.ts`: 105/105
+- `chat-test`: 44/44
