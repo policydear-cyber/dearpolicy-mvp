@@ -4333,3 +4333,20 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 - **(2) Cover rows: sound.**
   - The sum insured comes from the person's own cover line, and a corrected sum insured shows no amount.
   - The premium path is covered by R108-2.
+
+## R109 — PR #97 delta fa89d96 → a58235f (R108 fixes)
+
+**Verdict: READY.**
+
+- **R108-1 is fixed.** `dailyRateAlone` reads the row's line, its continuation lines and its quote. Any money figure other than the daily rate refuses the stay. So does any cap or limit word left once "max N days" is removed.
+  - I probed it with tsx:
+    - The real B3 line ("S$30 per day after the 10th day, up to a maximum of thirty (30) days") is still kept.
+    - "overall limit of S$2,000", "capped at 2,000", "payable up to 2,000" and "not exceeding twenty times the daily amount" are all refused.
+    - "per policy year" passes this check, but `verify.ts` `OTHER_DAY_RULE` already rejects it before a stay is worked out.
+  - Residual: a limit printed outside the row and its continuation lines (a footnote elsewhere on the page) cannot be seen. I accept this.
+- **R108-2 is fixed.** A premiumQuote is used only when the page has exactly one plain premium line, and that line is the premiumQuote's line.
+  - D8: "First Year Instalment Premium *" is not plain, so only "Instalment Premium : 470.85" can be used.
+  - The label is the line's own words. The frequency is kept only when it is printed on the page.
+  - The premium is de-duplicated per person, policy and source line.
+- `declaredCurrency` now defers "unless stated otherwise" to `pageCurrency`, which returns null for it.
+- `chat-test.ts` passes 41/41 locally with tsx.
