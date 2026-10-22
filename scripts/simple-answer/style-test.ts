@@ -6,7 +6,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { answerStyle } from "@/lib/chat/answer-style";
 import { SIMPLE_SYSTEM_PROMPT } from "@/lib/simple-chat/prompt";
-import { benefitName } from "@/lib/benefit-table/headline";
+import { benefitName, benefitNames } from "@/lib/benefit-table/headline";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AnswerCards, type StructuredAnswer } from "@/components/answer-cards";
 import { verifyAnswer } from "@/lib/simple-chat/verify";
 import type { Household } from "@/lib/simple-chat/library";
 import type { ModelStatement } from "@/lib/simple-chat/prompt";
@@ -31,7 +34,7 @@ t("every server route carries the guide file", () => {
 });
 t("a table's row letter or number is not part of a benefit's name", () => {
   const cases: [string, string][] = [["J, Accidental Hospital Recuperation Benefit", "Accidental Hospital Recuperation Benefit"], ["D. Daily Hospital Cash Benefit", "Daily Hospital Cash Benefit"],
-    ["(a) Death", "Death"], ["12. Hip", "Hip"], ["(iv) Loss of limb", "Loss of limb"], ["A Death benefit", "A Death benefit"], ["Arm, Elbow, Wrist or Ribs", "Arm, Elbow, Wrist or Ribs"], ["X-ray", "X-ray"]];
+    ["(a) Death", "Death"], ["12. Hip", "Hip"], ["(iv) Loss of limb", "Loss of limb"], ["A Death benefit", "A Death benefit"], ["D, E and F Benefit", "D, E and F Benefit"], ["J, Accidental Hospital Recuperation Benefit", "Accidental Hospital Recuperation Benefit"], ["Arm, Elbow, Wrist or Ribs", "Arm, Elbow, Wrist or Ribs"], ["X-ray", "X-ray"]];
   for (const [raw, name] of cases) assert.equal(benefitName(raw), name, raw);
 });
 
@@ -64,5 +67,26 @@ t("a missing guide file never stops the chat: the guide is empty (Critic R121-2)
 });
 t("the guide names no real household member (Critic R121-4)", () => {
   assert.doesNotMatch(readFileSync("lib/chat/answer-style.md", "utf8"), /Desmond|Charmaine/);
+});
+t("stripping row letters never makes two benefits of one cover read the same (TE #101)", () => {
+  const rows = [{ benefit: "A. Death", coverKey: "c1" }, { benefit: "B. Death", coverKey: "c1" }, { benefit: "C. Hip", coverKey: "c1" }, { benefit: "A. Death", coverKey: "c2" }];
+  const name = benefitNames(rows);
+  assert.deepEqual(rows.map(name), ["A. Death", "B. Death", "Hip", "Death"]);
+});
+t("a point keeps its other words when only its 'not a total' sentence repeats the server's note (Critic R122-1)", () => {
+  const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
+    st({ kind: "uncertainty", text: "These are not a total. Written notice is due within 30 days of the accident.", document: "D1" })] });
+  assert.equal(answer.statements!.filter((s) => /not a total/.test(s.text)).length, 1);
+  assert.ok(answer.statements!.some((s) => /within 30 days/.test(s.text)), "the deadline stays");
+  const mixed = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
+    st({ kind: "uncertainty", text: "They are not a total and must be claimed within 30 days.", document: "D1" })] }).answer;
+  assert.ok(mixed.statements!.some((s) => /must be claimed within 30 days/.test(s.text)), "a sentence with more than 'not a total' stays whole");
+});
+const card = (currencyResolved: boolean, kind = "fact") => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+  statements: [{ id: "s1", kind, personName: "Lim Ah Kow", text: "Recuperation.", fullText: "Recuperation.", conditions: [], amount: { text: "$250", currencyResolved, illustration: false } }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+t("a figure whose currency the document does not state says so on its card; others carry no label (TE #101)", () => {
+  assert.match(card(false), /Currency not stated/);
+  assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
+  assert.match(card(true, "benefit_terms"), /Policy terms, not worked out for this case/);
 });
 console.log(`style: ${passed} passed, 0 failed`);

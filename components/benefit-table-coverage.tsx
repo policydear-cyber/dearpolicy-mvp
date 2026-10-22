@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { benefitName, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 
 /** Coverage from the benefit table (lib/benefit-table), as a summary to read, with nothing to confirm: for each person,
  * one card per cover with its sum insured, premium and a few key benefits, and every other benefit in a collapsed list
@@ -31,13 +31,13 @@ function PageLink({source}:{source:Source}){
 }
 
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
-function benefitParts(row:Row){
+function benefitParts(row:Row,name:(r:Row)=>string){
   const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
-  return {name:<>{benefitName(row.benefit)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
+  return {name:<>{name(row)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
 }
 
 function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
-  const key=keyBenefits(rows).map(i=>rows[i]);
+  const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   const premium=cover.premium!=null?`${money(cover.premium,cover.currency)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
@@ -48,12 +48,12 @@ function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
       </div>
     </header>
     {!rows.length?<p className="muted cov-reading">Its benefits are still being read.</p>:<>
-      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r);
+      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[
           <tr className="sec" key={"s"+g.section}><th colSpan={3} scope="colgroup">{g.section}</th></tr>,
-          ...g.rows.map((r,i)=>{const b=benefitParts(r);
+          ...g.rows.map((r,i)=>{const b=benefitParts(r,name);
             return <tr key={g.section+i}><td className="b">{b.name}</td><td className="v">{b.pays}</td><td className="p"><PageLink source={r.source}/></td></tr>;})])}
         </tbody></table></details>:null}
     </>}
