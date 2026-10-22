@@ -189,11 +189,11 @@ test("an answer card names the cover shortly; the product is added only when two
   const labels = coverLabels([
     { product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP TERM LIFE(POLICY NO.3037850)", plan: null },
     { product: "Singlife Shield", cover: "Death Benefit", plan: null }, { product: "FWD Term", cover: "Death Benefit", plan: null },
-    { product: "Travel Care", cover: "Travel Care", plan: "Business" },
+    { product: "Travel Care", cover: "Travel Care", plan: "Business" }, { product: "Travel insurance summary", cover: "Single Trip", plan: "Business" },
     { product: "Same Name", cover: "Ward", plan: null }, { product: "Same Name (Policy No. 2)", cover: "Ward", plan: null },
   ]);
   assert.deepEqual([...labels.values()], ["GROUP TERM LIFE", "Death Benefit, Singlife Shield", "Death Benefit, FWD Term", "Travel Care, plan Business",
-    "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
+    "Single Trip, plan Business, Travel insurance summary", "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
 });
 test("real names carry policy and scheme numbers: their rows keep their amounts", () => {
   const named = rows.map((r) => r.product === "Group Scheme" ? { ...r, product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" } : r);
