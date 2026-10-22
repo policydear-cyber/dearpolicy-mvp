@@ -1139,7 +1139,7 @@ function docNames(d: HouseholdDocument): string[] {
  *   link to, them is left out;
  * - a premium sentence saying the insurer decides which premium applies is left out (a printed premium is what is charged).
  * Any other sentence is kept as written. */
-const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\binsurer\s+(?:decides|will\s+decide|determines)\b/i.test(x);
+const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?|to\s+rely\s+on)\b/i.test(x);
 function libraryClaimsRead(household: Household, left: string[]): (text: string, statement?: boolean) => string {
   const live = household.documents.filter((d) => !d.supersededAt);
   return (text: string, statement = false) => {

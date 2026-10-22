@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -139,7 +139,7 @@ test("money in the model's own sentence never removes what the amount is for (R9
 });
 test("the model's sentence naming another benefit is not used: the row's own benefit is said (R90-2)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Death benefit pays this." }]);
-  assert.match(r.amounts[0]?.text ?? "", /^Ambulance Cost \(Group Personal Accident\): up to this limit\.$/);
+  assert.match(r.amounts[0]?.text ?? "", /^Ambulance Cost \(Group Personal Accident\): up to this limit, per incident\.$/);
   assert.doesNotMatch(JSON.stringify(r.statements), /Death benefit/);
 });
 test("with no table rows yet, an amount asked for is said plainly not to be ready (R90-3)", () => {
@@ -175,7 +175,7 @@ test("a plan named with a number of 100 or more keeps its amount and its name (R
   const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan }));
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Ambulance." }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.statements));
-  assert.match(r.amounts[0].text, /^Ambulance Cost \(Group Personal Accident, plan 300\): up to this limit\.$/);
+  assert.match(r.amounts[0].text, /^Ambulance Cost \(Group Personal Accident, plan 300\): up to this limit, per incident\.$/);
   assert.match(r.amounts[0].amount, /500/);
   assert.match(r.amounts[1].amount, /450,000/);
 });
@@ -208,7 +208,7 @@ test("real names carry policy and scheme numbers: their rows keep their amounts"
   const named = rows.map((r) => r.product === "Group Scheme" ? { ...r, product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" } : r);
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.dropped));
-  assert.match(r.amounts[0].text, /^Ambulance Cost \(GROUP PERSONAL ACCIDENT\): up to this limit\.$/);
+  assert.match(r.amounts[0].text, /^Ambulance Cost \(GROUP PERSONAL ACCIDENT\): up to this limit, per incident\.$/);
   for (const name of ["GROUP POLICY NO. G007500", "POLICY NO.3037850", "Plan 300", "Plan 1000", "Plan 5000 Plus", "Option 2A", "Group Term Life (Policy 0012345678)", "Scheme 2026",
     "Policy No: 23-456789-01", "Certificate 000123", "SG-2026-001234", "12 Critical Illnesses", "Section 4.2.1", "Hospital & Surgical (Ward B1)", "Coverage against 37 critical illnesses", "Benefit 365 days", "Outpatient 120 visits"])
     assert.ok(!nameStatesMoney(name), name);
@@ -498,6 +498,13 @@ test("a first-year premium printed once on the premium's page is its own row, gi
   assert.deepEqual(shown.map((x) => x.amount!.text), ["S$470.85", "S$376.68"]);
   assert.ok(shown.every((x) => !x.group));
 });
+test("a figure printed per child (or per incident) says so on its card, never as a family total (release-set H10)", () => {
+  const amb = rows.find((r) => r.benefit === "Ambulance Cost")!;
+  const fund = { ...amb, benefit: "Child Education Fund Benefit", figure: { kind: "printed", amount: 5000, currency: "SGD", unit: "lump_sum" } as typeof amb.figure, source: { ...amb.source, excerpt: "Child Education Fund Benefit* S$5,000 per child (up to 2 children)" } };
+  assert.match(rowLabel(fund), /: per child \(up to 2 children\)\.$/);
+  // A "per" that follows another figure is not this one's.
+  assert.doesNotMatch(rowLabel({ ...fund, source: { ...fund.source, excerpt: "Child Education Fund Benefit S$5,000; Ambulance S$500 per incident" } }), /per/);
+});
 test("a premium sentence never says the insurer decides which premium applies (release-set A6)", () => {
   const run = (bottomLine: string, text: string) => {
     const a = verifyAnswer(HOUSE, readModelAnswer({ bottomLine, nextSteps: [], question: null, statements: [{ kind: "uncertainty", text, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]).answer;
@@ -506,6 +513,7 @@ test("a premium sentence never says the insurer decides which premium applies (r
   const r = run("Here are the premiums. The pages print two premiums, so the insurer decides which applies.", "The proposal prints a different premium from the schedule, so the insurer decides which applies. The schedule is later.");
   assert.equal(r.bottom, "Here are the premiums.");
   assert.deepEqual(r.texts, []);
+  assert.deepEqual(run("b", "The documents print different premium figures, so Singlife decides if they differ.").texts, []);
   // Not about a premium: kept.
   assert.deepEqual(run("b", "Two documents print different amounts for the fracture, so the insurer decides which applies.").texts, ["Two documents print different amounts for the fracture, so the insurer decides which applies."]);
 });

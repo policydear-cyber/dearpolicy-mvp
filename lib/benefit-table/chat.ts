@@ -283,7 +283,17 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
     // capped one is given as its printed cap, with no such line, so its label says what the cap limits.
     : f.kind === "worked_out" && f.capped && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the figure its table prints"}, up to this limit` : null;
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
+  // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
+  const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+}
+
+/** What a printed figure is counted per, as its quote prints it right after the figure: "S$5,000 per child (up to 2
+ * children)" gives "per child (up to 2 children)". Null when nothing follows. */
+function perUnit(excerpt: string, amount: number): string | null {
+  for (const m of excerpt.matchAll(/(?:S\$|US\$|SGD|\$)?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:each\s+)?(per\s+(?:child|children|person|insured(?:\s+person)?|life|member|dependant|family|claim|visit|trip|event|accident|incident|injury|bone|fracture|policy\s+year|year|disability|confinement|admission)\b(?:\s*\((?:up\s+to|maximum|max\.?|subject\s+to)[^)]{1,40}\))?(?:,?\s*subject\s+to\s+a\s+maximum\s+of\s+\w+\s+\w+)?)/gi))
+    if (Math.abs(Number(m[1].replace(/,/g, "")) - amount) < 0.005) return m[2].replace(/\s+/g, " ").trim();
+  return null;
 }
 
 /** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 3037850", "Certificate 000123". */
