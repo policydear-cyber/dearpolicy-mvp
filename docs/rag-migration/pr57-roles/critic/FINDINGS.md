@@ -4372,3 +4372,13 @@ I found nothing else. If the next delta only adds this condition and its tests, 
   - It never adds, changes or moves an amount.
   - Benefit rows and sums insured are unaffected.
 - `chat-test.ts` passes locally.
+
+## Round 112: PR #98 at 8853ef4 (reading CLI passes household names)
+
+**Verdict: READY.** No findings.
+
+- `scripts/benefit-table/read.ts:35` `sourcesOf` now sets `people` from `familyOf(s)`, with the same "(self)"-style suffix stripping the table uses, which matches the app path (`lib/benefit-table/service.ts:45-50`). The CLI's premium check now agrees with production.
+- `people` is read only by `otherLife` (`lib/benefit-table/check.ts:34,241`), which can only refuse a premium. `renderDocument` does not include it, so the names are never sent to the model, and nothing is written to the database.
+- Replays of earlier runs can only lose a premium that the page ties to another member. They can never gain an amount.
+- `test.ts` importing `./read` is safe: `main()` runs only when `argv[1]` ends with `read.ts`.
+- Local results: `scripts/benefit-table/test.ts` 104/104, `chat-test.ts` 42/42.
