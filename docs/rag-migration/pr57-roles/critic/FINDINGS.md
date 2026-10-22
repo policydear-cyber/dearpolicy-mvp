@@ -4308,3 +4308,28 @@ I found nothing else. If the next delta only adds this condition and its tests, 
   - In run-03b, the one per-day row that was re-read under the new schema kept its `maxDays`.
   - Not a blocker. Watch per-day rows in the next gold check.
 - The `object()` helper strips the `optional` marker from the emitted schema, and the test asserts that none remains.
+
+## R108 — draft PR #97 at fa89d96 (stay totals, cover rows, wrapped labels, schedule currency, premiumQuote)
+
+**Verdict: NOT READY.** One path can show a stay total that is too high. One path drops a premium's qualifier.
+
+- **R108-1 (overstated stay total, blocker)** `chat.ts` `keepLabelledAmounts` → `stayOf`.
+  - The stay figure comes from `verify.ts` `stayPays`. Before this PR the table path always refused it. Now it is kept whenever the table rows agree on max-days and first day.
+  - `stayPays` rejects other *day* rules (`OTHER_DAY_RULE`), but nothing rejects a *money* limit on the same row. `dailies` counts only figures followed by "per day", and every other figure is ignored.
+  - Example: "S$100 per day from the 1st day, up to a maximum of 30 days, subject to an overall limit of S$2,000". For a 25-day stay this gives S$2,500, above the S$2,000 limit.
+  - The real B3/H4 row (S$30 a day after the 10th day, max 30 days) has no such limit, so the replay is correct. But the guard is missing.
+  - Fix in `chat.ts` (verify.ts stays frozen): keep the stay only when the row as printed, with its continuation lines, prints no money figure other than the daily and no cap word (`NEAR_CAP`) other than the max-days phrase. Carry that as a flag in `report.days`. Add the example above as a test.
+- **R108-2 (premium qualifier stripped)** `check.ts` premiumQuote + `chat.ts` `coverRows`.
+  - D8 page 3 prints both "Instalment Premium : 470.85" and "First Year Instalment Premium * : 376.68". Both lines say "premium" and print a figure, so either one passes.
+  - Whichever one the model picks, the row is labelled "Premium, monthly". So S$376.68 would show with no "first year" qualifier.
+  - Also, nothing stops the same policy premium being attached to several cover lines (the basic plan and each rider), which double-counts it if the chat adds up premiums.
+  - Fix: when the premium comes from premiumQuote, take the label from that line's own words before the figure ("First Year Instalment Premium"), or refuse a line with a qualifier (first year, discount, health extra, basic, rider). Keep one premium source line per policy, not per cover.
+- **(3) Wrapped label: sound.**
+  - The quote minus one text-only cell must sit on a single line. The very next line must be exactly that cell with no figure, and only one cell can qualify.
+  - The figures checked (`printsNumber` on `source.excerpt`) are on the matched line. So the binding is to that line, and a mismatch only refuses.
+- **(4) Schedule currency: sound.**
+  - The fallback runs only when `DECLARED` finds nothing. `pageCurrency` returns null when the page names or prints any other currency, says "unless stated", or lists currency options.
+  - A sign printed in the excerpt still wins, and the chat path already uses `pageCurrency` on the same pages.
+- **(2) Cover rows: sound.**
+  - The sum insured comes from the person's own cover line, and a corrected sum insured shows no amount.
+  - The premium path is covered by R108-2.
