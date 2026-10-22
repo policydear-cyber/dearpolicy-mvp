@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -515,6 +515,8 @@ test("a premium sentence never says the insurer decides which premium applies (r
   assert.deepEqual(r.texts, []);
   assert.deepEqual(run("b", "The documents print different premium figures, so Singlife decides if they differ.").texts, []);
   assert.deepEqual(run("b", "The documents print different premium figures. The schedule is the one to rely on, and Singlife decides if they differ.").texts, []);
+  // A premium rule the documents print is not about which premium applies (Critic R131-3).
+  assert.deepEqual(run("b", "Premiums are waived if the insurer determines you are totally disabled.").texts, ["Premiums are waived if the insurer determines you are totally disabled."]);
   // Not about a premium: kept.
   assert.deepEqual(run("b", "Two documents print different amounts for the fracture, so the insurer decides which applies.").texts, ["Two documents print different amounts for the fracture, so the insurer decides which applies."]);
 });
@@ -738,12 +740,18 @@ test("a sentence that shuts a person out of a cover their own cards or rows show
   r = shutOut("This is Lim's alone. The hip benefit pays a share of the sum insured.", [hips[0]]);
   assert.deepEqual(r.left, ["This is Lim's alone."]);
   assert.match(String(r.bottom), /hip benefit/);
-  for (const s of ["Only Lim Ah Kow has this accident cover.", "Mei Ling has no accident cover.", "There is nothing for Mei Ling under this policy."]) {
+  for (const s of ["Only Lim Ah Kow has this accident cover.", "This accident cover belongs only to Lim.", "The accident cover is Lim's, not Mei Ling's.", "It is held by Lim, not Tan Mei Ling."]) {
     r = shutOut("Here it is.", [hips[0], fact(s)]);
     assert.deepEqual(r.left, [s], s);
   }
+  // A sentence that gives a reason or a condition, or does not speak of ownership, is never left out (Critic R131-1).
+  for (const s of ["Tan does not get the ambulance benefit, because no ambulance was used.", "Tan is not covered for this event, because a hairline crack is not a listed fracture.",
+    "Tan cannot claim the recuperation benefit unless she stays in hospital for 24 hours.", "Mei Ling has no accident cover.", "Only Lim's hip card is shown here, if Mei Ling was not hurt."]) {
+    r = shutOut("Here it is.", [...hips, fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
   // A kind of cover she has no row for is not shut out of anything she has.
-  for (const s of ["Tan Mei Ling is not covered by the travel policy.", "Mei Ling has no motor cover."]) {
+  for (const s of ["The travel policy belongs to Lim, not Tan Mei Ling.", "Only Lim has motor cover."]) {
     r = shutOut("Here it is.", [hips[0], fact(s)]);
     assert.deepEqual(r.left, [], s);
   }
@@ -765,6 +773,8 @@ test("what prose says about the library is held to the library's own record (liv
   assert.equal(run("Mei Ling has four documents linked to her.").bottom, "Tan Mei Ling has 2 documents linked in DearPolicy.");
   assert.equal(run("Mei Ling has two documents linked to her.").bottom, "Mei Ling has two documents linked to her.");
   assert.equal(run("You have 5 documents uploaded.").bottom, "Your library has 3 documents.");
+  // A count of some kind of document is not the library count (Critic R131-4).
+  assert.equal(run("Mei Ling has two travel documents.").bottom, "Mei Ling has two travel documents.");
   // A count of documents that print or show something is not a library count.
   assert.equal(run("Two documents print different amounts for this.").bottom, "Two documents print different amounts for this.");
   // Uploaded for, or linked to, someone the record does not say: left out.
@@ -804,6 +814,18 @@ test("a row the checks refuse is given as the same benefit's same figure from an
   assert.deepEqual(give(twin.id), [["S$450,000", 2]]);
   // Named itself, the table row is given, once.
   assert.deepEqual(give(hip.id), [["S$450,000", 2]]);
+  // The named row's own condition, printed only on its page, goes with the stand-in as a point quoting that page; one that
+  // states money cannot, so there is then no stand-in (Critic R131-2).
+  const all = (r2: ChatRow[], H2 = H) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: twin.id }] };
+    const fromRows = amountsFromRows(raw, r2, H2);
+    return (verifyAnswer(H2, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer.statements ?? []).map((x) => [x.amount?.text ?? null, x.text, x.source?.page]);
+  };
+  const conditioned = { ...twin, conditions: ["In the event of a fracture"] };
+  assert.deepEqual(all([...rows, conditioned]).filter(([, t]) => /also depends on/.test(String(t))), [[null, "Hip also depends on this: In the event of a fracture", 5]]);
+  const H3: Household = { ...H, documents: H.documents.map((d) => d.policyId !== PROSE ? d : { ...d, pages: [{ ...d.pages[0], text: d.pages[0].text + "\nNo more than S$1,000 is paid for any one fracture." }] }) };
+  const moneyed = { ...twin, conditions: ["No more than S$1,000 is paid for any one fracture."] };
+  assert.deepEqual(all([...rows, moneyed], H3).filter(([a]) => a), []);
   // A twin with another figure is no stand-in.
   const other = { ...hip, figure: { ...hip.figure, amount: 300000 } as typeof hip.figure, id: twin.id, docIndex: twin.docIndex, source: twin.source };
   assert.deepEqual(give(twin.id, [...rows.filter((r) => r !== hip), other]).filter(([t]) => t === "S$450,000"), []);

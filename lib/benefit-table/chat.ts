@@ -11,7 +11,7 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
@@ -180,7 +180,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
-    const row = checkedRow(named, raw, rows, household, labels, names, given);
+    const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -203,6 +203,10 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // one after the other, never alternatives and never a total.
     const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
       && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
+    // The named row's own conditions that the row given in its place does not print go with it, each as a point quoting
+    // the named row's document (Critic R131-2).
+    for (const c of carried) statements.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
+      quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
     for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -223,19 +227,28 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
 /** The row to give for the one the model named: itself, unless the checks would refuse its amount (a percentage printed in
  * prose, wrapped over two lines, release-set H1) and the same benefit of the same cover is printed with the same figure in
  * another of the person's documents (a table row) that they accept. The other row is then given in its place, with its own
- * conditions. Never a different figure: that is a companion, given with it. */
-function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): ChatRow {
+ * conditions, and the named row's conditions that its page does not print are carried as points of their own. Never a
+ * different figure: that is a companion, given with it. */
+function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): { row: ChatRow; carried: string[] } {
   const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
     && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && sameFigure(o.figure, row.figure));
-  if (!twins.length) return row;
+  const named = { row, carried: [] as string[] };
+  if (!twins.length) return named;
   const passes = (r: ChatRow, conditions: unknown) => {
     const st = statementFromRow(r, { ...raw, conditions, alternativeGroup: null }, labels, names);
     if (!st) return false;
     const parsed = readModelAnswer({ bottomLine: "-", nextSteps: [], question: null, statements: [st] });
     return !!parsed && (verifyAnswer(household, parsed, [], new Set([String(st.text)])).answer.statements ?? []).some((x) => x.amount && x.text === st.text);
   };
-  if (passes(row, raw.conditions)) return row;
-  return twins.find((o) => passes(o, o.conditions.map((t) => ({ text: t, quote: t })))) ?? row;
+  if (passes(row, raw.conditions)) return named;
+  for (const o of twins) {
+    // The named row's conditions the twin's page does not print are carried with it; one that states money cannot be said
+    // as a point, so that twin is not used (Critic R131-2).
+    const carried = row.conditions.filter((c) => { const f = locateQuote(household, c, o.docIndex); return !(f && f.docIndex === o.docIndex && f.page === o.source.page); });
+    if (carried.some((c) => statesMoney(c))) continue;
+    if (passes(o, o.conditions.map((t) => ({ text: t, quote: t })))) return { row: o, carried };
+  }
+  return named;
 }
 
 /** A benefit's name without its row letter, case or punctuation, split into its section ("Simple Fracture ...") and the
@@ -369,8 +382,8 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };
 }
 
-/** A sentence of the model's own words that shuts a person out of a cover ("they belong to Desmond, not Charmaine",
- * "only Desmond has it", "Charmaine has no life cover") while the answer's cards, or that person's own table rows for the
+/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Desmond, not
+ * Charmaine", "only Desmond has it", "Desmond's alone") while the answer's cards, or that person's own table rows for the
  * same benefit, show they have it (live run 22 Oct, C5). Such a sentence is a wrong-person statement even without an
  * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Charmaine is not covered by
  * the travel policy") is kept. */
@@ -396,12 +409,17 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
     if (cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
     return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
   };
-  const shutOut = (sentence: string): boolean => people.some((y) => {
+  // Only ownership or exclusivity is read ("belongs to Desmond, not Charmaine", "Desmond's alone", "only Desmond has it"). A
+  // sentence that gives a reason or a condition ("Tan does not get the ambulance benefit, because no ambulance was used") is
+  // never left out (Critic R131-1).
+  const REASON = /\b(?:because|unless|if|until|since|without|provided|as\s+long\s+as|only\s+when|so\s+long\s+as|due\s+to)\b/i;
+  const OWNED = /\b(?:belong\w*|held\s+by|holds?|owns?|owned)\b|\w's(?:,|\s+(?:alone|only|cover|policy|policies)\b)/i;
+  const shutOut = (sentence: string): boolean => !REASON.test(sentence) && people.some((y) => {
     const Y = alt(y);
     if (!Y) return false;
-    const excluded = new RegExp(String.raw`\b(?:not|but\s+not|rather\s+than|instead\s+of)\s+(?:for\s+|to\s+|of\s+|under\s+|by\s+)?${Y}\b|\b${Y}(?:'s)?\s+(?:does\s+not|doesn't|did\s+not|didn't|is\s+not|isn't|has\s+not|hasn't|has\s+no|have\s+no|is\s+never|cannot|can't)\b|\b(?:nothing|none|no\s+(?:cover|benefit|policy|amount|payout)s?)\s+(?:for|under|in)\s+${Y}\b`, "i").test(sentence);
-    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|just|exclusively)\s+(?:for\s+|to\s+)?${alt(x)}\b|\b${alt(x)}(?:'s)?\s+(?:only|alone)\b`, "i").test(sentence));
-    const shut = excluded || (others.length > 0 && !new RegExp(String.raw`\b${Y}\b`, "i").test(sentence));
+    const notY = OWNED.test(sentence) && new RegExp(String.raw`\b(?:not|but\s+not|rather\s+than|instead\s+of)\s+(?:to\s+|by\s+)?${Y}\b`, "i").test(sentence);
+    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:[a-z]+\s+){0,3}?${alt(x)}(?:\s+[a-z]+){0,3}?(?:'s)?\s+(?:has|have|holds?|owns?|is\s+covered|are\s+covered)\b|\b${alt(x)}'s\s+alone\b|\b${alt(x)}\s+alone\s+(?:has|holds?|owns?|is\s+covered)\b|\bbelongs?\s+only\s+to\s+${alt(x)}\b|\bonly\s+(?:belongs?|held)\s+(?:to|by)\s+${alt(x)}\b`, "i").test(sentence));
+    const shut = notY || (others.length > 0 && !new RegExp(String.raw`\b${Y}\b`, "i").test(sentence));
     return shut && has(y, sentence);
   });
   const left: string[] = [];

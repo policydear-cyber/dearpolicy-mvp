@@ -1126,7 +1126,8 @@ export function membersNamedIn(household: Household, text: string): string[] {
   return people.filter((p) => words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w))).some((w) => t.includes(` ${w} `)));
 }
 const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-const DOC_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:[a-z-]+\s+){0,2}?(?:documents?|files?|uploads?)\b`, "i");
+// Only a plain count ("four documents", "3 uploaded files"): "two travel documents" counts something else (Critic R131-4).
+const DOC_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:(?:uploaded|linked)\s+)?(?:documents?|files?|uploads?)\b`, "i");
 /** The names a sentence can call a document by: its file name when it is a name ("Product Summary.pdf"), and its product. */
 function docNames(d: HouseholdDocument): string[] {
   const own = personalFileName(d.name);
@@ -1139,7 +1140,9 @@ function docNames(d: HouseholdDocument): string[] {
  *   link to, them is left out;
  * - a premium sentence saying the insurer decides which premium applies is left out (a printed premium is what is charged).
  * Any other sentence is kept as written. */
-const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?|to\s+rely\s+on)\b/i.test(x);
+/** "The insurer decides which premium applies", "Singlife decides if they differ", "the one to rely on": said of premiums, never
+ * of a printed rule such as a premium waiver ("waived if the insurer determines you are disabled", Critic R131-3). */
+const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?)\s+(?:which|what)\b|\b(?:decides?|will\s+decide|determines?)\s+(?:if|whether)\s+(?:they|the\s+\w+(?:\s+\w+)?)\s+(?:differ|appl(?:y|ies))\b|\bwhich\s+(?:premium|figure|amount|one)\s+applies\b|\bto\s+rely\s+on\b/i.test(x);
 function libraryClaimsRead(household: Household, left: string[]): (text: string, statement?: boolean) => string {
   const live = household.documents.filter((d) => !d.supersededAt);
   return (text: string, statement = false) => {
