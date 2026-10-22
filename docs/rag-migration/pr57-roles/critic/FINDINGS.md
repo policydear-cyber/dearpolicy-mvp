@@ -4434,3 +4434,38 @@ Two minor notes:
 - `scripts/benefit-table/test.ts`: 105/105.
 - `chat-test.ts`: 43/43.
 - `scripts/simple-answer/chat-test.ts` was not run, because `@anthropic-ai/sdk` is missing in my sandbox.
+
+## Round 114: PR #98 at d728de5 (delta review for R113-1)
+
+**Verdict: READY.** R113-1 is fixed, and I am adding one recommended one-line widening of the page pattern (R114-1).
+
+### R113-1: fixed
+- **Rule pages are now sent.** `pagesToSend` (`lib/benefit-table/chat.ts:89-95`) adds every `RULE_PAGE` page of each document that a row comes from.
+  - I reproduced the coordinator's figure on run-03b plus the snapshot: 84 of 229 pages are sent.
+  - Benefit Summary p11, which holds the 90-day Living Care waiting period, is now sent.
+- **Every amount now carries a warning.** `noteNarrowedPages` (`chat.ts:101-104`, called at `hook.ts:104`) adds `NARROWED_PAGES_NOTE` once to any answer that shows an amount.
+  - The note contains no figure.
+  - I checked the trigger: it fires on `s.amount`, the same field the saved answer carries, and the end-to-end test asserts exactly one note when there is an amount and none when there isn't.
+  - It only runs when there are rows, which is when pages are narrowed. The only harmless edge is a library whose cited and rule pages happen to be all of its pages.
+- **Prompt.** `PAGES_NOTE` now tells the model to check the rule pages for the event before giving an amount.
+- **Tests.** The Living Care waiting page is sent, and the claims page is not.
+
+### R114-1 (medium, recommended before merge): `RULE_PAGE` misses "survival period" and "not payable"
+The doc comment on `RULE_PAGE` (`chat.ts:84`) says it covers "a waiting or survival period", but the regex has no `survival`.
+
+On the snapshot, these rule pages are still not sent:
+- **5e58ea7d p65:** "9 SURVIVAL PERIOD The Life Assured must survive a period of seven (7) days after the date of diagnosis…". This affects every CI amount if death follows within 7 days.
+- **817d6e8b p27 and p51, 5e58ea7d p38 and p61:** "This benefit is not payable if … diagnosed before the Benefit Commencement Date".
+- **817d6e8b p29, 5e58ea7d p40:** "shall not be payable".
+- **5e58ea7d p16:** "We will not be liable for any claim made on or after the Policy ends".
+
+The server note (a) still warns on every amount, so this is not a bare wrong amount. That is why it is not blocking.
+
+Suggested fix: add `|survival\s+period|\bnot\s+(be\s+)?payable\b|\bnot\s+be\s+liable\b` to `RULE_PAGE`. On this library that sends about 12 more pages, roughly 10k tokens.
+
+### Residual (noted, not blocking)
+- A document with no rows sends no pages at all, for example a separate policy wording whose schedule holds every row. Its exclusions reach the user only through the fixed note. Here, the only document with no rows is a single-page one (output_…117).
+
+### Tests (run locally)
+- `scripts/benefit-table/test.ts`: 105/105
+- `chat-test.ts`: 44/44
