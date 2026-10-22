@@ -113,7 +113,7 @@ export function citedPages(rows: ChatRow[]): Set<string> {
 
 /** Wording that can stop a benefit being paid: a waiting or survival period, an exclusion, a pre-existing condition, or a
  * "will not pay". A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
-export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b/i;
+export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b/i;
 
 /** What the chat sends with the table: the pages its rows come from, and every page of those documents that prints a
  * rule that can stop a payment (RULE_PAGE). Keys as in citedPages. */

@@ -33,11 +33,13 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 - A corrected answer is short: one opening sentence and the amounts for the right person, each still with its conditions. Leave out everything from the earlier answer that is still the same (other benefits, dates, caveats, next steps). Mention only what is different now.
 
 ## When several covers could pay
-- When more than one cover could pay for the same event (a life cover and an accident cover on a death), say plainly whether each can pay. Separate covers each pay on their own terms unless a document says one replaces or reduces another. Say which it is, and never add the amounts up.
+- When more than one cover could pay for the same event (a life cover and an accident cover on a death), say what the documents print about paying more than one, such as a benefit that can only be claimed under one scheme, or cover ending once a full sum is paid.
+- When they print nothing about it, say: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." Never promise that each will pay, and never add the amounts up.
 - This is different from two documents printing different figures for the same benefit. There the insurer decides which figure applies.
 
 ## When it isn't covered
 - When the answer is that something isn't covered, or the cover had ended, keep every later sentence consistent with that. Don't give claim deadlines, claim forms or claim steps for that cover.
+- "Not shown to be covered" is different: the documents don't settle it either way. A printed deadline can still matter, so give it as a condition ("If FWD confirms cover, claim within 30 days of the cancellation").
 - Say what they could do instead: another cover that may pay, or what to check.
 
 ## Keep it short

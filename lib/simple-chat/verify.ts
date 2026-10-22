@@ -128,15 +128,26 @@ function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocumen
   return { sign: "$", resolved: false };
 }
 const docCurrencies = new WeakMap<HouseholdDocument, string | null>();
-/** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and print or name no other
- * currency anywhere; otherwise null. A bare "$" in such a document is a Singapore dollar. */
+/** Anything in a document that may be another currency (Critic R124-1): "dollars" not after "Singapore" ("U.S. dollars",
+ * "Canadian dollars"), a currency code other than SGD beside a number ("USD 500", "500 RMB"), a sign with letters before
+ * "$" other than S$, SG$ or SGD$ ("NT$", "HK$"), another currency sign, a currency's name, or a foreign-currency clause. Codes are
+ * matched from the currency list, in capitals, so a scheme's own abbreviations ("GPA 600", "GTL") never count. */
+const OTHER_CODES = "USD|EUR|GBP|JPY|CNY|RMB|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|NTD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|MMK|KHR|LAK";
+const OTHER_CODE = new RegExp(String.raw`(?<![A-Z])(?:${OTHER_CODES})(?![A-Z])`);
+const OTHER_WORDS = new RegExp([
+  String.raw`(?<!singapore\s)\bdollars?\b`,
+  String.raw`(?<![a-z])(?!s\$|sg\$|sgd\$)[a-z]{1,3}\$`,
+  String.raw`[€£¥₹฿₩₱₫₺₽₪]|\brs\.?\s?\d`,
+  String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won|francs?|dirhams?|riyals?)\b`,
+  String.raw`\bforeign\s+currenc|\bexchange\s+rates?\b`,
+].join("|"), "i");
+/** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
+ * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
 export function documentCurrency(doc: HouseholdDocument): string | null {
   if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
   const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
-  const sgd = /\bSGD\b|(?<![A-Z])S\$|Singapore\s+dollars?/i.test(t);
-  const other = moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD")
-    || CURRENCY_NAMES.some(([code, name]) => code !== "SGD" && new RegExp(String.raw`\b(?:${name})\b`, "i").test(t))
-    || /US\$|HK\$|NZ\$|(?<![A-Z])A\$|(?<![A-Z])C\$|RM\s?\d|€|£|¥|\b(?:foreign\s+currenc|exchange\s+rate)/i.test(t);
+  const sgd = /\bSGD\b|(?<![A-Za-z])S\$|Singapore\s+dollars?/i.test(t);
+  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
   const found = sgd && !other ? "SGD" : null;
   docCurrencies.set(doc, found);
   return found;
@@ -886,22 +897,43 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
 /** A document as the household knows it: its product name, with the file name when two documents share one. */
 /** A document as the household would name it: its product, told apart from another file of the same product by the
  * file's own name when a person chose it ("Product Summary"), or else by what kind of document it is. A name a machine
- * gave the file ("817d6e8b-....pdf", "output_202609281146053.pdf") is never shown as a source. */
+ * gave the file ("817d6e8b-....pdf", "output_202609281146053.pdf") is never shown as a source. Two documents that would
+ * still read the same are told apart by their upload date, and then by their order (TE #102). */
 function docLabel(household: Household, d: HouseholdDocument): string {
-  const product = d.productName?.trim();
-  const own = personalFileName(d.name);
-  const kind = d.documentRole ? d.documentRole.replace(/_/g, " ") : null;
-  if (!product) return own ?? [d.insurer?.trim(), kind ?? "document"].filter(Boolean).join(" ").replace(/^./, (c) => c.toUpperCase());
-  const shared = household.documents.some((o) => o !== d && o.productName?.trim().toLowerCase() === product.toLowerCase());
-  const apart = own ?? kind;
-  return shared && apart ? `${product} (${apart})` : product;
+  const base = (x: HouseholdDocument) => {
+    const product = x.productName?.trim();
+    const own = personalFileName(x.name);
+    const kind = x.documentRole ? x.documentRole.replace(/_/g, " ") : null;
+    if (!product) return { label: own ?? [x.insurer?.trim(), kind ?? "document"].filter(Boolean).join(" ").replace(/^./, (c) => c.toUpperCase()), inside: null as string | null };
+    const shared = household.documents.some((o) => o !== x && o.productName?.trim().toLowerCase() === product.toLowerCase());
+    const apart = own ?? kind;
+    return shared && apart ? { label: product, inside: apart } : { label: product, inside: shared ? "" : null };
+  };
+  const text = (b: { label: string; inside: string | null }, extra: string[] = []) => {
+    const inside = [b.inside, ...extra].filter(Boolean).join(", ");
+    return inside ? `${b.label} (${inside})` : b.label;
+  };
+  const mine = base(d);
+  const same = household.documents.filter((o) => text(base(o)).toLowerCase() === text(mine).toLowerCase());
+  if (same.length < 2) return text(mine);
+  const day = (x: HouseholdDocument) => x.uploadedAt ? `uploaded ${sgDay(x.uploadedAt)}` : null;
+  const byDay = same.filter((o) => day(o) === day(d));
+  if (day(d) && byDay.length === 1) return text(mine, [day(d)!]);
+  return text(mine, [day(d), `file ${same.indexOf(d) + 1} of ${same.length}`].filter((x): x is string => !!x));
 }
+const sgDay = (iso: string) => {
+  const t = new Date(iso.length <= 10 ? `${iso}T00:00:00Z` : iso);
+  return Number.isNaN(t.getTime()) ? iso.slice(0, 10) : t.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" });
+};
 /** A file's name without its extension, when a person gave it; null for a name a scanner, app or upload gave it. */
 export function personalFileName(name: string): string | null {
   const base = (name ?? "").replace(/\.[a-z0-9]{2,5}$/i, "").trim();
   if (!/[A-Za-z]{3,}/.test(base)) return null;
   if (/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(base) || /^[0-9a-f]{16,}$/i.test(base)) return null;
-  if (/^(?:output|scan|scanned|img|image|document|doc|file|download|upload|untitled|pdf|photo|camscanner)[\s_-]*[\d_-]{4,}/i.test(base)) return null;
+  // A name made only of words apps and devices give files ("WhatsApp Image 2026-09-01 at 10.15.32", "Screenshot ...",
+  // "document (3)", "Download (1)", "PXL_20260901_101532"), with dates, times and counters, is not a name a person chose.
+  const rest = base.replace(/(?<![A-Za-z])(?:whatsapp|image|img|screenshot|screen\s*shot|scan|scanned|camscanner|document|doc|file|download|upload|untitled|pdf|photo|pxl|dsc|mvimg|output|attachment|print|copy|of|at|am|pm)(?![A-Za-z])/gi, " ");
+  if (!/[A-Za-z]{2,}/.test(rest.replace(/[\d_.:()\s-]+/g, " "))) return null;
   return base;
 }
 
@@ -924,12 +956,13 @@ function libraryCount(household: Household): string {
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
-function onlyNotATotal(sentence: string, docNames: string[] = []): boolean {
+function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = false): boolean {
   // "The Product Summary and the Benefit Summary print different wrist fracture figures, so the insurer decides which
-  // applies." says what the server's note says, once the documents' and the benefit's names are set aside.
-  const differ = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b/i.test(sentence) && /\binsurer\s+decides\s+which\b/i.test(sentence);
+  // applies." says what the server's note says, once the documents' and the benefit's names are set aside, but only when
+  // the server's notes cover every amount shown (`differOk`): otherwise it may be about amounts no note covers (TE #102).
+  const differ = differOk && /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b/i.test(sentence) && /\binsurer\s+decides\s+which\b/i.test(sentence);
   if (!(/\bnot (?:a|the) total\b/i.test(sentence) || differ) || /\d/.test(sentence)) return false;
-  if (/\b(?:within|days?|weeks?|months?|deadline|notice|must|only if|unless|except|provided|subject to|waiting|exclu)/i.test(sentence)) return false;
+  if (/\b(?:within|days?|weeks?|months?|deadline|notice|must|only|if|when|whenever|where|while|unless|except|provided|subject to|waiting|exclu\w*|after|before|until|once|newer|older|latest|later|earlier|dated)\b/i.test(sentence)) return false;
   let rest = sentence;
   for (const n of docNames) rest = rest.split(n).join(" ");
   if (differ) rest = rest.replace(/\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*?\b(?:figures?|amounts?|sums?)\b/gi, " ").replace(/\b(?:product|benefit|summary|summaries|certificate|schedule|policy|wording|brochure)\b/gi, " ")
@@ -1113,10 +1146,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     }
     uncoveredCard(c, i);
   });
+  const noted: Checked[] = [];
   for (const members of notTotals) {
     const who = members[0].person;
     const shown = members.filter((m) => statements.some((s) => s.amount?.text === m.amount!.text && s.personName === m.person));
     if (shown.length < 2) continue;
+    noted.push(...shown);
     // The person is named only when the answer gives amounts for more than one person.
     const others = statements.some((s) => s.amount && s.personName && s.personName !== who);
     const said = shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text));
@@ -1130,10 +1165,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   // decides which applies) is left out; any other words (a deadline, a condition) stay, and the point goes only when
   // nothing else is left (Critic R122-1, TE #101).
   if (statements.some((s) => s.id.startsWith("not-total-"))) {
+    const covered = new Set(noted.map((m) => `${m.person ?? ""}|${m.amount!.text}`));
+    const differOk = statements.filter((s) => s.amount).every((s) => covered.has(`${s.personName ?? ""}|${s.amount!.text}`));
     const docNames = household.documents.flatMap((d) => [docLabel(household, d), d.productName?.trim() ?? "", personalFileName(d.name) ?? ""]).filter((n) => n.length > 2).sort((a, b) => b.length - a.length);
     for (const s of [...statements]) {
       if (s.kind !== "uncertainty" || s.id.startsWith("not-total-")) continue;
-      const kept = sentences(s.text).filter((x) => !onlyNotATotal(x, docNames));
+      const kept = sentences(s.text).filter((x) => !onlyNotATotal(x, docNames, differOk));
       if (kept.length === sentences(s.text).length) continue;
       if (!kept.length) statements.splice(statements.indexOf(s), 1);
       else if (kept.length < sentences(s.text).length) { s.text = kept.join(" "); s.fullText = s.text; }
