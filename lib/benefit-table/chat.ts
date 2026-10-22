@@ -8,6 +8,7 @@
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
 import { figureText } from "./assemble";
+import { benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
@@ -150,7 +151,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const report: RowReport = { dropped: [], labels: [], days: {} };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const labels = coverLabels(rows);
+  const labels = coverLabels(rows), names = benefitNames(rows);
   const statements: unknown[] = [];
   const given = new Set<string>();
   for (const raw of (json as { statements: Record<string, unknown>[] }).statements) {
@@ -167,7 +168,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // The same row named twice is given once (Critic R91-3).
     if (given.has(row.id)) continue;
     given.add(row.id);
-    const st = statementFromRow(row, raw, labels);
+    const st = statementFromRow(row, raw, labels, names);
     if (st) {
       statements.push(st); report.labels.push(String(st.text));
       if (row.figure.kind === "printed" && row.figure.unit === "per_day")
@@ -198,14 +199,15 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
  * a projection. The model's own sentence is not used for an amount, so a figure is never labelled as another benefit. */
-export function rowLabel(row: ChatRow, labels?: Map<string, string>): string {
+export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (row: ChatRow) => string): string {
   const f = row.figure;
   const cover = labels?.get(fullCover(row)) ?? fullCover(row);
   const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? "up to this limit" : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
-    : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}, ${f.capped ? "up to this limit" : "worked out"}` : null;
-  return `${row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
+    : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}${f.capped ? ", up to this limit" : ""}` : null;
+  // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
 }
 
 /** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 3037850", "Certificate 000123". */
@@ -263,9 +265,9 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the
  * percentage with the base it is worked out on and the words that print that base. */
-function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Map<string, string>): Record<string, unknown> | null {
+function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Map<string, string>, names?: (row: ChatRow) => string): Record<string, unknown> | null {
   const f = row.figure;
-  const said = rowLabel(row, labels);
+  const said = rowLabel(row, labels, names);
   const base = { ...raw, text: said, person: baseName(row.person), document: documentId(row.docIndex), quote: row.source.excerpt, amount: null, percentOf: null };
   if (f.kind === "none") return null;
   if (f.kind !== "worked_out") return { ...base, amount: money(f.amount, f.currency) };

@@ -890,14 +890,23 @@ function libraryCount(household: Household): string {
   return `Of your ${n} uploaded files, ${n - bad.length} ${n - bad.length === 1 ? "was" : "were"} read${bad.length ? ` and ${bad.length} could not be read (${bad.map((d) => d.name).join(", ")})` : ""}.`;
 }
 
+/** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
+ * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
+function onlyNotATotal(sentence: string): boolean {
+  if (!/\bnot (?:a|the) total\b/i.test(sentence) || /\d/.test(sentence)) return false;
+  if (/\b(?:within|days?|weeks?|months?|deadline|notice|must|only if|unless|except|provided|subject to|waiting|exclu)/i.test(sentence)) return false;
+  const rest = sentence.replace(/\bnot (?:a|the) total\b/gi, " ").replace(/\b(?:they|these|this|it|are|is|amounts?|figures?|benefits?|separate|different|and|so|the|insurer|decides|which|one|applies|alternatives?|added|together|not|each|other|from|parts?|of|your|documents?|but|be|can|cannot|should)\b/gi, " ");
+  return !/[a-z]{3,}/i.test(rest);
+}
+
 /** How an illustration was worked out, in plain words with its sources. */
 function basisOf(household: Household, c: Checked): string {
   const po = c.s.percentOf!;
-  if (!c.base) return `${po.percent}% of ${po.baseAmount}, worked out from the document's terms`;
+  if (!c.base) return `${po.percent}% of ${po.baseAmount}`;
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf}), worked out from the document's terms`;
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
@@ -1042,7 +1051,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       statements.push({
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
-        basis: `${st.rule} (${st.payable} × ${c.amount!.text}), worked out from the document's terms for the stay you described`,
+        basis: `${st.rule} (${st.payable} × ${c.amount!.text}), for the stay you described`,
         conditions, asOf: null, source, group: null,
       });
     }
@@ -1066,6 +1075,17 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     if (shown.length < 2) continue;
     const text = `${shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text)).join(", ").replace(/, ([^,]*)$/, " and $1")}${who ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
     statements.push({ id: `not-total-${statements.length + 1}`, kind: "uncertainty", text, fullText: text, conditions: [] });
+  }
+  // Said once: the server's note, which names the amounts, is always kept (Critic R121-1). In a point of the model's own,
+  // only a sentence that says nothing but "not a total" is left out; any other words (a deadline, a condition) stay, and
+  // the point goes only when nothing else is left (Critic R122-1, TE #101).
+  if (statements.some((s) => s.id.startsWith("not-total-"))) {
+    for (const s of [...statements]) {
+      if (s.kind !== "uncertainty" || s.id.startsWith("not-total-") || !/\bnot (?:a|the) total\b/i.test(s.text)) continue;
+      const kept = sentences(s.text).filter((x) => !onlyNotATotal(x));
+      if (!kept.length) statements.splice(statements.indexOf(s), 1);
+      else if (kept.length < sentences(s.text).length) { s.text = kept.join(" "); s.fullText = s.text; }
+    }
   }
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
   else if (report.dropped.length) statements.push({ id: "left-out-fact", kind: "uncertainty", text: LEFT_OUT_FACT, fullText: LEFT_OUT_FACT, conditions: [] });

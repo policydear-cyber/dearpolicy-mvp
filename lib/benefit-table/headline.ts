@@ -41,6 +41,21 @@ export function rowDetail(r: SummaryRow): string {
     .filter(Boolean).join(" · ");
 }
 
+/** A benefit's name without the row letter or number its table prints before it ("J, ", "D. ", "(a) "): that is the
+ * document's layout, not the benefit's name. A letter followed by a comma is a row letter only when a word follows it,
+ * not another single letter ("D, E and F Benefit" is a list, TE #101). Use benefitNames for a set of rows. */
+export const benefitName = (benefit: string) =>
+  benefit.replace(/^\s*(?:(?:[A-Z]|\d{1,2})\s*[.):]|[A-Z],(?!\s*[A-Z](?:\s|,|$))|\(?(?:[a-z]|[ivx]{1,4})\))\s+(?=[A-Z])/, "").trim() || benefit;
+
+/** Each row's benefit name for display, without row letters, except where stripping them would make two different
+ * benefits of one cover read the same ("A. Death" and "B. Death" stay as printed, TE #101). */
+export function benefitNames<T extends { benefit: string; coverKey?: string }>(rows: T[]): (row: T) => string {
+  const key = (r: T) => `${r.coverKey ?? ""}\u0000${benefitName(r.benefit).toLowerCase()}`;
+  const raws = new Map<string, Set<string>>();
+  for (const r of rows) raws.set(key(r), (raws.get(key(r)) ?? new Set()).add(r.benefit.trim()));
+  return (r) => ((raws.get(key(r))?.size ?? 1) > 1 ? r.benefit : benefitName(r.benefit));
+}
+
 const amountOf = (f: Figure) => (f.kind === "printed" || f.kind === "worked_out" ? f.amount : 0);
 
 /** The rows that lead a cover's card, as indexes into `rows`, in the order shown: death, disability and critical illness;
