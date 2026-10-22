@@ -4984,3 +4984,27 @@ Both cases stay correct under either fix. A3 keeps its 5,000 only if the wording
 - benefit-table test: 105/105
 
 The 44-question replay (40 right, 4 partly right, 0 wrong) is the TE's. I did not re-run it.
+
+## Round 128: PR #103 at 153d9e7 (delta from 9aefff9)
+
+**Verdict: READY.** R127-1 is fixed. No new findings.
+
+The fallback now needs two things:
+- **Exactly one benefit-amount line on the base page, of any size.** Premium, instalment, total, discount, GST, tax and fee lines don't count.
+- **A base whose own or neighbouring lines name the benefit heading the wording** (`headingWords`). With no heading, it refuses.
+
+All my probes, re-run in `scratchpad/r128/w.ts`, now come back as expected:
+
+| Case | Result |
+|---|---|
+| CI 300,000 + Death 5,000 schedule, base = CI line | refused (R127-1) |
+| Same schedule, base = Death line | refused: two benefit amounts, so it is fail-safe and only the percentage is given |
+| Base is another policy's certificate, the spouse's line, or a table that prints its own base | refused (R126-1) |
+| One-benefit schedule ("Death Benefit 50,000.00", premium line ignored), wording headed "2. Death Benefit" | S$50,000 with the basis "100% of the sum insured, which is the amount shown" |
+
+The second row means DC's CI II death benefit (D8 p3) now shows as a percentage rather than S$5,000. That gives up a correct amount but never shows a wrong one, which meets the bar.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
