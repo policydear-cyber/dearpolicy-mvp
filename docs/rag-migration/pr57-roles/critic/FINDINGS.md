@@ -5032,3 +5032,25 @@ My probes (`scratchpad/r129/w.ts`):
 - benefit-table chat-test: 51/51
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 130: PR #103 at bcb3e25 (delta from 43515c3)
+
+**Verdict: READY.** No findings.
+
+This round adds the TE's A10c rule. The base line is taken as the sum insured only if nothing is left on it after removing:
+- the heading's benefit words,
+- "sum insured" or "sum assured",
+- the amount and its currency.
+
+The rule only adds refusals, so it is fail-safe.
+
+My probes (`scratchpad/r130/w.ts`):
+- Every earlier R126–R129 case is still refused.
+- The one-benefit positive case ("Death Benefit 50,000.00 ---" under a "Sum Assured" heading) still resolves to S$50,000.
+
+Trade-off: DC's real CI II base is now refused, so A3 is back to partly right. The answer shows the percentage instead of the amount. That withholds a correct figure and never shows a wrong one, so I accept it.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
