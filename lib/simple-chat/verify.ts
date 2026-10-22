@@ -397,7 +397,8 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
  * - its page prints exactly one benefit amount, of any size, so it is not another cover's (TE #103 A3, Critic R127-1);
  * - it is printed with the name of the benefit the wording is headed by (R127-1);
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
- *   expense amount (TE #103 A10b). */
+ *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
+ *   amount (A10c). */
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -429,6 +430,11 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
   if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return null;
   if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return null;
+  // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
+  // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
+  // make it another benefit's amount, so it is refused (TE #103 A10c).
+  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(/(?:S\$|SGD|US\$|USD|\$)?\s*\d[\d,]*(?:\.\d+)?/gi, " ").replace(/\b(?:SGD|USD)\b/gi, " ");
+  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return null;
   return bf;
 }
 /** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */

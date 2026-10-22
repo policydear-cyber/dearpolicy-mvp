@@ -562,6 +562,9 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   // A line that never says sum insured or sum assured (nor its table heading) is not taken as one.
   const unnamed: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Benefit\tSum Assured\n", "") }) }) };
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", unnamed).amounts, []);
+  // Any word on the base line beyond the heading's benefit, "sum insured" and the amount refuses it (TE #103 A10c).
+  const income: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Critical Illness Benefit\t300,000.00", "Critical Illness Hospital Income\t300,000.00") }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Hospital Income\t300,000.00", "300,000.00", "D1", income).amounts, []);
   // A premium line on the page is not a second benefit amount.
   const withPremium: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85" }) }) };
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
