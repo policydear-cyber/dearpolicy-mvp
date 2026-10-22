@@ -4646,3 +4646,13 @@ The alternative is to unset `MODEL_PRESET`, or keep the OpenAI settings with no 
 
 ### Tests
 `model-preset-test`: 5/5, run locally.
+
+## Round 120: PR #100 at 9d22898 (delta from 3b87b9d)
+
+**Verdict: READY.** No findings. R119-1 (the cost switch) is accepted under DC's Anthropic-only rule.
+
+- **Preset check.** `allowedByPreset(choice, env)` is now exported and reads `MODEL_PRESET` from the env it is given. "anthropic" is a known preset, so this behaves the same as `modelPreset()`.
+- **Alpha chat model.** `simpleChatModel` (`lib/simple-chat/flag.ts:45`) runs the parsed value through `allowedByPreset`. Under the preset, a leftover `openai:` value falls back to `DEFAULT_SIMPLE_MODEL` (Sonnet 5.5). An `anthropic:` value still wins, and the format check still throws on a malformed value.
+- **Canaries.** `canaryConfigFor` (`lib/ai/rollout.ts:116`) returns null for a canary that names another provider. With no canary configured, the stable model applies, and under the preset that model is Claude. So no Google or OpenAI call can come in through the canary path.
+- **Imports.** `simple-chat/flag.ts` now imports a value from `providers.ts`; before, it imported only types. `providers.ts` imports only zod and `deterministic-model`, so there is no import cycle. Neither module is imported by a client component; only server modules (`lib/chat/workflow.ts`, `lib/ai/llm.ts`) import them.
+- **Tests (run locally):** model-preset-test 7/7, benefit-table chat-test 46/46.
