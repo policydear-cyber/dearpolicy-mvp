@@ -515,7 +515,7 @@ const WORDING = "aaaaaaaa-0000-0000-0000-000000000006", OTHER_POLICY = "aaaaaaaa
 // One policy document holding its schedule (p3) and wording (p7, p8), as the CI II PDF does; and a group certificate.
 const HOUSE3: Household = { ...HOUSE, documents: [
   doc(WORDING, "CI policy.pdf", [
-    { page: 3, text: "Assured\t: Lim Ah Kow\nCurrency\t: SGD\nCritical Illness Benefit\t300,000.00" },
+    { page: 3, text: "Assured\t: Lim Ah Kow\nCurrency\t: SGD\nBenefit\tSum Assured\nCritical Illness Benefit\t300,000.00" },
     { page: 7, text: "CRITICAL ILLNESS BENEFIT\n100% of the Sum Assured will be payable in one lump sum. We will pay the Critical Illness Benefit subject to the following:" },
     { page: 8, text: "ADVANCE BENEFIT\n100% of the Sum Assured, up to S$400,000, will be payable." },
     { page: 9, text: "Accidental Medical Expenses (Sum Insured S$5,000)\nMedical expenses\t100%" },
@@ -556,6 +556,12 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   // With one amount line, wording headed by another benefit ("DEATH BENEFIT") never takes the CI line.
   const deathWording: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
   assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", deathWording).amounts, []);
+  // The one amount on a one-life schedule that is a limit, not a sum insured, is never the sum insured (TE #103 A10b).
+  const limitOnly: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: "Assured\t: Lim Ah Kow\nCurrency\t: SGD\nCritical Illness Benefit Medical Expenses limit\t15,000.00" }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit Medical Expenses limit\t15,000.00", "15,000.00", "D1", limitOnly).amounts, []);
+  // A line that never says sum insured or sum assured (nor its table heading) is not taken as one.
+  const unnamed: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Benefit\tSum Assured\n", "") }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", unnamed).amounts, []);
   // A premium line on the page is not a second benefit amount.
   const withPremium: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85" }) }) };
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);

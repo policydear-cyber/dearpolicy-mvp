@@ -395,7 +395,9 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
  * - its line names the person, or names nobody on a page that names them (a one-life schedule prints the name once, as
  *   "Life Assured : ...", not on the sum insured's line);
  * - its page prints exactly one benefit amount, of any size, so it is not another cover's (TE #103 A3, Critic R127-1);
- * - it is printed with the name of the benefit the wording is headed by (R127-1). */
+ * - it is printed with the name of the benefit the wording is headed by (R127-1);
+ * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
+ *   expense amount (TE #103 A10b). */
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -422,6 +424,11 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   const at = page.text.slice(0, bf.offset).split("\n").length - 1;
   const near = new Set(tokens(lines.slice(Math.max(0, at - 1), at + bf.excerpt.split("\n").length + 1).join(" ")));
   if (!name.length || !name.every((w) => near.has(w))) return null;
+  // It is a sum insured: its lines, or the table heading just above them ("Sum Assured / ..."), say so, and its lines are
+  // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
+  const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
+  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return null;
+  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return null;
   return bf;
 }
 /** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
