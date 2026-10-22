@@ -4358,3 +4358,17 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 - `otherLife` is a new condition, and it can only refuse a premium. It cannot show a figure or change one.
 - Worst case, a page whose "Policy Owner" differs from the life assured drops a premium that was correct. That is safe over-refusal of a non-claimable figure.
 - `chat-test.ts` passes 42/42 locally.
+
+## R111 — PR #97 delta 924c5a2 → 70a5204 (premium rule uses household names)
+
+**Verdict: READY.**
+
+- **Household isolation.** `service.ts` `documents()` fills `people` from `family()`, which queries `family_members WHERE account_id=$1 AND lifecycle_state='active'`, with the same `accountId` as the documents.
+  - The names are only used in memory, in `otherLife`.
+  - They are not stored: the stored reading is the model's JSON.
+  - They are not sent to the model: `renderDocument` uses only `name` and `pages`.
+  - `app-run` takes them from the same snapshot household.
+- **Can only refuse.** `doc.people` is read in one place (`check.ts:241`), as a further `!otherLife(...)` condition before a premiumQuote is accepted. It can only make that condition false, which drops the premium.
+  - It never adds, changes or moves an amount.
+  - Benefit rows and sums insured are unaffected.
+- `chat-test.ts` passes locally.
