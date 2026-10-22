@@ -195,6 +195,11 @@ test("an answer card names the cover shortly; the product is added only when two
   assert.deepEqual([...labels.values()], ["GROUP TERM LIFE", "Death Benefit, Singlife Shield", "Death Benefit, FWD Term", "Travel Care, plan Business",
     "Single Trip, plan Business, Travel insurance summary", "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
 });
+test("labels picked by different rules never land on the same words (TE #99)", () => {
+  const labels = coverLabels([{ product: "Alpha", cover: "Life, Beta", plan: null }, { product: "Beta", cover: "Life", plan: null }, { product: "Gamma", cover: "Life", plan: null }]);
+  const values = [...labels.values()];
+  assert.equal(new Set(values).size, values.length, JSON.stringify(values));
+});
 test("real names carry policy and scheme numbers: their rows keep their amounts", () => {
   const named = rows.map((r) => r.product === "Group Scheme" ? { ...r, product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" } : r);
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" }], named);

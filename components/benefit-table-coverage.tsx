@@ -31,8 +31,8 @@ function PageLink({source}:{source:Source}){
 }
 
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
-function benefitParts(row:Row,brief=false){
-  const f=shortFigure(row),detail=[rowDetail(row,brief),f.note].filter(Boolean).join(" · ");
+function benefitParts(row:Row){
+  const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
   return {name:<>{row.benefit}{detail?<small>{detail}</small>:null}</>,pays:f.text};
 }
 
@@ -48,7 +48,7 @@ function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
       </div>
     </header>
     {!rows.length?<p className="muted cov-reading">Its benefits are still being read.</p>:<>
-      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,true);
+      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[

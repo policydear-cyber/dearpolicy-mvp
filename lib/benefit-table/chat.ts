@@ -75,7 +75,12 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
   const shortUnique = unique(short), productUnique = unique(withProduct);
   // A cover name that says no kind of cover ("Single Trip") keeps its product, so the card still says what it is (Critic R117-1).
   const saysKind = (c: C) => COVER_KIND.test(short(c));
-  return new Map(covers.map((c) => [fullCover(c), shortUnique(c) && saysKind(c) ? short(c) : productUnique(c) ? withProduct(c) : fullCover(c)]));
+  const picked = covers.map((c) => [c, shortUnique(c) && saysKind(c) ? short(c) : productUnique(c) ? withProduct(c) : fullCover(c)] as const);
+  // Two different rules can still land on the same words ("Life, Beta" as a cover, and "Life" in product Beta): any label
+  // used twice falls back to the full printed name (TE #99).
+  const used = new Map<string, number>();
+  for (const [, l] of picked) used.set(l, (used.get(l) ?? 0) + 1);
+  return new Map(picked.map(([c, l]) => [fullCover(c), used.get(l)! > 1 ? fullCover(c) : l]));
 }
 
 /** A premium row's name: the premium line's own words ("Instalment Premium"), and how often it is paid when printed. */
