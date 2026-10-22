@@ -4766,3 +4766,69 @@ A tighter rule would drop the sentence only when, once "not a total" and the amo
   - Coverage and the chat label both use it, and the label checks compare the same text.
   - Separately, the `benefitName` calls in `lib/claims/*` belong to a different, local function.
 - **Tests run locally:** benefit-table chat-test 46/46 and headline-test 13/13. `style-test` now imports React, which my sandbox lacks, so I did not run it. I ran the verify-level probes above directly instead.
+
+## Round 124: PR #102 at cdc9105 (second answer-quality round, diff vs main)
+
+**Verdict: NOT READY. Two blockers, both small fixes.** (b) and (c) hold. The amounts in the before-and-after are right.
+
+### R124-1 (blocker): the bare-$ rule does not catch every other currency
+`documentCurrency` (`lib/simple-chat/verify.ts:133-146`) decides that a document is Singapore-dollar only. It does so when the document names S$ and it finds no *listed* other currency. The list misses common spellings, so a foreign-currency document can pass, and its bare "$" is then shown as S$. My probes, each text with "S$" somewhere plus a bare "$100,000":
+
+| The document also says | Result |
+|---|---|
+| "Premiums are payable in S$ or U.S. dollars" | **SGD** (wrong: "U.S." is not matched) |
+| "Japanese yen" / "RMB 5,000" / "NT$5,000" / "Canadian dollars CAD 5,000" / "Rs 5,000 or ₹5,000" | **SGD** (all wrong) |
+| "Policy Currency: USD" / "USD100,000" | null (correct) |
+
+USD policies sold in Singapore are common, so "U.S. dollars" is a realistic path to a wrong currency on an amount. The coordinator's bar is that an open path must withhold, not show a wrong figure. This path shows a wrong one.
+
+**Fix: make the check fail-safe.** Treat any of these as "other":
+- any "dollar(s)" not directly preceded by "Singapore";
+- any three-letter capital code other than SGD next to a number (`\b(?!SGD)[A-Z]{3}\s?\d`);
+- any currency sign other than "S$" and a bare "$" (`[A-Z]{1,3}\$`, ₹, ฿, ₩, ₱, ¥, €, £);
+- the words yen, yuan, renminbi, rupee, baht, ringgit, peso, won, franc.
+
+The cost of a false "other" is only the existing "Currency not stated" label.
+
+On the real snapshot, the 17-page MINDEF benefit summary resolves 19 bare "$" figures to S$. That is correct, and it still works with the stricter check.
+
+Scope (challenge a) is right. The inference uses only the amount's own document (`found.docIndex`, the base document for a sum insured, `bdoc` in `basisOf`), with one cache entry per document object. It is never borrowed from another document or version. DC approved this rule in principle when they said go on round 2. It changes the frozen money rules, so the stricter detection is a precondition for that approval holding.
+
+### R124-2 (blocker): "each paid on its own terms" is a promise the documents don't support
+Challenge (d). `answer-style.md` states as a fact: "Separate covers each pay on their own terms unless a document says one replaces or reduces another." The default sentence in `prompt.ts` tells the model to say "separate covers, each paid on its own terms" whenever the pages it was sent print no such rule. DC's own documents contain several such rules:
+
+| Document and page | Rule printed there | Sent under narrowed pages (RULE_PAGE)? |
+|---|---|---|
+| MINDEF Voluntary Scheme, 55 rows in the table | "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme." Hospital cash, Compassionate Death Allowance, Child Education Fund, recuperation, home modification. | Only some pages: D2 p9 yes (it says "exclusions"), D1 p7 no |
+| D2 p4, Advance Payment | Pays only "provided no other Benefit has been paid", and "the balance of the Sum Insured … shall be paid" at death. An advance payment reduces the death benefit. | Yes |
+| D2 p3 | Cover "terminated upon payment of full Sum Insured under GTL or GPA". | **No** |
+
+Mitigation: the table rows already carry the Core-or-Voluntary sentence as a condition, so those cards show it. The model's uncertainty line can still contradict a condition printed on the card next to it. Where the rule sits on an unsent page (D1 p7, D2 p3), "each paid on its own terms" fills the gap with an entitlement nobody checked.
+
+**Fix (two lines):**
+- Default sentence, in both the prompt and the style guide: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." Drop "each paid on its own terms" everywhere.
+- Add coordination words to `RULE_PAGE`: `can only be claimed|either under|no other benefit (has been )?paid|balance of the sum|terminated upon payment|instead of|in lieu|reduce[sd]?\b|deducted`. Pages that print these rules are then always sent.
+
+Keep the existing "fact with its quote" path for printed rules. In the before-and-after, the TPD answer already quotes the cover-ends rule, which is the right behaviour.
+
+### R124-3 (medium, should fix in this round): "not shown to be covered" also drops the claim deadline
+Challenge (e). The new rule (`prompt.ts`) removes how-and-when-to-claim steps when the bottom line is "not covered", "**not shown to be covered**" or "cover ended". The first and third are fine. "Not shown to be covered" means information is missing. Missing information is not an exclusion, so the cover may still pay.
+
+Dropping the printed notice deadline there can cost a valid claim. Example: the knee-ligament answer is "not shown covered", yet it lists ambulance (up to S$500) and recuperation (S$250) under the same accident cover. In the flight answer, the trip dates are uncertain and the user is told to confirm them with FWD.
+
+**Fix:** for "not shown to be covered" only, keep the printed deadline as a conditional fact, for example: "If FWD confirms cover, the policy says to claim within 30 days." Suppress claim steps only for "not covered" and "cover ended".
+
+### R124-4 (low, not blocking): a dropped point is now silent
+The LEFT_OUT_FACT notice is removed. A left-out amount still shows LEFT_OUT_AMOUNT. An unverified fact or exclusion the model wanted to state now disappears without a trace. Exclusion pages are sent (RULE_PAGE) and the cards carry the rows' own conditions, so I accept this as DC's style choice ("never say you left something out"). Keep `report.dropped` logged so the Test engineer can count dropped exclusion-type facts.
+
+### Checked and holding
+- **(b) The not-a-total note survives.** The R121 and R122 probes re-run on cdc9105. The model note "The two documents print different figures. The insurer decides which applies." is removed, and the server's not-a-total note stays (1 note, 2 amounts). The same holds for "X and the summary print different figures; the insurer decides which", "Either document…" and no note at all. A note with a condition is kept beside the server's note.
+- **(c) The card still shows base and percentage.** Every percent-of amount is an illustration (`verify.ts:407,413`), and `basis` is attached for every illustration with `percentOf` (`verify.ts:1087`, `basisOf` at 943). The card shows basis unless the text already says it (`answer-cards.tsx:60`). A capped row keeps its percentage in the label. A base the household corrected now states the percentage in the fact. A failed percent-of amount that is kept as a fact gains "N% of …". I found no path where a worked-out amount shows without its percentage and base.
+- **Row letters:** the `benefitNames` change keeps distinct letters ("A. Death" / "B. Death"). headline-test passes 13/13.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 46/46
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+simple-answer chat-test, style-test and offline-test need `@anthropic-ai/sdk` or React, which this sandbox lacks, so I did not run them. I ran the verify-level probes above instead.
