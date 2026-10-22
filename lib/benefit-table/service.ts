@@ -105,7 +105,9 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
 /** Each person's table, with the documents still waiting to be read. */
 export async function tableFor(db: Db, accountId: string): Promise<{ table: BenefitTable; documents: Loaded["documents"]; links: Loaded["links"] }> {
   const l = await load(db, accountId);
-  return { table: assembleTable(l.readings, l.family, l.links, l.confirmations), documents: l.documents, links: l.links };
+  // No confirmations: people never confirm or correct amounts (DC, 22 Oct 2026), so the table always uses the printed
+  // figures, even where an older build stored a correction (TE #99).
+  return { table: assembleTable(l.readings, l.family, l.links), documents: l.documents, links: l.links };
 }
 
 /** Asks the model which cover each section is paid under, for every section the household has not linked itself. The

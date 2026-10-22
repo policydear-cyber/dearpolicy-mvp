@@ -201,20 +201,18 @@ async function main() {
     await setLink(f.db, A, accident, gpa);
     assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p2")!.rows.find((r) => r.benefit === "Arm")!.figure.kind, "worked_out");
   });
-  await test("a correction changes every amount worked out from that sum insured, and Undo restores the printed one", async () => {
+  // Corrections were removed with Confirm/Correct (DC, 22 Oct 2026): one an older build stored must change nothing (TE #99).
+  await test("a stored correction changes no amount: the table uses the printed sum insured (TE #99)", async () => {
     const f = household();
     await readBoth(f);
     await setLink(f.db, A, accident, gpa);
+    const before = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
     await setConfirmation(f.db, A, "user-1", "p1", gpa, "corrected", 300000);
-    let wei = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
-    assert.equal(wei.covers[0].sumInsured, 300000);
-    assert.equal(wei.covers[0].confirmation!.printed, 200000);
-    assert.deepEqual(wei.rows.map((r) => (r.figure.kind === "worked_out" ? r.figure.amount : null)).sort(), [225000, 60000]);
-    assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p2")!.covers[0].sumInsured, 100000, "only that person's cover changes");
-    await setConfirmation(f.db, A, "user-1", "p1", gpa, null, null);
-    wei = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
+    const wei = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
     assert.equal(wei.covers[0].sumInsured, 200000);
     assert.equal(wei.covers[0].confirmation, null);
+    assert.ok(wei.rows.length > 0 && wei.rows.every((r) => !r.baseCorrected));
+    assert.deepEqual(wei.rows.map((r) => r.figure), before.rows.map((r) => r.figure));
   });
   await test("confirmations are refused for someone outside the family, a cover they do not hold, or a correction without a number", async () => {
     const f = household();
@@ -226,13 +224,13 @@ async function main() {
     await setConfirmation(f.db, A, "user-1", "p1", gpa, "confirmed", 999);
     assert.equal(f.s.confirmations.get(`${A}|p1|${gpa}`)!.sum_insured, null, "a confirmation stores no amount of its own");
   });
-  await test("a re-read that no longer shows a confirmed cover lists the confirmation to check again", async () => {
+  await test("a stored confirmation is never listed to check again: there is nothing to confirm (TE #99)", async () => {
     const f = household();
     await readBoth(f);
     await setConfirmation(f.db, A, "user-1", "p2", gpa, "confirmed", null);
     await readDocument(f.db, scriptedModel([() => doc("personal_proof", [cover("Lim Wei Jie", 200000, "Lim Wei Jie S$200,000")], [])]).model, A, "cert");
     const { table } = await tableFor(f.db, A);
-    assert.deepEqual(table.staleConfirmations.map((k) => k.personId), ["p2"]);
+    assert.deepEqual(table.staleConfirmations, []);
   });
   await test("a removed document leaves the table at once", async () => {
     const f = household();

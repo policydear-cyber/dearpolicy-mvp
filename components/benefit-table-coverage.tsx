@@ -15,7 +15,8 @@ type Row=SummaryRow&{coverKey:string;source:Source};
 type Person={id:string;name:string;covers:Cover[];rows:Row[]};
 type Other={person:string;product:string;cover:string;plan:string|null;source:Source};
 export type BenefitTableData={enabled:true;people:Person[];documents:{id:string;name:string;state:"read"|"waiting"|"not_readable"}[];
-  unmatchedCovers:Other[];illustrationCovers:Other[]};
+  unmatchedCovers:Other[];illustrationCovers:Other[];
+  unlinkedSections:{section:{key:string;document:string;section:string|null;column:string|null};source:Source|null}[]};
 
 const coverName=(c:{product:string;cover:string;plan:string|null;riderOf?:string|null})=>
   [c.product,c.plan&&!c.product.toLowerCase().includes(c.plan.toLowerCase())?`Plan ${c.plan}`:null].filter(Boolean).join(" · ");
@@ -30,8 +31,8 @@ function PageLink({source}:{source:Source}){
 }
 
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
-function benefitParts(row:Row){
-  const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
+function benefitParts(row:Row,brief=false){
+  const f=shortFigure(row),detail=[rowDetail(row,brief),f.note].filter(Boolean).join(" · ");
   return {name:<>{row.benefit}{detail?<small>{detail}</small>:null}</>,pays:f.text};
 }
 
@@ -47,7 +48,7 @@ function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){
       </div>
     </header>
     {!rows.length?<p className="muted cov-reading">Its benefits are still being read.</p>:<>
-      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r);
+      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,true);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[
@@ -99,10 +100,12 @@ export function BenefitTableCoverage({data}:{data:BenefitTableData;reload?:()=>P
       {person.covers.map(c=><CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={person.rows.filter(r=>r.coverKey===c.coverKey)}/>)}
       <TellUs person={person}/>
     </section>)}
-    {data.unmatchedCovers.length||data.illustrationCovers.length?<section className="cov-person" data-testid="table-also-found">
+    {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length?<section className="cov-person" data-testid="table-also-found">
       <div className="cov-person-head"><h2>Also in your documents</h2></div>
       <ul className="cov-also">
         {data.unmatchedCovers.map((c,i)=><li key={"u"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Not in your family. Add them on the <Link className="text-link" href="/family">Family page</Link> if they should be here.</span><PageLink source={c.source}/></li>)}
+        {data.unlinkedSections.length?<li data-testid="table-unplaced"><details className="cov-unplaced"><summary>{data.unlinkedSections.length===1?"One part":`${data.unlinkedSections.length} parts`} of your documents couldn&rsquo;t be placed under a cover, so {data.unlinkedSections.length===1?"it isn’t":"they aren’t"} in this summary or in the chat.</summary>
+          <ul>{data.unlinkedSections.map(u=><li key={u.section.key}><span>{u.section.section??"Untitled part"}{u.section.column?` (${u.section.column})`:""} <small>{u.section.document}</small></span>{u.source?<PageLink source={u.source}/>:null}</li>)}</ul></details></li>:null}
         {data.illustrationCovers.map((c,i)=><li key={"q"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Only in a quotation, which is not proof of cover.</span><PageLink source={c.source}/></li>)}
       </ul>
     </section>:null}

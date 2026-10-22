@@ -61,8 +61,14 @@ test("a projection says it is not an amount held or payable; a row with no amoun
 test("an amount with no currency says so", () => {
   assert.equal(shortFigure(row("x", { figure: { kind: "printed", amount: 500, currency: null, unit: "up_to" } })).text, "Up to $500 (currency not stated)");
 });
-test("who the figure is for is always shown with it (Critic R89-1), with its days", () => {
-  assert.equal(rowDetail(row("Juvenile illness", { qualifier: "child", fromDay: 2, maxDays: 90, conditions: ["after 90 days of cover"] })), "for child · from day 2 · up to 90 days");
+test("who the figure is for is always shown with it (Critic R89-1), with its days and every condition", () => {
+  const r = row("Juvenile illness", { qualifier: "child", fromDay: 2, maxDays: 90, conditions: ["Only 1 claim", "waiting period in Section 3.2", "max 6 claims"] });
+  assert.equal(rowDetail(r), "for child · from day 2 · up to 90 days · Only 1 claim · waiting period in Section 3.2 · max 6 claims");
+});
+test("a key row shows its first condition and how many more (Critic R116-1)", () => {
+  assert.equal(rowDetail(row("x", { conditions: ["Only 1 claim", "max 6 claims", "a third"] }), true), "Only 1 claim (+2 more)");
+  assert.equal(rowDetail(row("x", { conditions: ["Only 1 claim"] }), true), "Only 1 claim");
+  assert.equal(rowDetail(row("x"), true), "");
 });
 test("a worked-out amount's note is short when the row carries its percentage and base", () => {
   const f = { kind: "worked_out" as const, amount: 1000000, currency: "SGD", how: "100% of S$1,000,000 (GROUP TERM LIFE, Certificate.pdf p1, as of 06/10/2022)" };

@@ -34,9 +34,11 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
   return { text: t, note: null };
 }
 
-/** The small line under a benefit: who the figure is for and its days. Conditions are on the page the row links to. */
-export function rowDetail(r: SummaryRow): string {
-  return [r.qualifier ? `for ${r.qualifier}` : null, r.fromDay != null ? `from day ${r.fromDay}` : null, r.maxDays != null ? `up to ${r.maxDays} days` : null]
+/** The small line under a benefit: who the figure is for, its days, and its conditions ("Only 1 claim", "max 6 claims").
+ * `brief` (a key row) shows the first condition and how many more there are; the full list shows every one (Critic R116-1). */
+export function rowDetail(r: SummaryRow, brief = false): string {
+  const conditions = brief && r.conditions.length > 1 ? [`${r.conditions[0]} (+${r.conditions.length - 1} more)`] : r.conditions;
+  return [r.qualifier ? `for ${r.qualifier}` : null, r.fromDay != null ? `from day ${r.fromDay}` : null, r.maxDays != null ? `up to ${r.maxDays} days` : null, ...conditions]
     .filter(Boolean).join(" · ");
 }
 
