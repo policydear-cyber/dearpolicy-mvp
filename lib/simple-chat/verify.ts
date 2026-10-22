@@ -391,8 +391,10 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
 /** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
  * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
  * - it is in the same document as the wording, or in a document with the same policy number;
- * - its page names the person, and no other household member and no other insured person (otherLife). A schedule about
- *   one life prints the name once ("Life Assured : ..."), not on the sum insured's line, so the page is what is checked. */
+ * - its page names no other household member and no other insured person (otherLife);
+ * - its line names the person, or names nobody on a page that names them (a one-life schedule prints the name once, as
+ *   "Life Assured : ...", not on the sum insured's line);
+ * - its page prints exactly one figure the size of a sum insured, so it is not another cover's (TE #103 A3). */
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -406,7 +408,14 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (!page) return null;
   const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
   if (otherLife(page.text, person, people)) return null;
-  if (!nameOnPage(person, page.text)) return null;
+  // The base line names the person, or names nobody on a page about them alone (a one-life schedule's "Life Assured : ...").
+  const lines = page.text.split("\n");
+  const line = lines[page.text.slice(0, bf.offset).split("\n").length - 1] ?? "";
+  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return null;
+  // Exactly one line with a sum-sized amount (10,000 or more, printed with thousands separators, so not a phone number
+  // or code) on the page, so it cannot be another cover's sum insured (TE #103 A3).
+  const big = lines.filter((l) => [...l.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g)].some((m) => Number(m[0].replace(/,/g, "")) >= 10000));
+  if (big.length !== 1) return null;
   return bf;
 }
 /** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
@@ -419,7 +428,7 @@ function limitedWords(household: Household, found: Found): boolean {
   // settled what its 100% is of (Critic R126-1).
   const above = page ? page.text.slice(0, found.offset).split("\n") : [];
   if (above.some((l) => /\b(?:sum\s+(?:insured|assured)|benefit\s+limit|limit|%\s*of)\b/i.test(l) && moneyFiguresIn(l).length > 0)) return true;
-  return moneyFiguresIn(words).length > 0 || /\b(?:up\s+to|limits?|limited|max(?:imum)?|whichever|less(?:er)?|greater|caps?|capped|exceed(?:s|ing)?|reduced?|minus|less\s+any|deduct(?:ed)?|balance|instalments?|advance)\b/i.test(words);
+  return moneyFiguresIn(words).length > 0 || /\b(?:up\s+to|limits?|limited|max(?:imum)?|whichever|less(?:er)?|greater|caps?|capped|exceed(?:s|ing)?|reduc\w*|minus|less\s+any|deduct\w*|pro-?rat\w*|proportion\w*|exclud\w*|net\s+of|aggregate\w*|balance|instalments?|advance)\b/i.test(words);
 }
 /** The amount a statement may show, or why it may not. An amount is a currency-signed figure printed in the quote, or a
  * percentage the quote prints of the sum its own table heading prints on the same page. A percentage of the sum insured is

@@ -187,7 +187,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
     const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
-      && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && coreName(o.benefit) === coreName(row.benefit)
+      && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
@@ -208,9 +208,19 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   return { json: { ...(json as object), statements }, report };
 }
 
-/** A benefit's name without its section ("Simple Fracture ...: Neck, Skull or Spine (Full Break)"), row letter, case or
- * punctuation: how one benefit printed in two documents is matched. */
-const coreName = (benefit: string) => benefitName(benefit.slice(benefit.lastIndexOf(": ") + 1).trim()).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** A benefit's name without its row letter, case or punctuation, split into its section ("Simple Fracture ...") and the
+ * benefit ("Neck, Skull or Spine (Full Break)"). */
+const nameParts = (benefit: string) => {
+  const at = benefit.lastIndexOf(": ");
+  const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
+};
+/** One benefit printed in two documents: the same name, or the same benefit where only one of them prints a section
+ * before it. Two different sections ("Simple Fracture: Wrist", "Compound Fracture: Wrist") are different benefits (TE #103 C4). */
+function sameBenefit(a: string, b: string): boolean {
+  const x = nameParts(a), y = nameParts(b);
+  return x.core === y.core && (x.section === y.section || x.section == null || y.section == null);
+}
 
 const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind === "worked_out") && (b.kind === "printed" || b.kind === "worked_out")
   && Math.abs(a.amount - b.amount) < 0.005 && (a.kind === "printed" ? a.unit : "lump_sum") === (b.kind === "printed" ? b.unit : "lump_sum");
