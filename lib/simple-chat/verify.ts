@@ -414,22 +414,25 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (want == null) return null;
   // Words a plan row's name may print besides the benefit's: the product's name as the app read it (the document's own
   // record, or the server's label for a table row; never the model's words).
-  const product = [wdoc, ...(samePolicy ? [bdoc] : [])].flatMap((d) => tokens(d.productName ?? ""));
+  // A rider's words in the product's name ("... II with Early Critical Illness Rider") are not the plan's (TE #104 P2).
+  const product = [wdoc, ...(samePolicy ? [bdoc] : [])].flatMap((d) => tokens((d.productName ?? "").split(RIDER_PART)[0]));
   return planSumAssured(household, [wording.docIndex, ...(samePolicy && bf.docIndex !== wording.docIndex ? [bf.docIndex] : [])], wording, person, want,
     new Set([...product, ...(serverWords.has(st.text) ? tokens(st.text) : [])]));
 }
 /** A policy schedule's plan table: a header line with exactly one "Sum Assured" (or "Sum Insured") column, which may be
  * printed over two lines ("Sum" above "Assured/"), and the first row under it, with as many cells: the basic plan, whose
- * sum assured is "the Sum Assured" its wording pays a percentage of. Any amount between the header and the row (another
- * row above it) makes it no first row. The row's name is its first cell and the lines right after it that continue the
+ * sum assured is "the Sum Assured" its wording pays a percentage of. Only the header's own continuation lines (each with
+ * a tab) may come between the header and the row: an amount, or a line with no tab (a row's name printed above its cells,
+ * "Early" over "Critical Illness\t50,000.00"), makes it no first row (TE #104 P1). A rider's row is never the plan's. The row's name is its first cell and the lines right after it that continue the
  * name ("Comprehensive Critical" / "Illness Benefit"). */
 const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
+const RIDER_PART = /\b(?:with|riders?|plus|supplementary|add-?ons?)\b|[+&]/i;
 const SA_CELL = /^(?:S\$|SGD|US\$|\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$/;
 function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
   const cells = lines[i].split("\t").map((c) => c.trim());
   if (cells.length < 2 || !/[A-Za-z]/.test(cells[0]) || /\d/.test(cells[0])) return null;
   for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
-    if (AMOUNT.test(lines[j])) return null;
+    if (AMOUNT.test(lines[j]) || !/\t/.test(lines[j])) return null;
     const head = lines[j].split("\t").map((c) => c.trim());
     if (head.length !== cells.length) continue;
     const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
@@ -438,6 +441,7 @@ function planRow(lines: string[], i: number): { name: string; value: number; lin
     if (!cell) return null;
     let name = cells[0];
     for (const l of lines.slice(i + 1, i + 3)) { if (!l.trim() || /\t|\d/.test(l)) break; name += ` ${l.trim()}`; }
+    if (RIDER_PART.test(name)) return null;
     return { name, value: Number(cell[1].replace(/,/g, "")), line: lines[i] };
   }
   return null;
@@ -1098,7 +1102,10 @@ export function personalFileName(name: string): string | null {
 
 /** What the library records about a file, in the server's words. */
 /** A question about the library itself: which documents there are, or whose. */
-const ABOUT_DOCUMENTS = /\b(?:documents?|files?|uploads?|uploaded|paperwork)\b/i;
+const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\bfile\b(?!\s+(?:(?:a|an|the|my|your|his|her|their|our|this)\s+)?claims?\b)/i;
+/** A question about claiming ("how do I file a claim", "what documents do I need to claim") is not about the library,
+ * unless it also asks what was uploaded or linked (TE #104 L9). */
+const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
@@ -1256,7 +1263,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         const di = Number.isFinite(preferred) ? (preferred as number) : -1;
         // When the question is about the documents themselves ("show me Charmaine's documents"), any unquoted point about one
         // file is said the same way (release-set E4).
-        if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || ABOUT_DOCUMENTS.test(written[0] ?? ""))) {
+        if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || aboutLibrary(written[0] ?? ""))) {
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
           continue;
         }

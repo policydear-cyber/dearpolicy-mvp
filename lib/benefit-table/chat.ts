@@ -401,13 +401,20 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
   // The rows behind the cards: the row whose server label a card reads.
   const labelled = new Set(labels);
   const carded = rows.filter((r) => cards.some((c) => c.text === rowLabel(r, coverLabels(rows), benefitNames(rows)) && labelled.has(c.text)));
-  const coverText = (p: string) => rows.filter((r) => baseName(r.person) === p).map((r) => [r.product, r.cover, r.plan, r.benefit].join(" ")).join(" ").toLowerCase();
+  const rowText = (r: ChatRow) => [r.product, r.cover, r.plan, r.benefit].join(" ").toLowerCase();
+  // Y is shut out of a cover the answer itself shows is Y's: a card of Y's, or Y's own row for a carded benefit, of the
+  // kind the sentence names. A card of Y's for another cover says nothing about it ("Only Wei Ming has the Term Life
+  // policy" beside her accident card, while her term life is a group policy, TE #104 S4).
+  // The product and cover names' own words ("savemore", "shield"), so a sentence naming a policy is held to that policy.
+  const GENERIC = new Set(["group", "scheme", "plan", "cover", "policy", "benefit", "benefits", "insurance", "with"]);
+  const productWords = new Set(rows.flatMap((r) => `${r.product} ${r.cover}`.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 4 && !GENERIC.has(w)));
   const has = (p: string, sentence: string) => {
-    const kinds = [...sentence.toLowerCase().matchAll(new RegExp(COVER_KIND.source, "gi"))].map((m) => m[0]).filter((w) => !NOT_COVER_WORD.has(w));
-    const theirs = coverText(p);
-    if (kinds.some((k) => !theirs.includes(k))) return false;
-    if (cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
-    return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
+    const kinds = [...sentence.toLowerCase().matchAll(new RegExp(COVER_KIND.source, "gi"))].map((m) => m[0]).filter((w) => !NOT_COVER_WORD.has(w))
+      .concat(sentence.toLowerCase().split(/[^a-z]+/).filter((w) => productWords.has(w)));
+    const named = (r: ChatRow) => kinds.every((k) => rowText(r).includes(k));
+    if (carded.some((r) => baseName(r.person) === p && named(r))) return true;
+    if (!kinds.length && cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
+    return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && named(o) && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
   };
   // Only ownership or exclusivity is read ("belongs to Desmond, not Charmaine", "Desmond's alone", "only Desmond has it"). A
   // sentence that gives a reason or a condition ("Tan does not get the ambulance benefit, because no ambulance was used") is

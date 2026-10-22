@@ -595,6 +595,12 @@ test("100% of the Sum Assured is the plan table's own Sum Assured cell, read onl
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED)).amounts, ok);
   // A row above the plan's (a rider printed first) makes it no first row: refused.
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t300,000.00", "Early Critical Illness Rider\t50,000.00\t12.00\t-\t-\t-\nComprehensive Critical\t300,000.00"))).amounts, []);
+  // A rider printed as the only first row, its name on the line above its cells or with the product's rider words, is
+  // never the plan's Sum Assured, even when the base worked out is the rider's figure (TE #104 P1, P2).
+  const rider = (row: string) => PLAN_SCHED.replace("Comprehensive Critical\t300,000.00", `${row}\t50,000.00\t12.00\t-\t-\t-\nComprehensive Critical\t300,000.00`);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early\nCritical Illness"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Early Critical Illness Rider\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early Critical Illness Rider"), [], "Comprehensive Critical Illness II with Early Critical Illness Rider")).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Early Critical Illness\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early Critical Illness"), [], "Comprehensive Critical Illness II with Early Critical Illness Rider")).amounts, []);
   // A first row naming another benefit ("Critical Illness Hospital Income") or words beyond the product's name is refused.
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t", "Critical Illness Hospital Income\t").replace("\nIllness Benefit\n", "\n"))).amounts, []);
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED, [], "Shield Plan")).amounts, []);
@@ -755,6 +761,11 @@ test("a sentence that shuts a person out of a cover their own cards or rows show
     r = shutOut("Here it is.", [hips[0], fact(s)]);
     assert.deepEqual(r.left, [], s);
   }
+  // A card of hers for another cover or policy says nothing about this one (TE #104 S4).
+  for (const s of ["Only Lim has the SaveMore policy.", "The SaveMore policy belongs to Lim, not Tan Mei Ling."]) {
+    r = shutOut("Here it is.", [hips[1], fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
   // Naming both, or saying what is the person's own, shuts no one out.
   for (const s of ["Lim and Tan Mei Ling each have their own accident cover.", "The amount below is Lim's own accident cover."]) {
     r = shutOut(s, hips);
@@ -793,6 +804,9 @@ test("what prose says about the library is held to the library's own record (liv
   r = run("Mei Ling has two documents.", [{ text: "The group certificate for the scheme.", document: "D1" }, { text: "The scheme's terms.", document: "D2" }]);
   assert.equal(r.texts.length, 2);
   assert.match(r.texts[0], /^Certificate \(Certificate\.pdf\) was read\. It is linked to Lim Ah Kow and Tan Mei Ling in DearPolicy\. It was uploaded for Tan Mei Ling\.$/);
+  // Asked how to file a claim, or which documents a claim needs, the question is not about the library (TE #104 L9).
+  for (const q of ["how do I file a claim for Lim's hip", "what documents do I need to claim"])
+    assert.deepEqual(run("Here.", [{ text: "Notice must be given within 30 days.", document: "D2" }], q).texts.filter((t) => /was read\./.test(t)), [], q);
   // Not asked about documents, it is not.
   assert.equal(run("Here.", [{ text: "The group certificate for the scheme.", document: "D1" }], "how much is the accident cover").texts.length, 0);
 });
