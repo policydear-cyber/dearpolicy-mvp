@@ -4832,3 +4832,35 @@ The LEFT_OUT_FACT notice is removed. A left-out amount still shows LEFT_OUT_AMOU
 - benefit-table test: 105/105
 
 simple-answer chat-test, style-test and offline-test need `@anthropic-ai/sdk` or React, which this sandbox lacks, so I did not run them. I ran the verify-level probes above instead.
+
+## Round 125: PR #102 at 501fe7c (delta from cdc9105)
+
+**Verdict: READY.** All four R124 findings are fixed. One low note, not blocking.
+
+- **R124-1 is fixed.** `documentCurrency` (`verify.ts:131-154`) now treats as "other" all of the following:
+  - any "dollar(s)" not after "Singapore";
+  - a listed foreign code next to a number, in capitals;
+  - any letters-then-"$" sign other than S$/SG$/SGD$;
+  - any other currency sign, "Rs";
+  - currency names, and foreign-currency or exchange-rate clauses.
+
+  All my R124 probes now return null: U.S. dollars, yen, RMB, NT$, Canadian dollars, Rs/₹, USD100,000 and "Policy Currency: USD". "GPA 600 / GTL" (scheme codes) still resolves to SGD. On the real snapshot, the 17-page MINDEF benefit summary still resolves its 19 bare "$" to S$. The scope is still the amount's own document.
+- **R124-2 is fixed.** Both `prompt.ts` and `answer-style.md` now use the neutral line: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." "Each paid on its own terms" appears nowhere in either, and style-test asserts its absence. Printed rules are named for the model to quote: one scheme only, instead of / reduces, balance of the sum insured, cover ends after a full payment. `RULE_PAGE` now also matches coordination wording. On the snapshot it sends 93 rule pages instead of 81, adding 12, including D1 p7 (Core-or-Voluntary note) and D2 p3 (terminated upon payment of the full sum insured).
+- **R124-3 is fixed.** Claim steps are suppressed only for "not covered" and "cover ended". For "not shown to be covered", a printed deadline is given as a condition ("If FWD confirms cover, claim within 30 days …"), and the prompt adds "Missing wording is not an exclusion".
+- **R124-4:** accepted as DC's style choice. No change needed.
+- **TE fixes checked.**
+  - The "different figures" sentence is removed only when the server's notes cover every amount shown (`differOk`).
+  - `onlyNotATotal` now keeps any sentence with a condition or time word (if, when, after, only, dated…).
+  - Re-running my R121 and R122 probes: 1 server not-a-total note and 2 amounts in every case.
+  - `docLabel` tells apart documents that would read the same by upload date, then by "file N of M".
+  - `personalFileName` hides WhatsApp, Screenshot, PXL and "document (3)" names.
+
+### R125-1 (low, not blocking)
+`\bwon\b` also matches "won't", so a Singapore document that says "we won't pay" falls back to "Currency not stated" for its bare "$". This errs on the safe side (it withholds, never mislabels). It only costs the improvement in such documents. A later fix is `\bwon\b(?!['’]t)`.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 46/46
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+style-test (which now covers R124-1/2/3) needs React, which this sandbox lacks, so I did not run it. I re-ran the verify-level probes directly instead.
