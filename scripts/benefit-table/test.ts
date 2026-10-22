@@ -6,6 +6,7 @@ import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 import { LINKING_SCHEMA, READING_SCHEMA } from "@/lib/benefit-table/reading";
+import { sourcesOf } from "./read";
 
 let passed = 0;
 const failures: string[] = [];
@@ -740,6 +741,11 @@ test("the reading schema stays within the API's limit of 16 nullable fields, and
   const benefits = (READING_SCHEMA as unknown as { properties: { benefits: { items: { required: string[]; properties: Record<string, unknown> } } } }).properties.benefits.items;
   assert.ok(!benefits.required.includes("fromDay") && "fromDay" in benefits.properties && !JSON.stringify(benefits).includes('"optional"'));
   for (const k of ["value", "percentOf", "baseAmount", "baseQuote", "cap", "capQuote", "quote", "page"]) assert.ok(benefits.required.includes(k), k);
+});
+test("the reading CLI passes the household's names to the checks, so a page naming another member gives no premium (TE #97)", () => {
+  const snap = { accountId: "a", members: [{ name: "Lim Wei Jie (self)", relationship: "self" }, { name: "Tan Mei Ling", relationship: "spouse" }],
+    documents: [{ policyId: "p1", name: "s.pdf", processingStatus: "ready", pages: [{ page: 1, text: "x" }] }] } as unknown as Parameters<typeof sourcesOf>[0];
+  assert.deepEqual(sourcesOf(snap)[0].people, ["Lim Wei Jie", "Tan Mei Ling"]);
 });
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
