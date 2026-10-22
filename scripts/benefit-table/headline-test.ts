@@ -1,0 +1,79 @@
+/** Scripted tests for Coverage's summary of a cover (lib/benefit-table/headline.ts): which rows lead the card, how each
+ * amount is worded, and the grouping of the full list. Synthetic rows only.
+ *   npm run benefit-table:headline-test */
+import assert from "node:assert/strict";
+import { bySection, keyBenefits, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+
+let passed = 0;
+const failures: string[] = [];
+function test(name: string, fn: () => void) {
+  try { fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+const row = (benefit: string, o: Partial<SummaryRow> = {}): SummaryRow => ({ benefit, section: null, pays: "amount",
+  figure: { kind: "printed", amount: 1000, currency: "SGD", unit: "lump_sum" }, qualifier: null, fromDay: null, maxDays: null, conditions: [], ...o });
+const amount = (benefit: string, n: number, o: Partial<SummaryRow> = {}) => row(benefit, { figure: { kind: "printed", amount: n, currency: "SGD", unit: "lump_sum" }, ...o });
+const charged = (benefit: string) => row(benefit, { pays: "as_charged", figure: { kind: "none", why: "paid as charged, no limit printed on this row" } });
+const names = (rows: SummaryRow[]) => keyBenefits(rows).map((i) => rows[i].benefit);
+
+test("death, disability and critical illness lead, then ward and surgery, then the deductible, then the largest amounts", () => {
+  const rows = [amount("Funeral expenses", 5000), amount("Skull", 5000), amount("Wrist", 1000), row("Deductible", { figure: { kind: "printed", amount: 3500, currency: "SGD", unit: "per_period", period: "year" } }),
+    charged("Surgical fees"), amount("Accidental death", 250000), amount("Hip or thigh bone", 3000)];
+  assert.deepEqual(names(rows), ["Accidental death", "Surgical fees", "Deductible", "Funeral expenses", "Skull", "Hip or thigh bone", "Wrist"]);
+});
+test("at most 8 key rows", () => {
+  const rows = Array.from({ length: 20 }, (_, i) => amount(`Benefit ${i}`, 1000 + i));
+  assert.equal(keyBenefits(rows).length, MAX_KEY);
+  assert.equal(names(rows)[0], "Benefit 19");
+});
+test("a cover that is mostly 'as charged' shows at most 5", () => {
+  const rows = [charged("Ward and treatment"), charged("Intensive care unit"), charged("Surgical fees"), charged("Day surgery"), charged("Room and board"),
+    charged("In-patient specialist"), charged("Surgeon's fees, second"), amount("Stroke rehabilitation", 2000)];
+  assert.equal(keyBenefits(rows).length, MAX_KEY_AS_CHARGED);
+});
+test("a projection, a 'not covered' row, a row with no amount and a repeated name never lead", () => {
+  const rows = [row("Death", { figure: { kind: "projected", amount: 900000, currency: "SGD", basis: "non_guaranteed", asOf: null } }),
+    row("Critical illness", { pays: "not_covered", figure: { kind: "none", why: "printed as not covered" } }),
+    row("Terminal illness", { pays: "words", figure: { kind: "none", why: "no figure printed" } }),
+    charged("Cancer drug treatment"), amount("Wrist", 1000), amount("wrist", 2000)];
+  assert.deepEqual(names(rows), ["wrist"]);
+});
+test("no key rows from an empty cover", () => assert.deepEqual(keyBenefits([]), []));
+
+test("amounts are worded as printed, never changed", () => {
+  assert.equal(shortFigure(charged("Ward")).text, "As charged");
+  assert.equal(shortFigure(row("x", { pays: "up_to", figure: { kind: "printed", amount: 5000, currency: "SGD", unit: "up_to" } })).text, "Up to S$5,000");
+  assert.equal(shortFigure(row("x", { pays: "per_day", figure: { kind: "printed", amount: 150, currency: "SGD", unit: "per_day" } })).text, "S$150 a day");
+  assert.equal(shortFigure(row("x", { figure: { kind: "printed", amount: 2.5, currency: "SGD", unit: "lump_sum" } })).text, "S$2.50");
+  assert.equal(shortFigure(row("x", { pays: "not_covered", figure: { kind: "none", why: "printed as not covered" } })).text, "Not covered");
+});
+test("a worked-out amount shows how it was worked out, and a capped one says 'up to'", () => {
+  const w = shortFigure(row("Loss of one eye", { pays: "percent", figure: { kind: "worked_out", amount: 125000, currency: "SGD", how: "50% of S$250,000" } }));
+  assert.deepEqual(w, { text: "S$125,000", note: "50% of S$250,000" });
+  const c = shortFigure(row("x", { pays: "percent", figure: { kind: "worked_out", amount: 5000, currency: "SGD", how: "20% of S$200,000 is more than the most it pays", capped: true } }));
+  assert.equal(c.text, "Up to S$5,000");
+});
+test("a projection says it is not an amount held or payable; a row with no amount says why", () => {
+  const p = shortFigure(row("x", { figure: { kind: "projected", amount: 90000, currency: "SGD", basis: "non_guaranteed", asOf: "2040" } }));
+  assert.equal(p.text, "S$90,000 projected"); assert.match(p.note!, /not guaranteed: not an amount held or payable/);
+  assert.deepEqual(shortFigure(row("x", { pays: "words", figure: { kind: "none", why: "no figure printed" } })), { text: "See the page", note: "no figure printed" });
+});
+test("an amount with no currency says so", () => {
+  assert.equal(shortFigure(row("x", { figure: { kind: "printed", amount: 500, currency: null, unit: "up_to" } })).text, "Up to $500 (currency not stated)");
+});
+test("who the figure is for is always shown with it (Critic R89-1), with its days", () => {
+  assert.equal(rowDetail(row("Juvenile illness", { qualifier: "child", fromDay: 2, maxDays: 90, conditions: ["after 90 days of cover"] })), "for child · from day 2 · up to 90 days");
+});
+test("a worked-out amount's note is short when the row carries its percentage and base", () => {
+  const f = { kind: "worked_out" as const, amount: 1000000, currency: "SGD", how: "100% of S$1,000,000 (GROUP TERM LIFE, Certificate.pdf p1, as of 06/10/2022)" };
+  assert.equal(shortFigure(row("Death", { pays: "percent", percent: 100, base: 1000000, figure: f })).note, "100% of S$1,000,000");
+  assert.equal(shortFigure(row("x", { pays: "percent", percent: 20, base: 200000, figure: { ...f, amount: 5000, capped: true } })).note, "20% of S$200,000, capped at the most it pays");
+});
+test("the full list is grouped by section in first-seen order, with rows that have none last", () => {
+  const g = bySection([{ section: "Fractures", n: 1 }, { section: null, n: 2 }, { section: "Death", n: 3 }, { section: "Fractures", n: 4 }]);
+  assert.deepEqual(g.map((x) => [x.section, x.rows.map((r) => r.n)]), [["Fractures", [1, 4]], ["Death", [3]], ["Other", [2]]]);
+  assert.deepEqual(bySection([{ section: null }]).map((x) => x.section), ["Benefits"]);
+});
+
+console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
+if (failures.length) { for (const f of failures) console.error(" - " + f); process.exit(1); }

@@ -296,12 +296,14 @@ async function main() {
     await readBoth(f);
     await assert.rejects(setConfirmation(f.db, A, null, "p1", gpa, "corrected", 0), TableInputError, "the server refuses 0 too");
   });
-  await test("TE: the Correct field saves only what it shows, and shows it before saving", async () => {
+  // The Correct field this test guarded (TE, 41ab81e) is gone: DC decided on 22 Oct 2026 that people never confirm or
+  // correct amounts on Coverage. What is guarded now is that the page has no way to change an amount at all.
+  await test("Coverage has nothing to confirm or correct, and posts nothing that changes an amount", async () => {
     const src = readFileSync("components/benefit-table-coverage.tsx", "utf8");
-    assert.ok(!/replace\(\/\[\^0-9\.\]/.test(src), "no stripping of letters from a typed amount");
-    assert.match(src, /parseAmount\(value\)/);
-    assert.match(src, /Will save \$\{money\(parsed\.amount/);
-    assert.match(src, /disabled=\{busy\|\|!parsed\.ok\}/);
+    assert.doesNotMatch(src, /\/api\/benefit-table\/(?:confirm|link)\b/);
+    assert.doesNotMatch(src, />\s*(?:Confirm|Correct|Undo)\s*</);
+    assert.doesNotMatch(src, /Belongs to/);
+    assert.match(src, /\/api\/benefit-table\/report/);
   });
 
   console.log(`benefit-table service: ${passed} passed, ${failures.length} failed`);
