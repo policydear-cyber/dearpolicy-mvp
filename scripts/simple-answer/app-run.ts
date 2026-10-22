@@ -5,6 +5,8 @@
  *   Estimate (free):  node --import tsx scripts/simple-answer/app-run.ts --questions q.json --household-file snapshot.json
  *   Replay (free):    ... --replay <earlier results.json>   (re-checks the recorded model JSON with today's server checks)
  *   Paid:             ... --paid --model anthropic:claude-sonnet-5-5 --run-id <id> --max-usd <cap> --out <dir>
+ *   Benefit table:    add --table <benefit-table run dir> to answer with the table that run read (scripts/benefit-table/read.ts):
+ *                     its recorded model output is checked and assembled with today's code, nothing is read again
  *
  * A paid call is admitted only if it fits under the cap with no cache hit and a maximum-length answer. One call per turn,
  * no retries; a failed turn ends its conversation. Output holds real household text, so --out must be outside git. */
@@ -20,6 +22,11 @@ import { SIMPLE_SYSTEM_PROMPT } from "@/lib/simple-chat/prompt";
 import { answerAsText, type VerifyReport } from "@/lib/simple-chat/verify";
 import type { StructuredAnswer } from "@/components/answer-cards";
 import { AUTHORISED_CAP_USD, loadQuestions, type Question } from "./compare";
+import { assembleTable, type BenefitTable } from "@/lib/benefit-table/assemble";
+import { checkReading, type CheckedReading } from "@/lib/benefit-table/check";
+import { mergeReadings } from "@/lib/benefit-table/completeness";
+import type { SectionLink } from "@/lib/benefit-table/reading";
+import { chatRows, renderTable } from "@/lib/benefit-table/chat";
 
 export type AppTurn = { id: string; question: string; model?: string; json?: unknown; answer?: StructuredAnswer; text?: string; report?: VerifyReport; usage?: SimpleUsage; usd?: number; ms?: number; stopReason?: string | null; error?: string };
 
@@ -36,10 +43,10 @@ function contextFor(household: Household, conversationId: string, question: stri
 }
 
 /** One question set through runSimpleChat. `model` is the real model (paid) or a replayer. */
-export async function runSet(opts: { household: Household; questions: Question[]; model: SimpleModel; maxUsd?: number; price?: { input: number; output: number; cachedInput?: number } | null; onProgress?: (m: string) => void }) {
+export async function runSet(opts: { household: Household; questions: Question[]; model: SimpleModel; table?: BenefitTable | null; maxUsd?: number; price?: { input: number; output: number; cachedInput?: number } | null; onProgress?: (m: string) => void }) {
   const turns: AppTurn[] = [];
   let spent = 0, stoppedEarly = false;
-  const prefix = tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(opts.household));
+  const prefix = prefixTokens(opts.household, opts.table ?? null);
   for (const q of opts.questions) {
     const history: Turn[] = [];
     for (let i = 0; i < q.turns.length; i++) {
@@ -56,7 +63,7 @@ export async function runSet(opts: { household: Household; questions: Question[]
       try {
         await runSimpleChat(contextFor(opts.household, `app-run-${q.id}`, question), {}, {
           model, household: async () => opts.household, history: async () => history, ledger: false,
-          save: (async (t: Saved) => { got.saved = t; }) as never,
+          save: (async (t: Saved) => { got.saved = t; }) as never, ...(opts.table ? { table: async () => opts.table! } : {}),
         });
       } catch (error) {
         turns.push({ id, question, error: String(error instanceof Error ? error.message : error), ms: Date.now() - started });
@@ -73,6 +80,33 @@ export async function runSet(opts: { household: Household; questions: Question[]
     if (stoppedEarly) break;
   }
   return { turns, spentUsd: spent, stoppedEarly };
+}
+
+/** The cached prefix of every call: the prompt, the documents and, with the benefit table, its rows. */
+function prefixTokens(household: Household, table: BenefitTable | null): number {
+  return tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(household)) + (table ? tokensOf(renderTable(chatRows(table, household))) : 0);
+}
+
+/** The table a benefit-table run read: its recorded model output (each document's reading and page re-reads), checked
+ * and assembled with today's code for this household's members, as the app does, with the run's links. No model call. */
+export function tableFromRun(dir: string, household: Household): BenefitTable {
+  const readings: CheckedReading[] = [];
+  for (const d of household.documents) {
+    const raw = resolve(dir, `raw-${d.policyId}.json`);
+    if (!existsSync(raw)) continue;
+    const doc = { id: d.policyId, name: d.name, readable: d.processingStatus === "ready", pages: d.pages };
+    let reading = checkReading(doc, (JSON.parse(readFileSync(raw, "utf8")) as { json: unknown }).json);
+    for (const p of d.pages) {
+      const pageRaw = resolve(dir, `raw-${d.policyId}-p${p.page}.json`);
+      if (existsSync(pageRaw)) reading = mergeReadings(reading, checkReading(doc, (JSON.parse(readFileSync(pageRaw, "utf8")) as { json: unknown }).json));
+    }
+    readings.push(reading);
+  }
+  if (!readings.length) throw new Error(`${dir} holds no recorded readings for this household's documents`);
+  const linksPath = resolve(dir, "links.json");
+  const links = existsSync(linksPath) ? ((JSON.parse(readFileSync(linksPath, "utf8")) as { json?: { links?: SectionLink[] } }).json?.links ?? []) : [];
+  const family = household.members.map((m, i) => ({ id: `m${i}`, display_name: m.name.replace(/\s*\([^)]*\)\s*$/, "") }));
+  return assembleTable(readings, family, links);
 }
 
 /** A model that answers with the JSON an earlier run recorded, turn by turn, so today's server checks can be re-run free. */
@@ -126,16 +160,19 @@ async function main(argv: string[]) {
   const choice = parseChoice(arg(argv, "--model") ?? "anthropic:claude-sonnet-5-5");
   const price = priceFor(choice);
   if (!price) throw new Error(`No price on file for ${choice.provider}:${choice.model} in lib/ai/providers.ts`);
-  const prefix = tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(household));
+  const tableDir = arg(argv, "--table");
+  const table = tableDir ? tableFromRun(tableDir, household) : null;
+  const rows = table ? chatRows(table, household).length : null;
+  const prefix = prefixTokens(household, table);
   const calls = questions.reduce((n, q) => n + q.turns.length, 0);
   const expected = callUsd(price, { input: 0, cacheWrite: prefix, cacheRead: 0, output: 2500 }) + (calls - 1) * callUsd(price, { input: 1500, cacheWrite: 0, cacheRead: prefix, output: 2500 });
-  console.log(JSON.stringify({ model: `${choice.provider}:${choice.model}`, calls, libraryTokens: prefix, expectedUsd: Number(expected.toFixed(2)) }, null, 1));
+  console.log(JSON.stringify({ model: `${choice.provider}:${choice.model}`, calls, libraryTokens: prefix, ...(table ? { table: tableDir, tableRows: rows } : {}), expectedUsd: Number(expected.toFixed(2)) }, null, 1));
 
   const replay = arg(argv, "--replay");
   if (replay) {
     const recorded = (JSON.parse(readFileSync(replay, "utf8")) as { turns?: AppTurn[] }).turns;
     if (!Array.isArray(recorded) || !recorded.some((t) => t.json)) throw new Error(`${replay} holds no recorded app-path turns (an answer.ts results file has {meta, rows}, not turns)`);
-    const result = await runSet({ household, questions, model: replayModel(recorded, choice) });
+    const result = await runSet({ household, questions, model: replayModel(recorded, choice), table });
     const out = outsideRepo(arg(argv, "--out") ?? resolve(replay, "../replay"));
     mkdirSync(out, { recursive: true });
     writeFileSync(resolve(out, "replay.json"), JSON.stringify({ turns: result.turns }, null, 2));
@@ -153,8 +190,8 @@ async function main(argv: string[]) {
   if (existsSync(resolve(out, "results.json"))) throw new Error(`${out} already holds a run; use a new --run-id`);
   mkdirSync(out, { recursive: true });
   const startedAt = new Date().toISOString();
-  const result = await runSet({ household, questions, model: modelFromChoice(choice), maxUsd, price, onProgress: console.log });
-  const meta = { runId, startedAt, finishedAt: new Date().toISOString(), model: `${choice.provider}:${choice.model}`, path: "lib/simple-chat runSimpleChat", spentUsd: result.spentUsd, stoppedEarly: result.stoppedEarly, maxUsd };
+  const result = await runSet({ household, questions, model: modelFromChoice(choice), table, maxUsd, price, onProgress: console.log });
+  const meta = { runId, startedAt, finishedAt: new Date().toISOString(), model: `${choice.provider}:${choice.model}`, path: "lib/simple-chat runSimpleChat", table: tableDir ?? null, tableRows: rows, spentUsd: result.spentUsd, stoppedEarly: result.stoppedEarly, maxUsd };
   writeFileSync(resolve(out, "results.json"), JSON.stringify({ meta, turns: result.turns }, null, 2));
   writeFileSync(resolve(out, "answers.md"), asMarkdown(result.turns, meta));
   console.log(`Spent US$${result.spentUsd.toFixed(4)}. Wrote ${out}/answers.md`);

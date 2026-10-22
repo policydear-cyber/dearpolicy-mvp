@@ -50,7 +50,7 @@ function squash(s: string): { text: string; at: number[] } {
 const fragmentsOf = (quote: string) => quote.split(/\s*(?:\.{3}|…)\s*/).map((f) => squash(f).text).filter((f) => f.length >= 4);
 
 /** Where a quote was found: the document, the stored page, the stored words, and where on the page they start. */
-export type Found = { docIndex: number; page: number; excerpt: string; offset: number };
+export type Found = { docIndex: number; page: number; excerpt: string; offset: number; end?: number };
 
 /** Where the quote is printed: every fragment on one page, in order. The model's document is tried first, then the rest. */
 export function locateQuote(household: Household, quote: string, preferred: number | null): Found | null {
@@ -73,7 +73,7 @@ export function locateQuote(household: Household, quote: string, preferred: numb
       }
       if (!ok) continue;
       const excerpt = page.text.slice(sq.at[start], sq.at[end - 1] + 1).replace(/[ \t]+/g, " ").trim();
-      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt, offset: sq.at[start] };
+      return { docIndex: di, page: page.page, excerpt: excerpt.length > 700 ? excerpt.slice(0, 700) + "…" : excerpt, offset: sq.at[start], end: sq.at[end - 1] + 1 };
     }
   }
   return null;
@@ -195,10 +195,10 @@ function rowLine(pageText: string, offset: number): { start: number; end: number
 }
 /** A limit or condition on a percentage that working it out would drop (R50-2): it is then never multiplied. "Greater
  * than 8%" on a burns row is a row label, not a limit (R52-2); "whichever is the greater" is. */
-const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
+export const CAPPED = /\b(?:up\s+to|maximum|max\.?|whichever\s+is\s+(?:the\s+)?(?:lesser|greater|lower|higher)|capped|limit(?:ed)?|subject\s+to|balance)\b/i;
 /** The row's own line and the lines that continue it ("15% of Sum Insured" / "or up to S$50,000, whichever is lesser"),
  * up to the next row, bullet or numbered item (R52-1). */
-function rowWithContinuation(pageText: string, offset: number): string {
+export function rowWithContinuation(pageText: string, offset: number): string {
   const row = rowLine(pageText, offset);
   const rest = pageText.slice(row.end + 1).split("\n");
   const more: string[] = [];

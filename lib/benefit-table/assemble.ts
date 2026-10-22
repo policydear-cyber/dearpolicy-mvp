@@ -14,7 +14,7 @@
  * Rows from different documents are never added together; each row stands alone. A cover read from an illustration
  * (a quotation) is not proof that the person holds it. */
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
-import type { CheckedBenefit, CheckedCover, CheckedReading, Source } from "./check";
+import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null };
@@ -22,7 +22,8 @@ export type Figure =
   | { kind: "printed"; amount: number; currency: string | null; unit: "lump_sum" | "up_to" | "per_day" | "per_period"; period?: string | null }
   | { kind: "value"; amount: number; currency: string | null; asOf: string | null }
   | { kind: "projected"; amount: number; currency: string | null; basis: "non_guaranteed" | "illustrated"; asOf: string | null }
-  | { kind: "worked_out"; amount: number; currency: string | null; how: string }
+  /** capped: the percentage came to more than the most the row pays, so the amount is that printed cap. */
+  | { kind: "worked_out"; amount: number; currency: string | null; how: string; capped?: boolean }
   | { kind: "none"; why: string };
 export type TableRow = {
   personId: string; person: string; coverKey: string; product: string; cover: string; plan: string | null;
@@ -36,6 +37,8 @@ export type TableRow = {
   percent: number | null; base: number | null; baseCorrected: boolean;
   /** What a percentage row's percentage is of: the person's sum insured, or a fixed amount printed with it. */
   percentOf: CheckedBenefit["percentOf"] | null;
+  /** Where a percentage row's printed cap is, when it has one. */
+  capSource: Source | null;
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -114,12 +117,20 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays, period: b.period };
   if (b.pays === "value") return { kind: "value", amount: b.value!, currency: b.currency, asOf: b.asOf };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row" : "no figure printed" };
+  // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
+  // worked out: the uncapped figure could be more than it pays.
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt)))
+    return { kind: "none", why: `${b.value}% of ${b.percentOf === "sum_insured" ? "the sum insured" : "a printed amount"}, up to a limit printed with it on p${b.source.page}: see the document` };
+  const capped = (amount: number, currency: string | null, how: string): Figure =>
+    b.cap != null && amount > b.cap
+      ? { kind: "worked_out", amount: b.cap, currency, how: `${how} is more than the most it pays, so up to ${money(b.cap, currency)} (printed with it on p${b.capSource?.page ?? b.source.page})`, capped: true }
+      : { kind: "worked_out", amount, currency, how: b.cap != null ? `${how}, within its limit of ${money(b.cap, currency)}` : how };
   if (b.percentOf === "fixed_amount" && b.baseAmount != null)
-    return { kind: "worked_out", amount: cents(b.value! * b.baseAmount / 100), currency: b.currency, how: `${b.value}% of ${money(b.baseAmount, b.currency)}, printed on the same page` };
+    return capped(cents(b.value! * b.baseAmount / 100), b.currency, `${b.value}% of ${money(b.baseAmount, b.currency)}, printed on the same page`);
   if (b.percentOf === "sum_insured") {
     if (cover.sumInsured == null) return { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` };
-    return { kind: "worked_out", amount: cents(b.value! * cover.sumInsured / 100), currency: cover.currency,
-      how: `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})` };
+    return capped(cents(b.value! * cover.sumInsured / 100), cover.currency,
+      `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})`);
   }
   return { kind: "none", why: `${b.value}% of a base the page does not state` };
 }
@@ -209,7 +220,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         conditions: b.conditions, source: b.source, baseSource: b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays === "percent" ? b.value : null, percentOf: b.pays === "percent" ? b.percentOf : null,
         base: b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
-        baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected" });
+        baseCorrected: b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null });
     }
   }
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
