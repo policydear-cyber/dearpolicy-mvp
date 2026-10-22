@@ -4594,3 +4594,16 @@ Optional fix: keep the product whenever the short name has no cover-type word in
 - test.ts 105/105
 - chat-test 45/45
 - anthropic-post-test 4/4
+
+## Round 118: PR #99 at cc6e495 (delta from 42ac13d)
+
+**Verdict: READY.** No findings.
+
+- **R117-1 is fixed.** A short cover name keeps its product unless it contains a cover-type word (`COVER_KIND`, `chat.ts:60`).
+  - On run-03b the travel cover now reads "Single Trip, plan Business, Travel insurance summary".
+  - The other 6 labels are unchanged, and all 7 are still distinct.
+- **No two covers can share a label.** If any picked label is used by more than one cover, every cover with that label gets its full printed name. Full names are the keys, so they are distinct.
+  - The only way left to collide is contrived: one cover's picked short label would have to equal another cover's full printed name, word for word.
+  - My earlier adversarial case (GTL with policy no. 1, GTL with policy no. 2, and GTL from product B) still gives three distinct labels.
+- **Key rows now show every condition.** `rowDetail` takes no `brief` argument any more, so a key row's detail line is the same as the full list's. That is stricter than R116-1 asked for, and nothing is shortened.
+- **Tests (run locally):** headline-test 13/13, test.ts 105/105, chat-test 46/46.
