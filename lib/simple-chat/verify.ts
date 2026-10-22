@@ -1060,15 +1060,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     }
     uncoveredCard(c, i);
   });
-  // Said once: when a kept point already says these figures differ or are alternatives, the server's own note is not added.
-  const saidApart = (t: string) => /\b(?:not a total|alternatives?|either|differ(?:ent|s)?)\b/i.test(t);
   for (const members of notTotals) {
-    if (statements.some((s) => s.kind === "uncertainty" && saidApart(s.text))) continue;
     const who = members[0].person;
     const shown = members.filter((m) => statements.some((s) => s.amount?.text === m.amount!.text && s.personName === m.person));
     if (shown.length < 2) continue;
     const text = `${shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text)).join(", ").replace(/, ([^,]*)$/, " and $1")}${who ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
     statements.push({ id: `not-total-${statements.length + 1}`, kind: "uncertainty", text, fullText: text, conditions: [] });
+  }
+  // Said once: the server's note, which names the amounts, is always kept (Critic R121-1); a point of the model's own that
+  // only says "not a total" again is left out.
+  if (statements.some((s) => s.id.startsWith("not-total-"))) {
+    const again = statements.filter((s) => s.kind === "uncertainty" && !s.id.startsWith("not-total-") && /\bnot (?:a|the) total\b/i.test(s.text));
+    for (const s of again) statements.splice(statements.indexOf(s), 1);
   }
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
   else if (report.dropped.length) statements.push({ id: "left-out-fact", kind: "uncertainty", text: LEFT_OUT_FACT, fullText: LEFT_OUT_FACT, conditions: [] });

@@ -28,7 +28,7 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 
 ## Follow-ups and corrections
 - Treat a follow-up as part of the same conversation. Answer the new point, building on what was already said.
-- When the household corrects something ("sorry, it was Desmond"), give the corrected answer straight away for the right person or fact. Don't repeat the earlier answer, and don't apologise at length. Open with what changed: "For Desmond, ..."
+- When the household corrects something ("sorry, it was Wei Ming"), give the corrected answer straight away for the right person or fact. Don't repeat the earlier answer, and don't apologise at length. Open with what changed: "For Wei Ming, ..."
 
 ## Keep it short
 - Most answers need two to four points. Use more only when the question asks for a full list.

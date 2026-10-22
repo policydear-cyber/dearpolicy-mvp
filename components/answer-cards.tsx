@@ -93,8 +93,10 @@ function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: st
     {s.personName ? <p className="answer-card-person" data-testid="answer-card-person">For {s.personName}</p> : null}
     <div className="answer-card-amount">
       <strong>{a.text}</strong>
-      {/* No label under the figure ("illustration", "printed amount", "currency not stated"): the footer says what every
-          amount is, and "Where this comes from" says when a document prints a bare "$". */}
+      {/* Only a policy's terms are labelled (Critic R121-3); "illustration", "printed amount" and "currency not stated" are
+          not drawn under every figure: the footer says what every amount is, and "Where this comes from" says when a
+          document prints a bare "$". */}
+      {printed ? <small>Policy terms, not worked out for this case</small> : null}
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
     {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}

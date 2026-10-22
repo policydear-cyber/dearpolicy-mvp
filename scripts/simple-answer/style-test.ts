@@ -45,10 +45,24 @@ t("separate benefits grouped by the model get the server's 'not a total' note on
   const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: two });
   assert.equal(answer.statements!.filter((s) => /not a total/.test(s.text)).length, 1);
 });
-t("when a point already says the figures differ, the server's note is not added again", () => {
+t("the server's note is kept when the model only says the documents differ (Critic R121-1)", () => {
+  const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
+    st({ kind: "uncertainty", text: "The two documents print different figures.", document: "D1" })] });
+  assert.equal(answer.statements!.filter((s) => s.id.startsWith("not-total-")).length, 1);
+  assert.ok(answer.statements!.some((s) => /different figures/.test(s.text)), "the model's own point stays");
+});
+t("a point of the model's that only repeats 'not a total' is left out; the server's note with the amounts stays", () => {
   const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
     st({ kind: "uncertainty", text: "These are different benefits, not a total.", document: "D1" })] });
-  assert.equal(answer.statements!.filter((s) => s.kind === "uncertainty" && /not a total/.test(s.text)).length, 1);
+  const notes = answer.statements!.filter((s) => /not a total/.test(s.text));
+  assert.equal(notes.length, 1);
+  assert.ok(notes[0].id.startsWith("not-total-") && /S\$500/.test(notes[0].text), "the kept note names the amounts");
   assert.equal(answer.statements!.filter((s) => s.amount).length, 2, "both amounts stay");
+});
+t("a missing guide file never stops the chat: the guide is empty (Critic R121-2)", () => {
+  assert.equal(answerStyle("/nonexistent/answer-style.md"), "");
+});
+t("the guide names no real household member (Critic R121-4)", () => {
+  assert.doesNotMatch(readFileSync("lib/chat/answer-style.md", "utf8"), /Desmond|Charmaine/);
 });
 console.log(`style: ${passed} passed, 0 failed`);

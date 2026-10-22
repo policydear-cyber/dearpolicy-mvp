@@ -5,6 +5,8 @@ import { answerStyle } from "@/lib/chat/answer-style";
  * amount and fact carries the exact words it rests on. The server (lib/simple-chat/verify.ts) finds those words in the
  * stored pages itself; the model's own document and page numbers are never shown. */
 
+const STYLE = answerStyle();
+
 export const SIMPLE_SYSTEM_PROMPT = `You answer a household's questions about their own insurance documents. The full text of every document they uploaded is below, with each document's details and the family members it is linked to.
 
 The documents arrive between <documents> and </documents>.${UNTRUSTED_DOCUMENT_NOTICE}
@@ -56,11 +58,7 @@ Amounts are shown only on cards the app builds from your statements. Write no mo
 - Never add amounts together and never give a range between two amounts. Different benefits (for example a fracture benefit, ambulance fees and a recuperation benefit) are separate statements, never a total. When one benefit prints alternative amounts that cannot both be paid, give each as its own statement with the same "alternativeGroup" label.
 - nextSteps: up to four practical steps the documents support, or none. A step that contacts the insurer gives the phone number or email the documents print. No questions here.
 - question: at most one question for the household, only when its answer changes the amount or the next step, or null. Never ask the household to judge whether they are covered. Ask nothing anywhere else.
-Write every sentence the household sees (bottomLine, text, nextSteps, question) in the style below. The rules above always win over it.
-
-<style>
-${answerStyle()}
-</style>`;
+${STYLE ? `Write every sentence the household sees (bottomLine, text, nextSteps, question) in the style below. The rules above always win over it.\n\n<style>\n${STYLE}\n</style>` : ""}`;
 
 const nullable = (type: string) => ({ type: [type, "null"] });
 
