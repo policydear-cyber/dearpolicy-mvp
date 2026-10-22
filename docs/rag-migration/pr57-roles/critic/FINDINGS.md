@@ -5054,3 +5054,58 @@ Trade-off: DC's real CI II base is now refused, so A3 is back to partly right. T
 - benefit-table chat-test: 51/51
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 131: PR #104 at d21672e (round 4, diff vs main)
+
+**Verdict: NOT READY. One blocker (R131-1).** No path I found shows a wrong amount. The blocker is a check that removes true limits and refusals from the answer.
+
+### R131-1 (blocker): `dropPeopleShutOut` removes true conditions and refusals, not only ownership claims
+`chat.ts` `shutOut` treats any "<person> does not / cannot / is not / has no …" as shutting the person out. It removes the sentence whenever that person has a card in the answer, or a row for the same benefit. My probe (`scratchpad/r131/scripts/benefit-table/probe.ts`) uses Tan's hip card plus one uncertainty sentence:
+
+| Sentence | Result |
+|---|---|
+| "Tan Mei Ling does not get the ambulance benefit, because no ambulance was used." | **dropped** |
+| "Tan Mei Ling is not covered for this event, because a hairline crack is not a listed fracture." | **dropped** |
+| "Tan Mei Ling cannot claim the recuperation benefit unless she stays in hospital for 24 hours." | **dropped** |
+| "Tan Mei Ling has no cover under the travel policy." | kept |
+| "…paid only for Lim, not Tan Mei Ling, because it is paid on the insured member's death." | kept |
+
+So the answer becomes more generous than the documents. It loses a refusal, or a condition such as the 24-hour stay. That fails open, and it breaks the rule never to remove a qualifier.
+
+**Fix:** match only ownership or exclusivity wording:
+- "belongs to", "is X's (alone)", "X's, not Y's";
+- "only X has", "not for Y" with no reason after it;
+- "held by X".
+
+Keep every sentence that carries a reason or condition (because, unless, if, until, since, as, only if, without, no … was), or that names a benefit Y has no card for in this answer. The generic negations ("does not", "cannot", "is not", "has no") should never trigger a drop on their own.
+
+### R131-2 (medium, fix in this round): a swapped twin drops the named row's own conditions (from reading the code)
+`checkedRow` swaps a refused named row for a twin with the same figure, benefit and cover from another document. The twin is built with only its own `o.conditions`. Conditions the named row's document prints, from `named.conditions` and the model's conditions quoting that document, are not carried over. When only the refused document prints a condition (a stay length, or proof needed), the card shows the amount without it. This is the same kind of hole as R126-2, in the other direction.
+
+**Fix:** give the twin both rows' conditions, each kept against its own document's page. Alternatively, refuse the swap when `named.conditions` holds anything the twin's do not.
+
+### Checked and holding
+- **(1)/(a) The plan-table Sum Assured read.** It cannot take another row's or another person's cell:
+  - It takes only the **first row** under a header with exactly one Sum Assured column. Any amount line between the header and the row refuses it, so a rider or "Death Benefit 5,000.00" second row is never read.
+  - The row name must hold every word of the wording's heading, and no other word but the product's own name (or a server label).
+  - The page must name the person and no other life (`otherLife`).
+  - Searching is limited to the wording's document, or the base's document when the policy number matches.
+  - Every matching row must print the same sum, and it must equal the model's base.
+  - The card stays on the wording's page, so its conditions are read there, and the basis line names the person, the sum, the document and the page.
+  - All my R126–R130 probes are still refused. Tests 59/59.
+- **(3)/(c) Per child.** `perUnit` only appends the printed words ("per child (up to 2 children)") to the server's label. Nothing multiplies or adds it: the amount stays the printed figure, one card.
+- **(5) First-year premium.**
+  - It is taken only when the premium's page prints exactly one first-year line, ending in a figure with two decimals, with no other life on the page.
+  - It uses the premium's own currency (`premiumCurrency`, so it can show "Currency not stated").
+  - It is labelled "(first policy year only)" and shown after the premium, never as an alternative and never added to it.
+- **(4) Library claims.** Counts are held to the number of documents linked to the person; "uploaded for" / "linked to" claims are held to the record. These are prose-only changes with no amount risk.
+- **H8 policy-number prose.** A number is skipped by the money filter only when the sentence calls it by the label the documents print it under. That is narrow enough.
+
+### Low (not blocking)
+- **R131-3.** `PREMIUM_DECIDES` drops any statement mentioning a premium together with decides / determines / "to rely on". A true fact such as "the premium is waived if the insurer determines you are disabled" (the Premium Waiver, D1 p30) would vanish whole, hiding a documented benefit. Narrow it to "decides which premium" or a premium amount that "applies".
+- **R131-4.** A count sentence with a qualifier ("Desmond has 2 travel documents") is replaced with his total linked count ("Desmond has 5 documents linked"), which changes what was said. Skip sentences with a word between the number and "documents" that is not a count word.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
