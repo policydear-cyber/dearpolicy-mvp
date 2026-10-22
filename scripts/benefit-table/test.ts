@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
+import { LINKING_SCHEMA, READING_SCHEMA } from "@/lib/benefit-table/reading";
 
 let passed = 0;
 const failures: string[] = [];
@@ -728,6 +729,18 @@ test("caps: a reading recorded before caps were read still never shows an uncapp
   assert.equal(f.kind === "worked_out" && f.amount, 500000);
 });
 
+test("the reading schema stays within the API's limit of 16 nullable fields, and an optional field is never required", () => {
+  const unions = (x: unknown): number => {
+    if (!x || typeof x !== "object") return 0;
+    const o = x as Record<string, unknown>;
+    return (Array.isArray(o.type) || Array.isArray(o.anyOf) ? 1 : 0) + Object.values(o).reduce((n: number, v) => n + (Array.isArray(v) ? v.reduce((m: number, y) => m + unions(y), 0) : unions(v)), 0);
+  };
+  assert.ok(unions(READING_SCHEMA) <= 16, `${unions(READING_SCHEMA)} nullable fields`);
+  assert.ok(unions(LINKING_SCHEMA) <= 16);
+  const benefits = (READING_SCHEMA as unknown as { properties: { benefits: { items: { required: string[]; properties: Record<string, unknown> } } } }).properties.benefits.items;
+  assert.ok(!benefits.required.includes("fromDay") && "fromDay" in benefits.properties && !JSON.stringify(benefits).includes('"optional"'));
+  for (const k of ["value", "percentOf", "baseAmount", "baseQuote", "cap", "capQuote", "quote", "page"]) assert.ok(benefits.required.includes(k), k);
+});
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 if (failures.length) process.exit(1);
