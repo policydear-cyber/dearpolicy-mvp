@@ -26,6 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { documentId, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
+import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -210,7 +211,7 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -382,6 +383,91 @@ function sumInsuredBase(st: ModelStatement, found: Found, household: Household, 
   const d = AS_OF.exec(lines[at]);
   return { ok: true, value: want.value, raw: printed[0].raw ?? po.baseAmount, base: { found: bf, cover: head.cover, asOf: d ? `${d[3]}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null } };
 }
+/** The refusals after which a 100% statement may still be its person's printed sum insured (verifyAnswer): the
+ * percentage could not be tied to a table row, or its row prints no sum it is a percentage of. A row whose table prints its
+ * own base has settled the base, and every other refusal (a cap, another cover's sum) stands (Critic R126-1). */
+const NO_PRINTED_BASE = "the row prints no sum it is a percentage of";
+const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figure", NO_PRINTED_BASE]);
+/** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
+ * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
+ * - it is in the same document as the wording, or in a document with the same policy number;
+ * - its page names no other household member and no other insured person (otherLife);
+ * - its line names the person, or names nobody on a page that names them (a one-life schedule prints the name once, as
+ *   "Life Assured : ...", not on the sum insured's line);
+ * - its page prints exactly one benefit amount, of any size, so it is not another cover's (TE #103 A3, Critic R127-1);
+ * - it is printed with the name of the benefit the wording is headed by (R127-1);
+ * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
+ *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
+ *   amount (A10c). */
+function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
+  const po = st.percentOf!;
+  if (!po.baseQuote) return null;
+  const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
+  const bf = locateQuote(household, po.baseQuote, Number.isFinite(preferred) ? preferred : null);
+  if (!bf) return null;
+  const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (bf.docIndex !== wording.docIndex && !(number(wdoc) && number(wdoc) === number(bdoc))) return null;
+  const page = bdoc.pages.find((p) => p.page === bf.page);
+  if (!page) return null;
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  if (otherLife(page.text, person, people)) return null;
+  // The base line names the person, or names nobody on a page about them alone (a one-life schedule's "Life Assured : ...").
+  const lines = page.text.split("\n");
+  const line = lines[page.text.slice(0, bf.offset).split("\n").length - 1] ?? "";
+  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return null;
+  // Exactly one benefit-amount line on the page, of any size ("Death Benefit 5,000.00" counts as much as "300,000.00"); a
+  // premium, total, discount or tax line is not a benefit amount. Two lines cannot say which one the 100% is of (Critic R127-1).
+  const amountLines = lines.filter((l) => AMOUNT.test(l) && !NOT_BENEFIT_AMOUNT.test(l));
+  if (amountLines.length !== 1) return null;
+  // The base's lines (with the line either side, where a wrapped name continues) name the benefit the wording is headed by.
+  const name = headingWords(household, wording);
+  const at = page.text.slice(0, bf.offset).split("\n").length - 1;
+  const near = new Set(tokens(lines.slice(Math.max(0, at - 1), at + bf.excerpt.split("\n").length + 1).join(" ")));
+  if (!name.length || !name.every((w) => near.has(w))) return null;
+  // It is a sum insured: its lines, or the table heading just above them ("Sum Assured / ..."), say so, and its lines are
+  // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
+  const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
+  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return null;
+  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return null;
+  // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
+  // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
+  // make it another benefit's amount, so it is refused (TE #103 A10c).
+  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(/(?:S\$|SGD|US\$|USD|\$)?\s*\d[\d,]*(?:\.\d+)?/gi, " ").replace(/\b(?:SGD|USD)\b/gi, " ");
+  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return null;
+  return bf;
+}
+/** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
+const AMOUNT = /(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|(?<![\w.,])\d+\.\d{2}(?![\d])/;
+const NOT_BENEFIT_AMOUNT = /\b(?:premiums?|instalments?|installments?|total|discount|gst|tax|fees?|charges?|payable\s+for\s+advice)\b/i;
+const HEADING_STOP = new Set(["benefit", "benefits", "the", "of", "and", "for", "on", "a", "an", "to", "in"]);
+/** The name words of the heading above the quoted wording ("2.2. Critical Illness Benefit" gives critical, illness), from
+ * the nearest line above it that is a numbered heading or in capitals. Empty when there is none (refused, fail-safe). */
+function headingWords(household: Household, found: Found): string[] {
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!page) return [];
+  const above = page.text.slice(0, found.offset).split("\n").reverse();
+  for (const l of above) {
+    const t = l.trim();
+    const numbered = /^(?:\d+(?:\.\d+)*\.?|[A-Z]\.)[ \t]+([A-Za-z][A-Za-z &'()/-]{2,60})$/.exec(t);
+    const capitals = !numbered && /^[A-Z][A-Z &'()/-]{2,60}$/.test(t) ? t : null;
+    const heading = numbered?.[1] ?? capitals;
+    if (heading) return tokens(heading).filter((w) => !HEADING_STOP.has(w));
+  }
+  return [];
+}
+/** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
+ * figure ("100% of the Sum Insured, up to S$400,000"), or a line above it on its page prints a sum insured or limit with a
+ * figure. Fail-safe: such wording is never read as the whole sum insured. */
+function limitedWords(household: Household, found: Found): boolean {
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  const words = `${page ? rowWithContinuation(page.text, found.offset) : ""}\n${found.excerpt}`;
+  // A table above that prints its own base ("Accidental Medical Expenses (Sum Insured S$5,000)", "% of S$5,000") has
+  // settled what its 100% is of (Critic R126-1).
+  const above = page ? page.text.slice(0, found.offset).split("\n") : [];
+  if (above.some((l) => /\b(?:sum\s+(?:insured|assured)|benefit\s+limit|limit|%\s*of)\b/i.test(l) && moneyFiguresIn(l).length > 0)) return true;
+  return moneyFiguresIn(words).length > 0 || /\b(?:up\s+to|limits?|limited|max(?:imum)?|whichever|less(?:er)?|greater|caps?|capped|exceed(?:s|ing)?|reduc\w*|minus|less\s+any|deduct\w*|pro-?rat\w*|proportion\w*|exclud\w*|net\s+of|aggregate\w*|balance|instalments?|advance)\b/i.test(words);
+}
 /** The amount a statement may show, or why it may not. An amount is a currency-signed figure printed in the quote, or a
  * percentage the quote prints of the sum its own table heading prints on the same page. A percentage of the sum insured is
  * never multiplied: the documents do not tie a benefit row to one of a person's sums insured, so the percentage is shown as
@@ -418,7 +504,8 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
-    if (!printed || base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
+    if (!printed) return { ok: false, why: NO_PRINTED_BASE };
+    if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
     const cur = currencyOf(printed.raw, page.text, doc);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
@@ -996,7 +1083,16 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
-      const r = checkAmount(st, found, household, person);
+      let r = checkAmount(st, found, household, person);
+      // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
+      // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it
+      // (live run 22 Oct, A3), only where wholeSumInsured finds it is theirs for this policy (Critic R126-1).
+      let whole: string | null = null;
+      if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && person && !limitedWords(household, found)) {
+        const bf = wholeSumInsured(st, found, household, person);
+        const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: bf.excerpt }, bf, household) : null;
+        if (bf && plain?.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
+      }
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
@@ -1009,7 +1105,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, stay: st.perDay && !r.amount.illustration ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: st.perDay && !r.amount.illustration ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
@@ -1117,7 +1213,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const gid = groupOf.get(c);
     statements.push({
       id: `s${i + 1}`, kind, text, fullText: text, personName: c.person, amount: c.amount ? { text: c.amount.text, currencyResolved: c.amount.currencyResolved, illustration: c.amount.illustration } : null,
-      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : null,
+      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : c.whole ?? null,
       conditions, asOf: c.base?.asOf ?? null, source, group: gid ? { id: gid, kind: "either_or", note: ALTERNATIVES_NOTE } : null,
     });
     if (c.stay) {

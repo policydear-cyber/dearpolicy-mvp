@@ -96,6 +96,8 @@ export const documentId = (index: number) => `D${index + 1}`;
 /** Said for every document, so the model can tell "linked to nobody" from "not said" (release-set E1, E3). */
 export const LINKED_TO_NOBODY = "nobody (not linked to anyone in DearPolicy)";
 export const NOT_READABLE = "could not be read";
+/** On a document some of whose pages are not sent: the app read them; never say such a file could not be read (E1, E2). */
+export const PAGES_LEFT_OUT = "the app has read these pages; they are left out of this message only";
 /** Whether the app failed to read (or has not finished reading) this file; its text is not sent or quoted. */
 export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && doc.processingStatus !== "ready";
 
@@ -110,7 +112,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
     : [...sent.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`),
-      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length}"/>`] : [])].join("\n");
+      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length}" note="${PAGES_LEFT_OUT}"/>`] : [])].join("\n");
   return `${head}\n${pages}\n</document>`;
 }
 

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, coverLabels, citedPages, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
-import { escapeText, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
+import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
@@ -319,7 +319,8 @@ async function integration() {
       }
     }
     assert.ok(left > 0 && cited.size > 0, "the household has pages no row cites");
-    assert.match(t.call.library, /<pages_not_sent count="\d+" of="\d+"\/>/);
+    // The note says the left-out pages were read, so a file is never called unreadable (release-set E1, E2).
+    assert.match(t.call.library, new RegExp(`<pages_not_sent count="\\d+" of="\\d+" note="${PAGES_LEFT_OUT}"/>`));
     assert.ok(t.call.library.includes(PAGES_NOTE) && !off.call.library.includes(PAGES_NOTE));
     // Critic R113-1: an uncited page with a waiting period is sent; an uncited claims page is not.
     assert.match(t.call.library, /Waiting Period: no Living Care benefit is payable/);
@@ -419,7 +420,8 @@ test("a label that wraps onto the next line is still found, and only then (CI II
 });
 test("each cover's printed sum insured is a row after the benefit rows, shown from the person's own line", () => {
   const r = answer2(CASH_ROW, [{ row: rowNamed(/^Sum insured/), text: "Sum." }], ["how much CI cover"]);
-  assert.equal(r.rows.at(-1)!.benefit, "Sum insured, dated 19/10/2026");
+  // The schedule's one plain premium line is the cover's premium row, after its sum insured (release-set A6).
+  assert.deepEqual(r.rows.slice(-2).map((x) => x.benefit), ["Sum insured, dated 19/10/2026", "Instalment Premium, Monthly"]);
   assert.ok(r.rows.findIndex((x) => /Hospital Cash/.test(x.benefit)) < r.rows.findIndex((x) => /^Sum insured/.test(x.benefit)));
   assert.deepEqual(r.amounts, ["S$300,000"]);
   const corrected = answer2(CASH_ROW, [{ row: rowNamed(/^Sum insured/), text: "Sum." }], ["x"], [{ personId: "p1", coverKey: coverKeyOf({ product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null }), status: "corrected", sumInsured: 250000 }]);
@@ -434,10 +436,16 @@ test("a premium printed on its own line is read and shown from that line (chat t
   assert.deepEqual(r.amounts, ["S$470.85"]);
 });
 test("a premium is refused on a line that does not say premium, or that is not printed", () => {
+  // The reading's own premium is refused; the page's one plain premium line is then used, from that line (release-set A6).
   for (const premiumQuote of ["Death Benefit\t5,000.00", "Instalment Premium\t: 470.85 extra", undefined]) {
     const sched = schedR({ premium: premiumQuote?.startsWith("Death") ? 5000 : 470.85, premiumQuote });
-    assert.equal(sched.covers[0].premium, null, String(premiumQuote));
+    assert.equal(sched.covers[0].premium, 470.85, String(premiumQuote));
+    assert.equal(sched.covers[0].premiumSource?.excerpt, "Instalment Premium : 470.85 Currency", String(premiumQuote));
   }
+  // With no premium line on the page, none is shown.
+  const none = checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text.replace("Instalment Premium\t: 470.85\tCurrency\n", "") }] }),
+    reading("personal_proof", "CI Plan", [schedCover({ premium: 5000, premiumQuote: "Death Benefit\t5,000.00" })], []));
+  assert.equal(none.covers[0].premium, null);
 });
 
 test("a stay is not worked out past a limit printed with the daily rate (Critic R108-1)", () => {
@@ -458,8 +466,12 @@ test("a stay is not worked out past a limit printed with the daily rate (Critic 
 test("a qualified premium line, another life's or a rider's, is never the cover's premium (Critic R108-2, TE #97)", () => {
   const page = (extra: string) => checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text + "\n" + extra }] }),
     reading("personal_proof", "CI Plan", [schedCover({ premium: 376.68, premiumQuote: extra })], []));
-  for (const line of ["First Year Instalment Premium * : 376.68", "Rider Premium\t: 376.68", "Instalment Premium (Life Assured 2) : 376.68"])
-    assert.equal(page(line).covers[0].premium, null, line);
+  // The qualified figure is never used. The page's one plain line ("Instalment Premium : 470.85") still is, unless the
+  // page names another life; a first-year line on the page is said with it (release-set A6).
+  for (const [line, plain] of [["First Year Instalment Premium * : 376.68", 470.85], ["Rider Premium\t: 376.68", 470.85], ["Instalment Premium (Life Assured 2) : 376.68", null]] as const) {
+    assert.equal(page(line).covers[0].premium, plain, line);
+    assert.equal(page(line).covers[0].premiumNote ?? null, /^First Year/.test(line) ? "the page prints a different premium for the first policy year" : null, line);
+  }
   // Two plain premium lines on one page (one per life): neither is used.
   const two = checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text + "\nLife Assured 2\t: Tan Mei Ling\nInstalment Premium\t: 88.40" }] }),
     reading("personal_proof", "CI Plan", [schedCover({ premium: 470.85, premiumQuote: "Instalment Premium\t: 470.85" })], []));
@@ -496,6 +508,136 @@ test("one premium per policy: a schedule read as two covers gives one premium ro
 test("\"all amounts in Singapore dollars unless stated otherwise\" does not set a currency (TE #97)", () => {
   assert.equal(declaredCurrency("All amounts are in Singapore Dollars unless stated otherwise.\nDeath\t5,000"), null);
   assert.equal(declaredCurrency("Benefits (S$)\nDeath\t5,000"), "SGD");
+});
+
+// ------------------------------------------------------------------ live run 22 Oct (de65355) round 3
+const WORDING = "aaaaaaaa-0000-0000-0000-000000000006", OTHER_POLICY = "aaaaaaaa-0000-0000-0000-00000000000b";
+// One policy document holding its schedule (p3) and wording (p7, p8), as the CI II PDF does; and a group certificate.
+const HOUSE3: Household = { ...HOUSE, documents: [
+  doc(WORDING, "CI policy.pdf", [
+    { page: 3, text: "Assured\t: Lim Ah Kow\nCurrency\t: SGD\nBenefit\tSum Assured\nCritical Illness Benefit\t300,000.00" },
+    { page: 7, text: "CRITICAL ILLNESS BENEFIT\n100% of the Sum Assured will be payable in one lump sum. We will pay the Critical Illness Benefit subject to the following:" },
+    { page: 8, text: "ADVANCE BENEFIT\n100% of the Sum Assured, up to S$400,000, will be payable." },
+    { page: 9, text: "Accidental Medical Expenses (Sum Insured S$5,000)\nMedical expenses\t100%" },
+  ]),
+  doc(OTHER_POLICY, "Certificate.pdf", [{ page: 1, text: "GROUP TERM LIFE\nLim Ah Kow\tS$500,000\nTan Mei Ling\tS$1,000,000\nGROUP PERSONAL ACCIDENT\nLim Ah Kow\tS$600,000" }]),
+] };
+const whole = (quote: string, person = "Lim Ah Kow", baseQuote = "Critical Illness Benefit\t300,000.00", baseAmount = "300,000.00", baseDocument = "D1", H = HOUSE3) => {
+  const { answer: a, report } = verifyAnswer(H, readModelAnswer({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "Critical illness.", person, document: "D1", quote,
+    amount: null, percentOf: { percent: 100, baseAmount, baseDocument, baseQuote }, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]);
+  return { amounts: (a.statements ?? []).filter((x) => x.amount).map((x) => [x.amount!.text, x.basis]), report };
+};
+const LUMP = "100% of the Sum Assured will be payable in one lump sum.";
+test("100% of the sum insured in a policy wording is the person's printed sum insured (release-set A3)", () => {
+  assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  // Wording that limits it (a cap, any figure) is never read as the whole sum insured.
+  assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, []);
+  // A sum insured on a page that does not name the person is not theirs.
+  assert.deepEqual(whole(LUMP, "Tan Mei Ling").amounts, []);
+});
+test("the 100% fallback never takes another policy's or person's sum, or overrides a table's own base (Critic R126-1)", () => {
+  // Another policy's sum (the group certificate's term life line), even on a line naming the person.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Lim Ah Kow\tS$500,000", "S$500,000", "D2").amounts, []);
+  // The spouse's line.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Tan Mei Ling\tS$1,000,000", "S$1,000,000", "D2").amounts, []);
+  // The same policy number does not make a page that names another member the person's own.
+  const sameNumber: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d) => ({ ...d, policyNumber: "P-1" })) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Lim Ah Kow\tS$500,000", "S$500,000", "D2", sameNumber).amounts, []);
+  // A table that prints its own base ("Sum Insured S$5,000") settles it: never the person's S$600,000.
+  assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Lim Ah Kow\tS$600,000", "S$600,000", "D2").amounts, []);
+  assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1").amounts, []);
+  // A page printing two sums insured cannot say which one the wording's 100% is of (TE #103 A3).
+  const two: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nDeath Benefit\t5,000.00\nTerm Rider\t150,000.00" }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", two).amounts, []);
+  // A schedule printing the CI sum and a smaller death benefit: neither is "the" sum insured, whichever line is quoted
+  // (Critic R127-1, the CI II schedule's shape).
+  const withDeath: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85\nDeath Benefit\t5,000.00" }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withDeath).amounts, []);
+  // With one amount line, wording headed by another benefit ("DEATH BENEFIT") never takes the CI line.
+  const deathWording: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
+  assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", deathWording).amounts, []);
+  // The one amount on a one-life schedule that is a limit, not a sum insured, is never the sum insured (TE #103 A10b).
+  const limitOnly: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: "Assured\t: Lim Ah Kow\nCurrency\t: SGD\nCritical Illness Benefit Medical Expenses limit\t15,000.00" }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit Medical Expenses limit\t15,000.00", "15,000.00", "D1", limitOnly).amounts, []);
+  // A line that never says sum insured or sum assured (nor its table heading) is not taken as one.
+  const unnamed: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Benefit\tSum Assured\n", "") }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", unnamed).amounts, []);
+  // Any word on the base line beyond the heading's benefit, "sum insured" and the amount refuses it (TE #103 A10c).
+  const income: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Critical Illness Benefit\t300,000.00", "Critical Illness Hospital Income\t300,000.00") }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Hospital Income\t300,000.00", "300,000.00", "D1", income).amounts, []);
+  // A premium line on the page is not a second benefit amount.
+  const withPremium: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85" }) }) };
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  // Wording that deducts, pro-rates, excludes or aggregates is not the whole sum (TE #103 A5).
+  for (const words of ["after deducting any amount already paid", "pro-rated by age", "in proportion to the loss", "excluding any Advance Payment", "net of any claim paid", "in the aggregate"]) {
+    const H: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 10, text: `TOTAL DISABLEMENT\n100% of the Sum Assured, ${words}.` }] }) };
+    assert.deepEqual(whole(`100% of the Sum Assured, ${words}.`, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", H).amounts, [], words);
+  }
+});
+test("a premium taken from its page has only the currency its line or page settles, never the cover's (Critic R126-4)", () => {
+  const text = "Assured\t: Lim Ah Kow\nInstalment Premium\t: 470.85\nComprehensive Critical Illness Benefit\tS$300,000.00";
+  const r = checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text }] }), reading("personal_proof", "CI Plan", [schedCover({ quote: "Comprehensive Critical Illness Benefit\tS$300,000.00" })], []));
+  assert.equal(r.covers[0].currency, "SGD", JSON.stringify(r.dropped));
+  assert.equal(r.covers[0].premium, 470.85);
+  assert.equal(r.covers[0].premiumCurrency, null);
+  const premiumRow = chatRows(assembleTable([r], family, []), HOUSE2).find((x) => /Premium/.test(x.benefit))!;
+  assert.deepEqual(premiumRow.figure, { kind: "printed", amount: 470.85, currency: null, unit: "lump_sum" });
+});
+test("the same benefit of the same cover in another document is given with it, not added up (release-set B7, H7, H10)", () => {
+  const fracture = checkReading(src(HOUSE.documents[1]), reading("scheme_terms", "Group Scheme", [], [
+    b({ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", page: 2, quote: "Hip 75%" }),
+    b({ benefit: "Ankle", pays: "percent", value: 50, percentOf: "fixed_amount", baseAmount: 5000, baseQuote: "Compensation (% of S$5,000)", page: 3, quote: "Ankle 50%" })]));
+  const OTHER = "aaaaaaaa-0000-0000-0000-000000000007";
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(OTHER, "Benefit summary.pdf", [{ page: 8, text: "Simple Fracture due to Accident: (% of S$5,000)\nB. Hip\t30%\nPayable only if surgery is performed.\nAnkle\t50%" }])] };
+  const other = checkReading(src(H.documents[3]), reading("scheme_terms", "Group Scheme", [], [
+    b({ section: "Fracture", benefit: "Simple Fracture due to Accident: B. Hip", pays: "percent", value: 30, percentOf: "fixed_amount", baseAmount: 5000, baseQuote: "Simple Fracture due to Accident: (% of S$5,000)", page: 8, quote: "B. Hip 30%",
+      conditions: ["Payable only if surgery is performed."] }),
+    b({ section: "Fracture", benefit: "Ankle", pays: "percent", value: 50, percentOf: "fixed_amount", baseAmount: 5000, baseQuote: "Simple Fracture due to Accident: (% of S$5,000)", page: 8, quote: "Ankle 50%" })]));
+  const t = assembleTable([certR, fracture, other], family, [...links, { section: sectionKeyOf(OTHER, { section: "Fracture", column: null }), cover: gpa, why: "fractures" }]);
+  const rs = chatRows(t, H);
+  const ask = (benefit: RegExp) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [],
+      alternativeGroup: null, perDay: null, ofBill: null, row: rs.find((r) => r.person === "Lim Ah Kow" && r.source.documentId === TERMS && benefit.test(r.benefit))!.id }] };
+    const fromRows = amountsFromRows(raw, rs, H);
+    const { answer: a } = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+    return a.statements ?? [];
+  };
+  const hip = ask(/^Hip$/);
+  assert.deepEqual(hip.filter((x) => x.amount).map((x) => x.amount!.text), ["S$450,000", "S$1,500"]);
+  assert.ok(hip.some((x) => /not a total/.test(x.text)), JSON.stringify(hip));
+  // The companion carries its own row's condition, not the named row's (Critic R126-2).
+  assert.deepEqual(hip.find((x) => x.amount?.text === "S$1,500")!.conditions.map((c) => (typeof c === "string" ? c : (c as { text: string }).text)), ["Payable only if surgery is performed."]);
+  // Two different sections of one benefit name are different benefits (TE #103 C4).
+  const C4: Household = { ...H, documents: [...H.documents, doc("aaaaaaaa-0000-0000-0000-00000000000c", "Compound.pdf", [{ page: 1, text: "Compound Fracture: Hip\tS$3,000" }])] };
+  const compound = checkReading(src(C4.documents[4]), reading("scheme_terms", "Group Scheme", [], [b({ section: "Compound", benefit: "Compound Fracture: Hip", pays: "amount", value: 3000, page: 1, quote: "Compound Fracture: Hip S$3,000" })]));
+  const t4 = assembleTable([certR, fracture, other, compound], family, [...links, { section: sectionKeyOf(OTHER, { section: "Fracture", column: null }), cover: gpa, why: "fractures" },
+    { section: sectionKeyOf("aaaaaaaa-0000-0000-0000-00000000000c", { section: "Compound", column: null }), cover: gpa, why: "compound" }]);
+  const rs4 = chatRows(t4, C4);
+  const simpleHip = rs4.find((r) => r.source.documentId === OTHER && /Hip/.test(r.benefit))!;
+  const fromRows4 = amountsFromRows({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [],
+    alternativeGroup: null, perDay: null, ofBill: null, row: simpleHip.id }] }, rs4, C4);
+  const shown4 = (readModelAnswer(fromRows4.json)!.statements ?? []).map((x) => x.quote);
+  assert.ok(!shown4.some((q) => /Compound/.test(q ?? "")), JSON.stringify(shown4));
+  assert.ok(shown4.some((q) => /^Hip/.test(q ?? "")), JSON.stringify(shown4));
+  // The same figure printed again is not given twice.
+  assert.deepEqual(ask(/^Ankle$/).filter((x) => x.amount).map((x) => x.amount!.text), ["S$2,500"]);
+});
+test("a short document no row comes from is sent whole, unless it could not be read; payee rules are sent (release-set E1, E2, H10)", () => {
+  const RECEIPT = "aaaaaaaa-0000-0000-0000-000000000008", LONG = "aaaaaaaa-0000-0000-0000-000000000009", FAILED = "aaaaaaaa-0000-0000-0000-00000000000a";
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents,
+    doc(RECEIPT, "Receipt.pdf", [{ page: 1, text: "Tax invoice\nTotal premium\tS$73.17" }]),
+    doc(LONG, "Brochure.pdf", [1, 2, 3, 4].map((page) => ({ page, text: `Page ${page}` }))),
+    { ...doc(FAILED, "Scan.pdf", [{ page: 1, text: "partial" }]), processingStatus: "failed" }] };
+  const sent = pagesToSend(rows, H);
+  assert.ok(sent.has(`${RECEIPT}#1`));
+  assert.ok(![1, 2, 3, 4].some((n) => sent.has(`${LONG}#${n}`)));
+  assert.ok(!sent.has(`${FAILED}#1`));
+  // At most 15 pages of such documents in all (Critic R126-3).
+  const many: Household = { ...HOUSE, documents: [...HOUSE.documents, ...Array.from({ length: 8 }, (_, i) => doc(`aaaaaaaa-0000-0000-0001-${String(i).padStart(12, "0")}`, `Receipt ${i}.pdf`, [1, 2].map((page) => ({ page, text: `Receipt ${i}` }))))] };
+  const extra = [...pagesToSend(rows, many)].filter((k) => k.startsWith("aaaaaaaa-0000-0000-0001-")).length;
+  assert.equal(extra, 14);
+  const payee = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: 37, text: "All claims will be paid directly to the Insured Person, proper claimant or legal representative, as applicable." }] }) };
+  assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
 });
 
 async function atest(name: string, fn: () => Promise<void>) {

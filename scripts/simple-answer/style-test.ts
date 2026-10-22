@@ -156,4 +156,14 @@ t("a bare $ is S$ only in a document that names Singapore dollars and nothing th
     "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs"])
     assert.equal(documentCurrency(mk(other)), null, other);
 });
+t("a clarifying question says what is settled first; identifiers by their label; counts from links; read files never called unreadable (live run 22 Oct)", () => {
+  const style = answerStyle();
+  assert.match(SIMPLE_SYSTEM_PROMPT, /first say what the documents already settle for each person it could be/);
+  assert.match(style, /If it's Alex, nothing uploaded covers Alex/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /give the one printed next to that same label \(a "Group Policy No\." for the group policy number\)/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /comes only from each document's linked_people/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /never correct an earlier sentence in a later one/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /Never say such a document could not be read or has no text/);
+  assert.ok(RULE_PAGE.test("All claims will be paid directly to the Insured Person, proper claimant or legal representative, as applicable."));
+});
 console.log(`style: ${passed} passed, 0 failed`);

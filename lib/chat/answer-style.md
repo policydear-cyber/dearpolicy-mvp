@@ -26,6 +26,7 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 - Don't repeat in the next steps what the points above already say.
 - Don't restate the question or what the household just said.
 - Don't repeat a caveat already given earlier in the conversation, such as a certificate's date.
+- Never correct yourself later in the same answer ("I'm not sure the count of five is right"). Get the first sentence right instead.
 
 ## Follow-ups and corrections
 - Treat a follow-up as part of the same conversation. Answer the new point, building on what was already said.
@@ -46,10 +47,12 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 - Most answers need two to four points. Use more only when the question asks for a full list.
 - Give up to three next steps, and only when the household would act on the answer.
 - Ask a question back only when its answer changes the amount or the next step, and never more than one.
+- Before asking who is meant, say what is already clear for each person it could be ("If it's Alex, nothing uploaded covers Alex"), so the answer is useful whoever it is.
 
 ## Plain labels
 - Name a benefit the way a person would say it ("the wrist fracture benefit"), and keep the cover's name as the policy prints it.
 - Never show internal labels: document ids (D1, D2), row letters ("J,"), "worked out", "illustration", "as printed", or system words such as "statement" or "row".
+- When asked for a number, give the one printed under the label asked about ("Group Policy No."). Call any other number by its own label.
 - Name a document by its title or what it is ("the Benefit Summary", "your Singlife policy wording"), never by its file name.
 - Never say that you left something out or couldn't find a point. Just answer with what the documents show.
 

@@ -8,9 +8,9 @@
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
 import { figureText } from "./assemble";
-import { benefitNames } from "./headline";
+import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
-import { documentId, escapeText } from "@/lib/simple-chat/library";
+import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
@@ -84,8 +84,9 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
   return new Map(picked.map(([c, l]) => [fullCover(c), used.get(l)! > 1 ? fullCover(c) : l]));
 }
 
-/** A premium row's name: the premium line's own words ("Instalment Premium"), and how often it is paid when printed. */
-const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}`;
+/** A premium row's name: the premium line's own words ("Instalment Premium"), how often it is paid when printed, and that
+ * the first policy year's premium is different when its page says so. */
+const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}${c.premiumNote ? ` (${c.premiumNote})` : ""}`;
 
 /** A cover's own printed figures as rows: its sum insured (as of the date printed with it) and its premium. A sum insured
  * the household corrected is not printed anywhere, so that row has no amount (the Coverage page shows the correction). */
@@ -100,7 +101,7 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
       : { kind: "printed", amount: c.sumInsured, currency: c.currency, unit: "lump_sum" }, c.source));
   }
   if (c.premium != null)
-    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.currency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
   return out;
 }
 
@@ -112,16 +113,29 @@ export function citedPages(rows: ChatRow[]): Set<string> {
 }
 
 /** Wording that can stop a benefit being paid: a waiting or survival period, an exclusion, a pre-existing condition, or a
- * "will not pay". A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
-export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b/i;
+ * "will not pay", or whom a claim is paid to ("paid directly to the Insured Person, proper claimant or legal representative",
+ * release-set H10). A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
+export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b|paid\s+(?:directly\s+)?to\s+the\s+(?:insured|policy\s*holder|life\s+assured|proper|estate|legal|nominee)|proper\s+claimant|legal\s+(?:personal\s+)?representatives?\b|\bnominees?\b/i;
 
+/** Documents of at most this many pages that no row comes from are sent whole (pagesToSend). */
+const SHORT_DOCUMENT_PAGES = 3;
+/** At most this many pages in all are sent for such documents, so a household of many receipts stays small (Critic R126-3). */
+const SHORT_DOCUMENTS_BUDGET = 15;
 /** What the chat sends with the table: the pages its rows come from, and every page of those documents that prints a
- * rule that can stop a payment (RULE_PAGE). Keys as in citedPages. */
+ * rule that can stop a payment (RULE_PAGE). A short document the app has read but no row comes from (a premium receipt)
+ * is sent whole: with none of its pages sent the model said it "could not be read" (release-set E1, E2). Keys as in
+ * citedPages. */
 export function pagesToSend(rows: ChatRow[], household: Household): Set<string> {
   const sent = citedPages(rows);
   const docs = new Set([...sent].map((k) => k.slice(0, k.indexOf("#"))));
-  for (const d of household.documents)
-    if (docs.has(d.policyId)) for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`);
+  let whole = 0;
+  for (const d of household.documents) {
+    if (docs.has(d.policyId)) { for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`); }
+    else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES && whole + d.pages.length <= SHORT_DOCUMENTS_BUDGET) {
+      for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
+      whole += d.pages.length;
+    }
+  }
   return sent;
 }
 
@@ -168,18 +182,48 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // The same row named twice is given once (Critic R91-3).
     if (given.has(row.id)) continue;
     given.add(row.id);
-    const st = statementFromRow(row, raw, labels, names);
-    if (st) {
-      statements.push(st); report.labels.push(String(st.text));
-      if (row.figure.kind === "printed" && row.figure.unit === "per_day")
-        (report.days![String(st.text)] ??= []).push({ fromDay: row.fromDay, maxDays: row.maxDays, alone: dailyRateAlone(row, household) });
+    // The same benefit of the same cover printed in another of the person's documents ("Neck, Skull or Spine (Full Break)"
+    // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
+    // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
+    // H7, H10).
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+      && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
+      // The same figure printed again adds nothing.
+      && !sameFigure(o.figure, row.figure));
+    const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
+    for (const r of [row, ...companions]) {
+      given.add(r.id);
+      // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
+      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === row ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      if (st) {
+        statements.push(st); report.labels.push(String(st.text));
+        if (r.figure.kind === "printed" && r.figure.unit === "per_day")
+          (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
+      }
+      else if (r === row) report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
     }
-    else report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
   }
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
 }
+
+/** A benefit's name without its row letter, case or punctuation, split into its section ("Simple Fracture ...") and the
+ * benefit ("Neck, Skull or Spine (Full Break)"). */
+const nameParts = (benefit: string) => {
+  const at = benefit.lastIndexOf(": ");
+  const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
+};
+/** One benefit printed in two documents: the same name, or the same benefit where only one of them prints a section
+ * before it. Two different sections ("Simple Fracture: Wrist", "Compound Fracture: Wrist") are different benefits (TE #103 C4). */
+function sameBenefit(a: string, b: string): boolean {
+  const x = nameParts(a), y = nameParts(b);
+  return x.core === y.core && (x.section === y.section || x.section == null || y.section == null);
+}
+
+const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind === "worked_out") && (b.kind === "printed" || b.kind === "worked_out")
+  && Math.abs(a.amount - b.amount) < 0.005 && (a.kind === "printed" ? a.unit : "lump_sum") === (b.kind === "printed" ? b.unit : "lump_sum");
 
 /** Whether a daily row's printed words (its line, the lines that continue it, and its quote) hold no limit but its most
  * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked

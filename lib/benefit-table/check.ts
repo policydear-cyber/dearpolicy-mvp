@@ -7,6 +7,7 @@
  * bare "$" stays unresolved. A condition is kept only when its words are printed in this document. Everything dropped
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
+import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -17,32 +18,18 @@ export type SourceDoc = { id: string; name: string; readable: boolean; pages: { 
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
 /** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"),
  * and premiumLabel the words that line prints before it ("Instalment Premium"). */
-export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null };
+export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null;
+  /** Said with the premium when its page also prints a first-year premium ('First Year Instalment Premium * : 376.68'). */
+  premiumNote?: string | null;
+  /** A premium taken from its page's premium line has the currency that line or its page settles, never the cover's
+   * (Critic R126-4); unset, the premium has the cover's currency. */
+  premiumCurrency?: string | null };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
  * "Instalment Premium (Life Assured 2)") is about part of the premium or another life, so it is never used (Critic R108-2,
  * TE #97). */
 const PLAIN_PREMIUM = /^(?:(?:total|annual|yearly|monthly|quarterly|half[\s-]yearly|modal|instalment|installment)\s+)?(?:premium|instalment|installment)(?:\s+(?:paid|payable|amount))?$/i;
-/** Whether a page may name a life other than this person: another household member's name anywhere on it, a word for
- * another insured person (spouse, child, dependant, covered members), a second or joint life, or a life line naming someone
- * else. Fail-safe: a premium on such a page may be the other life's, so it is not used, even when it is in fact this
- * person's (TE #97). */
-const LIFE_LINE = /\b(?:(?:joint\s+)?life\s+(?:assured|insured)|assured|insured(?:\s+person)?|policy\s*holder|proposer|owner)\b[^:\t\n/]{0,20}[:\t][ \t]*:?[ \t]*([^\t\n]+)/gi;
-const HEADER_WORD = /^(?:premiums?|sum|benefits?|cessation|commencement|date|term|plan|amount|policy|basic|rider|insured|assured)$/;
-const OTHER_INSURED = /\b(?:spouses?|wife|husband|child(?:ren)?|sons?|daughters?|dependa?ents?|covered\s+(?:members?|persons?)|insured\s+members?|family\s+members?)\b|\b(?:life\s+(?:assured|insured)|insured(?:\s+person)?|assured)\s*(?:\(?\s*(?:2|3|ii|iii|two)\s*\)?)(?![\d.])|\bsecond\s+(?:life|insured)\b|\bjoint\s+life\b/i;
-function otherLife(pageText: string, person: string, people: string[]): boolean {
-  if (OTHER_INSURED.test(pageText)) return true;
-  const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
-  const same = (name: string) => { const n = normalizePersonName(name.replace(/,/g, " ")).split(" ").filter((w) => w.length > 1); return n.every((w) => own.includes(w)) || own.every((w) => n.includes(w)); };
-  if (people.some((name) => !same(name) && nameOnPage(name, pageText))) return true;
-  return [...pageText.matchAll(LIFE_LINE)].some((m) => {
-    const named = normalizePersonName(m[1].replace(/,/g, " ")).split(" ").filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
-    // A table header ("Assured/ Premium Cessation …") is column titles, not a name.
-    if (named.some((w) => HEADER_WORD.test(w))) return false;
-    return named.length > 0 && !named.every((w) => own.includes(w)) && !own.every((w) => named.includes(w));
-  });
-}
 const premiumLineLabel = (line: string, value: number) => {
   const at = [...line.matchAll(/\d[\d,]*(?:\.\d+)?/g)].find((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
   return at ? line.slice(0, at.index).replace(/(?:S\$|US\$|SGD|USD|\$)\s*$/i, "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
@@ -83,11 +70,6 @@ function asHousehold(doc: SourceDoc): Household {
   return { accountId: "", members: [], documents: [d] };
 }
 
-function nameOnPage(person: string, pageText: string) {
-  const words = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
-  const page = ` ${normalizePersonName(pageText.replace(/,/g, " "))} `;
-  return words.length > 0 && words.every((w) => page.includes(` ${w} `));
-}
 
 /** A printed date ("06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
 export function dateOnPage(date: string | null, pageText: string): string | null {
@@ -249,6 +231,35 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
       startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
   }
+  // A premium the reading did not give is taken from the cover's page when the page prints exactly one plain premium line
+  // and names no other life, the same test as a premium the reading gave (release-set A6: "Instalment Premium : 470.85",
+  // "Premium paid : S$73.17"). It goes on the first cover of that page and person only, as one premium is for the policy.
+  const seen = new Set<string>();
+  for (const c of out.covers) {
+    const key = `${c.page}|${normalizePersonName(c.person)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (out.covers.some((o) => o.page === c.page && normalizePersonName(o.person) === normalizePersonName(c.person) && o.premium != null)) continue;
+    const text = pageText(c.page);
+    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
+    if (lines.length !== 1 || otherLife(text, c.person, doc.people ?? [])) continue;
+    const amount = /^[^\d]*?(?:S\$|US\$|SGD|USD|\$)?\s*(\d[\d,]*(?:\.\d+)?)/.exec(lines[0]);
+    const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
+    if (!Number.isFinite(premium) || premium <= 0) continue;
+    const at = find(lines[0].trim(), c.page);
+    const said = at && at.page === c.page && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
+    if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;
+    const currency = statedCurrencyCode(at.excerpt) ?? declaredCurrency(text);
+    if (c.currency && currency && c.currency !== currency) continue;
+    const frequencies = [...text.matchAll(/\b(?:payment|premium)\s+(?:frequency|mode)\s*[\t:]+\s*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)\b/gi)].map((m) => m[1]);
+    c.premium = premium; c.premiumSource = at; c.premiumLabel = said; c.premiumCurrency = currency;
+    c.premiumFrequency = new Set(frequencies.map((f) => f.toLowerCase())).size === 1 ? frequencies[0] : null;
+  }
+  // The premium line's page also printing a first-year premium (a first-year discount): the plain premium is not what is
+  // paid in the first policy year, so the row says so (release-set A6).
+  for (const c of out.covers)
+    if (c.premium != null && /^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/im.test(pageText((c.premiumSource ?? c.source).page)))
+      c.premiumNote = "the page prints a different premium for the first policy year";
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;
