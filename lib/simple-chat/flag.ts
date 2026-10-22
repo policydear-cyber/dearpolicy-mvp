@@ -12,7 +12,7 @@
  */
 import { isProduction, truthy } from "@/lib/launch/guards";
 import { alphaAccountAllowed } from "@/lib/launch/alpha";
-import type { ModelChoice } from "@/lib/ai/providers";
+import { allowedByPreset, type ModelChoice } from "@/lib/ai/providers";
 
 export type SimpleChatStatus = { enabled: boolean; reason: string; production: boolean };
 
@@ -42,5 +42,6 @@ export function simpleChatModel(env: NodeJS.ProcessEnv = process.env): ModelChoi
   if (!raw) return DEFAULT_SIMPLE_MODEL;
   const m = /^(anthropic|openai):([\w.-]+)$/.exec(raw);
   if (!m) throw new Error(`DEARPOLICY_SIMPLE_CHAT_MODEL must be "anthropic:<model>" or "openai:<model>", not "${raw}"`);
-  return { provider: m[1] as ModelChoice["provider"], model: m[2] };
+  // Under MODEL_PRESET=anthropic a leftover OpenAI setting here is ignored, as for every other job (lib/ai/providers.ts).
+  return allowedByPreset({ provider: m[1] as ModelChoice["provider"], model: m[2] }, env) ?? DEFAULT_SIMPLE_MODEL;
 }
