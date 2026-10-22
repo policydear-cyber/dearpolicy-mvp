@@ -4534,3 +4534,63 @@ Leaving them out of the table and the chat is fail-safe, because no wrong amount
 - `headline-test`: 12/12
 - `test.ts`: 105/105
 - `chat-test`: 44/44
+
+## Round 117: PR #99 at 42ac13d (R116 fixes, short cover names, temperature retry)
+
+**Verdict: READY.** R116-1 and R116-2 are fixed. I found no new blocking issue; one low note is at the end.
+
+### R116-1: fixed
+`rowDetail(r, brief)` (`lib/benefit-table/headline.ts:39-43`) now includes the row's conditions:
+- In the full list, every condition is shown.
+- On a key row, the first condition is shown with "(+N more)".
+
+The component passes `brief` only for key rows, and the headline test covers both cases.
+
+### R116-2: fixed
+- `assembleTable` now records a `source` for each unplaced part: the first benefit of that section.
+- The GET route already sends `unlinkedSections`.
+- The page lists the parts under "Also in your documents", in a collapsed line: "N parts … couldn't be placed under a cover, so they aren't in this summary or in the chat". Each part has its document and a page link.
+
+### Stored corrections
+`tableFor` (`service.ts:108-110`) no longer passes confirmations, so:
+- every amount is the printed or worked-out figure;
+- the chat path that depended on a corrected base (`coverRows`/`baseCorrected`) gets nothing;
+- `staleConfirmations` is empty.
+
+This is consistent with the page having no undo.
+
+### Short cover names: no two covers merge
+`coverLabels` (`chat.ts:57-76`) is keyed by the full printed name, and it decides uniqueness across all the household's covers, not just the ones in one answer:
+- **Unique short name:** the cover is labelled with its short name, which is its own words without the printed policy number, plus the plan.
+- **Shared short name:** the product is added.
+- **Still shared:** the full printed name is kept, policy numbers included.
+
+Checks:
+- **Real table (run-03b):** 7 covers give 7 distinct labels.
+- **Adversarial case:** "A / GTL(POLICY NO. 1)", "A / GTL(POLICY NO. 2)" and "B / GTL" stay distinct, as "A, GTL(POLICY NO. 1)", "A, GTL(POLICY NO. 2)" and "GTL, B".
+- **Checks that compare labels:** `report.labels` and `keepLabelledAmounts` use the same `said` text, so they still match.
+- **Covers that already shared a full name:** two covers whose full printed names were identical already shared a label before this change. For example, two CI II policies with no policy number in their names. That is not new.
+
+### Temperature retry: no loop and no double charge
+`anthropicPost` (`lib/ai/providers.ts:357-364`) sends the request at most twice:
+- It retries only on a 400 whose body mentions temperature, and only while `temperature` is still in the request.
+- The retry drops `temperature`, so a second retry cannot happen.
+- A 400 is not billed.
+- `withRetries` retries only 429 and 5xx errors. So any repeat paid call can only come from those, exactly as before this change.
+
+Other details:
+- The model is remembered for the rest of the process, so later calls skip the 400.
+- Each caller builds a fresh request, so deleting `temperature` from it affects nothing else.
+- The rag2 hosted-model path uses the same helper.
+- Tests: `anthropic-post-test` 4/4.
+
+### R117-1 (low, not blocking): a short name can drop the kind of cover
+On run-03b, "Travel insurance summary, Single Trip, plan Business" becomes "Single Trip, plan Business". The card's citation names the document, so the reader can still tell what it is.
+
+Optional fix: keep the product whenever the short name has no cover-type word in it (life, accident, travel, health, critical, hospital and so on).
+
+### Tests (run locally)
+- headline-test 13/13
+- test.ts 105/105
+- chat-test 45/45
+- anthropic-post-test 4/4
