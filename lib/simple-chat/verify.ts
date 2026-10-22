@@ -893,11 +893,11 @@ function libraryCount(household: Household): string {
 /** How an illustration was worked out, in plain words with its sources. */
 function basisOf(household: Household, c: Checked): string {
   const po = c.s.percentOf!;
-  if (!c.base) return `${po.percent}% of ${po.baseAmount}, worked out from the document's terms`;
+  if (!c.base) return `${po.percent}% of ${po.baseAmount}`;
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf}), worked out from the document's terms`;
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
@@ -1042,7 +1042,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       statements.push({
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
-        basis: `${st.rule} (${st.payable} × ${c.amount!.text}), worked out from the document's terms for the stay you described`,
+        basis: `${st.rule} (${st.payable} × ${c.amount!.text}), for the stay you described`,
         conditions, asOf: null, source, group: null,
       });
     }
@@ -1060,7 +1060,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     }
     uncoveredCard(c, i);
   });
+  // Said once: when a kept point already says these figures differ or are alternatives, the server's own note is not added.
+  const saidApart = (t: string) => /\b(?:not a total|alternatives?|either|differ(?:ent|s)?)\b/i.test(t);
   for (const members of notTotals) {
+    if (statements.some((s) => s.kind === "uncertainty" && saidApart(s.text))) continue;
     const who = members[0].person;
     const shown = members.filter((m) => statements.some((s) => s.amount?.text === m.amount!.text && s.personName === m.person));
     if (shown.length < 2) continue;

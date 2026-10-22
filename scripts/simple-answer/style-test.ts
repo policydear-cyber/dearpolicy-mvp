@@ -1,0 +1,54 @@
+/** Offline test of the chat's tone and style guide and the general clean-ups that go with it: the guide file is loaded
+ * into the simple chat's instructions without displacing the accuracy rules, it is traced into every server route,
+ * a table's row letters are not part of a benefit's name, and "not a total" is said once.
+ *   npm run simple:style-test */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { answerStyle } from "@/lib/chat/answer-style";
+import { SIMPLE_SYSTEM_PROMPT } from "@/lib/simple-chat/prompt";
+import { benefitName } from "@/lib/benefit-table/headline";
+import { verifyAnswer } from "@/lib/simple-chat/verify";
+import type { Household } from "@/lib/simple-chat/library";
+import type { ModelStatement } from "@/lib/simple-chat/prompt";
+
+let passed = 0;
+const t = (name: string, run: () => void) => { run(); passed++; console.log("ok - " + name); };
+
+t("the style guide is read from its file, without the note for people editing it", () => {
+  const style = answerStyle();
+  assert.match(style, /^## Voice/);
+  assert.doesNotMatch(style, /This file sets the tone/);
+  for (const h of ["Answer first", "Only what was asked", "Say each thing once", "Follow-ups and corrections", "Plain labels"]) assert.match(style, new RegExp(`## ${h}`));
+});
+t("the prompt carries the guide after the accuracy rules, which still win", () => {
+  const at = SIMPLE_SYSTEM_PROMPT.indexOf("<style>");
+  assert.ok(at > 0 && SIMPLE_SYSTEM_PROMPT.includes(answerStyle()));
+  assert.ok(SIMPLE_SYSTEM_PROMPT.indexOf("Never add amounts together") < at, "accuracy rules come first");
+  assert.match(SIMPLE_SYSTEM_PROMPT, /The rules above always win over it/);
+});
+t("every server route carries the guide file", () => {
+  assert.match(readFileSync("next.config.ts", "utf8"), /"\/\*\*": \["lib\/chat\/answer-style\.md"\]/);
+});
+t("a table's row letter or number is not part of a benefit's name", () => {
+  const cases: [string, string][] = [["J, Accidental Hospital Recuperation Benefit", "Accidental Hospital Recuperation Benefit"], ["D. Daily Hospital Cash Benefit", "Daily Hospital Cash Benefit"],
+    ["(a) Death", "Death"], ["12. Hip", "Hip"], ["(iv) Loss of limb", "Loss of limb"], ["A Death benefit", "A Death benefit"], ["Arm, Elbow, Wrist or Ribs", "Arm, Elbow, Wrist or Ribs"], ["X-ray", "X-ray"]];
+  for (const [raw, name] of cases) assert.equal(benefitName(raw), name, raw);
+});
+
+const doc = { insurer: "Testlife", productName: "Test Extras", policyNumber: "T2", documentType: "personal_accident", documentRole: "certificate", effectiveDate: "2026-01-01", expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: "Lim Ah Kow", linkedPeople: ["Lim Ah Kow"], supersededAt: null, processingStatus: "ready" };
+const HOUSE = { accountId: "11111111-1111-1111-1111-111111111111", members: [{ name: "Lim Ah Kow", relationship: "self" }],
+  documents: [{ ...doc, policyId: "aaaaaaaa-0000-0000-0000-000000000002", name: "Extras.pdf", pages: [{ page: 1, text: "Ambulance Cost\tUp to S$500 per incident\nAccidental Hospital Recuperation Benefit\tS$250" }] }] } as unknown as Household;
+const st = (x: Partial<ModelStatement>): ModelStatement => ({ kind: "amount", text: "", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, ...x } as ModelStatement);
+const two = [st({ text: "Ambulance cost.", person: "Lim Ah Kow", document: "D1", quote: "Ambulance Cost Up to S$500 per incident", amount: "S$500", alternativeGroup: "x" }),
+  st({ text: "Recuperation benefit.", person: "Lim Ah Kow", document: "D1", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250", alternativeGroup: "x" })];
+t("separate benefits grouped by the model get the server's 'not a total' note once", () => {
+  const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: two });
+  assert.equal(answer.statements!.filter((s) => /not a total/.test(s.text)).length, 1);
+});
+t("when a point already says the figures differ, the server's note is not added again", () => {
+  const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
+    st({ kind: "uncertainty", text: "These are different benefits, not a total.", document: "D1" })] });
+  assert.equal(answer.statements!.filter((s) => s.kind === "uncertainty" && /not a total/.test(s.text)).length, 1);
+  assert.equal(answer.statements!.filter((s) => s.amount).length, 2, "both amounts stay");
+});
+console.log(`style: ${passed} passed, 0 failed`);

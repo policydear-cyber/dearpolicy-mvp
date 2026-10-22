@@ -87,13 +87,14 @@ function Qualifiers({ s }: { s: AnswerStatement }) {
  * comes from as a chip. Nothing that limits the amount moves off its card. */
 function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: string) => void }) {
   const a = s.amount!;
-  // A benefit's printed terms are not worked out for this event: drawn quieter and labelled so, never as a figure for the case.
+  // A benefit's printed terms are not worked out for this event: drawn quieter, never as a figure for the case.
   const printed = s.kind === "benefit_terms";
   return <div className={`answer-card${printed ? " printed" : ""}`} data-testid="answer-card">
     {s.personName ? <p className="answer-card-person" data-testid="answer-card-person">For {s.personName}</p> : null}
     <div className="answer-card-amount">
       <strong>{a.text}</strong>
-      <small>{printed ? "as printed in the policy, not worked out for this case" : a.illustration ? "illustration" : "printed amount"}{a.currencyResolved ? "" : " · currency not stated"}</small>
+      {/* No label under the figure ("illustration", "printed amount", "currency not stated"): the footer says what every
+          amount is, and "Where this comes from" says when a document prints a bare "$". */}
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
     {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}
@@ -167,7 +168,6 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     || steps.some((t) => t === norm(s) || restates(s, t, 0.8));
   const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s)) && !repeats(s)))];
   // An answer with no amount whose points are still to confirm: the bottom line is marked so, not drawn like a finding.
-  const toConfirm = !!bottomLine && !statements.some((s) => s.amount) && statements.some((s) => s.kind === "uncertainty");
   const illustrations = statements.some((s) => s.amount?.illustration);
   const amounts = statements.some((s) => s.amount);
   const fullProse = prose.map(render).filter((t) => t.trim());
@@ -212,7 +212,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     </div>);
   }
   return <div className="answer-cards">
-    {bottomLine ? <p className={`answer-bottom-line${toConfirm ? " to-confirm" : ""}`} data-testid="answer-bottom-line">{toConfirm ? <span className="answer-flag">To confirm</span> : null}{render(bottomLine)}</p> : null}
+    {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
     {blocks}
     {/* What the prose says that no statement covers stays in view, in its own words. */}

@@ -24,7 +24,7 @@ import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyRepo
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
-export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
+export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number }; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
 export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
   /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
@@ -76,13 +76,18 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const message = request.submittedQuestion ?? request.question;
   const model = deps.model ?? modelFromChoice(simpleChatModel());
   const ledger = deps.ledger ?? !deps.model;
-  if (ledger) await assertUnderSpendCap(request.accountId);
-  const household = await (deps.household ?? loadHousehold)(request.accountId);
+  const loadStarted = Date.now();
+  // The spend check, the library, the conversation and the benefit table are read side by side: a person is waiting.
+  const [, household, history, table] = await Promise.all([
+    ledger ? assertUnderSpendCap(request.accountId) : null,
+    (deps.household ?? loadHousehold)(request.accountId),
+    (deps.history ?? conversationTurns)(request.accountId, conversation.id),
+    (deps.table ?? liveTable)(request.accountId),
+  ]);
   if (household.accountId !== request.accountId) throw new Error("The library read is for another household; refusing to answer");
-  const history = await (deps.history ?? conversationTurns)(request.accountId, conversation.id);
-  const table = await (deps.table ?? liveTable)(request.accountId);
   const rows = table ? chatRows(table, household) : null;
   const started = Date.now();
+  const loadMs = started - loadStarted;
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
@@ -91,6 +96,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
+  const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
   const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
@@ -107,7 +113,9 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
   const prior = conversation.state as SimpleChatState;
-  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage), ms: Date.now() - started, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
+  // Where the time went (kept with the turn, no household text): reading the library and table, the model, the checks.
+  const timing = { loadMs, modelMs: modelEnded - started, checkMs: Date.now() - modelEnded };
+  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage), ms: Date.now() - started, timing, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
   const next: SimpleChatState = { ...prior, intent: "policy_question", simpleChat: { turns } };
   delete next.pending;
   await opts.check?.();

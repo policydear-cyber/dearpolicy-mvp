@@ -163,9 +163,9 @@ test("a row for a child says so with its amount (R89-1)", () => {
 });
 test("a percentage of the sum insured says so (R91-1)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }]);
-  assert.match(r.amounts[0]?.text ?? "", /: 75% of the sum insured, worked out\.$/);
+  assert.match(r.amounts[0]?.text ?? "", /: 75% of the sum insured\.$/);
   const a = answer([{ row: idOf("Lim Ah Kow", "Ankle"), person: "Lim Ah Kow", text: "Ankle." }]);
-  assert.match(a.amounts[0]?.text ?? "", /: 50% of the amount printed, worked out\.$/);
+  assert.match(a.amounts[0]?.text ?? "", /: 50% of the amount printed\.$/);
 });
 test("a plan named with a number of 100 or more keeps its amount and its name (R91-2)", () => {
   const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan }));
@@ -233,7 +233,7 @@ test("a bottom line built from the first card shows the label as written (TE, 23
   const raw = { bottomLine: "S$999.", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: idOf("Lim Ah Kow", "Ankle") }] };
   const fromRows = amountsFromRows(raw, rows, HOUSE);
   const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["How much?"], new Set(fromRows.report.labels));
-  assert.match(a.bottomLine ?? "", /Ankle \(.*\): 50% of the amount printed, worked out\./);
+  assert.match(a.bottomLine ?? "", /Ankle \(.*\): 50% of the amount printed\./);
   assert.doesNotMatch(JSON.stringify(a), /[\uff10-\uff19]|999/);
 });
 test("the same row named twice is given once (R91-3)", () => {
@@ -351,7 +351,7 @@ async function integration() {
     const shown = (t.saved.answer.statements ?? []).filter((s) => s.amount);
     assert.equal(shown.length, 1, JSON.stringify(t.saved.answer.statements));
     assert.match(shown[0].amount!.text, /450,000/);
-    assert.match(shown[0].text, /plan 300\): 75% of the sum insured, worked out\.$/);
+    assert.match(shown[0].text, /plan 300\): 75% of the sum insured\.$/);
   });
   await atest("in the app's chat turn, a made-up row is dropped and the household is told an amount was left out", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "amount", text: "made up", person: "Lim Ah Kow", document: null, quote: null, amount: "S$777", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: "R99" }] }), true);

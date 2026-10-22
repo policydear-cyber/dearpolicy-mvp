@@ -1,4 +1,5 @@
 import { UNTRUSTED_DOCUMENT_NOTICE } from "@/lib/documents/evidence";
+import { answerStyle } from "@/lib/chat/answer-style";
 
 /** What the simple chat asks the model for: a short prompt, the household's library, and one JSON answer whose every
  * amount and fact carries the exact words it rests on. The server (lib/simple-chat/verify.ts) finds those words in the
@@ -24,7 +25,9 @@ Who and what:
 - A limit is not a payment: say an expense is reimbursed up to a limit, subject to any co-payment, and never work out what is paid or left over from a bill.
 - When a table prints different figures for different plans, give the figure for the plan the person's proof of cover shows. When it shows no plan, say so and give each plan's figure as its own statement naming the plan. A figure printed once across all the plan columns applies to every plan; say so.
 - When the household adds a fact in a later message (a bill, a stay, a date), answer the question again with that fact applied: lead with what it changes, never open by repeating what they said ("You told me ..."), and keep the next steps.
-- When a question asks how much can be paid for a diagnosis or event, give every benefit in the person's documents that it could fall under, each with the terms it depends on (the covered illness or event it must meet, waiting and survival periods). A sum insured that a product pays in one lump sum on diagnosis or on the event is the amount it pays: give it as an amount. Never answer only that a sum insured does not say what is paid, or only that the insurer decides.
+- When the household corrects the person or a fact, answer again for the corrected person or fact only; the earlier answer is not repeated.
+- A separate benefit that would pay only if something else happened that the household has not mentioned (an ambulance, a hospital stay) is one short "fact" naming it and what it needs, with no amount. Every figure that could apply to the event the household did describe is still given, as below.
+- When a question asks how much can be paid for a diagnosis or event, give every benefit in the person's documents that the event as described falls under, each with the terms it depends on (the covered illness or event it must meet, waiting and survival periods). A sum insured that a product pays in one lump sum on diagnosis or on the event is the amount it pays: give it as an amount. Never answer only that a sum insured does not say what is paid, or only that the insurer decides.
 - Name the covered illness or benefit the event described would fall under (for example a cancer under "Major Cancer"), and say that the document's definition decides. When the documents print which product pays at which stage (a claims table), follow it, and give no amount for a product it says does not pay at that stage; say so in a "fact".
 - The question starts with today's date. When a waiting period runs from a date the documents print (a policy's issue or start date), say whether an event happening now falls inside it; if it does, give no amount for that benefit and say why in a "fact".
 - For "what is X covered for", list the covers on X's own proof of cover. Leave out side benefits and limits nobody asked about.
@@ -53,7 +56,11 @@ Amounts are shown only on cards the app builds from your statements. Write no mo
 - Never add amounts together and never give a range between two amounts. Different benefits (for example a fracture benefit, ambulance fees and a recuperation benefit) are separate statements, never a total. When one benefit prints alternative amounts that cannot both be paid, give each as its own statement with the same "alternativeGroup" label.
 - nextSteps: up to four practical steps the documents support, or none. A step that contacts the insurer gives the phone number or email the documents print. No questions here.
 - question: at most one question for the household, only when its answer changes the amount or the next step, or null. Never ask the household to judge whether they are covered. Ask nothing anywhere else.
-Be brief and plain.`;
+Write every sentence the household sees (bottomLine, text, nextSteps, question) in the style below. The rules above always win over it.
+
+<style>
+${answerStyle()}
+</style>`;
 
 const nullable = (type: string) => ({ type: [type, "null"] });
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { benefitName, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 
 /** Coverage from the benefit table (lib/benefit-table), as a summary to read, with nothing to confirm: for each person,
  * one card per cover with its sum insured, premium and a few key benefits, and every other benefit in a collapsed list
@@ -33,7 +33,7 @@ function PageLink({source}:{source:Source}){
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
 function benefitParts(row:Row){
   const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
-  return {name:<>{row.benefit}{detail?<small>{detail}</small>:null}</>,pays:f.text};
+  return {name:<>{benefitName(row.benefit)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
 }
 
 function CoverCard({cover,rows}:{cover:Cover;rows:Row[]}){

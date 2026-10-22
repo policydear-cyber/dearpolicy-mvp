@@ -87,6 +87,9 @@ const nextConfig: NextConfig = {
       "node_modules/pdfjs-dist/cmaps/**",
       "node_modules/pdfjs-dist/standard_fonts/**",
     ],
+    // The chat's tone and style guide is read from disk at run time (lib/chat/answer-style.ts), which the trace cannot
+    // see; any server route can run a chat job, so every route carries it.
+    "/**": ["lib/chat/answer-style.md"],
   },
 };
 

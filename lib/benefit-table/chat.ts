@@ -8,6 +8,7 @@
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
 import { figureText } from "./assemble";
+import { benefitName } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
@@ -204,8 +205,9 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>): string {
   const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? "up to this limit" : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
-    : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}, ${f.capped ? "up to this limit" : "worked out"}` : null;
-  return `${row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
+    : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}${f.capped ? ", up to this limit" : ""}` : null;
+  // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
+  return `${benefitName(row.benefit)} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
 }
 
 /** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 3037850", "Certificate 000123". */

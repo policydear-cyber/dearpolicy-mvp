@@ -41,6 +41,10 @@ export function rowDetail(r: SummaryRow): string {
     .filter(Boolean).join(" · ");
 }
 
+/** A benefit's name without the row letter or number its table prints before it ("J, ", "D. ", "(a) "): that is the
+ * document's layout, not the benefit's name. Used wherever a benefit is shown (Coverage and the chat). */
+export const benefitName = (benefit: string) => benefit.replace(/^\s*(?:(?:[A-Z]|\d{1,2})\s*[.,):]|\(?(?:[a-z]|[ivx]{1,4})\))\s+(?=[A-Z])/, "").trim() || benefit;
+
 const amountOf = (f: Figure) => (f.kind === "printed" || f.kind === "worked_out" ? f.amount : 0);
 
 /** The rows that lead a cover's card, as indexes into `rows`, in the order shown: death, disability and critical illness;
