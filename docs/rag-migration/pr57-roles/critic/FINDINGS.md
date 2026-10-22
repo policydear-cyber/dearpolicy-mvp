@@ -4382,3 +4382,55 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 - Replays of earlier runs can only lose a premium that the page ties to another member. They can never gain an amount.
 - `test.ts` importing `./read` is safe: `main()` runs only when `argv[1]` ends with `read.ts`.
 - Local results: `scripts/benefit-table/test.ts` 104/104, `chat-test.ts` 42/42.
+
+## Round 113: PR #98 at 4f604d4 (alpha switch-on)
+
+**Verdict: NOT READY.** One high finding, about the narrower page set. The allowlist and the backfill SQL are sound.
+
+### R113-1 (high): the narrower page set hides waiting periods and exclusions from the chat
+`lib/simple-chat/library.ts:110-113` and `lib/simple-chat/hook.ts:89`. With the table on, the model now sees only the pages its rows cite, which is 30 of the 229 pages in the snapshot library. I reproduced that 30/229 figure from run-03b `table.json` plus the snapshot.
+
+**What gets dropped.** Of the 199 pages not sent, 59 print "waiting period", "exclusions", "pre-existing", "will not pay", "does not cover" or "not covered". That is about 156k characters. Breakdown:
+
+| Document | Pages dropped |
+|---|---|
+| Benefit Summary | 6 |
+| Product Summary | 8 |
+| CI II wording | 5 |
+| Life wording | 5 |
+| Travel wording | 30 |
+
+**Concrete case.** Benefit Summary p11 states a 90-day waiting period for Living Care: no Living Care benefit is paid for a heart attack, major cancer and similar conditions diagnosed within 90 days of cover starting. The Living Care rows show "up to S$350,000" with no conditions, and they cite Product Summary p17 and p22, so p11 is not sent.
+
+Ask "I had a heart attack a month after joining, what can I claim?" The model now sees the S$350,000 row and nothing about the waiting period. Before this change, the whole library was sent and the model could raise it. The CI II rows say "The waiting period in Section 3.2", but the page that holds Section 3.2 isn't cited either.
+
+**Why the safeguards don't catch it.** `verifyAnswer` still checks quotes against every stored page, but it does not add waiting periods or exclusions. `PAGES_NOTE` only helps when the model thinks to look for an exclusion it cannot see. So a claimable amount can be shown without the rule that makes it unpayable. That breaks the "never strip a qualifier" rule.
+
+**Fix options, cheapest first:**
+- **(a) Free.** When `pagesSent` narrows the library, every amount statement carries a fixed server-side note: waiting periods and exclusions may be on pages not shown here, so check the full document before claiming.
+- **(b) Recommended.** Also send, for each document that has a cited page, its pages matching a waiting-period / exclusion / pre-existing / "will not pay" / "does not cover" pattern. On this library that adds 59 pages, roughly 62k tokens, taking the prefix from about 85k to about 150k tokens. That is still about half the full library.
+
+Either way, add a chat-test case: a Living Care row with an uncited waiting-period page must not produce a bare S$350,000.
+
+### Allowlist: sound
+- Every caller now passes an account. I checked by grepping all of them: the 3 API routes, `workflow.ts:308`, ledger extract and seed, ingest, and the hook's `liveTable`.
+- The account always comes from the server: `requireHouseholdContext().householdId`, or `request.accountId`. `jobs.ts:40` replays the stored request.
+- An unset or empty list, or a call that names no account, is off in any production build. That includes previews, because `VERCEL` is set there.
+- Comparison is exact after trimming and lower-casing, so neither a substring nor a wildcard matches.
+- No path turns the feature on for an unlisted account.
+
+### Backfill SQL: sound
+- **Readings.** Each reading insert has `WHERE EXISTS` on the policy, with the same `account_id`, active and not superseded, plus `ON CONFLICT (policy_id) DO NOTHING`. A wrong account or policy inserts nothing, and stored readings are never overwritten.
+- **Links.** Link inserts are scoped by `account_id` and use `DO NOTHING`, so the household's own links are kept.
+- **Quoting.** Every value is dollar-quoted with a random tag that is checked against the text, so no reading can end the quote.
+- **Transaction and RLS.** One transaction. No policy or RLS change, and the new rows carry `account_id`, so the existing RLS policies cover them.
+- **Account.** The account in the file matches the snapshot's `accountId`.
+
+Two minor notes:
+- The second undo line deletes every `chosen_by='model'` link for the account, including any the app makes after the import. The plan's "nothing else is touched" overstates it, but the app's own `relink` does the same delete (`service.ts:125`).
+- `links_stored` counts all of the account's links, not only the imported ones.
+
+### Checked locally
+- `scripts/benefit-table/test.ts`: 105/105.
+- `chat-test.ts`: 43/43.
+- `scripts/simple-answer/chat-test.ts` was not run, because `@anthropic-ai/sdk` is missing in my sandbox.
