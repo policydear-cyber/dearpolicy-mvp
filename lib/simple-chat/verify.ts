@@ -1094,6 +1094,8 @@ export function personalFileName(name: string): string | null {
 }
 
 /** What the library records about a file, in the server's words. */
+/** A question about the library itself: which documents there are, or whose. */
+const ABOUT_DOCUMENTS = /\b(?:documents?|files?|uploads?|uploaded|paperwork)\b/i;
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
@@ -1112,6 +1114,59 @@ function libraryCount(household: Household): string {
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
+/** The household members a sentence names, by the words of each one's name that no other member's name has ("Desmond",
+ * "Charmaine"). */
+export function membersNamedIn(household: Household, text: string): string[] {
+  const people = household.members.map((m) => baseName(m.name));
+  const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+  const t = ` ${text.toLowerCase().replace(/[^a-z]+/g, " ")} `;
+  return people.filter((p) => words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w))).some((w) => t.includes(` ${w} `)));
+}
+const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+const DOC_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:[a-z-]+\s+){0,2}?(?:documents?|files?|uploads?)\b`, "i");
+/** The names a sentence can call a document by: its file name when it is a name ("Product Summary.pdf"), and its product. */
+function docNames(d: HouseholdDocument): string[] {
+  const own = personalFileName(d.name);
+  return [own, d.name.replace(/\.[a-z0-9]{2,4}$/i, ""), d.productName].filter((x): x is string => !!x && /[a-z]{3}/i.test(x) && x.split(/\s+/).length <= 8 && !/^[0-9a-f-]{20,}$/i.test(x));
+}
+/** Sentences of the model's own words about the library itself, held to the library's own record (live run 22 Oct, E4, A8):
+ * - a count of a person's (or the household's) documents that is not the count of documents linked to them (or uploaded)
+ *   is replaced by the right count, in the server's words;
+ * - "uploaded for (under) <person>" or "linked (only) to <people>" said of a document the record does not upload for, or
+ *   link to, them is left out.
+ * Any other sentence is kept as written. */
+function libraryClaimsRead(household: Household, left: string[]): (text: string) => string {
+  const live = household.documents.filter((d) => !d.supersededAt);
+  return (text: string) => sentences(text).flatMap((x) => {
+    const named = membersNamedIn(household, x);
+    const count = DOC_COUNT.exec(x);
+    if (count && /\b(?:has|have|had|linked|uploaded|in\s+(?:your|the)\s+library|there\s+(?:are|is))\b/i.test(x) && !/\b(?:print|prints|printed|show|shows|say|says|list|lists|give|gives|differ|different)\b/i.test(x) && named.length <= 1) {
+      const said = COUNT_WORDS.indexOf(count[1].toLowerCase()) >= 0 ? COUNT_WORDS.indexOf(count[1].toLowerCase()) : Number(count[1]);
+      const person = named[0] ?? null;
+      const truth = person ? live.filter((d) => d.linkedPeople.some((p) => baseName(p) === person)).length : live.length;
+      if (said !== truth) {
+        left.push(x);
+        const n = `${truth} document${truth === 1 ? "" : "s"}`;
+        return [person ? `${person} has ${n} linked in DearPolicy.` : `Your library has ${n}.`];
+      }
+    }
+    const docs = live.filter((d) => docNames(d).some((n) => x.toLowerCase().includes(n.toLowerCase())));
+    // "No document is linked to Alex" says what no file is: not a claim about a named file.
+    const negated = (at: number) => /\b(?:no|not|never|none|nothing|neither|nor)\b|n't\b/i.test(x.slice(0, at).split(/[,;]|\b(?:and|but|while)\b/i).pop() ?? "");
+    const uploaded = /\buploaded\s+(?:under|for|in)\b([^.;]*)/i.exec(x);
+    if (uploaded && docs.length && !negated(uploaded.index)) {
+      const whom = membersNamedIn(household, uploaded[1]);
+      if (whom.length && docs.some((d) => !d.uploadedFor || !whom.includes(baseName(d.uploadedFor)))) { left.push(x); return []; }
+    }
+    const linked = /\blinked\s+(only\s+)?to\b([^.;]*)/i.exec(x);
+    if (linked && docs.length && !negated(linked.index)) {
+      const whom = membersNamedIn(household, linked[2]);
+      const to = (d: HouseholdDocument) => d.linkedPeople.map(baseName);
+      if (whom.length && docs.some((d) => whom.some((w) => !to(d).includes(w)) || (!!linked[1] && to(d).some((p) => !whom.includes(p))))) { left.push(x); return []; }
+    }
+    return [x];
+  }).join(" ");
+}
 function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = false): boolean {
   // "The Product Summary and the Benefit Summary print different wrist fracture figures, so the insurer decides which
   // applies." says what the server's note says, once the documents' and the benefit's names are set aside, but only when
@@ -1145,6 +1200,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [] };
   const checked: Checked[] = [];
   const read = proseRead(household);
+  const library = libraryClaimsRead(household, report.sentencesLeftOut);
   const aboutFiles = new Set<number>();
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
@@ -1184,7 +1240,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
         // is stated from the library's own record of that file instead, in the server's words (release-set E2, E3).
         const di = Number.isFinite(preferred) ? (preferred as number) : -1;
-        if (di >= 0 && di < household.documents.length && ABOUT_FILE.test(st.text)) {
+        // When the question is about the documents themselves ("show me Charmaine's documents"), any unquoted point about one
+        // file is said the same way (release-set E4).
+        if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || ABOUT_DOCUMENTS.test(written[0] ?? ""))) {
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
           continue;
         }
@@ -1264,7 +1322,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    let text = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    let text = serverWords.has(c.s.text) ? c.s.text : library(withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read));
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     // A finding left with no words (its only sentence stated money) still shows the bill it says is uncovered (TE #91 Q8).
@@ -1348,7 +1406,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   // A left-out amount is always said, so the household never takes the cards shown for all there is. A left-out point that
   // is not an amount stays in the report only: a line saying a point was left out tells the household nothing they can use.
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
-  let bottomLine = withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read);
+  let bottomLine = library(withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read));
   const labelled = labelledNumbersRead(citations);
   const nextSteps = model.nextSteps.map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, (t) => read(labelled(t)))).filter(Boolean);
   // One question back at most: the first one the model asks; any further question is left out.

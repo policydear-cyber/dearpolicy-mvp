@@ -713,6 +713,39 @@ test("a sentence that shuts a person out of a cover their own cards or rows show
   }
 });
 
+test("what prose says about the library is held to the library's own record (live run 22 Oct, E4, A8)", () => {
+  // Three documents: two linked to both, one (the illustration) to Lim only, uploaded for him.
+  const H: Household = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId === ILP ? { ...d, linkedPeople: ["Lim Ah Kow"], uploadedFor: "Lim Ah Kow" } : { ...d, uploadedFor: "Tan Mei Ling" }) };
+  const run = (bottomLine: string, statements: Record<string, unknown>[] = [], q = "show me mei ling's documents") => {
+    const { answer: a, report } = verifyAnswer(H, readModelAnswer({ bottomLine, nextSteps: [], question: null, statements: statements.map((x) => ({ kind: "fact", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, ...x })) })!, [q]);
+    return { bottom: a.bottomLine, texts: (a.statements ?? []).map((x) => x.text), left: report.sentencesLeftOut };
+  };
+  // A wrong count is replaced by the record's count; a right one is kept.
+  assert.equal(run("Mei Ling has four documents linked to her.").bottom, "Tan Mei Ling has 2 documents linked in DearPolicy.");
+  assert.equal(run("Mei Ling has two documents linked to her.").bottom, "Mei Ling has two documents linked to her.");
+  assert.equal(run("You have 5 documents uploaded.").bottom, "Your library has 3 documents.");
+  // A count of documents that print or show something is not a library count.
+  assert.equal(run("Two documents print different amounts for this.").bottom, "Two documents print different amounts for this.");
+  // Uploaded for, or linked to, someone the record does not say: left out.
+  let r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate and the Policy illustration were uploaded under Mei Ling's name. Both are read." }]);
+  assert.deepEqual(r.texts, ["Both are read."]);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Policy illustration is linked to Lim Ah Kow and Tan Mei Ling." }]);
+  assert.deepEqual(r.texts, []);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate is linked only to Lim." }]);
+  assert.deepEqual(r.texts, []);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Policy illustration is linked only to Lim Ah Kow. The Certificate was uploaded for Mei Ling." }]);
+  assert.deepEqual(r.texts, ["The Policy illustration is linked only to Lim Ah Kow. The Certificate was uploaded for Mei Ling."]);
+  // What no file is ("no document is linked to Mei Ling") is not a claim about the file the sentence names.
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate lists only Lim, and no document is linked to Mei Ling alone." }]);
+  assert.equal(r.texts.length, 1);
+  // Asked about documents, an unquoted point about one file is said from its record, never dropped.
+  r = run("Mei Ling has two documents.", [{ text: "The group certificate for the scheme.", document: "D1" }, { text: "The scheme's terms.", document: "D2" }]);
+  assert.equal(r.texts.length, 2);
+  assert.match(r.texts[0], /^Certificate \(Certificate\.pdf\) was read\. It is linked to Lim Ah Kow and Tan Mei Ling in DearPolicy\. It was uploaded for Tan Mei Ling\.$/);
+  // Not asked about documents, it is not.
+  assert.equal(run("Here.", [{ text: "The group certificate for the scheme.", document: "D1" }], "how much is the accident cover").texts.length, 0);
+});
+
 async function atest(name: string, fn: () => Promise<void>) {
   try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }
