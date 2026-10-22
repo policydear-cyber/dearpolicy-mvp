@@ -4746,3 +4746,23 @@ A tighter rule would drop the sentence only when, once "not a total" and the amo
 ### Tests (run locally)
 - style-test: 9/9
 - benefit-table chat-test: 46/46
+
+## Round 123: PR #101 at e8adffd (delta from 58a225f)
+
+**Verdict: READY.** No findings.
+
+- **"Currency not stated" is back.** An amount card shows it whenever the currency is not resolved, alone or after the policy-terms label (`answer-cards.tsx:99`).
+- **R122-1 is fixed.** `onlyNotATotal` (`verify.ts:893-900`) removes a sentence only if it says nothing but "not a total". A sentence with a digit, a time word, a condition word or any other content word stays. I probed four model notes:
+
+  | Model's note | What stays |
+  |---|---|
+  | "They are not a total." | removed |
+  | "…not a total. Claim within thirty days of the accident." | "Claim within thirty days of the accident." |
+  | "These are not a total; the recuperation benefit needs a 24-hour stay." | kept whole (it has a digit) |
+  | "Not a total, and the hip benefit is reduced by any earlier fracture payout." | kept whole |
+
+  The server's note, which names the amounts, is there in every case.
+- **benefitName regex fixed.** "D, E and F Benefit" is now treated as a list and left whole. `benefitNames` keeps the printed names whenever stripping the row letters would make two different benefits of one cover look the same ("A. Death" / "B. Death").
+  - Coverage and the chat label both use it, and the label checks compare the same text.
+  - Separately, the `benefitName` calls in `lib/claims/*` belong to a different, local function.
+- **Tests run locally:** benefit-table chat-test 46/46 and headline-test 13/13. `style-test` now imports React, which my sandbox lacks, so I did not run it. I ran the verify-level probes above directly instead.
