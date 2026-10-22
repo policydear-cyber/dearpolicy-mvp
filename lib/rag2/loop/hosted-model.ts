@@ -8,7 +8,7 @@
  * Under the deterministic model stand-in (DEARPOLICY_DETERMINISTIC_MODEL) no network call is made: a test must install
  * the scripted model instead (scripted-model.ts).
  */
-import { apiKeyFor, capabilityFor, deterministicStandInRequested, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
+import { anthropicPost, apiKeyFor, capabilityFor, deterministicStandInRequested, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
 import type { LoopMessage, LoopModel, ModelTurnInput, ModelTurnOutput, ToolCall } from "./types";
 
 type Fetch = typeof fetch;
@@ -112,7 +112,7 @@ export class HostedLoopModel implements LoopModel {
     try {
       let res: Response, read: ReturnType<typeof openAiReply>;
       if (provider === "anthropic") {
-        res = await this.http("https://api.anthropic.com/v1/messages", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify(anthropicRequest(model, input)) });
+        res = await anthropicPost(model, anthropicRequest(model, input), (body) => this.http("https://api.anthropic.com/v1/messages", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body }));
         if (!res.ok) await failed(res);
         read = anthropicReply(await res.json());
       } else {

@@ -351,20 +351,31 @@ export function anthropicUsageOf(u:{input_tokens?:number|null;output_tokens?:num
   const read=n(u?.cache_read_input_tokens),write=n(u?.cache_creation_input_tokens);
   return {input:n(u?.input_tokens)+read+write,output:n(u?.output_tokens),cached:read};
 }
+/** Anthropic models that reject `temperature` (newer Claude models answer 400 "temperature is deprecated for this
+ * model"): learned from a 400 that names it, asked again once without it, and remembered for the life of the process --
+ * the same rule as openAiCompatible above. A 400 is not billed. */
+const ANTHROPIC_NO_TEMPERATURE=new Set<string>();
+export async function anthropicPost(model:string,body:Record<string,unknown>,send:(body:string)=>Promise<Response>):Promise<Response>{
+  if(ANTHROPIC_NO_TEMPERATURE.has(model))delete body.temperature;
+  const response=await send(JSON.stringify(body));
+  if(response.status!==400||!("temperature" in body)||!/temperature/i.test(await response.clone().text()))return response;
+  ANTHROPIC_NO_TEMPERATURE.add(model);delete body.temperature;
+  return send(JSON.stringify(body));
+}
 export async function anthropicMessages(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor("anthropic");
   if(!key)throw new Error("No API key configured for anthropic");
   const timeoutMs=args.timeoutMs??120_000;
   // The system prompt is stable per job and is the part worth caching; the
   // schema rides with it so the cache covers both.
-  const body=JSON.stringify({
+  const body={
     model:choice.model,max_tokens:args.maxOutputTokens??1024,temperature:args.temperature??0,
     system:[{type:"text",text:args.system+"\n\nReply with a single JSON object and nothing else. It must match this JSON Schema exactly:\n"+JSON.stringify(args.jsonSchema),
       cache_control:{type:"ephemeral"}}],
     messages:[{role:"user",content:args.user}],
-  });
-  const response=await withRetries((signal)=>fetch((process.env.ANTHROPIC_BASE_URL??"https://api.anthropic.com").replace(/\/$/,"")+"/v1/messages",{method:"POST",signal,
-      headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body}),timeoutMs,args.attempts);
+  };
+  const response=await anthropicPost(choice.model,body,(json)=>withRetries((signal)=>fetch((process.env.ANTHROPIC_BASE_URL??"https://api.anthropic.com").replace(/\/$/,"")+"/v1/messages",{method:"POST",signal,
+      headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body:json}),timeoutMs,args.attempts));
   if(!response.ok)throw failedResponse(response.status,await response.text());
   const payload=AnthropicShape.parse(await response.json());
   const text=payload.content.filter(block=>block.type==="text").map(block=>block.text??"").join("");
@@ -574,7 +585,7 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   const key = apiKeyFor("anthropic");
   if (!key) throw new Error("No API key configured for anthropic");
   const timeoutMs = args.timeoutMs ?? 120_000;
-  const body = JSON.stringify({
+  const body = {
     model: choice.model,
     max_tokens: args.maxOutputTokens ?? 4096,
     temperature: 0,
@@ -586,10 +597,10 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
         { type: "text", text: args.user },
       ],
     }],
-  });
-  const response = await withRetries((signal) => fetch((process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "") + "/v1/messages", {
-    method: "POST", signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body,
-  }), timeoutMs);
+  };
+  const response = await anthropicPost(choice.model, body, (json) => withRetries((signal) => fetch((process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "") + "/v1/messages", {
+    method: "POST", signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: json,
+  }), timeoutMs));
   if (!response.ok) throw failedResponse(response.status, await response.text());
   const payload = AnthropicShape.parse(await response.json());
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");

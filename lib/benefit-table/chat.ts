@@ -54,6 +54,35 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   return rows;
 }
 
+/** The words a cover is named by on an answer card: the full product, cover and plan, as printed ("MINDEF & MHA GROUP
+ * INSURANCE SCHEME (GROUP POLICY NO. G007500), GROUP TERM LIFE(POLICY NO.3037850)"). */
+const fullCover = (r: Pick<TableRow, "product" | "cover" | "plan">) => [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(", ");
+const COVER_KIND = /\b(?:life|death|accident\w*|illness\w*|critical|disab\w*|tpd|hospital\w*|medical|medicare|health|surg\w*|ward|cancer|travel|income|care|term|endowment|annuity|savings|retirement|motor|car|home|property|shield|rider|benefit)\b/i;
+const noNumbers = (s: string) => s.replace(/\s*\(\s*(?:group\s+)?(?:policy|certificate|cert)\.?\s*(?:no|number)\b[^)]*\)/gi, "").replace(/\s+/g, " ").trim();
+/** Each cover's short name for an answer card, keyed by its full printed name (fullCover): the cover's own words without a
+ * printed policy number, with its plan ("GROUP TERM LIFE"). When two covers would read the same, the product is added;
+ * when that still reads the same, the full printed names are kept. The citation under the card names the document and page. */
+export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]): Map<string, string> {
+  const covers = [...new Map(rows.map((r) => [fullCover(r), r])).values()];
+  type C = (typeof covers)[number];
+  const unique = (name: (c: C) => string) => {
+    const count = new Map<string, number>();
+    for (const c of covers) count.set(name(c), (count.get(name(c)) ?? 0) + 1);
+    return (c: C) => count.get(name(c)) === 1;
+  };
+  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
+  const withProduct = (c: C) => c.cover !== c.product ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
+  const shortUnique = unique(short), productUnique = unique(withProduct);
+  // A cover name that says no kind of cover ("Single Trip") keeps its product, so the card still says what it is (Critic R117-1).
+  const saysKind = (c: C) => COVER_KIND.test(short(c));
+  const picked = covers.map((c) => [c, shortUnique(c) && saysKind(c) ? short(c) : productUnique(c) ? withProduct(c) : fullCover(c)] as const);
+  // Two different rules can still land on the same words ("Life, Beta" as a cover, and "Life" in product Beta): any label
+  // used twice falls back to the full printed name (TE #99).
+  const used = new Map<string, number>();
+  for (const [, l] of picked) used.set(l, (used.get(l) ?? 0) + 1);
+  return new Map(picked.map(([c, l]) => [fullCover(c), used.get(l)! > 1 ? fullCover(c) : l]));
+}
+
 /** A premium row's name: the premium line's own words ("Instalment Premium"), and how often it is paid when printed. */
 const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}`;
 
@@ -121,6 +150,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const report: RowReport = { dropped: [], labels: [], days: {} };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
+  const labels = coverLabels(rows);
   const statements: unknown[] = [];
   const given = new Set<string>();
   for (const raw of (json as { statements: Record<string, unknown>[] }).statements) {
@@ -137,7 +167,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // The same row named twice is given once (Critic R91-3).
     if (given.has(row.id)) continue;
     given.add(row.id);
-    const st = statementFromRow(row, raw);
+    const st = statementFromRow(row, raw, labels);
     if (st) {
       statements.push(st); report.labels.push(String(st.text));
       if (row.figure.kind === "printed" && row.figure.unit === "per_day")
@@ -168,9 +198,9 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
  * a projection. The model's own sentence is not used for an amount, so a figure is never labelled as another benefit. */
-export function rowLabel(row: ChatRow): string {
+export function rowLabel(row: ChatRow, labels?: Map<string, string>): string {
   const f = row.figure;
-  const cover = [row.product, row.cover !== row.product ? row.cover : null, row.plan ? `plan ${row.plan}` : null].filter(Boolean).join(", ");
+  const cover = labels?.get(fullCover(row)) ?? fullCover(row);
   const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? "up to this limit" : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
@@ -233,9 +263,9 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the
  * percentage with the base it is worked out on and the words that print that base. */
-function statementFromRow(row: ChatRow, raw: Record<string, unknown>): Record<string, unknown> | null {
+function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Map<string, string>): Record<string, unknown> | null {
   const f = row.figure;
-  const said = rowLabel(row);
+  const said = rowLabel(row, labels);
   const base = { ...raw, text: said, person: baseName(row.person), document: documentId(row.docIndex), quote: row.source.excerpt, amount: null, percentOf: null };
   if (f.kind === "none") return null;
   if (f.kind !== "worked_out") return { ...base, amount: money(f.amount, f.currency) };

@@ -52,7 +52,7 @@ export type BenefitTable = {
   /** Covers printed in an illustration (a quotation): not proof the person holds them. */
   illustrationCovers: CheckedCover[];
   /** Sections no cover was linked to, with why: shown to the household, never silently dropped. */
-  unlinkedSections: { section: SectionRef; why: string }[];
+  unlinkedSections: { section: SectionRef; why: string; source: Source | null }[];
   /** Confirmations for a cover the documents no longer show for that person (a re-read changed it): shown to check again. */
   staleConfirmations: Confirmation[];
   /** Links refused by the server's own checks. */
@@ -206,10 +206,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   }
   const people = family.map((m) => ({ id: m.id, name: m.display_name, covers: covers.filter((c) => c.personId === m.id), rows: [] as TableRow[] }));
   const unlinkedSections: BenefitTable["unlinkedSections"] = [];
+  // Where each section starts, so a part that is not on anyone's table can still be opened at its page.
+  const firstSource = new Map<string, Source>();
+  for (const r of readings) for (const b of r.benefits) if (!firstSource.has(sectionKeyOf(r.documentId, b))) firstSource.set(sectionKeyOf(r.documentId, b), b.source);
   for (const s of sections) {
     const l = linkOf.get(s.key);
     const refused = refusedLinks.find((x) => x.link.section === s.key);
-    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover" });
+    if (!l?.cover) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
   for (const r of readings) for (const b of r.benefits) {
     const l = linkOf.get(sectionKeyOf(r.documentId, b));
