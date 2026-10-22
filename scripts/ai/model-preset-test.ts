@@ -4,6 +4,8 @@
  *   npm run ai:model-preset-test */
 import assert from "node:assert/strict";
 import { fallbackModelFor, modelFor } from "@/lib/ai/providers";
+import { canaryConfigFor } from "@/lib/ai/rollout";
+import { DEFAULT_SIMPLE_MODEL, simpleChatModel } from "@/lib/simple-chat/flag";
 
 const NAMES = ["MODEL_PRESET", "READING_MODEL", "JUDGEMENT_MODEL", "NARRATION_MODEL", "CHAT_MODEL", "JUDGEMENT_FALLBACK_MODEL",
   "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "READING_MODEL_PROVIDER"];
@@ -17,6 +19,7 @@ const keys = { ANTHROPIC_API_KEY: "placeholder", OPENAI_API_KEY: "placeholder", 
 // Production on 22 Oct: the preset set, old OpenAI per-job settings and a Gemini fallback still present.
 const leftovers = { READING_MODEL: "openai:gpt-6-luna", JUDGEMENT_MODEL: "openai:gpt-6-luna", NARRATION_MODEL: "openai:gpt-6-luna",
   JUDGEMENT_FALLBACK_MODEL: "gemini:flash-lite", CHAT_MODEL: "anthropic:claude-sonnet-5-5" };
+const env = (vars: Record<string, string>) => ({ NODE_ENV: "test", ...vars }) as NodeJS.ProcessEnv;
 let n = 0;
 const t = (name: string, run: () => void) => { run(); n++; console.log("ok", name); };
 
@@ -40,4 +43,15 @@ t("other presets: explicit settings still win", () => withEnv({ ...keys, ...left
 t("no preset: explicit settings still win", () => withEnv({ ...keys, ...leftovers }, () => {
   assert.deepEqual(modelFor("judgement"), { provider: "openai", model: "gpt-6-luna" });
 }));
+t("anthropic preset: the alpha chat ignores an OpenAI DEARPOLICY_SIMPLE_CHAT_MODEL", () => {
+  assert.deepEqual(simpleChatModel(env({ MODEL_PRESET: "anthropic", DEARPOLICY_SIMPLE_CHAT_MODEL: "openai:gpt-6-luna" })), DEFAULT_SIMPLE_MODEL);
+  assert.deepEqual(simpleChatModel(env({ MODEL_PRESET: "anthropic", DEARPOLICY_SIMPLE_CHAT_MODEL: "anthropic:claude-opus-5-5" })), { provider: "anthropic", model: "claude-opus-5-5" });
+  assert.deepEqual(simpleChatModel(env({ DEARPOLICY_SIMPLE_CHAT_MODEL: "openai:gpt-6-luna" })), { provider: "openai", model: "gpt-6-luna" });
+});
+t("anthropic preset: a canary naming another provider is off", () => {
+  const canary = { CANARY_BENEFIT_EXTRACTION_MODEL: "openai:gpt-6-luna", CANARY_BENEFIT_EXTRACTION_PERCENTAGE: "100" };
+  assert.equal(canaryConfigFor("benefit_extraction", env({ ...canary, MODEL_PRESET: "anthropic" })), null);
+  assert.deepEqual(canaryConfigFor("benefit_extraction", env({ MODEL_PRESET: "anthropic", CANARY_BENEFIT_EXTRACTION_MODEL: "anthropic:claude-haiku-4-5" }))?.canary, { provider: "anthropic", model: "claude-haiku-4-5" });
+  assert.deepEqual(canaryConfigFor("benefit_extraction", env({ ...canary, MODEL_PRESET: "gemini" }))?.canary, { provider: "openai", model: "gpt-6-luna" });
+});
 console.log(`model preset: ${n} passed, 0 failed`);

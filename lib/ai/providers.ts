@@ -70,8 +70,9 @@ const DEFAULT_MODEL:Record<ModelRole,string>={reading:"flash-lite",judgement:"fl
 /** MODEL_PRESET=anthropic means "everything on the Anthropic key": a per-job setting still picks the Claude model, but
  * one naming another provider (an OpenAI or Google setting left over from before the move) is ignored, so the switch
  * is one setting rather than a hunt for old ones. Other presets keep "explicit settings win". */
-function allowedByPreset(choice:ModelChoice|null){
-  return choice&&(modelPreset()!=="anthropic"||choice.provider==="anthropic")?choice:null;
+export function allowedByPreset(choice:ModelChoice|null,env:NodeJS.ProcessEnv=process.env){
+  const anthropicOnly=(env.MODEL_PRESET??"").trim().toLowerCase()==="anthropic";
+  return choice&&(!anthropicOnly||choice.provider==="anthropic")?choice:null;
 }
 export function modelFor(role:ModelRole):ModelChoice{
   const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:process.env.CHAT_MODEL;

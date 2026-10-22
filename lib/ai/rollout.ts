@@ -24,7 +24,7 @@
  * requested_rollout column).
  */
 import { createHash } from "node:crypto";
-import type { ModelChoice } from "./providers";
+import { allowedByPreset, type ModelChoice } from "./providers";
 import type { KnownOperation } from "./provenance";
 
 export type RolloutCohort = "stable" | "canary";
@@ -113,6 +113,8 @@ export function canaryConfigFor(operation: KnownOperation, env: NodeJS.ProcessEn
   if (separator <= 0 || separator === modelSetting.length - 1) return null;
   const provider = modelSetting.slice(0, separator) as ModelChoice["provider"];
   const model = modelSetting.slice(separator + 1);
+  // Under MODEL_PRESET=anthropic a canary naming another provider is no canary at all (lib/ai/providers.ts allowedByPreset).
+  if (!allowedByPreset({ provider, model }, env)) return null;
   const percentage = Number(env[`CANARY_${upper}_PERCENTAGE`] ?? "0");
   const killSwitch = env.CANARY_KILL_SWITCH_ALL === "true" || env[`CANARY_${upper}_KILL_SWITCH`] === "true";
   return { canary: { provider, model }, percentage, killSwitch, rolloutId: `canary:${operation}:${modelSetting}` };
