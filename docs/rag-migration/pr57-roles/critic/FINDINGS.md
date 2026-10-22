@@ -4937,3 +4937,50 @@ Holding:
 - benefit-table test: 105/105
 
 style-test needs React, which this sandbox lacks, so I did not run it.
+
+## Round 127: PR #103 at 9aefff9 (delta from 57e33b4)
+
+**Verdict: NOT READY. One blocker left (R127-1), and it is a small fix.** R126-1 to R126-4 are fixed.
+
+### R127-1 (blocker): within one policy's schedule, the fallback can take another benefit's sum
+`wholeSumInsured` (`verify.ts` ~399-421) accepts a base line only when the page has exactly one line with an amount of 10,000 or more. A schedule can print one large sum and one small sum on the same page. In that case the large line passes the "exactly one" test even when the wording is about the other benefit.
+
+Probe: `scratchpad/r127/w.ts` uses the chat-test schedule (Comprehensive Critical Illness 300,000.00 and Death Benefit 5,000.00, Currency: Singapore Dollar). Its policy wording has the same policy number and says "2. Death Benefit … 100% of the Sum Assured will be payable in one lump sum".
+
+| Base quote the model gives | Shown as the death benefit |
+|---|---|
+| "Death Benefit 5,000.00" | S$5,000 (right) |
+| "Comprehensive Critical 300,000.00" | **S$300,000 (wrong: another benefit's sum)** |
+
+This is the shape of DC's own CI II schedule (D8 p3), which has a S$5,000 death benefit beside the CI sum assured. It would be a wrong claimable amount.
+
+**Fix (pick one):**
+- Count every line on the page that prints a benefit amount, of any size, skipping premium lines. Require exactly one.
+- Or require the base line to share the benefit's name with the wording's own heading ("Death Benefit").
+
+Both cases stay correct under either fix. A3 keeps its 5,000 only if the wording names that benefit.
+
+### Fixed and checked
+- **R126-1.** My three R126 probes are now all refused ("the row prints no sum it is a percentage of"):
+  - the base is another policy's certificate;
+  - the base is the spouse's line;
+  - the table prints its own base (S$5,000).
+
+  The fallback now needs all of these:
+  - same document or same policy number;
+  - no other life on the base page (`otherLife`, now shared in `lives.ts`);
+  - the base line names the person, or names nobody on a page about them alone;
+  - wording with no limit or base words, including a base printed on a line above.
+
+  "The sum is not the one this row's table is a percentage of" is no longer a fallback reason.
+- **TE's A1 positive control.** Its base is a certificate in another document that names both spouses, so it is now refused. **I agree that refusing it is correct.** The bar is to withhold rather than risk another person's or another policy's sum. The S$1,000,000 figure was right in that case, but nothing on that page ties it to this one life and this policy. The percentage is still given as a fact.
+- **R126-2.** A companion now carries only its own row's conditions. My R126 probe now shows S$1,500 with "Payable only if surgery is performed." and the primary keeps its own condition. `sameBenefit` keeps "Simple Fracture: Wrist" and "Compound Fracture: Wrist" apart (TE C4).
+- **R126-3.** Short files sent whole are capped at 15 pages in total.
+- **R126-4.** A premium's currency now comes only from its own line or page (`premiumCurrency`). With neither, it shows "Currency not stated".
+
+### Tests (run locally, free)
+- benefit-table chat-test: 51/51
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+The 44-question replay (40 right, 4 partly right, 0 wrong) is the TE's. I did not re-run it.
