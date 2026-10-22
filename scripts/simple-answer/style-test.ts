@@ -10,8 +10,9 @@ import { benefitName, benefitNames } from "@/lib/benefit-table/headline";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AnswerCards, type StructuredAnswer } from "@/components/answer-cards";
-import { verifyAnswer } from "@/lib/simple-chat/verify";
-import type { Household } from "@/lib/simple-chat/library";
+import { documentCurrency, personalFileName, verifyAnswer } from "@/lib/simple-chat/verify";
+import { RULE_PAGE } from "@/lib/benefit-table/chat";
+import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import type { ModelStatement } from "@/lib/simple-chat/prompt";
 
 let passed = 0;
@@ -88,5 +89,71 @@ t("a figure whose currency the document does not state says so on its card; othe
   assert.match(card(false), /Currency not stated/);
   assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
   assert.match(card(true, "benefit_terms"), /Policy terms, not worked out for this case/);
+});
+// ------------------------------------------------------------------ second round (DC, 22 Oct: live answers on 159b954)
+t("the same benefit printed with and without its row letter in two documents loses the letter", () => {
+  const rows = [{ benefit: "J, Accidental Hospital Recuperation Benefit", coverKey: "gpa" }, { benefit: "Accidental Hospital Recuperation Benefit", coverKey: "gpa" },
+    { benefit: "A. Death", coverKey: "c1" }, { benefit: "B. Death", coverKey: "c1" }, { benefit: "A. Death", coverKey: "c1" }];
+  assert.deepEqual(rows.map(benefitNames(rows)), ["Accidental Hospital Recuperation Benefit", "Accidental Hospital Recuperation Benefit", "A. Death", "B. Death", "A. Death"]);
+});
+t("a source is named by its document, never by a file name a machine gave it", () => {
+  for (const n of ["817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf", "Scan_20261003.pdf", "IMG-4412.jpg", "0012345.pdf", "WhatsApp Image 2026-09-01 at 10.15.32.pdf",
+    "Screenshot 2026-09-01 at 10.15.32 AM.pdf", "document (3).pdf", "Download (1).pdf", "PXL_20260901_101532.pdf", "CamScanner 09-01-2026 10.15.pdf"]) assert.equal(personalFileName(n), null, n);
+  for (const [n, want] of [["Product Summary.pdf", "Product Summary"], ["Desmond travel policy.pdf", "Desmond travel policy"]]) assert.equal(personalFileName(n), want);
+  const house = { ...HOUSE, documents: [{ ...HOUSE.documents[0], name: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", productName: null, insurer: "Singlife", documentRole: "policy_wording" }] } as Household;
+  const { answer } = verifyAnswer(house, { bottomLine: "x", nextSteps: [], question: null, statements: [st({ text: "Recuperation.", person: "Lim Ah Kow", document: "D1", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250" })] });
+  const json = JSON.stringify(answer);
+  assert.doesNotMatch(json, /817d6e8b/);
+  assert.equal(answer.statements!.find((s) => s.amount)?.source?.policyName, "Singlife policy wording");
+});
+t("a point that could not be checked is left out without a line saying so; a left-out amount is still said", () => {
+  const { answer, report } = verifyAnswer(HOUSE, { bottomLine: "x", nextSteps: [], question: null, statements: [st({ kind: "fact", text: "Something unprintable.", document: "D1", quote: "words that are not on any page" })] });
+  assert.equal(report.dropped.length, 1);
+  assert.doesNotMatch(JSON.stringify(answer), /left out a point/);
+  const amount = verifyAnswer(HOUSE, { bottomLine: "x", nextSteps: [], question: null, statements: [st({ text: "Made up.", person: "Lim Ah Kow", document: "D1", quote: "nowhere S$777", amount: "S$777" })] }).answer;
+  assert.ok(amount.statements!.some((s) => s.id === "left-out-amount"));
+});
+t("with the server's 'not a total' note, the model's 'documents print different figures, the insurer decides which' is not said again", () => {
+  const { answer } = verifyAnswer(HOUSE, { bottomLine: "Two benefits could pay.", nextSteps: [], question: null, statements: [...two,
+    st({ kind: "uncertainty", text: "The two documents print different figures for the same recuperation benefit, so the insurer decides which applies. Written notice is due within 30 days.", document: "D1" })] });
+  assert.equal(answer.statements!.filter((s) => /insurer decides which/.test(s.text)).length, 1, "only the server's note");
+  assert.ok(answer.statements!.some((s) => s.text === "Written notice is due within 30 days."), "the deadline stays");
+  const note = answer.statements!.find((s) => s.id.startsWith("not-total-"))!;
+  assert.doesNotMatch(note.text, /Lim Ah Kow/, "one person's amounts: the note does not name them again");
+  assert.match(note.text, /^Up to S\$500 and S\$250 come from/);
+});
+t("a 'different figures' sentence stays when it carries a condition, or when the server's notes don't cover every amount (TE #102)", () => {
+  const said = (extra: ModelStatement[], text: string) => verifyAnswer(HOUSE, { bottomLine: "x", nextSteps: [], question: null, statements: [...two, ...extra,
+    st({ kind: "uncertainty", text, document: "D1" })] }).answer.statements!.some((s) => s.text.includes(text.slice(0, 30)));
+  assert.ok(said([], "The two documents print different figures for the same benefit if you were hospitalised, so the insurer decides which applies."));
+  const loose = st({ text: "Hospital cash.", person: "Lim Ah Kow", document: "D1", quote: "Accidental Hospital Recuperation Benefit S$250", amount: "S$250" });
+  const house2 = { ...HOUSE, documents: [{ ...HOUSE.documents[0], pages: [{ page: 1, text: HOUSE.documents[0].pages[0].text + "\nDaily cash\tS$75" }] }] } as Household;
+  const other = verifyAnswer(house2, { bottomLine: "x", nextSteps: [], question: null, statements: [...two, { ...loose, quote: "Daily cash S$75", amount: "S$75" },
+    st({ kind: "uncertainty", text: "The two documents print different figures for the same benefit, so the insurer decides which applies.", document: "D1" })] }).answer;
+  assert.ok(other.statements!.some((s) => /print different figures/.test(s.text)), "S$75 has no server note, so the model's sentence stays");
+});
+t("the style guide covers corrections, several covers on one event, and 'not covered' answers", () => {
+  const style = answerStyle();
+  for (const h of ["When several covers could pay", "When it isn't covered"]) assert.match(style, new RegExp(`## ${h}`));
+  assert.match(style, /corrected answer is short/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /never tell them how or by when to claim on that cover/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /the earlier answer stands except for what the correction changes/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /These are separate covers\. The pages I used don't say whether one affects the other, so the insurer decides\. They are not added up\./);
+  assert.match(style, /These are separate covers\. The pages I used don't say whether one affects the other, so the insurer decides\. They are not added up\./);
+  // Never a promise that each pays (Critic R124-2); a "not shown to be covered" answer keeps a printed deadline as a condition (R124-3).
+  assert.doesNotMatch(SIMPLE_SYSTEM_PROMPT + style, /each paid on its own terms|each pay on their own terms/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /If FWD confirms cover, claim within 30 days/);
+});
+t("pages printing how covers limit each other are sent with the table (Critic R124-2)", () => {
+  for (const line of ["This Benefit can only be claimed either under the Core Scheme or the Voluntary Scheme", "provided no other benefit has been paid",
+    "the balance of the sum insured will be paid", "Cover is terminated upon payment of the full Sum Insured under GTL or GPA", "paid in lieu of", "will be reduced by", "is deducted from"])
+    assert.ok(RULE_PAGE.test(line), line);
+});
+t("a bare $ is S$ only in a document that names Singapore dollars and nothing that may be another currency (Critic R124-1)", () => {
+  const mk = (text: string) => ({ pages: [{ page: 1, text: "Benefit Schedule (SGD$)\nAmbulance S$500\nRecuperation $250\n" + text }] }) as unknown as HouseholdDocument;
+  for (const ok of ["", "GPA 600 and GTL 1 (scheme codes)", "Payable in Singapore dollars", "We won't pay for self-inflicted injury.", "We won’t pay for war."]) assert.equal(documentCurrency(mk(ok)), "SGD", ok);
+  for (const other of ["Paid in U.S. dollars", "Limit 5,000 yen", "RMB 300", "300 RMB", "NT$ 400", "Canadian dollars", "Rs 500", "₹500", "USD500", "HK$100", "5,000 baht",
+    "RM 200 in ringgit", "100 pesos", "₩ 10,000", "฿ 900", "₱ 50", "converted at the exchange rate", "claims in a foreign currency", "20 francs"])
+    assert.equal(documentCurrency(mk(other)), null, other);
 });
 console.log(`style: ${passed} passed, 0 failed`);

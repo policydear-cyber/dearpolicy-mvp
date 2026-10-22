@@ -178,14 +178,17 @@ async function main() {
     assert.ok(answer.statements!.some((s) => s.text === LEFT_OUT_AMOUNT));
   });
 
-  await check("a bare $ stays currency-unresolved; S$ printed in the quote is resolved", () => {
-    const { answer } = verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [
+  await check("a bare $ is S$ only in a document that names Singapore dollars and no other currency; S$ in the quote is resolved", () => {
+    const ask = (house: Household) => verifyAnswer(house, { bottomLine: "", nextSteps: [], question: null, statements: [
       st({ kind: "amount", text: "Outpatient up to $90 a visit.", person: "Ah Kow", document: "D2", quote: "Outpatient\tup to $90 per visit", amount: "$90" }),
       st({ kind: "amount", text: "Recuperation S$250.", person: "Ah Kow", document: "D2", quote: "Accidental Hospital Recuperation Benefit\tS$250", amount: "$250" }),
-    ] });
-    const [a, b] = answer.statements!.filter((s) => s.amount);
-    assert.deepEqual([a.amount!.text, a.amount!.currencyResolved], ["Up to $90", false]);
-    assert.deepEqual([b.amount!.text, b.amount!.currencyResolved], ["S$250", true]);
+    ] }).answer.statements!.filter((s) => s.amount).map((s) => [s.amount!.text, s.amount!.currencyResolved]);
+    // Extras.pdf prints S$ throughout and no other currency: its bare "$90" is a Singapore dollar figure (DC, 22 Oct).
+    assert.deepEqual(ask(HOUSE), [["Up to S$90", true], ["S$250", true]]);
+    // The same document with a US$ figure, or a foreign-currency clause, on another page: the bare "$" stays unresolved.
+    const withPage = (extra: string) => ({ ...HOUSE, documents: HOUSE.documents.map((d, i) => i !== 1 ? d : { ...d, pages: [...d.pages, { page: 2, text: extra }] }) });
+    assert.deepEqual(ask(withPage("Overseas emergency evacuation\tUS$50,000")), [["Up to $90", false], ["S$250", true]]);
+    assert.deepEqual(ask(withPage("Expenses paid in a foreign currency are converted at the exchange rate on the day")), [["Up to $90", false], ["S$250", true]]);
   });
 
   await check("people: a name maps to one household member; an unknown or ambiguous name gets no card owner", () => {
@@ -639,9 +642,10 @@ async function main() {
     const daily = (stayDays: number, quote = "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously.", amount = "$30") =>
       st({ kind: "amount", text: "Daily hospital cash.", person: "Ah Kow", document: "D3", quote, amount, perDay: { stayDays } });
     const cards = (s: ModelStatement, written: string[]) => fixAnswer([s], {}, written).answer.statements!.filter((x) => x.kind === "calculation").map((x) => [x.amount?.text ?? null, x.text]);
-    assert.deepEqual(cards(daily(12), ["he was in hospital 12 days"]), [["$60", "For a 12-day stay, this works out to 2 days of the daily benefit."]]);
+    // D3 names Singapore dollars and no other currency, so its bare "$30" is S$30 (DC, 22 Oct).
+    assert.deepEqual(cards(daily(12), ["he was in hospital 12 days"]), [["S$60", "For a 12-day stay, this works out to 2 days of the daily benefit."]]);
     assert.deepEqual(cards(daily(45), ["in hospital forty-five days"]).length, 0);
-    assert.deepEqual(cards(daily(45), ["in hospital 45 days after a fall"]), [["$900", "For a 45-day stay, this works out to 30 days of the daily benefit."]]);
+    assert.deepEqual(cards(daily(45), ["in hospital 45 days after a fall"]), [["S$900", "For a 45-day stay, this works out to 30 days of the daily benefit."]]);
     assert.deepEqual(cards(daily(8), ["8 days in hospital"]), [[null, "A 8-day stay ends before this daily benefit starts, so it pays nothing for that stay."]]);
     assert.deepEqual(cards(daily(12), ["he was in hospital 21 days"]), []);
     assert.deepEqual(cards(daily(12), []), []);

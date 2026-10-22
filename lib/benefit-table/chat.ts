@@ -113,7 +113,7 @@ export function citedPages(rows: ChatRow[]): Set<string> {
 
 /** Wording that can stop a benefit being paid: a waiting or survival period, an exclusion, a pre-existing condition, or a
  * "will not pay". A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
-export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b/i;
+export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b/i;
 
 /** What the chat sends with the table: the pages its rows come from, and every page of those documents that prints a
  * rule that can stop a payment (RULE_PAGE). Keys as in citedPages. */
@@ -205,7 +205,9 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? "up to this limit" : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
-    : f.kind === "worked_out" && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the amount printed"}${f.capped ? ", up to this limit" : ""}` : null;
+    // A worked-out figure's card shows how it is worked out ("25% of S$5,000") on its own line, so the label does not. A
+    // capped one is given as its printed cap, with no such line, so its label says what the cap limits.
+    : f.kind === "worked_out" && f.capped && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the figure its table prints"}, up to this limit` : null;
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
   return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
 }
@@ -277,7 +279,7 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
   // A sum insured the household corrected is not printed anywhere, so the checks cannot find it: the row is given as its
   // printed percentage, with where the amount is shown.
   if (row.baseCorrected)
-    return { ...base, kind: "fact", text: `${said.replace(/\.$/, "")}, on the sum insured you corrected on the Coverage page, which shows the amount.`, alternativeGroup: null, perDay: null, ofBill: null };
+    return { ...base, kind: "fact", text: `${said.replace(/\.$/, "")}: ${row.percent}% of the sum insured you corrected on the Coverage page, which shows the amount.`, alternativeGroup: null, perDay: null, ofBill: null };
   const own = row.baseSource && row.baseSource.page === row.source.page && row.baseSource.documentId === row.source.documentId;
   return { ...base, percentOf: { percent: row.percent, baseAmount: money(row.base, f.currency),
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };

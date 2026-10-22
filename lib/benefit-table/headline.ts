@@ -48,12 +48,15 @@ export const benefitName = (benefit: string) =>
   benefit.replace(/^\s*(?:(?:[A-Z]|\d{1,2})\s*[.):]|[A-Z],(?!\s*[A-Z](?:\s|,|$))|\(?(?:[a-z]|[ivx]{1,4})\))\s+(?=[A-Z])/, "").trim() || benefit;
 
 /** Each row's benefit name for display, without row letters, except where stripping them would make two different
- * benefits of one cover read the same ("A. Death" and "B. Death" stay as printed, TE #101). */
+ * benefits of one cover read the same: two different row letters before one name ("A. Death" and "B. Death") stay as
+ * printed (TE #101). The same benefit printed with and without its letter in two documents ("J, Accidental Hospital
+ * Recuperation Benefit" in one, "Accidental Hospital Recuperation Benefit" in the other) is one benefit, shown without it. */
 export function benefitNames<T extends { benefit: string; coverKey?: string }>(rows: T[]): (row: T) => string {
   const key = (r: T) => `${r.coverKey ?? ""}\u0000${benefitName(r.benefit).toLowerCase()}`;
-  const raws = new Map<string, Set<string>>();
-  for (const r of rows) raws.set(key(r), (raws.get(key(r)) ?? new Set()).add(r.benefit.trim()));
-  return (r) => ((raws.get(key(r))?.size ?? 1) > 1 ? r.benefit : benefitName(r.benefit));
+  const letter = (b: string) => b.trim().slice(0, b.trim().length - benefitName(b).length).replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  const letters = new Map<string, Set<string>>();
+  for (const r of rows) if (letter(r.benefit)) letters.set(key(r), (letters.get(key(r)) ?? new Set()).add(letter(r.benefit)));
+  return (r) => ((letters.get(key(r))?.size ?? 0) > 1 ? r.benefit : benefitName(r.benefit));
 }
 
 const amountOf = (f: Figure) => (f.kind === "printed" || f.kind === "worked_out" ? f.amount : 0);

@@ -115,14 +115,42 @@ const numbersIn = (text: string) => [...text.matchAll(/\d[\d,]*(?:\.\d+)?/g)].ma
 
 type Currency = { sign: string; resolved: boolean };
 const SIGN: Record<string, string> = { SGD: "S$", USD: "US$", MYR: "RM", HKD: "HK$", AUD: "A$", EUR: "€", GBP: "£", JPY: "¥", "$": "$" };
-/** The currency of an amount, resolved only when the words it rests on print that currency (a bare "$" never is). */
-function currencyOf(amountText: string, evidence: string): Currency {
+/** The currency of an amount, resolved only when the words it rests on print that currency, or when a bare "$" stands in
+ * a document that names Singapore dollars and no other currency anywhere in it (a Singapore scheme's benefit summary
+ * prints "S$" in one table and "$250" in the next). */
+function currencyOf(amountText: string, evidence: string, doc?: HouseholdDocument): Currency {
   const f = moneyFiguresIn(amountText)[0];
   const printed = moneyFiguresIn(evidence).map((x) => x.currency);
   const named = /\bSGD\b|S\$|Singapore dollars?/i.test(evidence) ? "SGD" : null;
   if (f && f.currency !== "$") return { sign: SIGN[f.currency] ?? f.currency, resolved: printed.includes(f.currency) || named === f.currency };
   if (printed.includes("SGD") || (named && !printed.some((c) => c !== "$" && c !== "SGD"))) return { sign: "S$", resolved: true };
+  if (doc && !printed.some((c) => c !== "$") && documentCurrency(doc) === "SGD") return { sign: "S$", resolved: true };
   return { sign: "$", resolved: false };
+}
+const docCurrencies = new WeakMap<HouseholdDocument, string | null>();
+/** Anything in a document that may be another currency (Critic R124-1): "dollars" not after "Singapore" ("U.S. dollars",
+ * "Canadian dollars"), a currency code other than SGD beside a number ("USD 500", "500 RMB"), a sign with letters before
+ * "$" other than S$, SG$ or SGD$ ("NT$", "HK$"), another currency sign, a currency's name, or a foreign-currency clause. Codes are
+ * matched from the currency list, in capitals, so a scheme's own abbreviations ("GPA 600", "GTL") never count. */
+const OTHER_CODES = "USD|EUR|GBP|JPY|CNY|RMB|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|NTD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|MMK|KHR|LAK";
+const OTHER_CODE = new RegExp(String.raw`(?<![A-Z])(?:${OTHER_CODES})(?![A-Z])`);
+const OTHER_WORDS = new RegExp([
+  String.raw`(?<!singapore\s)\bdollars?\b`,
+  String.raw`(?<![a-z])(?!s\$|sg\$|sgd\$)[a-z]{1,3}\$`,
+  String.raw`[€£¥₹฿₩₱₫₺₽₪]|\brs\.?\s?\d`,
+  String.raw`\b(?:euros?|pounds?\s+sterling|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|pesos?|won(?!['’]t)|francs?|dirhams?|riyals?)\b`,
+  String.raw`\bforeign\s+currenc|\bexchange\s+rates?\b`,
+].join("|"), "i");
+/** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
+ * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
+export function documentCurrency(doc: HouseholdDocument): string | null {
+  if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
+  const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
+  const sgd = /\bSGD\b|(?<![A-Za-z])S\$|Singapore\s+dollars?/i.test(t);
+  const other = OTHER_CODE.test(t) || OTHER_WORDS.test(t) || moneyFiguresIn(t).some((x) => x.currency !== "$" && x.currency !== "SGD");
+  const found = sgd && !other ? "SGD" : null;
+  docCurrencies.set(doc, found);
+  return found;
 }
 /** The one currency a page declares for every figure on it (release-set A2, A3, A6: a policy schedule prints "Death Benefit
  * 5,000.00" under a "Currency : Singapore Dollar" field, with no sign on any figure): a currency field ("Currency : SGD",
@@ -385,13 +413,13 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
     if (printed === "sum_insured") {
       const b = sumInsuredBase(st, found, household, person);
       if (!b.ok) return { ok: false, why: b.why, asFact: true };
-      const cur = currencyOf(b.raw, b.base.found.excerpt);
+      const cur = currencyOf(b.raw, b.base.found.excerpt, household.documents[b.base.found.docIndex]);
       const value = Math.round(b.value * pct) / 100;
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
     if (!printed || base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
-    const cur = currencyOf(printed.raw, page.text);
+    const cur = currencyOf(printed.raw, page.text, doc);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
   }
@@ -433,7 +461,7 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
   const printed = moneyFiguresIn(found.excerpt).find((f) => sameValue(f.value, value))!;
-  const cur = currencyOf(printed.raw ?? raw, found.excerpt);
+  const cur = currencyOf(printed.raw ?? raw, found.excerpt, doc);
   return { ok: true, amount: { value, text: upTo(found.excerpt, printed.raw ? found.excerpt.indexOf(printed.raw) : -1) + formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: false } };
 }
 /** "Up to " when the quoted words print the figure as a limit ("Up to S$500 per incident", "up to maximum of $500",
@@ -867,17 +895,53 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
 }
 
 /** A document as the household knows it: its product name, with the file name when two documents share one. */
+/** A document as the household would name it: its product, told apart from another file of the same product by the
+ * file's own name when a person chose it ("Product Summary"), or else by what kind of document it is. A name a machine
+ * gave the file ("817d6e8b-....pdf", "output_202609281146053.pdf") is never shown as a source. Two documents that would
+ * still read the same are told apart by their upload date, and then by their order (TE #102). */
 function docLabel(household: Household, d: HouseholdDocument): string {
-  const product = d.productName?.trim();
-  if (!product) return d.name;
-  const shared = household.documents.some((o) => o !== d && o.productName?.trim().toLowerCase() === product.toLowerCase());
-  return shared ? `${product} (${d.name.replace(/\.[a-z0-9]+$/i, "")})` : product;
+  const base = (x: HouseholdDocument) => {
+    const product = x.productName?.trim();
+    const own = personalFileName(x.name);
+    const kind = x.documentRole ? x.documentRole.replace(/_/g, " ") : null;
+    if (!product) return { label: own ?? [x.insurer?.trim(), kind ?? "document"].filter(Boolean).join(" ").replace(/^./, (c) => c.toUpperCase()), inside: null as string | null };
+    const shared = household.documents.some((o) => o !== x && o.productName?.trim().toLowerCase() === product.toLowerCase());
+    const apart = own ?? kind;
+    return shared && apart ? { label: product, inside: apart } : { label: product, inside: shared ? "" : null };
+  };
+  const text = (b: { label: string; inside: string | null }, extra: string[] = []) => {
+    const inside = [b.inside, ...extra].filter(Boolean).join(", ");
+    return inside ? `${b.label} (${inside})` : b.label;
+  };
+  const mine = base(d);
+  const same = household.documents.filter((o) => text(base(o)).toLowerCase() === text(mine).toLowerCase());
+  if (same.length < 2) return text(mine);
+  const day = (x: HouseholdDocument) => x.uploadedAt ? `uploaded ${sgDay(x.uploadedAt)}` : null;
+  const byDay = same.filter((o) => day(o) === day(d));
+  if (day(d) && byDay.length === 1) return text(mine, [day(d)!]);
+  return text(mine, [day(d), `file ${same.indexOf(d) + 1} of ${same.length}`].filter((x): x is string => !!x));
+}
+const sgDay = (iso: string) => {
+  const t = new Date(iso.length <= 10 ? `${iso}T00:00:00Z` : iso);
+  return Number.isNaN(t.getTime()) ? iso.slice(0, 10) : t.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Singapore" });
+};
+/** A file's name without its extension, when a person gave it; null for a name a scanner, app or upload gave it. */
+export function personalFileName(name: string): string | null {
+  const base = (name ?? "").replace(/\.[a-z0-9]{2,5}$/i, "").trim();
+  if (!/[A-Za-z]{3,}/.test(base)) return null;
+  if (/^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(base) || /^[0-9a-f]{16,}$/i.test(base)) return null;
+  // A name made only of words apps and devices give files ("WhatsApp Image 2026-09-01 at 10.15.32", "Screenshot ...",
+  // "document (3)", "Download (1)", "PXL_20260901_101532"), with dates, times and counters, is not a name a person chose.
+  const rest = base.replace(/(?<![A-Za-z])(?:whatsapp|image|img|screenshot|screen\s*shot|scan|scanned|camscanner|document|doc|file|download|upload|untitled|pdf|photo|pxl|dsc|mvimg|output|attachment|print|copy|of|at|am|pm)(?![A-Za-z])/gi, " ");
+  if (!/[A-Za-z]{2,}/.test(rest.replace(/[\d_.:()\s-]+/g, " "))) return null;
+  return base;
 }
 
 /** What the library records about a file, in the server's words. */
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 function libraryFact(household: Household, d: HouseholdDocument): string {
-  const label = docLabel(household, d);
+  // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
+  const label = d.productName?.trim() ? docLabel(household, d) : d.name;
   const named = label === d.name ? d.name : `${label} (${d.name})`;
   const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.` : `${named} was read.`;
   const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
@@ -892,10 +956,19 @@ function libraryCount(household: Household): string {
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
-function onlyNotATotal(sentence: string): boolean {
-  if (!/\bnot (?:a|the) total\b/i.test(sentence) || /\d/.test(sentence)) return false;
-  if (/\b(?:within|days?|weeks?|months?|deadline|notice|must|only if|unless|except|provided|subject to|waiting|exclu)/i.test(sentence)) return false;
-  const rest = sentence.replace(/\bnot (?:a|the) total\b/gi, " ").replace(/\b(?:they|these|this|it|are|is|amounts?|figures?|benefits?|separate|different|and|so|the|insurer|decides|which|one|applies|alternatives?|added|together|not|each|other|from|parts?|of|your|documents?|but|be|can|cannot|should)\b/gi, " ");
+function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = false): boolean {
+  // "The Product Summary and the Benefit Summary print different wrist fracture figures, so the insurer decides which
+  // applies." says what the server's note says, once the documents' and the benefit's names are set aside, but only when
+  // the server's notes cover every amount shown (`differOk`): otherwise it may be about amounts no note covers (TE #102).
+  const differ = differOk && /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b/i.test(sentence) && /\binsurer\s+decides\s+which\b/i.test(sentence);
+  if (!(/\bnot (?:a|the) total\b/i.test(sentence) || differ) || /\d/.test(sentence)) return false;
+  if (/\b(?:within|days?|weeks?|months?|deadline|notice|must|only|if|when|whenever|where|while|unless|except|provided|subject to|waiting|exclu\w*|after|before|until|once|newer|older|latest|later|earlier|dated)\b/i.test(sentence)) return false;
+  let rest = sentence;
+  for (const n of docNames) rest = rest.split(n).join(" ");
+  if (differ) rest = rest.replace(/\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*?\b(?:figures?|amounts?|sums?)\b/gi, " ").replace(/\b(?:product|benefit|summary|summaries|certificate|schedule|policy|wording|brochure)\b/gi, " ")
+    // "... for the same wrist fracture, so ..." only names the benefit the cards already show.
+    .replace(/\bfor\s+(?:the\s+same|this|that)\s+[a-z' -]{1,40}?(?=\s*[,;]|\s+so\b)/gi, " ").replace(/\b(?:two|both)\b/gi, " ");
+  rest = rest.replace(/\bnot (?:a|the) total\b/gi, " ").replace(/\b(?:they|these|this|it|are|is|amounts?|figures?|benefits?|separate|different|and|so|the|insurer|decides|which|one|applies|alternatives?|added|together|not|each|other|from|parts?|of|your|documents?|but|be|can|cannot|should)\b/gi, " ");
   return !/[a-z]{3,}/i.test(rest);
 }
 
@@ -906,7 +979,7 @@ function basisOf(household: Household, c: Checked): string {
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
   const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
-  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
+  return `${po.percent}% of ${c.person}'s ${cover} sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
@@ -927,8 +1000,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
-        // A percentage that is not worked out is kept as the printed percentage, without an amount.
-        if (st.percentOf) checked.push({ s: { ...st, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found: r.found ?? found, amount: null, person, note: null });
+        // A percentage that is not worked out is kept as the printed percentage, without an amount. A benefit table's label
+        // does not print the percentage (the card's own line does), so it is said here.
+        if (st.percentOf) {
+          const pct = serverWords.has(st.text) ? `${st.text.replace(/\.\s*$/, "")}: ${st.percentOf.percent}% of ${st.percentOf.baseQuote ? "the sum insured" : "the figure its table prints"}.` : st.text;
+          checked.push({ s: { ...st, text: pct, kind: "fact", amount: null, percentOf: null, alternativeGroup: null }, found: r.found ?? found, amount: null, person, note: null });
+        }
         continue;
       }
       const at = r.found ?? found;
@@ -1069,26 +1146,39 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     }
     uncoveredCard(c, i);
   });
+  const noted: Checked[] = [];
   for (const members of notTotals) {
     const who = members[0].person;
     const shown = members.filter((m) => statements.some((s) => s.amount?.text === m.amount!.text && s.personName === m.person));
     if (shown.length < 2) continue;
-    const text = `${shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text)).join(", ").replace(/, ([^,]*)$/, " and $1")}${who ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
+    noted.push(...shown);
+    // The person is named only when the answer gives amounts for more than one person.
+    const others = statements.some((s) => s.amount && s.personName && s.personName !== who);
+    const said = shown.map((m, k) => (k ? m.amount!.text.replace(/^Up to /, "up to ") : m.amount!.text));
+    // "S$1,250 and S$120,000": the amounts' own commas never stand in for the list's.
+    const list = `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}`;
+    const text = `${list}${who && others ? ` for ${who}` : ""} come from different parts of your documents. They are not a total; the insurer decides which applies.`;
     statements.push({ id: `not-total-${statements.length + 1}`, kind: "uncertainty", text, fullText: text, conditions: [] });
   }
   // Said once: the server's note, which names the amounts, is always kept (Critic R121-1). In a point of the model's own,
-  // only a sentence that says nothing but "not a total" is left out; any other words (a deadline, a condition) stay, and
-  // the point goes only when nothing else is left (Critic R122-1, TE #101).
+  // only a sentence that says nothing but "not a total" (or that the documents print different figures and the insurer
+  // decides which applies) is left out; any other words (a deadline, a condition) stay, and the point goes only when
+  // nothing else is left (Critic R122-1, TE #101).
   if (statements.some((s) => s.id.startsWith("not-total-"))) {
+    const covered = new Set(noted.map((m) => `${m.person ?? ""}|${m.amount!.text}`));
+    const differOk = statements.filter((s) => s.amount).every((s) => covered.has(`${s.personName ?? ""}|${s.amount!.text}`));
+    const docNames = household.documents.flatMap((d) => [docLabel(household, d), d.productName?.trim() ?? "", personalFileName(d.name) ?? ""]).filter((n) => n.length > 2).sort((a, b) => b.length - a.length);
     for (const s of [...statements]) {
-      if (s.kind !== "uncertainty" || s.id.startsWith("not-total-") || !/\bnot (?:a|the) total\b/i.test(s.text)) continue;
-      const kept = sentences(s.text).filter((x) => !onlyNotATotal(x));
+      if (s.kind !== "uncertainty" || s.id.startsWith("not-total-")) continue;
+      const kept = sentences(s.text).filter((x) => !onlyNotATotal(x, docNames, differOk));
+      if (kept.length === sentences(s.text).length) continue;
       if (!kept.length) statements.splice(statements.indexOf(s), 1);
       else if (kept.length < sentences(s.text).length) { s.text = kept.join(" "); s.fullText = s.text; }
     }
   }
+  // A left-out amount is always said, so the household never takes the cards shown for all there is. A left-out point that
+  // is not an amount stays in the report only: a line saying a point was left out tells the household nothing they can use.
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
-  else if (report.dropped.length) statements.push({ id: "left-out-fact", kind: "uncertainty", text: LEFT_OUT_FACT, fullText: LEFT_OUT_FACT, conditions: [] });
   let bottomLine = withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read);
   const labelled = labelledNumbersRead(citations);
   const nextSteps = model.nextSteps.map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, (t) => read(labelled(t)))).filter(Boolean);
