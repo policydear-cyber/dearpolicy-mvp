@@ -51,7 +51,8 @@ export function apiKeyFor(provider:Provider){
 /** One key, whole system. MODEL_PRESET=anthropic routes every job to Claude
  * with the cheap tier where cheap is enough and the mid tier where it has to
  * be right, and needs nothing installed on the computer. Explicit per-job
- * settings still win over the preset. */
+ * settings still win over the preset, except that under the anthropic preset
+ * only Anthropic ones count (allowedByPreset). */
 const PRESETS:Record<string,Record<"reading"|"judgement"|"narration",string>>={
   anthropic:{reading:"anthropic:claude-haiku-4-5",judgement:"anthropic:claude-sonnet-5",narration:"anthropic:claude-haiku-4-5"},
   gemini:{reading:"gemini:flash-lite",judgement:"gemini:flash",narration:"gemini:flash-lite"},
@@ -66,9 +67,15 @@ export function modelPreset(){
  * was not accepted", which is the actual problem, instead of as an empty
  * answer nobody can explain. */
 const DEFAULT_MODEL:Record<ModelRole,string>={reading:"flash-lite",judgement:"flash",narration:"flash-lite",chat:"flash"};
+/** MODEL_PRESET=anthropic means "everything on the Anthropic key": a per-job setting still picks the Claude model, but
+ * one naming another provider (an OpenAI or Google setting left over from before the move) is ignored, so the switch
+ * is one setting rather than a hunt for old ones. Other presets keep "explicit settings win". */
+function allowedByPreset(choice:ModelChoice|null){
+  return choice&&(modelPreset()!=="anthropic"||choice.provider==="anthropic")?choice:null;
+}
 export function modelFor(role:ModelRole):ModelChoice{
   const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:process.env.CHAT_MODEL;
-  const chosen=parseChoice(setting);
+  const chosen=allowedByPreset(parseChoice(setting));
   if(chosen)return chosen;
   const preset=modelPreset();
   if(preset&&role!=="chat"){
@@ -95,7 +102,7 @@ export function describeChoice(choice:ModelChoice){
  * back to, or when it would just be the same model again. */
 export function fallbackModelFor(role:ModelRole):ModelChoice|null{
   const setting=role==="judgement"?process.env.JUDGEMENT_FALLBACK_MODEL:undefined;
-  const chosen=parseChoice(setting);
+  const chosen=allowedByPreset(parseChoice(setting));
   if(chosen)return chosen;
   const preset=modelPreset();
   if(preset==="gemini"&&role==="judgement"){
