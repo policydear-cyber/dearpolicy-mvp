@@ -12,7 +12,8 @@ import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
-export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[] };
+/** people: the household's member names, so a page naming another member is known (only the premium check uses it). */
+export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[]; people?: string[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
 /** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"),
  * and premiumLabel the words that line prints before it ("Instalment Premium"). */
@@ -23,13 +24,18 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
  * "Instalment Premium (Life Assured 2)") is about part of the premium or another life, so it is never used (Critic R108-2,
  * TE #97). */
 const PLAIN_PREMIUM = /^(?:(?:total|annual|yearly|monthly|quarterly|half[\s-]yearly|modal|instalment|installment)\s+)?(?:premium|instalment|installment)(?:\s+(?:paid|payable|amount))?$/i;
-/** Whether a page names a life other than this person ("Life Assured 2 : …", "Insured : <someone else>", "second life"):
- * a premium on such a page may be the other life's, so it is not used (TE #97). */
-const LIFE_LINE = /^[ \t]*(?:(?:joint\s+)?life\s+(?:assured|insured)|assured|insured(?:\s+person)?|policy\s*holder|proposer|owner)\b[^:\t\n/]{0,20}[:\t][ \t]*:?[ \t]*([^\t\n]+)/gim;
+/** Whether a page may name a life other than this person: another household member's name anywhere on it, a word for
+ * another insured person (spouse, child, dependant, covered members), a second or joint life, or a life line naming someone
+ * else. Fail-safe: a premium on such a page may be the other life's, so it is not used, even when it is in fact this
+ * person's (TE #97). */
+const LIFE_LINE = /\b(?:(?:joint\s+)?life\s+(?:assured|insured)|assured|insured(?:\s+person)?|policy\s*holder|proposer|owner)\b[^:\t\n/]{0,20}[:\t][ \t]*:?[ \t]*([^\t\n]+)/gi;
 const HEADER_WORD = /^(?:premiums?|sum|benefits?|cessation|commencement|date|term|plan|amount|policy|basic|rider|insured|assured)$/;
-function otherLife(pageText: string, person: string): boolean {
-  if (/\b(?:life\s+(?:assured|insured)|insured(?:\s+person)?|assured)\s*(?:\(?\s*(?:2|3|ii|iii|two)\s*\)?)(?![\d.])|\bsecond\s+(?:life|insured)\b|\bjoint\s+life\b/i.test(pageText)) return true;
+const OTHER_INSURED = /\b(?:spouses?|wife|husband|child(?:ren)?|sons?|daughters?|dependa?ents?|covered\s+(?:members?|persons?)|insured\s+members?|family\s+members?)\b|\b(?:life\s+(?:assured|insured)|insured(?:\s+person)?|assured)\s*(?:\(?\s*(?:2|3|ii|iii|two)\s*\)?)(?![\d.])|\bsecond\s+(?:life|insured)\b|\bjoint\s+life\b/i;
+function otherLife(pageText: string, person: string, people: string[]): boolean {
+  if (OTHER_INSURED.test(pageText)) return true;
   const own = normalizePersonName(person).split(" ").filter((w) => w.length > 1);
+  const same = (name: string) => { const n = normalizePersonName(name.replace(/,/g, " ")).split(" ").filter((w) => w.length > 1); return n.every((w) => own.includes(w)) || own.every((w) => n.includes(w)); };
+  if (people.some((name) => !same(name) && nameOnPage(name, pageText))) return true;
   return [...pageText.matchAll(LIFE_LINE)].some((m) => {
     const named = normalizePersonName(m[1].replace(/,/g, " ")).split(" ").filter((w) => w.length > 1 && /^[a-z]+$/.test(w));
     // A table header ("Assured/ Premium Cessation …") is column titles, not a name.
@@ -232,7 +238,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const said = at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
       // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
       const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
-      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person)) { premiumSource = at; premiumLabel = said; }
+      if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
       else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
     }
     const currency = sumInsured == null && premium == null ? null
