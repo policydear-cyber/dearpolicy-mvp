@@ -10,7 +10,8 @@ import type { Source } from "./check";
 import { figureText } from "./assemble";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, matchMember } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
+import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null };
@@ -18,7 +19,7 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
-  days?: Record<string, { fromDay: number | null; maxDays: number | null }[]> };
+  days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]> };
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -40,9 +41,21 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     rows.push({ ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null });
   };
   for (const p of table.people) for (const r of p.rows) add(r);
-  for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) add(r);
+  // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
+  const premiums = new Set<string>();
+  for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) {
+    if (r.benefit === premiumName(c)) {
+      const key = [p.id, c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
+      if (premiums.has(key)) continue;
+      premiums.add(key);
+    }
+    add(r);
+  }
   return rows;
 }
+
+/** A premium row's name: the premium line's own words ("Instalment Premium"), and how often it is paid when printed. */
+const premiumName = (c: PersonCover) => `${c.premiumLabel || "Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}`;
 
 /** A cover's own printed figures as rows: its sum insured (as of the date printed with it) and its premium. A sum insured
  * the household corrected is not printed anywhere, so that row has no amount (the Coverage page shows the correction). */
@@ -57,7 +70,7 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
       : { kind: "printed", amount: c.sumInsured, currency: c.currency, unit: "lump_sum" }, c.source));
   }
   if (c.premium != null)
-    out.push(row(`Premium${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""}`, { kind: "printed", amount: c.premium, currency: c.currency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.currency, unit: "lump_sum" }, c.premiumSource ?? c.source));
   return out;
 }
 
@@ -99,13 +112,30 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const st = statementFromRow(row, raw);
     if (st) {
       statements.push(st); report.labels.push(String(st.text));
-      if (row.figure.kind === "printed" && row.figure.unit === "per_day") (report.days![String(st.text)] ??= []).push({ fromDay: row.fromDay, maxDays: row.maxDays });
+      if (row.figure.kind === "printed" && row.figure.unit === "per_day")
+        (report.days![String(st.text)] ??= []).push({ fromDay: row.fromDay, maxDays: row.maxDays, alone: dailyRateAlone(row, household) });
     }
     else report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
   }
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
+}
+
+/** Whether a daily row's printed words (its line, the lines that continue it, and its quote) hold no limit but its most
+ * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked
+ * out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
+const MAX_DAYS = /\b(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+)?days?\b/gi;
+function dailyRateAlone(row: ChatRow, household: Household): boolean {
+  if (row.figure.kind !== "printed") return false;
+  const found = locateQuote(household, row.source.excerpt, row.docIndex);
+  const page = found && household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!found || !page) return false;
+  const words = `${rowWithContinuation(page.text, found.offset)}\n${found.excerpt}`;
+  const daily = row.figure.amount;
+  if (moneyFiguresIn(words).some((f) => Math.abs(f.value - daily) > 0.005)) return false;
+  const rest = words.replace(MAX_DAYS, " ");
+  return !CAP_WORDS.test(rest) && !/\b(?:limit|aggregate|overall|in\s+total)\b/i.test(rest);
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
@@ -160,7 +190,7 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
     const parent = statements.find((s) => s.id === st.id!.slice(0, -"-stay".length));
     const rule = /paid from day (\d+), for at most (\d+) days/.exec(st.basis ?? "");
     const rows = parent && labels.has(parent.text) ? report.days?.[parent.text] ?? [] : [];
-    return !!rule && rows.length > 0 && rows.every((r) => r.maxDays === Number(rule[2]) && (r.fromDay == null || r.fromDay === Number(rule[1])));
+    return !!rule && rows.length > 0 && rows.every((r) => r.alone && r.maxDays === Number(rule[2]) && (r.fromDay == null || r.fromDay === Number(rule[1])));
   };
   const refused = statements.filter((st) => st.amount && !labels.has(st.text) && !stayOf(st));
   return { kept: statements.filter((st) => !refused.includes(st)), refused };
