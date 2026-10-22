@@ -797,7 +797,7 @@ export function statesMoney(sentence: string): boolean {
 }
 /** Sentences, without splitting after an abbreviation ("Group Policy No. G00750", "p. 13"). */
 const JOIN = "\u2060";
-const sentences = (text: string) => sentencesOf((text ?? "").replace(/\b(No|Nos|no|nos|p|pp|Cl|cl|Ref|ref|approx|e\.g|i\.e|vs)\.\s+(?=[A-Z0-9])/g, `$1.${JOIN}`)).map((x) => x.replace(new RegExp(JOIN, "g"), " "));
+export const sentences = (text: string) => sentencesOf((text ?? "").replace(/\b(No|Nos|no|nos|p|pp|Cl|cl|Ref|ref|approx|e\.g|i\.e|vs)\.\s+(?=[A-Z0-9])/g, `$1.${JOIN}`)).map((x) => x.replace(new RegExp(JOIN, "g"), " "));
 function withoutMoney(text: string, dropped: string[], keep: (s: string) => string = (s) => s): string {
   return sentences(text ?? "").filter((s) => { const money = statesMoney(keep(s)); if (money) dropped.push(s); return !money; }).join(" ").trim();
 }

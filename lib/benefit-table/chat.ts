@@ -11,7 +11,7 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation, sentences } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
@@ -327,4 +327,57 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
   const own = row.baseSource && row.baseSource.page === row.source.page && row.baseSource.documentId === row.source.documentId;
   return { ...base, percentOf: { percent: row.percent, baseAmount: money(row.base, f.currency),
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };
+}
+
+/** A sentence of the model's own words that shuts a person out of a cover ("they belong to Desmond, not Charmaine",
+ * "only Desmond has it", "Charmaine has no life cover") while the answer's cards, or that person's own table rows for the
+ * same benefit, show they have it (live run 22 Oct, C5). Such a sentence is a wrong-person statement even without an
+ * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Charmaine is not covered by
+ * the travel policy") is kept. */
+export const PERSON_OVERRULED = "a sentence said a person does not have a cover their own rows show";
+const NOT_COVER_WORD = new Set(["benefit"]);
+export function dropPeopleShutOut<T extends { kind: string; text: string; fullText?: string; amount?: unknown; personName?: string | null }>(
+  answer: { summary: string; bottomLine?: string | null; statements?: T[] }, rows: ChatRow[], household: Household, labels: readonly string[]): string[] {
+  const people = household.members.map((m) => baseName(m.name));
+  const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+  // The words that name each person and no one else ("desmond", "chuen", "charmaine").
+  const own = new Map(people.map((p) => [p, words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w)))]));
+  const alt = (p: string) => own.get(p)!.length ? `(?:${own.get(p)!.join("|")})` : null;
+  const statements = answer.statements ?? [];
+  const cards = statements.filter((s) => s.amount);
+  // The rows behind the cards: the row whose server label a card reads.
+  const labelled = new Set(labels);
+  const carded = rows.filter((r) => cards.some((c) => c.text === rowLabel(r, coverLabels(rows), benefitNames(rows)) && labelled.has(c.text)));
+  const coverText = (p: string) => rows.filter((r) => baseName(r.person) === p).map((r) => [r.product, r.cover, r.plan, r.benefit].join(" ")).join(" ").toLowerCase();
+  const has = (p: string, sentence: string) => {
+    const kinds = [...sentence.toLowerCase().matchAll(new RegExp(COVER_KIND.source, "gi"))].map((m) => m[0]).filter((w) => !NOT_COVER_WORD.has(w));
+    const theirs = coverText(p);
+    if (kinds.some((k) => !theirs.includes(k))) return false;
+    if (cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
+    return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
+  };
+  const shutOut = (sentence: string): boolean => people.some((y) => {
+    const Y = alt(y);
+    if (!Y) return false;
+    const excluded = new RegExp(String.raw`\b(?:not|but\s+not|rather\s+than|instead\s+of)\s+(?:for\s+|to\s+|of\s+|under\s+|by\s+)?${Y}\b|\b${Y}(?:'s)?\s+(?:does\s+not|doesn't|did\s+not|didn't|is\s+not|isn't|has\s+not|hasn't|has\s+no|have\s+no|is\s+never|cannot|can't)\b|\b(?:nothing|none|no\s+(?:cover|benefit|policy|amount|payout)s?)\s+(?:for|under|in)\s+${Y}\b`, "i").test(sentence);
+    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|just|exclusively)\s+(?:for\s+|to\s+)?${alt(x)}\b|\b${alt(x)}(?:'s)?\s+(?:only|alone)\b`, "i").test(sentence));
+    const shut = excluded || (others.length > 0 && !new RegExp(String.raw`\b${Y}\b`, "i").test(sentence));
+    return shut && has(y, sentence);
+  });
+  const left: string[] = [];
+  const keep = (text: string) => sentences(text).filter((x) => { const out = shutOut(x); if (out) left.push(x); return !out; }).join(" ");
+  const bottom = keep(answer.bottomLine ?? answer.summary);
+  for (const s of [...statements]) {
+    if (s.amount || labelled.has(s.text)) continue;
+    const text = keep(s.text);
+    if (text === s.text) continue;
+    if (!text) statements.splice(statements.indexOf(s), 1);
+    else { s.text = text; s.fullText = text; }
+  }
+  if (left.length) {
+    const b = bottom || (cards.length ? "Here is what your documents show for each person." : "Here is what your documents say.");
+    answer.summary = b;
+    if (answer.bottomLine != null) answer.bottomLine = b;
+  }
+  return left;
 }

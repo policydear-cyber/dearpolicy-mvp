@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, coverLabels, citedPages, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -673,6 +673,44 @@ test("a short document no row comes from is sent whole, unless it could not be r
   assert.equal(extra, 14);
   const payee = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: 37, text: "All claims will be paid directly to the Insured Person, proper claimant or legal representative, as applicable." }] }) };
   assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
+});
+
+// ------------------------------------------------------------------ live run 22 Oct (ab4026a) round 4
+/** The answer for these model statements, as the chat turn has it before the shut-out check, and that check's result. */
+function shutOut(bottomLine: string, statements: Record<string, unknown>[]) {
+  const raw = { bottomLine, nextSteps: [], question: null, statements: statements.map((s) => ({
+    kind: "amount", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...s })) };
+  const fromRows = amountsFromRows(raw, rows, HOUSE);
+  const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+  const left = dropPeopleShutOut(a, rows, HOUSE, fromRows.report.labels);
+  return { left, bottom: a.bottomLine, texts: (a.statements ?? []).filter((s) => !s.amount).map((s) => s.text), amounts: (a.statements ?? []).filter((s) => s.amount).length };
+}
+const fact = (text: string, person: string | null = null) => ({ kind: "uncertainty", text, person, quote: null, document: null });
+test("a sentence that shuts a person out of a cover their own cards or rows show is left out (live run 22 Oct, C5)", () => {
+  const hips = [{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow" }, { row: idOf("Tan Mei Ling", "Hip"), person: "Tan Mei Ling" }];
+  // "not Tan" while Tan's own card is shown: left out, and the bottom line is the server's.
+  let r = shutOut("Both are real, and they belong to Lim, not Tan Mei Ling.", hips);
+  assert.equal(r.left.length, 1);
+  assert.doesNotMatch(String(r.bottom), /not Tan/);
+  assert.equal(r.amounts, 2);
+  // Only Lim's card shown, but Tan has her own row for the same benefit: still left out.
+  r = shutOut("This is Lim's alone. The hip benefit pays a share of the sum insured.", [hips[0]]);
+  assert.deepEqual(r.left, ["This is Lim's alone."]);
+  assert.match(String(r.bottom), /hip benefit/);
+  for (const s of ["Only Lim Ah Kow has this accident cover.", "Mei Ling has no accident cover.", "There is nothing for Mei Ling under this policy."]) {
+    r = shutOut("Here it is.", [hips[0], fact(s)]);
+    assert.deepEqual(r.left, [s], s);
+  }
+  // A kind of cover she has no row for is not shut out of anything she has.
+  for (const s of ["Tan Mei Ling is not covered by the travel policy.", "Mei Ling has no motor cover."]) {
+    r = shutOut("Here it is.", [hips[0], fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
+  // Naming both, or saying what is the person's own, shuts no one out.
+  for (const s of ["Lim and Tan Mei Ling each have their own accident cover.", "The amount below is Lim's own accident cover."]) {
+    r = shutOut(s, hips);
+    assert.deepEqual(r.left, [], s);
+  }
 });
 
 async function atest(name: string, fn: () => Promise<void>) {
