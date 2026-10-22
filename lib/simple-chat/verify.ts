@@ -394,7 +394,8 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
  * - its page names no other household member and no other insured person (otherLife);
  * - its line names the person, or names nobody on a page that names them (a one-life schedule prints the name once, as
  *   "Life Assured : ...", not on the sum insured's line);
- * - its page prints exactly one figure the size of a sum insured, so it is not another cover's (TE #103 A3). */
+ * - its page prints exactly one benefit amount, of any size, so it is not another cover's (TE #103 A3, Critic R127-1);
+ * - it is printed with the name of the benefit the wording is headed by (R127-1). */
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -412,11 +413,35 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   const lines = page.text.split("\n");
   const line = lines[page.text.slice(0, bf.offset).split("\n").length - 1] ?? "";
   if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return null;
-  // Exactly one line with a sum-sized amount (10,000 or more, printed with thousands separators, so not a phone number
-  // or code) on the page, so it cannot be another cover's sum insured (TE #103 A3).
-  const big = lines.filter((l) => [...l.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g)].some((m) => Number(m[0].replace(/,/g, "")) >= 10000));
-  if (big.length !== 1) return null;
+  // Exactly one benefit-amount line on the page, of any size ("Death Benefit 5,000.00" counts as much as "300,000.00"); a
+  // premium, total, discount or tax line is not a benefit amount. Two lines cannot say which one the 100% is of (Critic R127-1).
+  const amountLines = lines.filter((l) => AMOUNT.test(l) && !NOT_BENEFIT_AMOUNT.test(l));
+  if (amountLines.length !== 1) return null;
+  // The base's lines (with the line either side, where a wrapped name continues) name the benefit the wording is headed by.
+  const name = headingWords(household, wording);
+  const at = page.text.slice(0, bf.offset).split("\n").length - 1;
+  const near = new Set(tokens(lines.slice(Math.max(0, at - 1), at + bf.excerpt.split("\n").length + 1).join(" ")));
+  if (!name.length || !name.every((w) => near.has(w))) return null;
   return bf;
+}
+/** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
+const AMOUNT = /(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|(?<![\w.,])\d+\.\d{2}(?![\d])/;
+const NOT_BENEFIT_AMOUNT = /\b(?:premiums?|instalments?|installments?|total|discount|gst|tax|fees?|charges?|payable\s+for\s+advice)\b/i;
+const HEADING_STOP = new Set(["benefit", "benefits", "the", "of", "and", "for", "on", "a", "an", "to", "in"]);
+/** The name words of the heading above the quoted wording ("2.2. Critical Illness Benefit" gives critical, illness), from
+ * the nearest line above it that is a numbered heading or in capitals. Empty when there is none (refused, fail-safe). */
+function headingWords(household: Household, found: Found): string[] {
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  if (!page) return [];
+  const above = page.text.slice(0, found.offset).split("\n").reverse();
+  for (const l of above) {
+    const t = l.trim();
+    const numbered = /^(?:\d+(?:\.\d+)*\.?|[A-Z]\.)[ \t]+([A-Za-z][A-Za-z &'()/-]{2,60})$/.exec(t);
+    const capitals = !numbered && /^[A-Z][A-Z &'()/-]{2,60}$/.test(t) ? t : null;
+    const heading = numbered?.[1] ?? capitals;
+    if (heading) return tokens(heading).filter((w) => !HEADING_STOP.has(w));
+  }
+  return [];
 }
 /** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
  * figure ("100% of the Sum Insured, up to S$400,000"), or a line above it on its page prints a sum insured or limit with a
