@@ -4728,3 +4728,21 @@ Two wording points, neither blocking:
 ### Tests (run locally)
 - style-test: 6/6
 - benefit-table chat-test: 46/46
+
+## Round 122: PR #101 at 58a225f (R121 fixes)
+
+**Verdict: READY.** R121-1 to R121-4 are fixed. One low note follows.
+
+- **R121-1 is fixed.** `verify.ts:1063-1075` now always adds the server's not-a-total note, which names the amounts. It then drops the model's own uncertainty statements that say "not a/the total". I re-ran my R121 probe with the PR's fixture. "The documents print different figures", "Either document…" and no note each now keep exactly 1 server note, and both amounts stay.
+- **R121-2 is fixed.** `answerStyle()` catches a read failure, logs one line and returns "". The prompt then leaves out the style block entirely, so the accuracy rules are unchanged. The style test covers a missing path.
+- **R121-3 is fixed.** `benefit_terms` cards show "Policy terms, not worked out for this case" again.
+- **R121-4 is fixed.** The guide uses "Wei Ming", and a test asserts that neither household name appears in it. The full name in `app/family/page.tsx` is still there, outside this PR's scope.
+
+### R122-1 (low, not blocking)
+A model sentence is dropped whole when it contains "not a total", even if it also says something else. My probe: "These are not a total; the recuperation benefit needs a 24-hour stay" is removed. The condition still sits on the recuperation card, because cards carry the row's conditions, so nothing is hidden today.
+
+A tighter rule would drop the sentence only when, once "not a total" and the amounts are removed, nothing else is left.
+
+### Tests (run locally)
+- style-test: 9/9
+- benefit-table chat-test: 46/46
