@@ -746,6 +746,28 @@ test("what prose says about the library is held to the library's own record (liv
   assert.equal(run("Here.", [{ text: "The group certificate for the scheme.", document: "D1" }], "how much is the accident cover").texts.length, 0);
 });
 
+test("a row the checks refuse is given as the same benefit's same figure from another document, never another figure (H1)", () => {
+  const PROSE = "aaaaaaaa-0000-0000-0000-00000000000c";
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(PROSE, "Benefit summary.pdf", [{ page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nB. Hip\nIn the event of a fracture the Company will pay seventy five\npercent (75%) of the Sum Insured in the following manner" }])] };
+  const hip = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Hip")!;
+  const twin = { ...hip, id: `R${rows.length + 1}`, docIndex: H.documents.length - 1, source: { ...hip.source, documentId: PROSE, page: 5, excerpt: "the Company will pay seventy five\npercent (75%) of the Sum Insured in the following manner" } };
+  const rs = [...rows, twin];
+  const give = (id: string, r2 = rs) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: id }] };
+    const fromRows = amountsFromRows(raw, r2, H);
+    const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer;
+    return (a.statements ?? []).filter((x) => x.amount).map((x) => [x.amount!.text, x.source?.page]);
+  };
+  // The prose row alone is refused (its percentage is wrapped onto the next line); named, the table row is given instead.
+  assert.deepEqual(give(twin.id, [twin]), []);
+  assert.deepEqual(give(twin.id), [["S$450,000", 2]]);
+  // Named itself, the table row is given, once.
+  assert.deepEqual(give(hip.id), [["S$450,000", 2]]);
+  // A twin with another figure is no stand-in.
+  const other = { ...hip, figure: { ...hip.figure, amount: 300000 } as typeof hip.figure, id: twin.id, docIndex: twin.docIndex, source: twin.source };
+  assert.deepEqual(give(twin.id, [...rows.filter((r) => r !== hip), other]).filter(([t]) => t === "S$450,000"), []);
+});
+
 async function atest(name: string, fn: () => Promise<void>) {
   try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }

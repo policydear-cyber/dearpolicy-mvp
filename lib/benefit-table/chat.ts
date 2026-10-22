@@ -11,7 +11,7 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation, sentences } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
@@ -171,8 +171,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   for (const raw of (json as { statements: Record<string, unknown>[] }).statements) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
-    const row = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
-    if (!row) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
+    if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    const row = checkedRow(named, raw, rows, household, labels, names, given);
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -180,8 +181,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
     }
     // The same row named twice is given once (Critic R91-3).
-    if (given.has(row.id)) continue;
-    given.add(row.id);
+    if (given.has(row.id) || given.has(named.id)) continue;
+    given.add(row.id); given.add(named.id);
     // The same benefit of the same cover printed in another of the person's documents ("Neck, Skull or Spine (Full Break)"
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
@@ -194,7 +195,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     for (const r of [row, ...companions]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === row ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
@@ -206,6 +207,24 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
+}
+
+/** The row to give for the one the model named: itself, unless the checks would refuse its amount (a percentage printed in
+ * prose, wrapped over two lines, release-set H1) and the same benefit of the same cover is printed with the same figure in
+ * another of the person's documents (a table row) that they accept. The other row is then given in its place, with its own
+ * conditions. Never a different figure: that is a companion, given with it. */
+function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): ChatRow {
+  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && sameFigure(o.figure, row.figure));
+  if (!twins.length) return row;
+  const passes = (r: ChatRow, conditions: unknown) => {
+    const st = statementFromRow(r, { ...raw, conditions, alternativeGroup: null }, labels, names);
+    if (!st) return false;
+    const parsed = readModelAnswer({ bottomLine: "-", nextSteps: [], question: null, statements: [st] });
+    return !!parsed && (verifyAnswer(household, parsed, [], new Set([String(st.text)])).answer.statements ?? []).some((x) => x.amount && x.text === st.text);
+  };
+  if (passes(row, raw.conditions)) return row;
+  return twins.find((o) => passes(o, o.conditions.map((t) => ({ text: t, quote: t })))) ?? row;
 }
 
 /** A benefit's name without its row letter, case or punctuation, split into its section ("Simple Fracture ...") and the
