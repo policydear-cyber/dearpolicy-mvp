@@ -477,6 +477,38 @@ test("a qualified premium line, another life's or a rider's, is never the cover'
     reading("personal_proof", "CI Plan", [schedCover({ premium: 470.85, premiumQuote: "Instalment Premium\t: 470.85" })], []));
   assert.equal(two.covers[0].premium, null);
 });
+test("a first-year premium printed once on the premium's page is its own row, given with the premium (release-set A6)", () => {
+  const withFirst = (extra: string) => checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text.replace("Instalment Premium\t: 470.85", `${extra}\nInstalment Premium\t: 470.85`) }] }),
+    reading("personal_proof", "CI Plan", [schedCover({ premium: 470.85, premiumQuote: "Instalment Premium\t: 470.85" })], []));
+  const c = withFirst("First Year Instalment Premium * : 376.68").covers[0];
+  assert.equal(c.firstYearPremium, 376.68);
+  assert.equal(c.firstYearLabel, "First Year Instalment Premium");
+  // Two first-year lines, or one with no figure of its own, give none (the note is still said).
+  assert.equal(withFirst("First Year Instalment Premium * : 376.68\nFirst Year Premium (Rider) : 12.00").covers[0].firstYearPremium ?? null, null);
+  assert.equal(withFirst("First Year Instalment Premium * : see page 4").covers[0].firstYearPremium ?? null, null);
+  assert.equal(withFirst("First Year Instalment Premium * : see page 4").covers[0].premiumNote, "the page prints a different premium for the first policy year");
+  // Named, the premium row brings the first-year row with it; both shown, never as alternatives.
+  const H: Household = { ...HOUSE2, documents: [{ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text.replace("Instalment Premium\t: 470.85", "First Year Instalment Premium * : 376.68\nInstalment Premium\t: 470.85") }] }, ...HOUSE2.documents.slice(1)] };
+  const rs = chatRows(assembleTable([withFirst("First Year Instalment Premium * : 376.68")], family, []), H);
+  assert.deepEqual(rs.filter((r) => /Premium/.test(r.benefit)).map((r) => r.benefit), ["Instalment Premium (the page prints a different premium for the first policy year)", "First Year Instalment Premium (first policy year only)"]);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: rs.find((r) => /^Instalment Premium/.test(r.benefit))!.id }] };
+  const fromRows = amountsFromRows(raw, rs, H);
+  const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["how much do we pay"], new Set(fromRows.report.labels)).answer;
+  const shown = keepLabelledAmounts(a.statements ?? [], fromRows.report).kept.filter((x) => x.amount);
+  assert.deepEqual(shown.map((x) => x.amount!.text), ["S$470.85", "S$376.68"]);
+  assert.ok(shown.every((x) => !x.group));
+});
+test("a premium sentence never says the insurer decides which premium applies (release-set A6)", () => {
+  const run = (bottomLine: string, text: string) => {
+    const a = verifyAnswer(HOUSE, readModelAnswer({ bottomLine, nextSteps: [], question: null, statements: [{ kind: "uncertainty", text, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]).answer;
+    return { bottom: a.bottomLine, texts: (a.statements ?? []).map((x) => x.text) };
+  };
+  const r = run("Here are the premiums. The pages print two premiums, so the insurer decides which applies.", "The proposal prints a different premium from the schedule, so the insurer decides which applies. The schedule is later.");
+  assert.equal(r.bottom, "Here are the premiums.");
+  assert.deepEqual(r.texts, []);
+  // Not about a premium: kept.
+  assert.deepEqual(run("b", "Two documents print different amounts for the fracture, so the insurer decides which applies.").texts, ["Two documents print different amounts for the fracture, so the insurer decides which applies."]);
+});
 test("a premium on a page that names another life is not used (TE #97)", () => {
   const base = HOUSE2.documents[0].pages[0].text;
   for (const extra of ["Life Assured 2\t: Goh Siew Lan", "Insured\t: Tan Mei Ling", "Second life insured: Tan Mei Ling", "Name of Life Assured\t: Goh Siew Lan",

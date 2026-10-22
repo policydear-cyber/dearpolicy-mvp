@@ -44,14 +44,18 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   for (const p of table.people) for (const r of p.rows) add(r);
   // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
   const premiums = new Set<string>();
+  // First-year premiums come last, so the other rows keep their numbers.
+  const firstYears: TableRow[] = [];
   for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) {
-    if (r.benefit === premiumName(c)) {
-      const key = [p.id, c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
+    const firstYear = r.source === c.firstYearSource;
+    if (r.benefit === premiumName(c) || firstYear) {
+      const key = [p.id, firstYear ? "first year" : "premium", c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
       if (premiums.has(key)) continue;
       premiums.add(key);
     }
-    add(r);
+    if (firstYear) firstYears.push(r); else add(r);
   }
+  for (const r of firstYears) add(r);
   return rows;
 }
 
@@ -102,6 +106,9 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
   }
   if (c.premium != null)
     out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+  // The first policy year's premium its page prints (release-set A6), named as that page names it.
+  if (c.premium != null && c.firstYearPremium != null && c.firstYearSource)
+    out.push(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource));
   return out;
 }
 
@@ -192,10 +199,14 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
-    for (const r of [row, ...companions]) {
+    // A premium whose page prints a different first-year premium is given with that first-year premium (release-set A6):
+    // one after the other, never alternatives and never a total.
+    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+      && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
+    for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")

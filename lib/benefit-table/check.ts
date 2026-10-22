@@ -23,7 +23,10 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   premiumNote?: string | null;
   /** A premium taken from its page's premium line has the currency that line or its page settles, never the cover's
    * (Critic R126-4); unset, the premium has the cover's currency. */
-  premiumCurrency?: string | null };
+  premiumCurrency?: string | null;
+  /** The first policy year's premium, when the premium's page prints exactly one first-year premium line with a figure
+   * ("First Year Instalment Premium * : 376.68"), and that line's words. */
+  firstYearPremium?: number | null; firstYearSource?: Source | null; firstYearLabel?: string | null };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -257,9 +260,19 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   }
   // The premium line's page also printing a first-year premium (a first-year discount): the plain premium is not what is
   // paid in the first policy year, so the row says so (release-set A6).
-  for (const c of out.covers)
-    if (c.premium != null && /^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/im.test(pageText((c.premiumSource ?? c.source).page)))
-      c.premiumNote = "the page prints a different premium for the first policy year";
+  // That first-year premium is given too, when the page prints it once, as a figure on a line of its own (release-set A6:
+  // the schedule's 376.68): from the same page and person as the premium, so the same tests hold.
+  for (const c of out.covers) {
+    if (c.premium == null) continue;
+    const page = (c.premiumSource ?? c.source).page;
+    if (!/^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/im.test(pageText(page))) continue;
+    c.premiumNote = "the page prints a different premium for the first policy year";
+    const lines = pageText(page).split("\n").filter((l) => /^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/i.test(l));
+    const m = lines.length === 1 ? /^[ \t]*(first[ \t]+(?:policy[ \t]+)?year[^\d\n]*?\bpremium)[ \t*]*[:\t][ \t]*(?:S\$|US\$|SGD|USD|\$)?[ \t]*(\d[\d,]*\.\d{2})[ \t]*$/i.exec(lines[0]) : null;
+    const at = m ? find(lines[0].trim(), page) : null;
+    if (!m || !at || at.page !== page || otherLife(pageText(page), c.person, doc.people ?? [])) continue;
+    c.firstYearPremium = Number(m[2].replace(/,/g, "")); c.firstYearSource = at; c.firstYearLabel = m[1].replace(/\s+/g, " ").trim();
+  }
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;

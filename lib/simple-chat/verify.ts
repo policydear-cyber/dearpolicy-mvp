@@ -1136,11 +1136,18 @@ function docNames(d: HouseholdDocument): string[] {
  * - a count of a person's (or the household's) documents that is not the count of documents linked to them (or uploaded)
  *   is replaced by the right count, in the server's words;
  * - "uploaded for (under) <person>" or "linked (only) to <people>" said of a document the record does not upload for, or
- *   link to, them is left out.
+ *   link to, them is left out;
+ * - a premium sentence saying the insurer decides which premium applies is left out (a printed premium is what is charged).
  * Any other sentence is kept as written. */
-function libraryClaimsRead(household: Household, left: string[]): (text: string) => string {
+const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\binsurer\s+(?:decides|will\s+decide|determines)\b/i.test(x);
+function libraryClaimsRead(household: Household, left: string[]): (text: string, statement?: boolean) => string {
   const live = household.documents.filter((d) => !d.supersededAt);
-  return (text: string) => sentences(text).flatMap((x) => {
+  return (text: string, statement = false) => {
+    // A printed premium is what is charged: "the insurer decides which premium applies" is never said (release-set A6). A
+    // statement built on it is left out whole, so no sentence that only explained it is left standing.
+    if (statement && sentences(text).some(PREMIUM_DECIDES)) { left.push(text); return ""; }
+    return sentences(text).flatMap((x) => {
+    if (PREMIUM_DECIDES(x)) { left.push(x); return []; }
     const named = membersNamedIn(household, x);
     const count = DOC_COUNT.exec(x);
     if (count && /\b(?:has|have|had|linked|uploaded|in\s+(?:your|the)\s+library|there\s+(?:are|is))\b/i.test(x) && !/\b(?:print|prints|printed|show|shows|say|says|list|lists|give|gives|differ|different)\b/i.test(x) && named.length <= 1) {
@@ -1169,6 +1176,7 @@ function libraryClaimsRead(household: Household, left: string[]): (text: string)
     }
     return [x];
   }).join(" ");
+  };
 }
 function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = false): boolean {
   // "The Product Summary and the Benefit Summary print different wrist fracture figures, so the insurer decides which
@@ -1325,7 +1333,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    let text = serverWords.has(c.s.text) ? c.s.text : library(withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read));
+    const said = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    let text = serverWords.has(c.s.text) ? said : library(said, true);
+    // A point the library's record or the premium rule leaves out is not shown at all.
+    if (said && !text && !c.amount) return;
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     // A finding left with no words (its only sentence stated money) still shows the bill it says is uncovered (TE #91 Q8).
