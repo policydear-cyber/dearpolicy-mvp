@@ -529,11 +529,43 @@ const whole = (quote: string, person = "Lim Ah Kow", baseQuote = "Critical Illne
 };
 const LUMP = "100% of the Sum Assured will be payable in one lump sum.";
 test("100% of the sum insured in a policy wording is the person's printed sum insured (release-set A3)", () => {
-  assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
   // Wording that limits it (a cap, any figure) is never read as the whole sum insured.
   assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, []);
   // A sum insured on a page that does not name the person is not theirs.
   assert.deepEqual(whole(LUMP, "Tan Mei Ling").amounts, []);
+});
+// The CI II schedule as printed: "Sum" over "Assured/", the plan's name wrapped onto the next line, a second row (the death
+// benefit) and a proposal page whose table has no clean Sum Assured column (round 4, A3).
+const PLAN_SCHED = "Policy Schedule\nPlan\t: Comprehensive Critical Illness II\nAssured\t: Lim Ah Kow\nFirst Year Instalment Premium * : 376.68\n: Singapore Dollar\nInstalment Premium\t: 470.85\tCurrency\n"
+  + "Basic Benefits\tSum\tInstalment\tPremium\tBenefit\tBenefit\nAssured/\tPremium\tCessation\tCommencement\tCessation\nBenefit\tDate\tDate\tDate\n"
+  + "Comprehensive Critical\t300,000.00\t269.05\t19/10/2036\t19/10/2026\t19/10/2036\nIllness Benefit\n- Health Extra\t---\t201.80\t19/10/2036\t---\t---\nDeath Benefit\t5,000.00\t---\t---\t19/10/2026\t19/10/2036";
+const PROPOSAL = "Life Assured\t: LIM AH KOW\nCurrency\t: SGD\nSum Assured /\tDiscount\nComprehensive Critical\n10\t10\t300,000.00\t298.95\t10%\t269.05\nIllness II";
+const planHouse = (sched: string, extra: { page: number; text: string }[] = [], product = "Comprehensive Critical Illness II"): Household => ({ ...HOUSE, documents: [
+  { ...doc(WORDING, "CI policy.pdf", [{ page: 2, text: PROPOSAL }, { page: 3, text: sched }, ...extra, { page: 9, text: "2.2. Critical Illness Benefit\n100% of the Sum Assured will be payable in one lump sum." }]), productName: product },
+  doc(OTHER_POLICY, "Certificate.pdf", [{ page: 1, text: "GROUP TERM LIFE\nLim Ah Kow\tS$500,000\nTan Mei Ling\tS$1,000,000" }]),
+] });
+const PROPOSAL_ROW = "Comprehensive Critical\n10 10 300,000.00 298.95 10% 269.05\nIllness II";
+test("100% of the Sum Assured is the plan table's own Sum Assured cell, read only where it is plainly the plan's (round 4, A3)", () => {
+  const ok = [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (Comprehensive Critical Illness II, page 3)"]];
+  // The table row step's base is the proposal page; its schedule prints the plan's Sum Assured column.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED)).amounts, ok);
+  // A row above the plan's (a rider printed first) makes it no first row: refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t300,000.00", "Early Critical Illness Rider\t50,000.00\t12.00\t-\t-\t-\nComprehensive Critical\t300,000.00"))).amounts, []);
+  // A first row naming another benefit ("Critical Illness Hospital Income") or words beyond the product's name is refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t", "Critical Illness Hospital Income\t").replace("\nIllness Benefit\n", "\n"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED, [], "Shield Plan")).amounts, []);
+  // A row that does not name the wording's benefit is refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t", "Comprehensive Life\t").replace("\nIllness Benefit\n", "\n"))).amounts, []);
+  // Another page of the document printing a different sum for the plan: neither is taken.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED, [{ page: 4, text: PLAN_SCHED.replace("300,000.00", "250,000.00") }])).amounts, []);
+  // A schedule that also names another member is never read.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED + "\nSpouse\t: Tan Mei Ling")).amounts, []);
+  // A limit column is not a Sum Assured column, and a cell that is not the worked-out sum is not taken.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Basic Benefits\tSum\t", "Basic Benefits\tLimit\t"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("\t300,000.00\t", "\t200,000.00\t"))).amounts, []);
+  // Spouse's own plan table does not answer for him.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Assured\t: Lim Ah Kow", "Assured\t: Tan Mei Ling"))).amounts, []);
 });
 test("the 100% fallback never takes another policy's or person's sum, or overrides a table's own base (Critic R126-1)", () => {
   // Another policy's sum (the group certificate's term life line), even on a line naming the person.
@@ -546,13 +578,16 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   // A table that prints its own base ("Sum Insured S$5,000") settles it: never the person's S$600,000.
   assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Lim Ah Kow\tS$600,000", "S$600,000", "D2").amounts, []);
   assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1").amounts, []);
-  // A page printing two sums insured cannot say which one the wording's 100% is of (TE #103 A3).
-  const two: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nDeath Benefit\t5,000.00\nTerm Rider\t150,000.00" }) }) };
+  // A page printing two sums insured, not as a plan table's Sum Assured column, cannot say which one the wording's 100% is
+  // of (TE #103 A3).
+  const two: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Benefit\tSum Assured\n", "Sum Assured\n") + "\nDeath Benefit\t5,000.00\nTerm Rider\t150,000.00" }) }) };
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", two).amounts, []);
-  // A schedule printing the CI sum and a smaller death benefit: neither is "the" sum insured, whichever line is quoted
-  // (Critic R127-1, the CI II schedule's shape).
+  // Under a plan table's Sum Assured column, the CI row's own cell is the CI wording's sum, whatever rows follow it; a death
+  // wording never takes it (Critic R127-1, the CI II schedule's shape; round 4 A3).
   const withDeath: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85\nDeath Benefit\t5,000.00" }) }) };
-  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withDeath).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withDeath).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
+  const deathToo: Household = { ...withDeath, documents: withDeath.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
+  assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Death Benefit\t5,000.00", "5,000.00", "D1", deathToo).amounts, []);
   // With one amount line, wording headed by another benefit ("DEATH BENEFIT") never takes the CI line.
   const deathWording: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
   assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", deathWording).amounts, []);
@@ -567,7 +602,7 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Hospital Income\t300,000.00", "300,000.00", "D1", income).amounts, []);
   // A premium line on the page is not a second benefit amount.
   const withPremium: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85" }) }) };
-  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
   // Wording that deducts, pro-rates, excludes or aggregates is not the whole sum (TE #103 A5).
   for (const words of ["after deducting any amount already paid", "pro-rated by age", "in proportion to the loss", "excluding any Advance Payment", "net of any claim paid", "in the aggregate"]) {
     const H: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 10, text: `TOTAL DISABLEMENT\n100% of the Sum Assured, ${words}.` }] }) };

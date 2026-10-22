@@ -399,7 +399,7 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
  *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
  *   amount (A10c). */
-function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
+function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string, serverWords: ReadonlySet<string> = new Set()): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
   const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
@@ -407,35 +407,104 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (!bf) return null;
   const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
   const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  if (bf.docIndex !== wording.docIndex && !(number(wdoc) && number(wdoc) === number(bdoc))) return null;
-  const page = bdoc.pages.find((p) => p.page === bf.page);
-  if (!page) return null;
+  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc));
+  if (samePolicy && quotedLineIsWhole(bf, wording, household, person)) return bf;
+  // Otherwise the plan's own Sum Assured cell, in the wording's document or the base's (when it is the same policy).
+  const want = moneyFiguresIn(po.baseAmount)[0]?.value ?? numbersIn(po.baseAmount)[0];
+  if (want == null) return null;
+  // Words a plan row's name may print besides the benefit's: the product's name as the app read it (the document's own
+  // record, or the server's label for a table row; never the model's words).
+  const product = [wdoc, ...(samePolicy ? [bdoc] : [])].flatMap((d) => tokens(d.productName ?? ""));
+  return planSumAssured(household, [wording.docIndex, ...(samePolicy && bf.docIndex !== wording.docIndex ? [bf.docIndex] : [])], wording, person, want,
+    new Set([...product, ...(serverWords.has(st.text) ? tokens(st.text) : [])]));
+}
+/** A policy schedule's plan table: a header line with exactly one "Sum Assured" (or "Sum Insured") column, which may be
+ * printed over two lines ("Sum" above "Assured/"), and the first row under it, with as many cells: the basic plan, whose
+ * sum assured is "the Sum Assured" its wording pays a percentage of. Any amount between the header and the row (another
+ * row above it) makes it no first row. The row's name is its first cell and the lines right after it that continue the
+ * name ("Comprehensive Critical" / "Illness Benefit"). */
+const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
+const SA_CELL = /^(?:S\$|SGD|US\$|\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$/;
+function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
+  const cells = lines[i].split("\t").map((c) => c.trim());
+  if (cells.length < 2 || !/[A-Za-z]/.test(cells[0]) || /\d/.test(cells[0])) return null;
+  for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
+    if (AMOUNT.test(lines[j])) return null;
+    const head = lines[j].split("\t").map((c) => c.trim());
+    if (head.length !== cells.length) continue;
+    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
+    if (k.length !== 1 || k[0] === 0) return null;
+    const cell = SA_CELL.exec(cells[k[0]]);
+    if (!cell) return null;
+    let name = cells[0];
+    for (const l of lines.slice(i + 1, i + 3)) { if (!l.trim() || /\t|\d/.test(l)) break; name += ` ${l.trim()}`; }
+    return { name, value: Number(cell[1].replace(/,/g, "")), line: lines[i] };
+  }
+  return null;
+}
+/** The person's sum assured for the plan a 100% wording is from, read from the plan table's Sum Assured cell (planRow) in
+ * the given documents (release-set A3: "Comprehensive Critical	300,000.00	269.05 ..." under "Sum / Assured/"). Taken
+ * only when every such row says the same:
+ * - its page names the person and no other life;
+ * - its name prints every word of the benefit the wording is headed by ("critical illness"), and no other word but the
+ *   product's own name (`allowed`): "Personal Accident Hospital Income" is another benefit (TE #103 A10c);
+ * - its line prints no limit, expense or "per" word;
+ * - its cell is the sum the row step worked the 100% out on (`want`), and no other such row prints another sum.
+ * Fail-safe: anything else is null and the percentage stays a fact. */
+function planSumAssured(household: Household, docs: number[], wording: Found, person: string, want: number, allowed: Set<string>): Found | null {
+  const name = headingWords(household, wording);
+  if (!name.length) return null;
   const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
-  if (otherLife(page.text, person, people)) return null;
+  const hits: { found: Found; value: number }[] = [];
+  for (const di of docs) for (const page of household.documents[di].pages) {
+    if (!nameOnPage(person, page.text) || otherLife(page.text, person, people)) continue;
+    const lines = page.text.split("\n");
+    let at = 0;
+    lines.forEach((l, i) => {
+      const start = at; at += l.length + 1;
+      if (!/\t/.test(l)) return;
+      const row = planRow(lines, i);
+      if (!row) return;
+      const words = tokens(row.name);
+      if (!name.every((w) => words.includes(w)) || words.some((w) => !name.includes(w) && !allowed.has(w) && !HEADING_STOP.has(w))) return;
+      if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(row.line)) return;
+      hits.push({ found: { docIndex: di, page: page.page, excerpt: row.line.trim().replace(/[ \t]+/g, " "), offset: start + (l.length - l.trimStart().length) }, value: row.value });
+    });
+  }
+  if (!hits.length || hits.some((h) => !sameValue(h.value, want))) return null;
+  return hits[0].found;
+}
+/** The quoted base line itself is the person's whole sum insured for this policy (the checks listed on wholeSumInsured). */
+function quotedLineIsWhole(bf: Found, wording: Found, household: Household, person: string): boolean {
+  const bdoc = household.documents[bf.docIndex];
+  const page = bdoc.pages.find((p) => p.page === bf.page);
+  if (!page) return false;
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  if (otherLife(page.text, person, people)) return false;
   // The base line names the person, or names nobody on a page about them alone (a one-life schedule's "Life Assured : ...").
   const lines = page.text.split("\n");
   const line = lines[page.text.slice(0, bf.offset).split("\n").length - 1] ?? "";
-  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return null;
+  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return false;
   // Exactly one benefit-amount line on the page, of any size ("Death Benefit 5,000.00" counts as much as "300,000.00"); a
   // premium, total, discount or tax line is not a benefit amount. Two lines cannot say which one the 100% is of (Critic R127-1).
   const amountLines = lines.filter((l) => AMOUNT.test(l) && !NOT_BENEFIT_AMOUNT.test(l));
-  if (amountLines.length !== 1) return null;
+  if (amountLines.length !== 1) return false;
   // The base's lines (with the line either side, where a wrapped name continues) name the benefit the wording is headed by.
   const name = headingWords(household, wording);
   const at = page.text.slice(0, bf.offset).split("\n").length - 1;
   const near = new Set(tokens(lines.slice(Math.max(0, at - 1), at + bf.excerpt.split("\n").length + 1).join(" ")));
-  if (!name.length || !name.every((w) => near.has(w))) return null;
+  if (!name.length || !name.every((w) => near.has(w))) return false;
   // It is a sum insured: its lines, or the table heading just above them ("Sum Assured / ..."), say so, and its lines are
   // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
   const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
-  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return null;
-  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return null;
+  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return false;
+  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
   // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
   // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
   // make it another benefit's amount, so it is refused (TE #103 A10c).
   const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(/(?:S\$|SGD|US\$|USD|\$)?\s*\d[\d,]*(?:\.\d+)?/gi, " ").replace(/\b(?:SGD|USD)\b/gi, " ");
-  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return null;
-  return bf;
+  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return false;
+  return true;
 }
 /** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
 const AMOUNT = /(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|(?<![\w.,])\d+\.\d{2}(?![\d])/;
@@ -1089,9 +1158,13 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // (live run 22 Oct, A3), only where wholeSumInsured finds it is theirs for this policy (Critic R126-1).
       let whole: string | null = null;
       if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && person && !limitedWords(household, found)) {
-        const bf = wholeSumInsured(st, found, household, person);
+        const bf = wholeSumInsured(st, found, household, person, serverWords);
         const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: bf.excerpt }, bf, household) : null;
-        if (bf && plain?.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
+        // The card stays on the wording's own page, so its conditions are read there, and says where the sum is printed.
+        if (bf && plain?.ok) {
+          r = { ...plain, found };
+          whole = `100% of ${person}'s sum insured of ${plain.amount.text} (${docLabel(household, household.documents[bf.docIndex])}, page ${bf.page})`;
+        }
       }
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
