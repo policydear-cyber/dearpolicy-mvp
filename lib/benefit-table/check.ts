@@ -8,13 +8,14 @@
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { CAPPED, locateQuote } from "@/lib/simple-chat/verify";
+import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
 export type SourceDoc = { id: string; name: string; readable: boolean; pages: { page: number; text: string }[] };
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
-export type CheckedCover = ReadCover & { source: Source; currency: string | null };
+/** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"). */
+export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null };
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
 export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[] };
@@ -34,10 +35,11 @@ export function numbersIn(text: string): number[] {
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
 const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
-/** The currency a page declares for its table ("Benefits (S$)"), or null. */
+/** The currency a page declares for its table ("Benefits (S$)"), or for every figure on it (a policy schedule's "Currency :
+ * Singapore Dollar", the chat's own pageCurrency), or null. */
 export function declaredCurrency(pageText: string): string | null {
   const m = pageText.match(DECLARED);
-  if (!m) return null;
+  if (!m) return pageCurrency(pageText);
   const word = m[1] ?? m[2];
   return /singapore/i.test(word) ? "SGD" : statedCurrencyCode(word);
 }
@@ -153,9 +155,25 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   // Where on its page each located quote is printed, for reading the row around it.
   const placed = new Map<Source, { start: number; end: number }>();
   const lineEndAt = (text: string, i: number) => { const e = text.indexOf("\n", i); return e < 0 ? text.length : e; };
+  // A label cell that wraps onto the next line ("Comprehensive Critical\t300,000.00\t269.05\nIllness Benefit"), copied
+  // whole by the model ("Comprehensive Critical\tIllness Benefit\t300,000.00\t269.05"): the row is its own line without
+  // that cell, and only when the very next line prints that cell alone, with no figure. One reading only.
+  const wrappedLabel = (quote: string) => {
+    const cells = quote.split("\t");
+    const flatten = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const hits = [];
+    for (let j = 1; j < cells.length - 1; j++) {
+      if (!/[a-z]/i.test(cells[j]) || /\d/.test(cells[j]) || !/[a-z]/i.test(cells[0])) continue;
+      const g = locateQuote(household, [...cells.slice(0, j), ...cells.slice(j + 1)].join("\t"), 0);
+      if (!g || g.excerpt.includes("\n")) continue;
+      const text = pageText(g.page), end = lineEndAt(text, g.offset);
+      if (flatten(text.slice(end + 1, lineEndAt(text, end + 1))) === flatten(cells[j])) hits.push(g);
+    }
+    return hits.length === 1 ? hits[0] : null;
+  };
   const find = (quote: string | null, page: number | null): Source | null => {
     if (!quote) return null;
-    const f = locateQuote(household, quote, 0);
+    const f = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
     if (!f) return null;
     const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
       const src: Source = { documentId: doc.id, document: doc.name, page: g.page, excerpt: g.excerpt };
@@ -181,13 +199,20 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const sumInsured = num(c.sumInsured);
     if (sumInsured != null && !printsNumber(source.excerpt, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
     let premium = num(c.premium);
-    if (premium != null && !printsNumber(source.excerpt, premium)) { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote; kept the cover without it` }); premium = null; }
-    const currency = sumInsured == null && premium == null ? null : statedCurrencyCode(source.excerpt) ?? declaredCurrency(pageText(source.page));
+    // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
+    let premiumSource: Source | null = null;
+    if (premium != null && !printsNumber(source.excerpt, premium)) {
+      const at = find(str(c.premiumQuote), source.page);
+      if (at && at.page === source.page && printsNumber(at.excerpt, premium) && /\b(?:premium|instalment)\b/i.test(at.excerpt)) premiumSource = at;
+      else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or a premium line on its page; kept the cover without it` }); premium = null; }
+    }
+    const currency = sumInsured == null && premium == null ? null
+      : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredCurrency(pageText(source.page));
     const page = pageText(source.page);
     const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
     out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured, premium,
       premiumFrequency: premium == null ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
-      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency });
+      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource });
   }
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {

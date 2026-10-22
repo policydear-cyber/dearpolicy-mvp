@@ -310,6 +310,80 @@ async function integration() {
     assert.ok(!JSON.stringify(t.saved.answer).includes("777"));
   });
 }
+// ------------------------------------------------------------------ chat test 01 follow-ups: stays, cover lines, premiums
+const SCHED = "aaaaaaaa-0000-0000-0000-000000000004", CASH = "aaaaaaaa-0000-0000-0000-000000000005";
+const HOUSE2: Household = { ...HOUSE, documents: [
+  doc(SCHED, "Policy schedule.pdf", [{ page: 3, text: "Policy Effective Date\t: 19/10/2026\nAssured\t: Lim Ah Kow\nInstalment Premium\t: 470.85\tCurrency\n: Singapore Dollar\nPayment Frequency\t: Monthly\nBasic Benefits\tSum\tInstalment\nComprehensive Critical\t300,000.00\t269.05\t19/10/2036\nIllness Benefit\nDeath Benefit\t5,000.00\t---\nPolicy Number\t: 1234567" }]),
+  doc(CASH, "Life terms.pdf", [{ page: 5, text: "BENEFIT 1: GROUP TERM LIFE\nDaily Hospital Cash Benefit\tS$30 per day from the 11th day onwards.\nMax: 30 days of continuous hospitalisation" }]),
+] };
+const schedCover = (o: Record<string, unknown>) => ({ person: "Lim Ah Kow", product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null, sumInsured: 300000, asOf: "19/10/2026", page: 3,
+  quote: "Comprehensive Critical\tIllness Benefit\t300,000.00\t269.05\t19/10/2036", ...o });
+const schedR = (o: Record<string, unknown> = {}) => checkReading(src(HOUSE2.documents[0]), reading("personal_proof", "CI Plan", [schedCover(o)], []));
+const cashR = (o: Record<string, unknown>) => checkReading(src(HOUSE2.documents[1]), reading("scheme_terms", "Group Scheme", [], [
+  b({ section: "Life", benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, page: 5, quote: "Daily Hospital Cash Benefit\tS$30 per day from the 11", ...o })]));
+const lifeCert = checkReading(src(HOUSE2.documents[0]), reading("personal_proof", "Group Scheme", [], []));
+function answer2(cash: Record<string, unknown>, statements: Record<string, unknown>[], asked: string[], confirmations: Confirmation[] = [], sched = schedR()) {
+  const ci = coverKeyOf({ product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null });
+  const t = assembleTable([sched, cashR(cash), lifeCert], family, [{ section: sectionKeyOf(CASH, { section: "Life", column: null }), cover: ci, why: "hospital cash" }], confirmations);
+  const rs = chatRows(t, HOUSE2);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: statements.map((s) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...s, ...(typeof s.row === "function" ? { row: (s.row as (r: typeof rs) => string)(rs) } : {}) })) };
+  const fromRows = amountsFromRows(raw, rs, HOUSE2);
+  const { answer: a } = verifyAnswer(HOUSE2, readModelAnswer(fromRows.json)!, asked, new Set(fromRows.report.labels));
+  const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
+  return { rows: rs, amounts: kept.filter((s) => s.amount).map((s) => s.amount!.text), kept };
+}
+const rowNamed = (benefit: RegExp) => (rs: ReturnType<typeof chatRows>) => rs.find((r) => benefit.test(r.benefit))!.id;
+const CASH_ROW = { fromDay: 11, maxDays: 30, quote: "Daily Hospital Cash Benefit\tS$30 per day from the 11th day onwards.\nMax: 30 days of continuous hospitalisation" };
+test("a stay the household described is worked out from a labelled daily row, within its most days (chat test B3, H4)", () => {
+  const twelve = answer2(CASH_ROW, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 12 }, text: "Hospital cash." }], ["he was in hospital 12 days"]);
+  assert.deepEqual(twelve.amounts, ["S$30", "S$60"]);
+  assert.ok(twelve.kept.some((s) => s.kind === "calculation" && s.amount?.illustration && /12-day stay/.test(s.text)));
+  const long = answer2(CASH_ROW, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days after a fall"]);
+  assert.deepEqual(long.amounts, ["S$30", "S$900"]);
+});
+test("the stay is refused when the table read other most days, or none, for that row", () => {
+  for (const o of [{ ...CASH_ROW, maxDays: 40 }, { ...CASH_ROW, maxDays: null }, { ...CASH_ROW, fromDay: 30 }]) {
+    const r = answer2(o, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
+    assert.deepEqual(r.amounts, ["S$30"], JSON.stringify(o));
+  }
+});
+test("a stay statement is never kept without its labelled daily row", () => {
+  const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30 }] } };
+  const st = [{ id: "s1", text: "Cash (Y).", amount: { text: "S$30" } }, { id: "s1-stay", text: "For a 12-day stay, this works out to 2 days of the daily benefit.", amount: { text: "S$60" }, basis: "S$30 a day, paid from day 11, for at most 30 days (2 × S$30)" }];
+  assert.deepEqual(keepLabelledAmounts(st, report).kept, []);
+});
+test("a label that wraps onto the next line is still found, and only then (CI II schedule, chat test A3)", () => {
+  const r = schedR();
+  assert.equal(r.covers.length, 1, JSON.stringify(r.dropped));
+  assert.equal(r.covers[0].currency, "SGD");
+  assert.match(r.covers[0].source.excerpt, /Comprehensive Critical 300,000\.00/);
+  const other = schedR({ quote: "Comprehensive Critical\tDeath Benefit\t300,000.00\t269.05\t19/10/2036" });
+  assert.equal(other.covers.length, 0);
+});
+test("each cover's printed sum insured is a row after the benefit rows, shown from the person's own line", () => {
+  const r = answer2(CASH_ROW, [{ row: rowNamed(/^Sum insured/), text: "Sum." }], ["how much CI cover"]);
+  assert.equal(r.rows.at(-1)!.benefit, "Sum insured, dated 19/10/2026");
+  assert.ok(r.rows.findIndex((x) => /Hospital Cash/.test(x.benefit)) < r.rows.findIndex((x) => /^Sum insured/.test(x.benefit)));
+  assert.deepEqual(r.amounts, ["S$300,000"]);
+  const corrected = answer2(CASH_ROW, [{ row: rowNamed(/^Sum insured/), text: "Sum." }], ["x"], [{ personId: "p1", coverKey: coverKeyOf({ product: "CI Plan", cover: "Comprehensive Critical Illness Benefit", plan: null }), status: "corrected", sumInsured: 250000 }]);
+  assert.deepEqual(corrected.amounts, []);
+});
+test("a premium printed on its own line is read and shown from that line (chat test A6)", () => {
+  const sched = schedR({ premium: 470.85, premiumFrequency: "Monthly", premiumQuote: "Instalment Premium\t: 470.85" });
+  assert.equal(sched.covers[0].premium, 470.85);
+  assert.match(sched.covers[0].premiumSource?.excerpt ?? "", /Instalment Premium/);
+  const r = answer2(CASH_ROW, [{ row: rowNamed(/^Premium/), text: "Premium." }], ["how much do we pay"], [], sched);
+  assert.equal(r.rows.find((x) => /^Premium/.test(x.benefit))!.benefit, "Premium, Monthly");
+  assert.deepEqual(r.amounts, ["S$470.85"]);
+});
+test("a premium is refused on a line that does not say premium, or that is not printed", () => {
+  for (const premiumQuote of ["Death Benefit\t5,000.00", "Instalment Premium\t: 470.85 extra", undefined]) {
+    const sched = schedR({ premium: premiumQuote?.startsWith("Death") ? 5000 : 470.85, premiumQuote });
+    assert.equal(sched.covers[0].premium, null, String(premiumQuote));
+  }
+});
+
 async function atest(name: string, fn: () => Promise<void>) {
   try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }
