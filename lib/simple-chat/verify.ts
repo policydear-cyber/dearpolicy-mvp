@@ -847,8 +847,11 @@ function proseRead(household: Household): (s: string) => string {
   return (s) => s.replace(FILE_NAME, " ").replace(IDENTIFIER, (m, at: number, whole: string) => {
     const kinds = ids.get(idKey(m));
     const kind = idKind(m, whole.slice(Math.max(0, at - 40), at));
-    // A bare number with no label in the answer is read past only when the documents print it as plain number too.
-    return kinds && kinds.has(kind) ? " " : m;
+    // A bare number with no label in the answer is read past only when the documents print it as plain number too, or when
+    // the sentence calls it by the label the documents print it under ("the cover's own policy number ... is 3037850",
+    // release-set H8).
+    const named = kind === "number" && [...(kinds ?? [])].some((k) => /^(?:policy|certificate|claim)$/.test(k) && new RegExp(String.raw`\b${k}\s*(?:no\.?|number|#)`, "i").test(whole));
+    return kinds && (kinds.has(kind) || named) ? " " : m;
   });
 }
 /** A next step may keep a helpline, policy, certificate or claim number, or a page, when it is labelled as one and the

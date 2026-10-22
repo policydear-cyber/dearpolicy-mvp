@@ -768,6 +768,15 @@ test("a row the checks refuse is given as the same benefit's same figure from an
   assert.deepEqual(give(twin.id, [...rows.filter((r) => r !== hip), other]).filter(([t]) => t === "S$450,000"), []);
 });
 
+test("a number the documents print as a policy number is no money when the sentence calls it a policy number (H8)", () => {
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc("aaaaaaaa-0000-0000-0000-00000000000d", "Group cert.pdf", [{ page: 1, text: "GROUP TERM LIFE(POLICY NO.3037850)\nLim Ah Kow\tS$500,000" }])] };
+  const said = (text: string) => (verifyAnswer(H, readModelAnswer({ bottomLine: text, nextSteps: [], question: null, statements: [] })!, ["q"]).answer.bottomLine);
+  assert.equal(said("The cover's own policy number, shown against Group Term Life, is 3037850."), "The cover's own policy number, shown against Group Term Life, is 3037850.");
+  // Not called a policy number, or a figure the documents never print as one: still money.
+  assert.notEqual(said("Group Term Life pays 3037850."), "Group Term Life pays 3037850.");
+  assert.notEqual(said("The policy number is fine and the payout is 3037851."), "The policy number is fine and the payout is 3037851.");
+});
+
 async function atest(name: string, fn: () => Promise<void>) {
   try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
 }
