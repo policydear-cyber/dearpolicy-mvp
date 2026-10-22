@@ -34,6 +34,7 @@ const HOUSE: Household = {
       { page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nAdvance Payment Benefit 100% Sum Insured (up to S$400,000)" },
       { page: 9, text: "CLAIMS\nWritten notice of a claim must be given within 30 days." },
       { page: 11, text: "LIVING CARE\nWaiting Period: no Living Care benefit is payable for a heart attack or major cancer diagnosed within 90 days of cover starting." },
+      { page: 12, text: "CRITICAL ILLNESS\nThe insured must survive the diagnosis by 7 days (the survival period)." },
     ]),
     doc(ILP, "Policy illustration.pdf", [{ page: 1, text: "Lim Ah Kow\tSum assured S$100,000\nNon-Guaranteed Surrender Value S$12,400" }]),
   ],
@@ -302,6 +303,7 @@ async function integration() {
     assert.ok(t.call.library.includes(PAGES_NOTE) && !off.call.library.includes(PAGES_NOTE));
     // Critic R113-1: an uncited page with a waiting period is sent; an uncited claims page is not.
     assert.match(t.call.library, /Waiting Period: no Living Care benefit is payable/);
+    assert.match(t.call.library, /must survive the diagnosis by 7 days/, "Critic R114-1: a survival-period page is sent");
     assert.doesNotMatch(t.call.library, /Written notice of a claim/);
     assert.ok(citedPages(chatRows(tableWith(), HOUSE)).size < cited.size, "rule pages are added to the cited ones");
   });
