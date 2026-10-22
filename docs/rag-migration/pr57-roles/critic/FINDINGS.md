@@ -4864,3 +4864,76 @@ simple-answer chat-test, style-test and offline-test need `@anthropic-ai/sdk` or
 - benefit-table test: 105/105
 
 style-test (which now covers R124-1/2/3) needs React, which this sandbox lacks, so I did not run it. I re-ran the verify-level probes directly instead.
+
+## Round 126: PR #103 at 57e33b4 (round 3, diff vs main)
+
+**Verdict: NOT READY. Two blockers, both of which can show a wrong or unqualified amount.** Premium rows (2), short files (3) and the prompt-only changes (5) hold.
+
+### R126-1 (blocker): the "100% of the sum insured" fallback accepts another policy's, another person's, or a contradicted sum
+The new fallback (`verify.ts` ~1009-1023) runs when `checkAmount` refuses for one of two reasons:
+- "the percentage is not the quoted row's own figure";
+- "the sum is not the one this row's table is a percentage of".
+
+It then shows the model's base quote as the amount if three things hold: the base line is printed, the base's *page* contains the person's name tokens, and the wording has no limit words. It skips every check `sumInsuredBase` makes. It does not check that the base line names the person, that the base is the same cover or policy as the wording, or that the base agrees with the row's own printed base.
+
+Probes (`scratchpad/r126/w.ts`) use a certificate page with "GROUP TERM LIFE / Lim Ah Kow S$500,000 / Tan Mei S$1,000,000 / GROUP PERSONAL ACCIDENT / Lim Ah Kow S$600,000":
+
+| Model statement | Shown |
+|---|---|
+| CI policy wording "100% of the Sum Assured will be payable in one lump sum", base = Lim's **GTL** line | **S$500,000** as the CI death benefit (another policy's sum) |
+| Same wording for Lim, base = **Tan Mei's** line | **S$1,000,000** (spouse's sum, for Lim) |
+| A table that prints its own base "Accidental Medical Expenses (Sum Insured S$5,000) / Medical expenses 100%", base = Lim's S$600,000 | **S$600,000** (overrides the base the table prints) |
+
+Each of these is a wrong claimable amount.
+
+**Fix:**
+- Drop "the sum is not the one this row's table is a percentage of" from `WHOLE_FALLBACK`. A table that prints its own base has settled the base.
+- For the other reason, require the base to come from the **same document as the wording, or a document with the same policy number**.
+- Require the base **line** to name the person (as `sumInsuredBase` does at R50-3) and the page to name no other household member (`otherLife`).
+
+A3 (policy wording and its own schedule, one policy) still passes under these rules.
+
+### R126-2 (blocker): a companion row is shown without its own conditions
+`amountsFromRows` (`chat.ts` ~179-196) builds each companion with `statementFromRow(r, { ...raw, alternativeGroup })`. `raw` is the model's statement for the *primary* row, so the companion:
+- inherits the primary's conditions (verify then drops them, because their quote is not on the companion's page);
+- never gets its own row's conditions, because the model never wrote a statement for it.
+
+Probe: I added the condition "Payable only if surgery is performed." to the benefit-summary Hip row, R3 in the test. The card reads **S$1,500 with conditions []**. Its qualifier is stripped, which the standing rule forbids.
+
+Borrowing (challenge 4) is blocked today, but only by the page-quote check, not by design.
+
+**Fix:** build each companion with `conditions: r.conditions.map((t) => ({ text: t, quote: t }))` and none of `raw.conditions`. Add a test asserting that the companion card carries its own row's condition.
+
+Holding:
+- Companions require the same person, `coverKey` (product, cover and plan), qualifier and core name, from a different document and with a different figure.
+- No combination across people or schedules was found.
+- The not-a-total note is added.
+
+### Checked and holding
+- **(2) Premium rows.**
+  - Only a page with exactly one plain premium line is used ("First Year Instalment Premium *" fails `PLAIN_PREMIUM`), and only when the page names no other life (`otherLife`), on the first cover of that page and person.
+  - Currency: the snapshot's 470.85 (D8 p3) prints no sign, but the page declares "Currency : Singapore Dollar", so it is S$ by the page's own declaration. A different stated currency on the line skips it.
+  - With no declaration, the premium takes the cover's own currency from the same document and cover. I accept that, because one policy has one currency; it is noted below.
+  - "Monthly" comes only from a single "Payment Frequency" on the page.
+  - The first-year note is part of the row's label (`premiumName`), so it cannot come apart from the figure.
+- **(3) Short files.**
+  - Only readable documents of 3 pages or fewer that no row comes from are sent whole, and only from this household's `documents`, so isolation holds.
+  - On the snapshot that is 3 one-page files, a negligible cost.
+  - `PAGES_LEFT_OUT` replaces the misleading "not sent" so the model stops saying a file "could not be read".
+- **(5) Prompt and style.** These rules carry no amount risk:
+  - count documents from linked_people;
+  - give the number under the label asked;
+  - say what is settled before asking who is meant;
+  - no self-correction;
+  - a file with no reading_status was read.
+
+### Low (not blocking)
+- **R126-3.** There is no total cap on short files sent whole. A household with dozens of 3-page receipts sends them all. A page budget, say 15 pages for this rule, would bound the cost.
+- **R126-4.** A bare premium with no page declaration borrows the cover's currency, which comes from the same document. It would be safer to require the premium's own page to settle the currency, otherwise "Currency not stated".
+
+### Tests (run locally, free)
+- benefit-table chat-test: 49/49
+- headline-test: 13/13
+- benefit-table test: 105/105
+
+style-test needs React, which this sandbox lacks, so I did not run it.
