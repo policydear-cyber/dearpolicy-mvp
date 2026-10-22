@@ -241,7 +241,7 @@ async function refreshSeededRows(accountId:string,seeds:Seed[]){
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
   // Switched to the benefit table: no rows are seeded from defaults the documents never print (lib/ledger/extract.ts).
   const { benefitTableLive }=await import("@/lib/benefit-table/app");
-  if(await benefitTableLive())return {added:0};
+  if(await benefitTableLive(accountId))return {added:0};
   await ensureLedgerSchema();
   const family=people??(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId])).rows;
   if(!family.length)return {added:0};

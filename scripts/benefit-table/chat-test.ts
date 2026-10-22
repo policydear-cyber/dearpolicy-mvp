@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
-import type { Household } from "@/lib/simple-chat/library";
+import { amountsFromRows, chatRows, citedPages, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { escapeText, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
@@ -32,6 +32,7 @@ const HOUSE: Household = {
       { page: 4, text: "BENEFIT 5: GROUP TERM LIFE\nCompensation Schedule (% of Sum Insured)\nKnee\t40%" },
       { page: 3, text: "Simple Fracture Benefit Limit: S$5,000\nCompensation (% of S$5,000)\nAnkle\t50%\nAmbulance Cost\tUp to S$500 per incident\nChild\nHospital cash\tS$50 per day" },
       { page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nAdvance Payment Benefit 100% Sum Insured (up to S$400,000)" },
+      { page: 9, text: "CLAIMS\nWritten notice of a claim must be given within 30 days." },
     ]),
     doc(ILP, "Policy illustration.pdf", [{ page: 1, text: "Lim Ah Kow\tSum assured S$100,000\nNon-Guaranteed Surrender Value S$12,400" }]),
   ],
@@ -281,6 +282,23 @@ async function integration() {
     assert.equal(amounts.length, 1);
     assert.match(amounts[0], /450,000/);
     assert.ok(!JSON.stringify(t.saved.answer).includes("999,999"));
+  });
+  await atest("with the table, only the pages its rows come from are sent, with every document's details; switched off, every page", async () => {
+    const t = await turn(hip, true), off = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [] }), false);
+    const cited = citedPages(chatRows(tableWith(), HOUSE));
+    let left = 0;
+    for (const d of HOUSE.documents) {
+      assert.ok(t.call.library.includes(`name="${d.name}"`), d.name);
+      for (const p of d.pages) {
+        const page = `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`;
+        assert.ok(off.call.library.includes(page), `off sends ${d.name} p${p.page}`);
+        assert.equal(t.call.library.includes(page), cited.has(`${d.policyId}#${p.page}`), `${d.name} p${p.page}`);
+        if (!cited.has(`${d.policyId}#${p.page}`)) left++;
+      }
+    }
+    assert.ok(left > 0 && cited.size > 0, "the household has pages no row cites");
+    assert.match(t.call.library, /<pages_not_sent count="\d+" of="\d+"\/>/);
+    assert.ok(t.call.library.includes(PAGES_NOTE) && !off.call.library.includes(PAGES_NOTE));
   });
   await atest("switched off, the chat turn is exactly as before: no table, no row field", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [] }), false);

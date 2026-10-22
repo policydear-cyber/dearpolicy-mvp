@@ -9,9 +9,9 @@ import { readDocument, relink, tableReady, type Db, type OnUsage } from "./servi
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
-/** Switched on, and the additive tables (sql/benefit-table.sql) exist. */
-export async function benefitTableLive(): Promise<boolean> {
-  if (!benefitTableEnabled()) return false;
+/** Switched on for this account (DEARPOLICY_ALPHA_ACCOUNTS), and the additive tables (sql/benefit-table.sql) exist. */
+export async function benefitTableLive(accountId: string): Promise<boolean> {
+  if (!benefitTableEnabled(process.env, accountId)) return false;
   return tableReady(appDb).catch(() => false);
 }
 

@@ -53,11 +53,19 @@ async function main() {
     assert.equal(simpleChatEnabled({} as unknown as NodeJS.ProcessEnv), false);
     assert.equal(simpleChatEnabled({ DEARPOLICY_SIMPLE_CHAT: "1" } as unknown as NodeJS.ProcessEnv), true);
     assert.equal(simpleChatEnabled({ DEARPOLICY_SIMPLE_CHAT: "1", VERCEL: "1" } as unknown as NodeJS.ProcessEnv), false);
-    assert.equal(simpleChatEnabled({ DEARPOLICY_SIMPLE_CHAT: "1", VERCEL: "1", DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION: "1" } as unknown as NodeJS.ProcessEnv), true);
+    // Production also needs the account in DEARPOLICY_ALPHA_ACCOUNTS: unset, or no account named, it stays off (fail-safe).
+    const prod = { DEARPOLICY_SIMPLE_CHAT: "1", VERCEL: "1", DEARPOLICY_SIMPLE_CHAT_ALLOW_PRODUCTION: "1" };
+    assert.equal(simpleChatEnabled(prod as unknown as NodeJS.ProcessEnv, "acc-1"), false);
+    assert.equal(simpleChatEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: "" } as unknown as NodeJS.ProcessEnv, "acc-1"), false);
+    assert.equal(simpleChatEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: "acc-1" } as unknown as NodeJS.ProcessEnv), false);
+    assert.equal(simpleChatEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: "acc-2, ACC-1" } as unknown as NodeJS.ProcessEnv, "acc-1"), true);
+    assert.equal(simpleChatEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: "acc-2" } as unknown as NodeJS.ProcessEnv, "acc-1"), false);
+    // Outside production an unset list allows every account; a set list limits them.
+    assert.equal(simpleChatEnabled({ DEARPOLICY_SIMPLE_CHAT: "1", DEARPOLICY_ALPHA_ACCOUNTS: "acc-2" } as unknown as NodeJS.ProcessEnv, "acc-1"), false);
   });
 
-  await check("model is configurable: anthropic by default, openai:<model> accepted, anything else refused", () => {
-    assert.deepEqual(simpleChatModel({} as unknown as NodeJS.ProcessEnv), { provider: "anthropic", model: "claude-opus-5-5" });
+  await check("model is configurable: Sonnet 5.5 by default (the alpha's cost), , openai:<model> accepted, anything else refused", () => {
+    assert.deepEqual(simpleChatModel({} as unknown as NodeJS.ProcessEnv), { provider: "anthropic", model: "claude-sonnet-5-5" });
     assert.deepEqual(simpleChatModel({ DEARPOLICY_SIMPLE_CHAT_MODEL: "openai:gpt-6-luna" } as unknown as NodeJS.ProcessEnv), { provider: "openai", model: "gpt-6-luna" });
     assert.throws(() => simpleChatModel({ DEARPOLICY_SIMPLE_CHAT_MODEL: "gemini:flash" } as unknown as NodeJS.ProcessEnv));
   });
@@ -67,7 +75,7 @@ async function main() {
     const hooks = src.split("\n").filter((l) => l.includes("@/lib/simple-chat/hook"));
     assert.equal(hooks.length, 2);
     // prepareChat reads the switch; the run follows the path that prepared the turn (R36-5).
-    assert.match(hooks[0], /^\s*if\(simpleChatEnabled\(\)\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.prepareSimpleChat\(request\);$/);
+    assert.match(hooks[0], /^\s*if\(simpleChatEnabled\(process\.env,request\.accountId\)\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.prepareSimpleChat\(request\);$/);
     assert.match(hooks[1], /^\s*if\(context\.chatPath==="simple"\)return \(await import\("@\/lib\/simple-chat\/hook"\)\)\.runSimpleChat\(/);
     assert.match(readFileSync("lib/simple-chat/hook.ts", "utf8"), /holdings: \[\], chatPath: "simple" \}/);
     assert.ok(!/^import .*simple-chat\/hook/m.test(src));

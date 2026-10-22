@@ -14,7 +14,7 @@ const Body=z.object({ section:z.string().min(1).max(600), cover:z.string().min(1
 export async function POST(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
-    if(!(await benefitTableLive()))return NextResponse.json({enabled:false},{status:404});
+    if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false},{status:404});
     const body=Body.parse(await request.json().catch(()=>({})));
     await setLink(appDb,accountId,body.section,body.cover);
     return NextResponse.json({ok:true});

@@ -99,7 +99,7 @@ export const NOT_READABLE = "could not be read";
 /** Whether the app failed to read (or has not finished reading) this file; its text is not sent or quoted. */
 export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && doc.processingStatus !== "ready";
 
-export function renderDocument(doc: HouseholdDocument, index: number): string {
+export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>): string {
   const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
@@ -107,13 +107,18 @@ export function renderDocument(doc: HouseholdDocument, index: number): string {
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
     (unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : "") + ">";
   // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
-  const pages = !unreadable(doc) && doc.pages.length
-    ? doc.pages.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`).join("\n")
-    : "<no_readable_text/>";
+  const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
+  const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"
+    : [...sent.map((p) => `<page n="${p.page}">\n${escapeText(p.text)}\n</page>`),
+      ...(sent.length < doc.pages.length ? [`<pages_not_sent count="${doc.pages.length - sent.length}" of="${doc.pages.length}"/>`] : [])].join("\n");
   return `${head}\n${pages}\n</document>`;
 }
 
-export function renderLibrary(household: Household): string {
+/** pagesSent: with the benefit table, only the pages its rows cite are sent (keys `${policyId}#${page}`, citedPages in
+ * lib/benefit-table/chat.ts), about a third of the whole library; every document's details are still sent. */
+export function renderLibrary(household: Household, pagesSent?: Set<string>): string {
   const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
-  return `<household_members>${escapeText(people)}</household_members>\n<documents>\n${household.documents.map(renderDocument).join("\n")}\n</documents>`;
+  const note = pagesSent ? `\n<pages_note>${PAGES_NOTE}</pages_note>` : "";
+  return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent)).join("\n")}\n</documents>`;
 }
+export const PAGES_NOTE = "Only the pages the benefit table's rows come from are sent below; each document's other pages are left out, though the app has read them. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";

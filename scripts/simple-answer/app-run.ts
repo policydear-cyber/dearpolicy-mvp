@@ -26,7 +26,7 @@ import { assembleTable, type BenefitTable } from "@/lib/benefit-table/assemble";
 import { checkReading, type CheckedReading } from "@/lib/benefit-table/check";
 import { mergeReadings } from "@/lib/benefit-table/completeness";
 import type { SectionLink } from "@/lib/benefit-table/reading";
-import { chatRows, renderTable } from "@/lib/benefit-table/chat";
+import { chatRows, citedPages, renderTable } from "@/lib/benefit-table/chat";
 
 export type AppTurn = { id: string; question: string; model?: string; json?: unknown; answer?: StructuredAnswer; text?: string; report?: VerifyReport; usage?: SimpleUsage; usd?: number; ms?: number; stopReason?: string | null; error?: string };
 
@@ -82,9 +82,11 @@ export async function runSet(opts: { household: Household; questions: Question[]
   return { turns, spentUsd: spent, stoppedEarly };
 }
 
-/** The cached prefix of every call: the prompt, the documents and, with the benefit table, its rows. */
+/** The cached prefix of every call: the prompt, the documents and, with the benefit table, its rows and only the pages
+ * they come from (as lib/simple-chat/hook.ts sends them). */
 function prefixTokens(household: Household, table: BenefitTable | null): number {
-  return tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(household)) + (table ? tokensOf(renderTable(chatRows(table, household))) : 0);
+  const rows = table ? chatRows(table, household) : null;
+  return tokensOf(SIMPLE_SYSTEM_PROMPT) + tokensOf(renderLibrary(household, rows ? citedPages(rows) : undefined)) + (rows ? tokensOf(renderTable(rows)) : 0);
 }
 
 /** The table a benefit-table run read: its recorded model output (each document's reading and page re-reads), checked

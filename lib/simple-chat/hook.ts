@@ -22,7 +22,7 @@ import { loadHousehold, renderLibrary, type Household } from "./library";
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, citedPages, keepLabelledAmounts, noteLeftOutAmounts, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -33,7 +33,7 @@ export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) 
 /** The signed-in household's benefit table when DEARPOLICY_BENEFIT_TABLE is live, otherwise null. */
 async function liveTable(accountId: string): Promise<BenefitTable | null> {
   const { appDb, benefitTableLive } = await import("@/lib/benefit-table/app");
-  if (!(await benefitTableLive())) return null;
+  if (!(await benefitTableLive(accountId))) return null;
   const { tableFor } = await import("@/lib/benefit-table/service");
   return (await tableFor(appDb, accountId)).table;
 }
@@ -85,7 +85,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const started = Date.now();
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
-    reply = await model.call({ library: renderLibrary(household) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
+    // With the table, only the pages its rows come from are sent with it (about a third of the cost per question).
+    reply = await model.call({ library: renderLibrary(household, rows ? citedPages(rows) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }

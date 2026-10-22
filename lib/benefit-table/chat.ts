@@ -75,6 +75,12 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
 }
 
 /** The table as the model sees it: what each row is and what it shows, never a figure the Coverage page does not show. */
+/** The pages the rows come from (each row's own page, its base's and its cap's), as `${policyId}#${page}`: what the
+ * chat sends with the table instead of the whole library. */
+export function citedPages(rows: ChatRow[]): Set<string> {
+  return new Set(rows.flatMap((r) => [r.source, r.baseSource, r.capSource].flatMap((s) => (s ? [`${s.documentId}#${s.page}`] : []))));
+}
+
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),

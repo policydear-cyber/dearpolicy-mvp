@@ -7,6 +7,7 @@ import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type 
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 import { LINKING_SCHEMA, READING_SCHEMA } from "@/lib/benefit-table/reading";
 import { sourcesOf } from "./read";
+import { backfillSql } from "./backfill-sql";
 
 let passed = 0;
 const failures: string[] = [];
@@ -746,6 +747,24 @@ test("the reading CLI passes the household's names to the checks, so a page nami
   const snap = { accountId: "a", members: [{ name: "Lim Wei Jie (self)", relationship: "self" }, { name: "Tan Mei Ling", relationship: "spouse" }],
     documents: [{ policyId: "p1", name: "s.pdf", processingStatus: "ready", pages: [{ page: 1, text: "x" }] }] } as unknown as Parameters<typeof sourcesOf>[0];
   assert.deepEqual(sourcesOf(snap)[0].people, ["Lim Wei Jie", "Tan Mei Ling"]);
+});
+test("backfill SQL: inserts only for the account's current policy, never over a stored reading or link, and no text can end its quote", () => {
+  const acct = "11111111-2222-4333-8444-555555555555", pol = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const nasty = "x'); DROP TABLE policies; -- $bt0$ $$ \\ end";
+  const sql = backfillSql({ accountId: acct, label: "import test", links: [{ section: `${pol}|life|`, cover: null, why: nasty }],
+    readings: [{ policyId: pol, model: "m", stored: { document: { note: nasty }, pages: [{ page: 2, json: { note: nasty } }] } }] });
+  assert.match(sql, /^BEGIN;$/m);
+  assert.match(sql, /^COMMIT;$/m);
+  assert.match(sql, /WHERE EXISTS \(SELECT 1 FROM policies WHERE id='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'::uuid AND account_id='11111111-2222-4333-8444-555555555555'::uuid AND lifecycle_state='active' AND superseded_at IS NULL\)/);
+  assert.equal((sql.match(/ON CONFLICT \(policy_id\) DO NOTHING;/g) ?? []).length, 1);
+  assert.equal((sql.match(/ON CONFLICT \(account_id, section_key\) DO NOTHING;/g) ?? []).length, 1);
+  assert.doesNotMatch(sql, /DO UPDATE|^DELETE|^DROP/m);
+  // Every dollar-quoted value opens and closes with the same tag, and the text never contains it.
+  for (const m of sql.matchAll(/(\$bt[0-9a-f]{12}\$)([\s\S]*?)\1/g)) assert.ok(!m[2].includes(m[1]));
+  const json = /(\$bt[0-9a-f]{12}\$)([\s\S]*?)\1::jsonb/.exec(sql)!;
+  assert.deepEqual(JSON.parse(json[2]), { document: { note: nasty }, pages: [{ page: 2, json: { note: nasty } }] });
+  assert.throws(() => backfillSql({ accountId: "acct'; --", label: "x", links: [], readings: [] }));
+  assert.throws(() => backfillSql({ accountId: acct, label: "x", links: [], readings: [{ policyId: "p'1", model: "m", stored: { document: {}, pages: [] } }] }));
 });
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);

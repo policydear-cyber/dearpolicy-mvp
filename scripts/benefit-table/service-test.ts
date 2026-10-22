@@ -7,6 +7,7 @@ import { parseAmount } from "@/lib/benefit-table/amount";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
 import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
+import { benefitTableEnabled } from "@/lib/benefit-table/flag";
 
 let passed = 0;
 const failures: string[] = [];
@@ -267,8 +268,23 @@ async function main() {
   await test("R85-3: with the table switched on, every old ledger read and seed stops at its first line", async () => {
     const body = (file: string, head: string) => { const src = readFileSync(file, "utf8"), i = src.indexOf(head); assert.ok(i >= 0, head); return src.slice(i, i + 600); };
     for (const head of ["export async function readDocumentIntoLedger(", "export async function readPendingDocuments(", "export async function pendingDocumentCount("])
-      assert.match(body("lib/ledger/extract.ts", head), /\{\n  if\(await benefitTableOwnsReading\(\)\)return/, head);
-    assert.match(body("lib/ledger/store.ts", "export async function seedLedger("), /if\(await benefitTableLive\(\)\)return \{added:0\}/);
+      assert.match(body("lib/ledger/extract.ts", head), /\{\n  if\(await benefitTableOwnsReading\((?:args\.)?accountId\)\)return/, head);
+    assert.match(body("lib/ledger/store.ts", "export async function seedLedger("), /if\(await benefitTableLive\(accountId\)\)return \{added:0\}/);
+  });
+
+  await test("alpha: in production the table is on only for an account in DEARPOLICY_ALPHA_ACCOUNTS; unset, empty or no account named, it is off", async () => {
+    const prod = { DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_BENEFIT_TABLE_ALLOW_PRODUCTION: "1", VERCEL: "1" } as unknown as NodeJS.ProcessEnv;
+    assert.equal(benefitTableEnabled(prod, A), false);
+    assert.equal(benefitTableEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: " , " }, A), false);
+    assert.equal(benefitTableEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: A }), false);
+    assert.equal(benefitTableEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: `someone-else ${A.toUpperCase()}` }, A), true);
+    assert.equal(benefitTableEnabled({ ...prod, DEARPOLICY_ALPHA_ACCOUNTS: "someone-else" }, A), false);
+    assert.equal(benefitTableEnabled({ ...prod, DEARPOLICY_BENEFIT_TABLE: "", DEARPOLICY_ALPHA_ACCOUNTS: A }, A), false);
+    assert.equal(benefitTableEnabled({ DEARPOLICY_BENEFIT_TABLE: "1" } as unknown as NodeJS.ProcessEnv, A), true);
+    assert.equal(benefitTableEnabled({ DEARPOLICY_BENEFIT_TABLE: "1", DEARPOLICY_ALPHA_ACCOUNTS: "someone-else" } as unknown as NodeJS.ProcessEnv, A), false);
+    // Every caller names the account: the switch is read per request, never once for everyone.
+    for (const f of ["app/api/benefit-table/route.ts", "app/api/benefit-table/confirm/route.ts", "app/api/benefit-table/link/route.ts", "lib/rag/ingest.ts", "lib/ledger/store.ts", "lib/ledger/extract.ts", "lib/simple-chat/hook.ts"])
+      assert.doesNotMatch(readFileSync(f, "utf8"), /benefitTableLive\(\)/, f);
   });
 
   await test("TE: a typed sum insured is read strictly; words, letters and zero are refused, never guessed", async () => {
