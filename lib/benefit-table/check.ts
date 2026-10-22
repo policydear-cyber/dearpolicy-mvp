@@ -17,7 +17,9 @@ export type SourceDoc = { id: string; name: string; readable: boolean; pages: { 
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
 /** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"),
  * and premiumLabel the words that line prints before it ("Instalment Premium"). */
-export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null };
+export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null;
+  /** Said with the premium when its page also prints a first-year premium ('First Year Instalment Premium * : 376.68'). */
+  premiumNote?: string | null };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -249,6 +251,35 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
       startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
   }
+  // A premium the reading did not give is taken from the cover's page when the page prints exactly one plain premium line
+  // and names no other life, the same test as a premium the reading gave (release-set A6: "Instalment Premium : 470.85",
+  // "Premium paid : S$73.17"). It goes on the first cover of that page and person only, as one premium is for the policy.
+  const seen = new Set<string>();
+  for (const c of out.covers) {
+    const key = `${c.page}|${normalizePersonName(c.person)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (out.covers.some((o) => o.page === c.page && normalizePersonName(o.person) === normalizePersonName(c.person) && o.premium != null)) continue;
+    const text = pageText(c.page);
+    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
+    if (lines.length !== 1 || otherLife(text, c.person, doc.people ?? [])) continue;
+    const amount = /^[^\d]*?(?:S\$|US\$|SGD|USD|\$)?\s*(\d[\d,]*(?:\.\d+)?)/.exec(lines[0]);
+    const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
+    if (!Number.isFinite(premium) || premium <= 0) continue;
+    const at = find(lines[0].trim(), c.page);
+    const said = at && at.page === c.page && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
+    if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;
+    const currency = statedCurrencyCode(at.excerpt) ?? declaredCurrency(text);
+    if (c.currency && currency && c.currency !== currency) continue;
+    const frequencies = [...text.matchAll(/\b(?:payment|premium)\s+(?:frequency|mode)\s*[\t:]+\s*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)\b/gi)].map((m) => m[1]);
+    c.premium = premium; c.premiumSource = at; c.premiumLabel = said; c.currency = c.currency ?? currency;
+    c.premiumFrequency = new Set(frequencies.map((f) => f.toLowerCase())).size === 1 ? frequencies[0] : null;
+  }
+  // The premium line's page also printing a first-year premium (a first-year discount): the plain premium is not what is
+  // paid in the first policy year, so the row says so (release-set A6).
+  for (const c of out.covers)
+    if (c.premium != null && /^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/im.test(pageText((c.premiumSource ?? c.source).page)))
+      c.premiumNote = "the page prints a different premium for the first policy year";
 
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;

@@ -210,7 +210,7 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -381,6 +381,16 @@ function sumInsuredBase(st: ModelStatement, found: Found, household: Household, 
   if (section !== head.cover) return { ok: false, why: "the sum insured is for a different cover than the row's table" };
   const d = AS_OF.exec(lines[at]);
   return { ok: true, value: want.value, raw: printed[0].raw ?? po.baseAmount, base: { found: bf, cover: head.cover, asOf: d ? `${d[3]}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null } };
+}
+/** Why a 100% statement may still be its person's printed sum insured (verifyAnswer): the percentage could not be tied
+ * to a table row or its heading's sum. A refusal for any other reason (a cap, another cover's sum) stands. */
+const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figure", "the sum is not the one this row's table is a percentage of"]);
+/** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
+ * figure ("100% of the Sum Insured, up to S$400,000"). Fail-safe: such wording is never read as the whole sum insured. */
+function limitedWords(household: Household, found: Found): boolean {
+  const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
+  const words = `${page ? rowWithContinuation(page.text, found.offset) : ""}\n${found.excerpt}`;
+  return moneyFiguresIn(words).length > 0 || /\b(?:up\s+to|limits?|limited|max(?:imum)?|whichever|less(?:er)?|greater|caps?|capped|exceed(?:s|ing)?|reduced?|minus|less\s+any|deduct(?:ed)?|balance|instalments?|advance)\b/i.test(words);
 }
 /** The amount a statement may show, or why it may not. An amount is a currency-signed figure printed in the quote, or a
  * percentage the quote prints of the sum its own table heading prints on the same page. A percentage of the sum insured is
@@ -996,7 +1006,21 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
-      const r = checkAmount(st, found, household, person);
+      let r = checkAmount(st, found, household, person);
+      // 100% of the sum insured is the sum insured: when the percentage cannot be checked on the wording ("100% of the Sum
+      // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it,
+      // checked like any printed amount on a page that names them (live run 22 Oct, A3).
+      let whole: string | null = null;
+      if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && st.percentOf.baseQuote && person && !limitedWords(household, found)) {
+        const pref = st.percentOf.baseDocument ? Number(/^D(\d+)$/i.exec(st.percentOf.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
+        const bf = locateQuote(household, st.percentOf.baseQuote, Number.isFinite(pref) ? pref : null);
+        const page = bf ? household.documents[bf.docIndex].pages.find((p) => p.page === bf.page) : null;
+        const named = page ? new Set(tokens(page.text)) : null;
+        if (bf && named && tokens(person).every((w) => named.has(w))) {
+          const plain = plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: st.percentOf.baseQuote }, bf, household);
+          if (plain.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
+        }
+      }
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
         else report.keptAsFact!.push({ why: r.why, text: st.text });
@@ -1009,7 +1033,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, stay: st.perDay && !r.amount.illustration ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: st.perDay && !r.amount.illustration ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
@@ -1117,7 +1141,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const gid = groupOf.get(c);
     statements.push({
       id: `s${i + 1}`, kind, text, fullText: text, personName: c.person, amount: c.amount ? { text: c.amount.text, currencyResolved: c.amount.currencyResolved, illustration: c.amount.illustration } : null,
-      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : null,
+      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : c.whole ?? null,
       conditions, asOf: c.base?.asOf ?? null, source, group: gid ? { id: gid, kind: "either_or", note: ALTERNATIVES_NOTE } : null,
     });
     if (c.stay) {
