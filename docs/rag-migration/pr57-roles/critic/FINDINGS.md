@@ -5146,3 +5146,21 @@ When `checkedRow` swaps in a twin, the named row's table conditions that are not
 - benefit-table chat-test: 59/59
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 133: PR #104 at 202b8f1 (delta from c9ae1f8)
+
+**Verdict: READY.** No findings. Every change in this delta makes the code refuse or drop less often than before, or refuse where it used to accept.
+
+- **Plan Sum Assured read.** Two new cases are refused:
+  - Any line with no tab between the header and the row (for example, a rider's name printed above its cells).
+  - A row name or product name that carries a rider word.
+
+  Both only add refusals.
+- **Ownership filter.** It is now held to the cover or policy the sentence names, so it drops fewer sentences. My R131/R132 probe is unchanged: the 5 sentences with a reason or condition are kept, and the 4 ownership claims are dropped.
+- **Claim questions.** "File a claim" questions are no longer treated as library questions. An unquoted point in such an answer is now dropped as unquoted, instead of being replaced with a library-record line.
+- **Earlier probes.** All my R126–R130 cases for the "100% of the sum insured" fallback are still refused. The one-benefit positive case still shows S$50,000, now with the fuller basis line.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 59/59
+- headline-test: 13/13
+- benefit-table test: 105/105
