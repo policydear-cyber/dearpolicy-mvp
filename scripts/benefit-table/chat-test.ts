@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, citedPages, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, citedPages, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -33,6 +33,7 @@ const HOUSE: Household = {
       { page: 3, text: "Simple Fracture Benefit Limit: S$5,000\nCompensation (% of S$5,000)\nAnkle\t50%\nAmbulance Cost\tUp to S$500 per incident\nChild\nHospital cash\tS$50 per day" },
       { page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nAdvance Payment Benefit 100% Sum Insured (up to S$400,000)" },
       { page: 9, text: "CLAIMS\nWritten notice of a claim must be given within 30 days." },
+      { page: 11, text: "LIVING CARE\nWaiting Period: no Living Care benefit is payable for a heart attack or major cancer diagnosed within 90 days of cover starting." },
     ]),
     doc(ILP, "Policy illustration.pdf", [{ page: 1, text: "Lim Ah Kow\tSum assured S$100,000\nNon-Guaranteed Surrender Value S$12,400" }]),
   ],
@@ -283,9 +284,9 @@ async function integration() {
     assert.match(amounts[0], /450,000/);
     assert.ok(!JSON.stringify(t.saved.answer).includes("999,999"));
   });
-  await atest("with the table, only the pages its rows come from are sent, with every document's details; switched off, every page", async () => {
+  await atest("with the table, the pages its rows come from and those documents' rule pages are sent, with every document's details; switched off, every page", async () => {
     const t = await turn(hip, true), off = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [] }), false);
-    const cited = citedPages(chatRows(tableWith(), HOUSE));
+    const cited = pagesToSend(chatRows(tableWith(), HOUSE), HOUSE);
     let left = 0;
     for (const d of HOUSE.documents) {
       assert.ok(t.call.library.includes(`name="${d.name}"`), d.name);
@@ -299,6 +300,20 @@ async function integration() {
     assert.ok(left > 0 && cited.size > 0, "the household has pages no row cites");
     assert.match(t.call.library, /<pages_not_sent count="\d+" of="\d+"\/>/);
     assert.ok(t.call.library.includes(PAGES_NOTE) && !off.call.library.includes(PAGES_NOTE));
+    // Critic R113-1: an uncited page with a waiting period is sent; an uncited claims page is not.
+    assert.match(t.call.library, /Waiting Period: no Living Care benefit is payable/);
+    assert.doesNotMatch(t.call.library, /Written notice of a claim/);
+    assert.ok(citedPages(chatRows(tableWith(), HOUSE)).size < cited.size, "rule pages are added to the cited ones");
+  });
+  await atest("Critic R113-1: an amount given from narrowed pages always carries the server's note on waiting periods and exclusions", async () => {
+    const t = await turn(hip, true);
+    const st = t.saved.answer.statements ?? [];
+    assert.ok(st.some((s) => s.amount), "the amount is shown");
+    assert.equal(st.filter((s) => s.text === NARROWED_PAGES_NOTE).length, 1);
+    assert.doesNotMatch(NARROWED_PAGES_NOTE, /\d/);
+    const none = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "fact", text: "Ambulance is covered per incident.", person: "Lim Ah Kow", document: "D2",
+      quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] }), true);
+    assert.ok(!(none.saved.answer.statements ?? []).some((s) => s.text === NARROWED_PAGES_NOTE), "no amount, no note");
   });
   await atest("switched off, the chat turn is exactly as before: no table, no row field", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [] }), false);

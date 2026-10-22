@@ -114,11 +114,12 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
   return `${head}\n${pages}\n</document>`;
 }
 
-/** pagesSent: with the benefit table, only the pages its rows cite are sent (keys `${policyId}#${page}`, citedPages in
- * lib/benefit-table/chat.ts), about a third of the whole library; every document's details are still sent. */
+/** pagesSent: with the benefit table, only the pages its rows cite and those documents' rule pages are sent (keys
+ * `${policyId}#${page}`, pagesToSend in lib/benefit-table/chat.ts), about half the whole library; every document's details
+ * are still sent. */
 export function renderLibrary(household: Household, pagesSent?: Set<string>): string {
   const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
   const note = pagesSent ? `\n<pages_note>${PAGES_NOTE}</pages_note>` : "";
   return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent)).join("\n")}\n</documents>`;
 }
-export const PAGES_NOTE = "Only the pages the benefit table's rows come from are sent below; each document's other pages are left out, though the app has read them. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
+export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";

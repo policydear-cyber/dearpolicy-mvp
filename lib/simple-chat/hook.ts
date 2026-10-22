@@ -22,7 +22,7 @@ import { loadHousehold, renderLibrary, type Household } from "./library";
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, chatRows, citedPages, keepLabelledAmounts, noteLeftOutAmounts, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -85,8 +85,9 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const started = Date.now();
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
-    // With the table, only the pages its rows come from are sent with it (about a third of the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? citedPages(rows) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
+    // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
+    // exclusion, are sent with it (about half the cost per question).
+    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
@@ -100,6 +101,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     answer.statements = kept;
     fromRows.report.dropped.push(...refused.map((st) => ({ why: "the amount lost its label to the checks", text: st.text })));
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
+    answer.statements = noteNarrowedPages(answer.statements, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
