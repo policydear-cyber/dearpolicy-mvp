@@ -1145,7 +1145,7 @@ function libraryClaimsRead(household: Household, left: string[]): (text: string,
   return (text: string, statement = false) => {
     // A printed premium is what is charged: "the insurer decides which premium applies" is never said (release-set A6). A
     // statement built on it is left out whole, so no sentence that only explained it is left standing.
-    if (statement && sentences(text).some(PREMIUM_DECIDES)) { left.push(text); return ""; }
+    if (statement && PREMIUM_DECIDES(text)) { left.push(text); return ""; }
     return sentences(text).flatMap((x) => {
     if (PREMIUM_DECIDES(x)) { left.push(x); return []; }
     const named = membersNamedIn(household, x);

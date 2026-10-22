@@ -514,6 +514,7 @@ test("a premium sentence never says the insurer decides which premium applies (r
   assert.equal(r.bottom, "Here are the premiums.");
   assert.deepEqual(r.texts, []);
   assert.deepEqual(run("b", "The documents print different premium figures, so Singlife decides if they differ.").texts, []);
+  assert.deepEqual(run("b", "The documents print different premium figures. The schedule is the one to rely on, and Singlife decides if they differ.").texts, []);
   // Not about a premium: kept.
   assert.deepEqual(run("b", "Two documents print different amounts for the fracture, so the insurer decides which applies.").texts, ["Two documents print different amounts for the fracture, so the insurer decides which applies."]);
 });
