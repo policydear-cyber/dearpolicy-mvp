@@ -101,7 +101,7 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
       : { kind: "printed", amount: c.sumInsured, currency: c.currency, unit: "lump_sum" }, c.source));
   }
   if (c.premium != null)
-    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.currency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+    out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
   return out;
 }
 
@@ -119,6 +119,8 @@ export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\b
 
 /** Documents of at most this many pages that no row comes from are sent whole (pagesToSend). */
 const SHORT_DOCUMENT_PAGES = 3;
+/** At most this many pages in all are sent for such documents, so a household of many receipts stays small (Critic R126-3). */
+const SHORT_DOCUMENTS_BUDGET = 15;
 /** What the chat sends with the table: the pages its rows come from, and every page of those documents that prints a
  * rule that can stop a payment (RULE_PAGE). A short document the app has read but no row comes from (a premium receipt)
  * is sent whole: with none of its pages sent the model said it "could not be read" (release-set E1, E2). Keys as in
@@ -126,9 +128,13 @@ const SHORT_DOCUMENT_PAGES = 3;
 export function pagesToSend(rows: ChatRow[], household: Household): Set<string> {
   const sent = citedPages(rows);
   const docs = new Set([...sent].map((k) => k.slice(0, k.indexOf("#"))));
+  let whole = 0;
   for (const d of household.documents) {
     if (docs.has(d.policyId)) { for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`); }
-    else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES) for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
+    else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES && whole + d.pages.length <= SHORT_DOCUMENTS_BUDGET) {
+      for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
+      whole += d.pages.length;
+    }
   }
   return sent;
 }
@@ -187,7 +193,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
     for (const r of [row, ...companions]) {
       given.add(r.id);
-      const st = statementFromRow(r, { ...raw, alternativeGroup: group }, labels, names);
+      // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
+      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === row ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")

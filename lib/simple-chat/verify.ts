@@ -26,6 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { documentId, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
+import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -382,14 +383,42 @@ function sumInsuredBase(st: ModelStatement, found: Found, household: Household, 
   const d = AS_OF.exec(lines[at]);
   return { ok: true, value: want.value, raw: printed[0].raw ?? po.baseAmount, base: { found: bf, cover: head.cover, asOf: d ? `${d[3]}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null } };
 }
-/** Why a 100% statement may still be its person's printed sum insured (verifyAnswer): the percentage could not be tied
- * to a table row or its heading's sum. A refusal for any other reason (a cap, another cover's sum) stands. */
-const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figure", "the sum is not the one this row's table is a percentage of"]);
+/** The refusals after which a 100% statement may still be its person's printed sum insured (verifyAnswer): the
+ * percentage could not be tied to a table row, or its row prints no sum it is a percentage of. A row whose table prints its
+ * own base has settled the base, and every other refusal (a cap, another cover's sum) stands (Critic R126-1). */
+const NO_PRINTED_BASE = "the row prints no sum it is a percentage of";
+const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figure", NO_PRINTED_BASE]);
+/** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
+ * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
+ * - it is in the same document as the wording, or in a document with the same policy number;
+ * - its page names the person, and no other household member and no other insured person (otherLife). A schedule about
+ *   one life prints the name once ("Life Assured : ..."), not on the sum insured's line, so the page is what is checked. */
+function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
+  const po = st.percentOf!;
+  if (!po.baseQuote) return null;
+  const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
+  const bf = locateQuote(household, po.baseQuote, Number.isFinite(preferred) ? preferred : null);
+  if (!bf) return null;
+  const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (bf.docIndex !== wording.docIndex && !(number(wdoc) && number(wdoc) === number(bdoc))) return null;
+  const page = bdoc.pages.find((p) => p.page === bf.page);
+  if (!page) return null;
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  if (otherLife(page.text, person, people)) return null;
+  if (!nameOnPage(person, page.text)) return null;
+  return bf;
+}
 /** Whether the quoted wording, with the lines that continue its row, limits the amount: a cap or limit word, or any money
- * figure ("100% of the Sum Insured, up to S$400,000"). Fail-safe: such wording is never read as the whole sum insured. */
+ * figure ("100% of the Sum Insured, up to S$400,000"), or a line above it on its page prints a sum insured or limit with a
+ * figure. Fail-safe: such wording is never read as the whole sum insured. */
 function limitedWords(household: Household, found: Found): boolean {
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page);
   const words = `${page ? rowWithContinuation(page.text, found.offset) : ""}\n${found.excerpt}`;
+  // A table above that prints its own base ("Accidental Medical Expenses (Sum Insured S$5,000)", "% of S$5,000") has
+  // settled what its 100% is of (Critic R126-1).
+  const above = page ? page.text.slice(0, found.offset).split("\n") : [];
+  if (above.some((l) => /\b(?:sum\s+(?:insured|assured)|benefit\s+limit|limit|%\s*of)\b/i.test(l) && moneyFiguresIn(l).length > 0)) return true;
   return moneyFiguresIn(words).length > 0 || /\b(?:up\s+to|limits?|limited|max(?:imum)?|whichever|less(?:er)?|greater|caps?|capped|exceed(?:s|ing)?|reduced?|minus|less\s+any|deduct(?:ed)?|balance|instalments?|advance)\b/i.test(words);
 }
 /** The amount a statement may show, or why it may not. An amount is a currency-signed figure printed in the quote, or a
@@ -428,7 +457,8 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
       return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true }, base: b.base };
     }
     const base = moneyFiguresIn(st.percentOf!.baseAmount)[0]?.value ?? numbersIn(st.percentOf!.baseAmount)[0];
-    if (!printed || base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
+    if (!printed) return { ok: false, why: NO_PRINTED_BASE };
+    if (base == null || !sameValue(printed.value, base)) return { ok: false, why: "the sum is not the one this row's table is a percentage of" };
     const cur = currencyOf(printed.raw, page.text, doc);
     const value = Math.round(base * pct) / 100;
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
@@ -1007,19 +1037,14 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
       let r = checkAmount(st, found, household, person);
-      // 100% of the sum insured is the sum insured: when the percentage cannot be checked on the wording ("100% of the Sum
-      // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it,
-      // checked like any printed amount on a page that names them (live run 22 Oct, A3).
+      // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
+      // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it
+      // (live run 22 Oct, A3), only where wholeSumInsured finds it is theirs for this policy (Critic R126-1).
       let whole: string | null = null;
-      if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && st.percentOf.baseQuote && person && !limitedWords(household, found)) {
-        const pref = st.percentOf.baseDocument ? Number(/^D(\d+)$/i.exec(st.percentOf.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
-        const bf = locateQuote(household, st.percentOf.baseQuote, Number.isFinite(pref) ? pref : null);
-        const page = bf ? household.documents[bf.docIndex].pages.find((p) => p.page === bf.page) : null;
-        const named = page ? new Set(tokens(page.text)) : null;
-        if (bf && named && tokens(person).every((w) => named.has(w))) {
-          const plain = plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: st.percentOf.baseQuote }, bf, household);
-          if (plain.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
-        }
+      if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && person && !limitedWords(household, found)) {
+        const bf = wholeSumInsured(st, found, household, person);
+        const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: bf.excerpt }, bf, household) : null;
+        if (bf && plain?.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
       }
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
