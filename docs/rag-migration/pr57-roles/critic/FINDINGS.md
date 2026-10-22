@@ -4469,3 +4469,17 @@ Suggested fix: add `|survival\s+period|\bnot\s+(be\s+)?payable\b|\bnot\s+be\s+li
 ### Tests (run locally)
 - `scripts/benefit-table/test.ts`: 105/105
 - `chat-test.ts`: 44/44
+
+## Round 115: PR #98 at 8fd4003 (R114-1 delta)
+
+**Verdict: READY.** R114-1 is fixed.
+
+- **The pattern now catches the missed rules.** `RULE_PAGE` (`lib/benefit-table/chat.ts:86`) adds three patterns:
+  - `survival\s+period`
+  - `not (be) payable`
+  - `not be liable`
+
+  This matches the fix I suggested, and the regex now agrees with its doc comment.
+- **The page count matches.** 96 of 229 pages are sent, which is what I estimated: 84, plus 12 new rule pages.
+- **Test coverage.** The survival-period case is added inside the existing chat-test case.
+- **Local test results:** `scripts/benefit-table/test.ts` 105/105, `chat-test.ts` 44/44.
