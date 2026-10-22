@@ -4350,3 +4350,11 @@ I found nothing else. If the next delta only adds this condition and its tests, 
   - The premium is de-duplicated per person, policy and source line.
 - `declaredCurrency` now defers "unless stated otherwise" to `pageCurrency`, which returns null for it.
 - `chat-test.ts` passes 41/41 locally with tsx.
+
+## R110 — PR #97 delta a58235f → 924c5a2 (premium refused when the page names another life)
+
+**Verdict: READY.**
+
+- `otherLife` is a new condition, and it can only refuse a premium. It cannot show a figure or change one.
+- Worst case, a page whose "Policy Owner" differs from the life assured drops a premium that was correct. That is safe over-refusal of a non-claimable figure.
+- `chat-test.ts` passes 42/42 locally.
