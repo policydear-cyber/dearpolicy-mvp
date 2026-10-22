@@ -31,7 +31,9 @@ const usdOf = (p: Price, input: number, output: number) => (input * p.input + ou
 type Snapshot = { accountId: string; members: { name: string; relationship: string }[];
   documents: { policyId: string; name: string; processingStatus?: string | null; pages: { page: number; text: string }[] }[] };
 export const familyOf = (s: Snapshot): FamilyMember[] => s.members.map((m, i) => ({ id: `m${i}`, display_name: m.name.replace(/\s*\([^)]*\)\s*$/, "") }));
-export const sourcesOf = (s: Snapshot): SourceDoc[] => s.documents.map((d) => ({ id: d.policyId, name: d.name, readable: !d.processingStatus || d.processingStatus === "ready", pages: d.pages }));
+// people: the household's names, so the premium check refuses a page naming another member (as the app's service does).
+export const sourcesOf = (s: Snapshot): SourceDoc[] => s.documents.map((d) => ({ id: d.policyId, name: d.name, readable: !d.processingStatus || d.processingStatus === "ready", pages: d.pages,
+  people: familyOf(s).map((m) => m.display_name) }));
 
 type Call = { system: string; user: string; schema: unknown; maxTokens: number };
 type Reply = { json: unknown; stopReason: string | null; model: string; input: number; output: number; ms: number };

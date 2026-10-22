@@ -944,7 +944,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // With DEARPOLICY_BENEFIT_TABLE on (and its tables applied), the document is read once into the benefit table
       // instead, and the old ledger rows and seeded defaults are not made. Switched off, nothing below changes.
       const benefitTable = await import("@/lib/benefit-table/app");
-      if (await benefitTable.benefitTableLive()) {
+      if (await benefitTable.benefitTableLive(args.accountId)) {
         if (!isPaymentDocument && !noCover) await benefitTable.readIntoBenefitTable(args.accountId, args.policyId).catch((error) => {
           console.warn("Benefit table reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
         });

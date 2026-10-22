@@ -13,7 +13,7 @@ export const ROUTE_AUTH = "household-member" as const;
 export async function GET(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
-    if(!(await benefitTableLive()))return NextResponse.json({enabled:false});
+    if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
     const {table,documents,links}=await tableFor(appDb,accountId);
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
     return NextResponse.json({enabled:true,documents,

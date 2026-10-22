@@ -75,6 +75,34 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
 }
 
 /** The table as the model sees it: what each row is and what it shows, never a figure the Coverage page does not show. */
+/** The pages the rows come from (each row's own page, its base's and its cap's), as `${policyId}#${page}`: what the
+ * chat sends with the table instead of the whole library. */
+export function citedPages(rows: ChatRow[]): Set<string> {
+  return new Set(rows.flatMap((r) => [r.source, r.baseSource, r.capSource].flatMap((s) => (s ? [`${s.documentId}#${s.page}`] : []))));
+}
+
+/** Wording that can stop a benefit being paid: a waiting or survival period, an exclusion, a pre-existing condition, or a
+ * "will not pay". A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
+export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b/i;
+
+/** What the chat sends with the table: the pages its rows come from, and every page of those documents that prints a
+ * rule that can stop a payment (RULE_PAGE). Keys as in citedPages. */
+export function pagesToSend(rows: ChatRow[], household: Household): Set<string> {
+  const sent = citedPages(rows);
+  const docs = new Set([...sent].map((k) => k.slice(0, k.indexOf("#"))));
+  for (const d of household.documents)
+    if (docs.has(d.policyId)) for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`);
+  return sent;
+}
+
+/** Said on every answer that gives an amount while the chat was sent only some pages (Critic R113-1): a fixed server
+ * note, whatever the model wrote. No figure in it. */
+export const NARROWED_PAGES_NOTE = "Waiting periods, exclusions and other conditions can be printed on pages not used for this answer. Check the full document, or ask the insurer, before you claim.";
+export function noteNarrowedPages<T extends { id: string; kind: string; text: string; amount?: unknown }>(statements: T[], make: (id: string, text: string) => T): T[] {
+  if (!statements.some((s) => s.amount) || statements.some((s) => s.id === "narrowed-pages")) return statements;
+  return [...statements, make("narrowed-pages", NARROWED_PAGES_NOTE)];
+}
+
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),

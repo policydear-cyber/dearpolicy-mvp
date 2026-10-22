@@ -305,7 +305,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
-  if(simpleChatEnabled())return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
+  if(simpleChatEnabled(process.env,request.accountId))return (await import("@/lib/simple-chat/hook")).prepareSimpleChat(request);
   if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).prepareLoopChat(request);
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");

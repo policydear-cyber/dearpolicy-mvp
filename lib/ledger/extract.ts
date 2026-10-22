@@ -232,12 +232,12 @@ function seedKeyFor(policyId:string,row:ExtractedRow,familyMemberId:string){
 /** Reads one document into the ledger. Additive; never touches an existing row. */
 /** With the benefit table switched on (lib/benefit-table), documents are read into it instead: no ledger read runs, from
  * any caller (upload, dashboard, Coverage, chat), so a document is never read and paid for twice. */
-async function benefitTableOwnsReading(){
+async function benefitTableOwnsReading(accountId:string){
   const { benefitTableLive }=await import("@/lib/benefit-table/app");
-  return benefitTableLive();
+  return benefitTableLive(accountId);
 }
 export async function readDocumentIntoLedger(args:{accountId:string;policyId:string;report?:(stage:string)=>void}):Promise<{added:number;read:number;dropped:number}>{
-  if(await benefitTableOwnsReading())return {added:0,read:0,dropped:0};
+  if(await benefitTableOwnsReading(args.accountId))return {added:0,read:0,dropped:0};
   await ensureLedgerSchema();
   const doc=(await query<{product_name:string|null;insurer:string|null}>(`SELECT p.product_name,p.insurer FROM policies p WHERE p.id=$1 AND p.account_id=$2 AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}`,[args.policyId,args.accountId])).rows[0];
   if(!doc)return {added:0,read:0,dropped:0};
@@ -327,7 +327,7 @@ type ExtractGlobals=typeof globalThis&{__dearpolicyLedgerReading?:Map<string,Pro
 /** Reads every ready document that has not been read into the ledger yet.
  * One run per account at a time; a second caller joins the first. */
 export async function readPendingDocuments(accountId:string,report?:(stage:string)=>void,opts:{includeBackedOff?:boolean}={}):Promise<{documents:number;added:number}>{
-  if(await benefitTableOwnsReading())return {documents:0,added:0};
+  if(await benefitTableOwnsReading(accountId))return {documents:0,added:0};
   const state=globalThis as ExtractGlobals;
   state.__dearpolicyLedgerReading??=new Map();
   const running=state.__dearpolicyLedgerReading.get(accountId);
@@ -358,7 +358,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
  * failed read (callers refresh the ledger's seeded rows when any is waiting);
  * `dueOnly` counts only those readPendingDocuments would read now. */
 export async function pendingDocumentCount(accountId:string,opts:{dueOnly?:boolean}={}){
-  if(await benefitTableOwnsReading())return 0;
+  if(await benefitTableOwnsReading(accountId))return 0;
   await ensureLedgerSchema();
   const r=await query<{n:number}>(
     `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}

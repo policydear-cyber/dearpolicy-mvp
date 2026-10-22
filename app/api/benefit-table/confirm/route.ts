@@ -19,7 +19,7 @@ const Body=z.object({
 export async function POST(request:NextRequest){
   try{
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
-    if(!(await benefitTableLive()))return NextResponse.json({enabled:false},{status:404});
+    if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false},{status:404});
     const body=Body.parse(await request.json().catch(()=>({})));
     await setConfirmation(appDb,accountId,ctx.userId,body.personId,body.coverKey,body.status,body.sumInsured??null);
     return NextResponse.json({ok:true});
