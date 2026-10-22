@@ -4290,3 +4290,21 @@ I found nothing else. If the next delta only adds this condition and its tests, 
 
 - `CONNECTIVE || NEAR_CAP` is right. My R105 "swap" would have dropped the "Or\t10% …" case (TE layout 32), so keeping both was correct.
 - I re-ran all 65 layouts. Only K5 changed, and it now withholds. Everything else is identical.
+
+## R107 — PR #96 delta c07aa11 → 1f99963 (reading schema within the 16-union limit)
+
+**Verdict: READY.**
+
+- **Missing vs null is the same everywhere downstream.**
+  - Every stored reading (the whole document and its page re-reads) goes through `checkReading` (`service.ts:55-56`). That function reads each of the 11 fields through `str`, `num`, `int` or `day`, and all of these return null for `undefined` (`check.ts:141-143, 183-190, 258-262`).
+  - After that point the types are `T | null`. `assemble.ts`, `chat.ts`, `components/benefit-table-coverage.tsx` and `app/api/benefit-table` only see null.
+  - Document `insurer`, `periodFrom` and `periodTo` are not read by `checkReading` at all.
+  - `coverKeyOf` already guards `riderOf` with `?? null` / truthiness.
+- **No amount field lost its guarantee.**
+  - `value`, `percentOf`, `baseAmount`, `baseQuote`, `cap`, `capQuote`, `quote` and `page` stay required. So do cover `sumInsured` and `policyNumber`, and benefit `section`, `column`, `period` and `basis`. The new test pins the benefit set.
+  - `premium` is optional, but it is a cover attribute, never a claimable amount, and `check.ts:184` still drops one that is not printed.
+- **Qualifier check, the one field class that matters: `fromDay`/`maxDays`.** These are now optional, so a model could leave out "up to N days" on a per-day row.
+  - Before this change the field could already come back null, so the guarantee was always weak; the amount itself is unaffected.
+  - In run-03b, the one per-day row that was re-read under the new schema kept its `maxDays`.
+  - Not a blocker. Watch per-day rows in the next gold check.
+- The `object()` helper strips the `optional` marker from the emitted schema, and the test asserts that none remains.
