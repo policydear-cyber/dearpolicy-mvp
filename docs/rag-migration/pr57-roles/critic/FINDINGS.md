@@ -4607,3 +4607,42 @@ Optional fix: keep the product whenever the short name has no cover-type word in
   - My earlier adversarial case (GTL with policy no. 1, GTL with policy no. 2, and GTL from product B) still gives three distinct labels.
 - **Key rows now show every condition.** `rowDetail` takes no `brief` argument any more, so a key row's detail line is the same as the full list's. That is stricter than R116-1 asked for, and nothing is shortened.
 - **Tests (run locally):** headline-test 13/13, test.ts 105/105, chat-test 46/46.
+
+## Round 119: PR #100 at 3b87b9d (MODEL_PRESET=anthropic ignores non-Anthropic per-job settings)
+
+**Verdict: READY on code.** One cost point needs DC's decision before merge (R119-1).
+
+### The four checks
+1. **The alpha chat and the benefit-table reading are untouched.** Neither path calls `modelFor`:
+   - The benefit table uses `benefitTableModel`, which reads `DEARPOLICY_BENEFIT_TABLE_MODEL` and accepts only `anthropic:` values (default Sonnet 5.5).
+   - The simple chat uses `simpleChatModel` and `DEARPOLICY_SIMPLE_CHAT_MODEL`.
+   - Nothing outside `providers.ts` reads `READING_MODEL`, `JUDGEMENT_MODEL`, `NARRATION_MODEL`, `CHAT_MODEL` or `JUDGEMENT_FALLBACK_MODEL` directly.
+2. **Anthropic per-job settings still win.** `allowedByPreset` (`lib/ai/providers.ts:73-75`) drops a setting only when the preset is anthropic and the setting's provider is not anthropic. So `CHAT_MODEL=anthropic:claude-haiku-4-5` is kept.
+   - When a setting is dropped, the job falls back to the preset's model: Haiku 4.5 for reading and narration, Sonnet 5 for judgement and chat.
+   - Every other preset, and no preset, behaves exactly as before. The tests cover all five cases.
+3. **Fallback.** Under the anthropic preset, `fallbackModelFor` returns null unless `JUDGEMENT_FALLBACK_MODEL` is itself an Anthropic model.
+   - A leftover `gemini:flash-lite` fallback is now ignored, so a rate-limited judgement retries nothing rather than switching to Google.
+   - No fallback can end on a non-Claude model.
+   - Scanned-page reading (`documentReaderFor`) now gets a Claude reading model. Anthropic is in `HOSTED_DOCUMENT_PROVIDERS`, so that model is used for scanned pages.
+4. **Spend accounting.** Every model these paths can now resolve to is in `PRICES`: `claude-haiku-4-5`, `claude-sonnet-5` and `claude-sonnet-5-5`.
+   - An Anthropic model typed into a per-job setting that is not in the table is still priced at zero and flagged. That was already true.
+
+One edge case: with the preset set but no `ANTHROPIC_API_KEY`, the preset choice parses to null. The OpenAI setting is now ignored too, so the job falls back to the Gemini default. The preset implies the key, so this only matters if the key is removed.
+
+### R119-1 (decision for DC, not a defect): merging moves every household's older jobs to Claude prices
+The test comment says production already has `MODEL_PRESET=anthropic` set, with the `openai:gpt-6-luna` per-job settings left over. If so, then from merge and deploy onward, these jobs move for every household, not just the alpha account:
+
+| Job | Today | After merge |
+|---|---|---|
+| Reading (old ledger) | `gpt-6-luna` | Haiku 4.5 |
+| Narration | `gpt-6-luna` | Haiku 4.5 |
+| Judgement | `gpt-6-luna` | Sonnet 5 |
+
+By `PRICES`, Haiku 4.5 costs US$1 in / US$5 out per million tokens, and Sonnet 5 costs US$2 / US$10. `gpt-6-luna` costs US$0.10 / US$0.50. That is about 10x for reading and narration, and about 20x for judgement.
+
+This is the intended behaviour, but it changes cost and model quality in production, against a US$100/month budget. DC should say yes knowing that.
+
+The alternative is to unset `MODEL_PRESET`, or keep the OpenAI settings with no preset, until the alpha's own spend is known.
+
+### Tests
+`model-preset-test`: 5/5, run locally.
