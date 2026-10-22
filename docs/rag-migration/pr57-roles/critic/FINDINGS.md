@@ -4656,3 +4656,75 @@ The alternative is to unset `MODEL_PRESET`, or keep the OpenAI settings with no 
 - **Canaries.** `canaryConfigFor` (`lib/ai/rollout.ts:116`) returns null for a canary that names another provider. With no canary configured, the stable model applies, and under the preset that model is Claude. So no Google or OpenAI call can come in through the canary path.
 - **Imports.** `simple-chat/flag.ts` now imports a value from `providers.ts`; before, it imported only types. `providers.ts` imports only zod and `deterministic-model`, so there is no import cycle. Neither module is imported by a client component; only server modules (`lib/chat/workflow.ts`, `lib/ai/llm.ts`) import them.
 - **Tests (run locally):** model-preset-test 7/7, benefit-table chat-test 46/46.
+
+## Round 121: PR #101 at aef0cbd (answer style guide, label clean-up, sin1 region)
+
+**Verdict: NOT READY.** One finding is high, two are medium and one is low. The region change is safe, and the PR has no per-question patches.
+
+### R121-1 (high): any model note containing "differ", "either" or "alternative" now removes the server's "not a total" warning
+In `lib/simple-chat/verify.ts:1063-1066`, `saidApart` skips every not-a-total note whenever any uncertainty statement in the answer matches `not a total|alternatives?|either|differ(ent|s)?`.
+
+The style guide asks for exactly such a note: "When documents print different figures, say so once, in the note after the amounts". That note says the figures differ, not that they must not be added. It is also not tied to the amounts in the group: one such note anywhere drops the warning for every group.
+
+I probed this with the PR's own style-test fixture (two cross-row amounts, S$500 and S$250):
+
+| Model's note | not-a-total notes kept |
+|---|---|
+| "The two documents print different figures." | 0 |
+| "Either document can be used to claim." | 0 |
+| no note | 1 |
+
+In each case both amounts are still shown. This is the wrist case in plain form: S$1,250 or S$120,000 shown with only "the documents differ", and nothing saying they cannot be added. A wrong total is our worst kind of bug, and this removes the server-side guard against it on the model's wording alone.
+
+**Fix:** always keep the server's note. To say it once, drop the model's own uncertainty sentence when it only restates the difference. If you do want to skip the server's note, require the model's sentence to say "not a total" or "cannot be added" and to name every amount in the group.
+
+### R121-2 (medium): the chat goes down if the style file is missing at run time
+`SIMPLE_SYSTEM_PROMPT` is a module-level template that calls `answerStyle()`, which does `readFileSync(.../answer-style.md)`. If the file is not traced into a route, the prompt module throws when it is imported, and every chat request fails. That can happen through a future `outputFileTracingIncludes` edit, a bundling change or a route that is not covered.
+
+The `"/**"` include in `next.config.ts` covers today's routes, and the test asserts that config line. But a style file should never be able to stop the chat.
+
+**Fix:** wrap the read in try/catch, return "" on failure and log once. Or import the text at build time, for example as a `.ts` string export.
+
+### R121-3 (medium): cards for printed policy terms lost their only text label
+`components/answer-cards.tsx:96`. Cards of kind `benefit_terms` used to say "as printed in the policy, not worked out for this case". Now only the CSS class `printed` (a quieter style) tells them apart from an amount worked out for the event. A style is not a qualifier: a screen reader or a quick reader sees "Up to S$5,000" just as they see a calculated figure.
+
+Removing "illustration", "printed amount" and the "currency not stated" line is fine:
+- the footer still says "Illustrations/Amounts from your documents, not a payment or an insurer's decision";
+- a bare "$" is still explained under "Where this comes from" (`answer-cards.tsx:125-126`).
+
+But the per-case qualifier on printed terms should stay. A short label such as "Policy terms, not worked out for this case" is enough.
+
+Also checked:
+- Removing "To confirm" (no amount, only uncertainties) leaves no amount, so it cannot mislead.
+- Removing "worked out from the document's terms" from `basisOf` and the stay basis keeps "N% of …" and "(n × amount)", so how each figure was reached is still shown.
+
+### R121-4 (low): a real household name is in a prompt sent to every household
+`lib/chat/answer-style.md:31` uses "sorry, it was Desmond" and "For Desmond, …". The guide goes into every household's system prompt. It is DC's real family member's name, from the live test.
+
+**Fix:** use a made-up name, as the tests do ("Lim Ah Kow").
+
+Separately, and outside this PR: `app/family/page.tsx:115` already shows DC's full legal name as the placeholder to every user. It should be replaced the same way.
+
+### Can the style guide override the accuracy rules? Mostly no.
+- The guide is placed after the rules, with "The rules above always win over it".
+- It tells the model only how to write. The server's checks (`verifyAnswer`, `amountsFromRows`, `keepLabelledAmounts`) do not read it, so it cannot add an amount or remove a qualifier. R121-1 is the exception, because a server check now depends on wording the guide encourages.
+
+Two wording points, neither blocking:
+- The prompt's "could fall under" became "falls under", and "Leave out benefits … the question didn't ask about" was added. Read with the new "a separate benefit … one short fact, no amount" line, this narrows answers to the event as described. That matches "missing information is not an exclusion": the benefit is still named.
+- "Never show … 'as printed'" conflicts with keeping the printed-terms qualifier (R121-3). Apply that line to the model's prose only.
+
+### Region (sin1) on Hobby: safe
+- `vercel.json` sets one region, `["sin1"]`. To my knowledge Vercel's Hobby plan allows one region of your choice for functions; only multiple regions need Pro. I have not checked this against the live dashboard.
+- No route sets `preferredRegion` or the edge runtime, so nothing conflicts.
+- The daily cron runs in sin1 too.
+- The only effect is lower latency to the Singapore database.
+- `/api/health` now reports `VERCEL_REGION` and splits the "Chat model" and "Checking model" labels. `simpleChatModel()` can throw, and that is caught.
+
+### No per-question patches
+- The prompt and guide lines are general rules (corrections, unmentioned separate benefits, list questions, follow-ups). The ambulance and hospital-stay examples illustrate a general rule.
+- `benefitName` strips any leading row letter or number from every benefit. It is tested on 8 shapes, including ones it must leave alone ("A Death benefit", "X-ray").
+- Loading the library, conversation and table in parallel is general. The spend-cap check runs in that same `Promise.all`, so going over the cap still rejects before the model is called.
+
+### Tests (run locally)
+- style-test: 6/6
+- benefit-table chat-test: 46/46
