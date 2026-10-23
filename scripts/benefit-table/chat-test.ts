@@ -318,7 +318,9 @@ async function integration() {
       { kind: "fact", text: "The scheme has a hotline.", person: null, document: "D1", quote: "a sentence printed nowhere", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null, waiting: null, period: null }] });
     const texts = async (b: string) => ((await turn(unquoted(b), true)).saved.answer.statements ?? []).map((x) => x.text);
     assert.ok(!(await texts("All eight of your files were read, so none could not be read.")).includes(NOTHING_SHOWN));
-    for (const b of ["Here is each adult's list.", "The documents are listed below.", "Each person's documents:"]) assert.deepEqual(await texts(b), [NOTHING_SHOWN], b);
+    for (const b of ["Here is each adult's list.", "The documents are listed below.", "Each person's documents:", "Here's what each of you has.", "Your documents are as follows.", "These are the benefits."]) assert.deepEqual(await texts(b), [NOTHING_SHOWN], b);
+    // "Following" and "below" in their plain sense introduce nothing (TE N4).
+    for (const b of ["Nothing is paid following a stroke in the first year.", "An injury below the knee is covered."]) assert.ok(!(await texts(b)).includes(NOTHING_SHOWN), b);
   });
   await atest("in the app's chat turn, the table rides with the documents and the row's amount is what is saved", async () => {
     const t = await turn(hip, true);
@@ -1129,6 +1131,8 @@ test("a benefit the question asks about by name is never hidden as not described
   assert.equal(shown("she had an accident at work, 3 days so far", amb), 0);
   // One word of the name is not the name ("aid" alone).
   assert.equal(shown("what aid can i get"), 0);
+  // The cover's name is not the benefit's: a not described card under it stays hidden (TE A3).
+  assert.equal(shown("I broke my wrist. What does my personal accident cover pay?"), 0);
 });
 
 test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
@@ -1151,6 +1155,13 @@ test("a card whose copied benefit name is not its row's is left out: the id slip
   assert.equal(nested(cash, "ICU Hospital Cash"), 0);
   assert.equal(nested(icu, "ICU Hospital Cash"), 1);
   assert.equal(nested(cash, "Hospital Cash Benefit"), 1);
+  // A name without its section is not the row's: two sections can share it (TE K8).
+  const simple: ChatRow = { ...amb, id: "R966", benefit: "Simple Fracture: Wrist" }, compound: ChatRow = { ...amb, id: "R967", benefit: "Compound Fracture: Wrist" };
+  const fracture = (row: ChatRow, rowBenefit: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "any_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, [...rows, simple, compound], HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.length;
+  assert.equal(fracture(compound, "Wrist"), 0);
+  assert.equal(fracture(compound, "Simple Fracture: Wrist"), 0);
+  assert.equal(fracture(compound, "Compound Fracture: Wrist"), 1);
   // An answer recorded before the field existed is not checked.
   assert.equal(run(cef.id, undefined).labels.length, 1);
 });
@@ -1195,6 +1206,10 @@ test("a sentence that sets the daily cards' one day rule against itself is left 
   assert.equal(left.length, 2);
   assert.deepEqual(answer.statements.map((x) => x.text), ["It is paid from the 11th day. It is not paid for self-inflicted injuries.", "The scheme pays after the 7th day, the other from the 11th day.", "The benefit can only be claimed once."]);
   // Cards read with different rules: nothing is left out.
+  // "After 10 days" is day 11; "on 11th October" is a date, not a first paid day (TE D8, D9).
+  const more = { summary: "x", statements: [st("One page says after 10 days, the other from the 11th day, for up to 30 days."), st("He was admitted on 11th October and it pays after the 10th day.")] };
+  assert.equal(dropAgreeingDayRules(more, report).length, 1);
+  assert.deepEqual(more.statements.map((x) => x.text), ["He was admitted on 11th October and it pays after the 10th day."]);
   const two = { ...report, days: { a: [{ fromDay: 11, maxDays: 30, alone: true }], b: [{ fromDay: 8, maxDays: 30, alone: true }] } };
   const kept = { summary: "x", statements: [st("One says after the 10th day, the other from the 11th day.")] };
   assert.deepEqual(dropAgreeingDayRules(kept, two), []);

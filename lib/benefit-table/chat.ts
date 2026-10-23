@@ -279,11 +279,11 @@ function periodEnded(raw: Record<string, unknown>, today: number): string | null
 }
 /** Whether the question asks about the row's benefit by its name: the whole name, or the name before the event it is
  * paid on ("Mobility aid" of "Mobility aid upon Accidental Total & Permanent Disablement"), at least two words long. */
-function asksFor(question: string, row: ChatRow, rows: ChatRow[]): boolean {
+function asksFor(question: string, row: ChatRow): boolean {
+  // The benefit's own name, never its cover's: "what does my personal accident cover pay" asks about no one benefit (TE A3).
   if (!question.trim()) return false;
-  if (namesRow(question, row, rows)) return true;
-  const head = nameHead(row);
-  return !!head && plainWords(question).includes(head);
+  const q = plainWords(question), whole = plainWords(benefitName(row.benefit)), head = nameHead(row);
+  return (whole.trim().length > 2 && q.includes(whole)) || (!!head && q.includes(head));
 }
 const plainWords = (x: string) => ` ${x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
 /** A benefit's name before the event it is paid on, without a list letter or a closing "benefit": "mobility aid" of "H.
@@ -318,7 +318,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // A benefit the question asks about by name is what was asked, never "not described" (live run 23 Oct, H7: "what is
     // the mobility aid benefit" lost its S$10,000).
     const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list`
-      : x.eventFit === "not_described" ? (asksFor(question, r, rows) ? null : `${names(r)} pays only on something not described`)
+      : x.eventFit === "not_described" ? (asksFor(question, r) ? null : `${names(r)} pays only on something not described`)
       : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
@@ -493,8 +493,10 @@ const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|
  * "11th to 40th day") and each most-days figure ("up to 30 days", "for at most thirty (30) days", "11th to 40th day" is 30). */
 function dayRulesIn(sentence: string): { starts: number[]; maxes: number[] } {
   const starts: number[] = [], maxes: number[] = [];
-  for (const m of sentence.matchAll(/\bafter\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+day\b/gi)) starts.push(Number(m[1]) + 1);
-  for (const m of sentence.matchAll(/\b(?:from|on)\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)(?:\s+day)?)(?:\s+(?:to|until|through|-)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?(?:\s+day)?)?/gi)) {
+  // "After the 10th day" and "after 10 days" are day 11 (TE D8).
+  for (const m of sentence.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day|(\d+)\s+(?:consecutive\s+|continuous\s+)?days)\b/gi)) starts.push(Number(m[1] ?? m[2]) + 1);
+  // An ordinal counts only with "day" after it, or a range ending in one: "on 11th October" is a date (TE D9).
+  for (const m of sentence.matchAll(/\b(?:from|on)\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)(?=\s+day\b|\s+(?:to|until|through|-)\s+(?:the\s+)?\d+(?:st|nd|rd|th)?\s+day\b))(?:\s+day)?(?:\s+(?:to|until|through|-)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+day)?/gi)) {
     const start = Number(m[1] ?? m[2]);
     starts.push(start);
     if (m[3]) maxes.push(Number(m[3]) - start + 1);
@@ -624,13 +626,14 @@ const nameParts = (benefit: string) => {
   return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
 };
 /** Whether a benefit name the model copied is the row's: the same name, letters and digits only, with any list letter
- * ("D.", "J,") and section dropped by sameBenefit; or the same once words that name no benefit are taken out ("Child
+ * ("D.", "J,") dropped and its section kept; or the same once words that name no benefit are taken out ("Child
  * Education Fund" of "Child Education Fund Benefit"). */
 function copiedName(copied: string, row: ChatRow): boolean {
   const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/^\s*[a-z]\s*[.,]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
   const a = plain(copied), b = plain(row.benefit);
   if (!a) return false;
-  if (a === b || sameBenefit(copied, row.benefit)) return true;
+  // The section is part of the name: "Wrist" is neither "Simple Fracture: Wrist" nor "Compound Fracture: Wrist" (TE K8).
+  if (a === b) return true;
   // Never one name inside another: "Hospital Cash" is not "ICU Hospital Cash" (Critic R157-1). Only words that name no
   // benefit ("the", "benefit", "cover", "limit") may differ.
   const core = (t: string) => ` ${t} `.replace(/\s(?:the|benefits?|cover(?:age)?|amount|limit|plan|payment)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
