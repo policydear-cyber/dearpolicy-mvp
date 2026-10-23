@@ -5927,3 +5927,10 @@ Free tests on 3f2547b: chat 86/86, headline 13/13, table 106/106.
 ## R166 — PR #112 re-check (3f2547b..6de7b2f)
 
 **Verdict: READY.** R165-1 and R165-2 applied as patched, with a test that fails on 3f2547b. My four probes are false and the A6 quote still binds. Low (b) fixed (", shown below," eats its following comma). Low (a) accepted. Free tests on 6de7b2f: chat 87/87, headline 13/13, table 106/106.
+
+## R167 — PR #112 re-check (6de7b2f..b1e0669)
+
+**Verdict: READY.** Free tests on b1e0669: chat 87/87, headline 13/13, table 106/106. The R165 probes still hold.
+- B4 (copy equal to another cover's name rejected): only rejects, and only in the fit fallback. That can withhold, never mis-bind.
+- N4 (PERIOD_NOTE turns off the one-sided-note rule): this only narrows pairing. Core-equal names still match as before.
+- M1b (away point for a condition only the other document prints): reuses awayConditions (money dropped, quote located in the sibling's document) and the same `away` key dedupe as carried points. It adds no amount.
