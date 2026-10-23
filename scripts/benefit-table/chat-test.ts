@@ -1156,8 +1156,12 @@ test("a card for an event outside its cover's printed period is never shown; wit
     return { labels: r.report.labels, why: r.report.dropped.map((d) => d.why) };
   };
   const p = (eventOn: string | null) => ({ from: "29/09/2026", to: "04/10/2026", eventOn });
-  // An event with no date said is today's: after the trip ended, no card.
-  assert.deepEqual(run("any_event", p(null)), { labels: [], why: ["its cover period ended on 04/10/2026"] });
+  // An event with no date said may have been during the trip: shown, saying when the period ended (Critic R156-1).
+  const undated = run("any_event", p(""));
+  assert.equal(undated.labels.length, 1);
+  assert.match(undated.labels[0], / Its cover period ended on 04\/10\/2026, so it pays only for an event on or before that day\.$/);
+  // Happening now (today's date): after the trip ended, no card.
+  assert.deepEqual(run("any_event", p("23/10/2026")), { labels: [], why: ["its cover period ended on 04/10/2026"] });
   // On a date inside the trip: shown. Before it: not.
   assert.equal(run("any_event", p("29/09/2026")).labels.length, 1);
   assert.deepEqual(run("any_event", p("20/09/2026")).why, ["its cover period starts on 29/09/2026"]);
@@ -1165,7 +1169,7 @@ test("a card for an event outside its cover's printed period is never shown; wit
   assert.equal(run("any_event", null).labels.length, 1);
   assert.equal(run("any_event", { from: null, to: null, eventOn: null }).labels.length, 1);
   // With no event, the card is shown and says the period ended.
-  const lookup = run("no_event", p(null)).labels;
+  const lookup = run("no_event", p("")).labels;
   assert.equal(lookup.length, 1);
   assert.match(lookup[0], / Its cover period ended on 04\/10\/2026\.$/);
   assert.doesNotMatch(run("no_event", { from: "01/10/2026", to: "01/12/2026", eventOn: null }).labels[0], /ended/);
