@@ -5890,3 +5890,12 @@ Free tests on 877dcbd: chat 82/82, headline 13/13, table 106/106.
 - **Q2 dedupe: cannot hide a different figure.** The skip needs same person, cover, qualifier, sameBenefit, a different document, and sameFigure (same amount and unit). Low: the skipped twin's own carried points/conditions are dropped with it; if the two documents print different conditions, only the first card's show.
 - **Low `lib/simple-chat/hook.ts` datesSaidNote:** "24/7", "1/2", "3/4" are read as dd/mm dates (24 Jul, 1 Feb, 3 Apr), adding a wrong "days before today" line. Suggest requiring a year in the slash form, or a lead word (on, since, from, by, dated, until).
 - Holds: AMOUNT_POINTER widening (end-of-clause only), points after the card, deadline prompt rule.
+
+## R163 — PR #111 re-check (head 4ea465b)
+
+**Verdict: READY.**
+
+- R162-1 fixed with the suggested PREMIUM_ROW (chat.ts:466) plus a test for waiver/return/refund rows inside a waiting period.
+- datesSaidNote: slash dates now need a 4-digit year or a lead word. Probed: "24/7", "3/4 of the bill" give no note; "on 3/4", "on 29/9/2026", "since 1/10/2026" are read right. "on 3/4/26" (2-digit year) gives no note, which is a miss, not a wrong date.
+- The two low notes left as is are accepted (both only withhold).
+- Free tests on 4ea465b: chat 82/82, headline 13/13, table 106/106.
