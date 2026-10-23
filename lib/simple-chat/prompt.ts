@@ -138,7 +138,9 @@ export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; ne
 export const TABLE_ANSWER_SCHEMA = (() => {
   const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
   return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
-    items: { ...st, required: [...st.required, "row", "eventFit", "waiting", "period"], properties: { ...st.properties, row: nullable("string"),
+    items: { ...st, required: [...st.required, "row", "rowBenefit", "eventFit", "waiting", "period"], properties: { ...st.properties, row: nullable("string"),
+      // The row's benefit name, copied: a name that is not the row's means the id slipped (lib/benefit-table/chat.ts).
+      rowBenefit: { type: "string" },
       // Whether the event asked about is one the row pays for: decided for each card, enforced by lib/benefit-table/chat.ts.
       eventFit: { anyOf: [{ type: "null" }, { type: "string", enum: ["on_list", "not_on_list", "any_event", "not_described", "no_event"] }] },
       // The waiting period that could apply to the event, as printed: the server compares its dates with today.

@@ -1131,6 +1131,22 @@ test("a benefit the question asks about by name is never hidden as not described
   assert.equal(shown("what aid can i get"), 0);
 });
 
+test("a card whose copied benefit name is not its row's is left out: the id slipped (round 9 check, S088)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const rec: ChatRow = { ...amb, id: "R962", benefit: "J, Accidental Hospital Recuperation Benefit" }, cef: ChatRow = { ...amb, id: "R963", benefit: "K. Child Education Fund Benefit" };
+  const run = (row: string, rowBenefit: unknown) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row, rowBenefit, eventFit: "any_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, [...rows, rec, cef], HOUSE, new Date("2026-10-23T02:00:00Z")).report;
+  const slip = run(cef.id, "Accidental Hospital Recuperation Benefit");
+  assert.equal(slip.labels.length, 0);
+  assert.match(slip.dropped[0].why, /R963 is .*Child Education Fund.*not "Accidental Hospital Recuperation Benefit"/);
+  // The row's own name: exactly, without its list letter, in other case, or two or more words of it: shown.
+  for (const n of ["K. Child Education Fund Benefit", "Child Education Fund Benefit", "child education fund"]) assert.equal(run(cef.id, n).labels.length, 1, n);
+  // One word, an empty name, another row's, or a name with words added: left out (copied exactly, or not at all).
+  for (const n of ["Fund", "", "Ambulance Cost", "Child Education Fund (per child)"]) assert.equal(run(cef.id, n).labels.length, 0, n);
+  // An answer recorded before the field existed is not checked.
+  assert.equal(run(cef.id, undefined).labels.length, 1);
+});
+
 test("a card for an event outside its cover's printed period is never shown; with no event it says the period ended (live run 23 Oct, S048, S008)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const trip: ChatRow = { ...amb, id: "R961", cover: "Single Trip", benefit: "Daily hospital cash while overseas", coverKey: coverKeyOf({ product: amb.product, cover: "Single Trip", plan: null }) };

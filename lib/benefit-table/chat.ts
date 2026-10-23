@@ -202,7 +202,7 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY, "" when they did not say one)}; all three "" when no period is printed for the cover. The app compares these dates with today as well (a card for an event outside the period is never shown; say why in a fact), so say whether a period has started or ended only from those dates. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY, "" when they did not say one)}; all three "" when no period is printed for the cover. The app compares these dates with today as well (a card for an event outside the period is never shown; say why in a fact), so say whether a period has started or ended only from those dates. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -324,6 +324,12 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined);
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    // The model copies the benefit name of the row it gives: a name that is not that row's means the id slipped to another
+    // row (round 9 check, S088: the recuperation benefit given as the Child Education Fund's row). The card is left out: a
+    // missing amount, never a wrong one. An answer recorded before the field existed has none, and is not checked.
+    if (typeof raw.rowBenefit === "string" && !copiedName(raw.rowBenefit, named)) {
+      report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text }); continue;
+    }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
     // the event not on that list, is never shown (live run 23 Oct, H2). Decided per card, never read from the prose.
@@ -460,7 +466,8 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
       && (norm(r.source.excerpt) === quote || (norm(r.source.excerpt).includes(quote) && norm(benefitName(r.benefit)).length && quote.includes(norm(benefitName(r.benefit)))))) : [];
     if (hits.length === 1) {
       out.push({ ...raw, conditions: [] });
-      out.push({ ...raw, kind: "amount", row: hits[0].id, amount: null, percentOf: null, alternativeGroup: null, perDay: null, ofBill: null });
+      // Bound by its quote, not by an id the model gave: no copied name to check.
+      out.push({ ...raw, kind: "amount", row: hits[0].id, rowBenefit: undefined, amount: null, percentOf: null, alternativeGroup: null, perDay: null, ofBill: null });
       continue;
     }
     const kept = withoutPointers(text);
@@ -610,6 +617,17 @@ const nameParts = (benefit: string) => {
   const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
 };
+/** Whether a benefit name the model copied is the row's: the same name, letters and digits only, with any list letter
+ * ("D.", "J,") and section dropped by sameBenefit; or the one name inside the other, at least two words of it ("Child
+ * Education Fund" of "Child Education Fund Benefit"). */
+function copiedName(copied: string, row: ChatRow): boolean {
+  const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/^\s*[a-z]\s*[.,]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const a = plain(copied), b = plain(row.benefit);
+  if (!a) return false;
+  if (a === b || sameBenefit(copied, row.benefit)) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.split(" ").length >= 2 && ` ${long} `.includes(` ${short} `);
+}
 /** One benefit printed in two documents: the same name, or the same benefit where only one of them prints a section
  * before it. Two different sections ("Simple Fracture: Wrist", "Compound Fracture: Wrist") are different benefits (TE #103 C4). */
 function sameBenefit(a: string, b: string): boolean {
