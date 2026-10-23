@@ -21,7 +21,7 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   lesserOf?: boolean };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string }[]; labels: string[];
+export type RowReport = { dropped: { why: string; text: string; notFit?: boolean }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
   days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]> };
 
@@ -186,12 +186,17 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const statements: unknown[] = [];
   const given = new Set<string>();
   const away = new Map<string, Record<string, unknown>>();
+  const notFit = saidNotToFit(json as Record<string, unknown>, household);
+  const refused = (r: ChatRow) => notFit.some((x) => saysNotFit(x, r, rows, household));
   for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
+    // A card for a cover or benefit the answer itself says the event is not on ("not on its list", "may not fall under
+    // it", "not shown to be covered") is never shown: a list cover pays only for what its list names (live run 23 Oct, H2).
+    if (refused(row) || refused(named)) { report.dropped.push({ why: `the answer says ${names(row)} does not fit the event`, text, notFit: true }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -205,7 +210,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
-    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !refused(o) && o.personId === row.personId && o.coverKey === row.coverKey
       && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
@@ -235,7 +240,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      // Premiums for different policy years are paid one after the other, never alternatives (live run 23 Oct, A6).
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
@@ -272,6 +278,56 @@ export const withoutPointers = (text: string) => sentences(text ?? "").map(witho
  * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
  * one (dropAmountPointers). */
+/** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
+ * different premium for the first policy year)"). */
+const PERIOD_ROW = /first policy year(?: only)?\)$/;
+/** Words that say the event is not one a cover or benefit pays for: it is not on its list, may not fall under it, or is
+ * not shown to be covered. Never an exclusion or a waiting period said of something else ("pre-existing conditions are
+ * excluded", "falls outside the waiting period"). */
+const NOT_FIT = /\b(?:is|are|was)\s+not\s+(?:on|among|one\s+of|named\s+(?:on|in|among)|listed)\b|\b(?:isn't|aren't|wasn't)\s+(?:on|among|one\s+of|named\s+(?:on|in|among)|listed)\b|\bnot\s+(?:on|in)\s+(?:its|their|the|either|any|that|this)\s+(?:\w+\s+)?list\b|\bnot\s+named\s+among\b|\bmay\s+not\s+(?:fall|come)\s+(?:under|within)\b|\bwould\s+not\s+necessarily\s+meet\b|\bnot\s+(?:shown|clearly\s+shown)\s+(?:to\s+be|as)\s+(?:covered|paid|payable)\b|\b(?:isn't|is\s+not|aren't|are\s+not)\s+(?:clearly\s+)?shown\s+(?:to\s+be\s+|as\s+)?(?:covered|paid|payable)\b|\bno\s+amount\s+is\s+(?:shown|given)\b/i;
+/** A sentence that leans on the one before it for what it is about ("It pays only if ...", "This cover ..."). */
+const LEANS_BACK = /^(?:it|its|this|that|they|their|these|those|such)\b/i;
+type NotFit = { text: string; person: string | null };
+/** The model's own sentences (its bottom line, and its points that give no amount) saying the event does not fit a cover
+ * or benefit. A sentence that leans on the one before it is read with it. */
+function saidNotToFit(json: Record<string, unknown>, household: Household): NotFit[] {
+  const out: NotFit[] = [];
+  const read = (text: unknown, person: string | null) => {
+    if (typeof text !== "string") return;
+    const all = sentences(text);
+    all.forEach((x, i) => { if (NOT_FIT.test(x)) out.push({ text: LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${x}` : x, person }); });
+  };
+  read(json.bottomLine, null);
+  for (const st of (Array.isArray(json.statements) ? json.statements : []) as Record<string, unknown>[])
+    if (st && typeof st === "object" && st.kind !== "amount") read(st.text, matchMember(household, typeof st.person === "string" ? st.person : null));
+  return out;
+}
+/** A cover's own name in plain words ("living care plus" for "GROUP LIVING CARE PLUS(POLICY NO. 3037850)"). */
+const coverName = (r: ChatRow) => noNumbers(r.cover).toLowerCase().replace(/^group\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+const FIT_STOP = new Set(["with", "from", "other", "simple", "than", "into", "under", "after", "before", "between", "only", "each", "that", "this"]);
+const FIT_GENERIC = new Set(["fracture", "fractures", "simple", "other", "due", "accident", "accidental", "benefit", "benefits", "cover", "coverage", "against", "critical", "illness", "illnesses", "early", "sum", "insured", "dated", "full", "break", "premium", "plan", "and", "the", "for", "with", "from", "per", "any", "one", "two", "both", "total", "monthly", "yearly", "first", "year", "policy"]);
+/** Whether a not-fit sentence is about this row: it is for no one but the row's person, and it names the row's benefit by
+ * a word only that benefit has among the cover's rows, or names the cover itself when the cover pays one benefit (a
+ * critical illness cover with its list). A shorter cover name inside a longer one ("living care" in "living care plus")
+ * does not name it. */
+function saysNotFit(x: NotFit, row: ChatRow, rows: ChatRow[], household: Household): boolean {
+  const person = baseName(row.person);
+  if (x.person && x.person !== person) return false;
+  if (membersNamedIn(household, x.text).some((m) => m !== person)) return false;
+  const t = ` ${x.text.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const own = coverName(row);
+  let rest = t;
+  for (const o of new Set(rows.map(coverName))) if (o !== own && o.includes(own)) rest = rest.split(` ${o} `).join(" ");
+  const ofCover = rows.filter((o) => o.personId === row.personId && o.coverKey === row.coverKey && !/^sum insured\b/i.test(o.benefit));
+  if (own && rest.includes(` ${own} `) && new Set(ofCover.map((o) => o.benefit)).size <= 1) return true;
+  // The row's words the sentence uses ("shoulder" and "fracture") must include one of its own (not "fracture" alone), and
+  // must not all be words of another benefit of the cover too ("shoulder" alone also names "Loss of arm (at shoulder)").
+  const all = (b: string) => new Set(b.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !FIT_STOP.has(w)));
+  const used = [...all(row.benefit)].filter((w) => t.includes(` ${w} `));
+  if (!used.some((w) => !FIT_GENERIC.has(w))) return false;
+  return !ofCover.some((o) => o.benefit !== row.benefit && !sameBenefit(o.benefit, row.benefit) && used.every((w) => all(o.benefit).has(w)));
+}
+
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
   const out: Record<string, unknown>[] = [];
@@ -300,21 +356,29 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
 const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
+const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b|\bnot\s+(?:a|the)\s+total\b/i;
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
  * and points. A server label is never changed. */
 export function dropAmountPointers<T extends { text: string; fullText?: string; amount?: unknown }>(answer: { summary: string; bottomLine?: string | null; statements?: T[] }, labels: readonly string[]): string[] {
   const statements = answer.statements ?? [];
   if (statements.some((s) => s.amount)) return [];
   const left: string[] = [];
-  const cut = (text: string) => { const kept = withoutPointers(text); if (kept !== text.trim()) left.push(...sentences(text).filter((x) => withoutPointer(x) !== x)); return kept; };
+  // With no amount shown, "the two documents print different figures, so the insurer decides which applies" is about
+  // nothing either (unseen set U16).
+  const point = (x: string) => (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x));
+  const cut = (text: string) => {
+    const kept = sentences(text).map(point).filter((x): x is string => !!x).join(" ").trim();
+    if (kept !== text.trim()) left.push(...sentences(text).filter((x) => point(x) !== x));
+    return kept;
+  };
   const bottom = answer.bottomLine ?? answer.summary;
-  if (bottom && AMOUNT_POINTER.test(bottom)) {
+  if (bottom && (AMOUNT_POINTER.test(bottom) || DIFFERENT_FIGURES.test(bottom))) {
     const b = cut(bottom) || "Here is what your documents say.";
     answer.summary = b;
     if (answer.bottomLine != null) answer.bottomLine = b;
   }
   for (const s of [...statements]) {
-    if (labels.includes(s.text) || !AMOUNT_POINTER.test(s.text)) continue;
+    if (labels.includes(s.text) || !(AMOUNT_POINTER.test(s.text) || DIFFERENT_FIGURES.test(s.text))) continue;
     const text = cut(s.text);
     if (!text) statements.splice(statements.indexOf(s), 1);
     else { s.text = text; s.fullText = text; }
@@ -476,7 +540,8 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
 /** Applied last: an amount the row step dropped or refused never reached verifyAnswer, so its "left out an amount" note
  * is added here (in place of the weaker "left out a point"), and the household always hears that an amount was left out. */
 export function noteLeftOutAmounts<T extends { id: string; kind: string; text: string }>(statements: T[], report: RowReport, make: (id: string, text: string) => T): T[] {
-  if (!report.dropped.length || statements.some((s) => s.id === "left-out-amount")) return statements;
+  // An amount the answer itself says does not fit the event is not one the documents fail to print: no note for it.
+  if (!report.dropped.some((d) => !d.notFit) || statements.some((s) => s.id === "left-out-amount")) return statements;
   return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
 }
 

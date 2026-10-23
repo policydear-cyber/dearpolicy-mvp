@@ -45,7 +45,7 @@ function contextFor(household: Household, conversationId: string, question: stri
 /** One question set through runSimpleChat. `model` is the real model (paid) or a replayer. */
 export async function runSet(opts: { household: Household; questions: Question[]; model: SimpleModel; table?: BenefitTable | null; maxUsd?: number; price?: { input: number; output: number; cachedInput?: number } | null; onProgress?: (m: string) => void }) {
   const turns: AppTurn[] = [];
-  let spent = 0, stoppedEarly = false;
+  let spent = 0, stoppedEarly = false, warm = false;
   const prefix = prefixTokens(opts.household, opts.table ?? null);
   for (const q of opts.questions) {
     const history: Turn[] = [];
@@ -54,7 +54,7 @@ export async function runSet(opts: { household: Household; questions: Question[]
       const question = q.turns[i];
       if (opts.price && opts.maxUsd != null) {
         const fresh = tokensOf(question) + history.reduce((n, t) => n + tokensOf(t.text), 0);
-        if (spent + callUsd(opts.price, { input: fresh, cacheWrite: prefix, cacheRead: 0, output: MAX_OUTPUT_TOKENS }) > opts.maxUsd) { stoppedEarly = true; break; }
+        if (spent + callUsd(opts.price, { input: fresh, cacheWrite: warm ? 0 : prefix, cacheRead: warm ? prefix : 0, output: MAX_OUTPUT_TOKENS }) > opts.maxUsd) { stoppedEarly = true; break; }
       }
       type Saved = { answer: StructuredAnswer; state: { simpleChat?: { turns: { report: VerifyReport }[] } } };
       const got: { reply?: Awaited<ReturnType<SimpleModel["call"]>>; saved?: Saved } = {};
@@ -72,6 +72,8 @@ export async function runSet(opts: { household: Household; questions: Question[]
       const r = got.reply!, s = got.saved!;
       const usd = opts.price ? callUsd(opts.price, r.usage) : 0;
       spent += usd;
+      // Once a call has written or read the cached prefix, the next one reads it (the cache lives for minutes).
+      warm = r.usage.cacheWrite + r.usage.cacheRead >= prefix * 0.9;
       const text = answerAsText(s.answer);
       turns.push({ id, question, model: r.model, json: r.json, answer: s.answer, text, report: s.state.simpleChat?.turns.at(-1)?.report, usage: r.usage, usd, ms: Date.now() - started, stopReason: r.stopReason });
       history.push({ role: "user", text: question }, { role: "assistant", text });

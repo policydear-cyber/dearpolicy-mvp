@@ -170,5 +170,6 @@ t("same-event smaller benefits are given, and no sentence says a cover is one pe
   assert.match(SIMPLE_SYSTEM_PROMPT, /smaller benefits a cover pays on that same event \(a funeral or compassionate allowance, a child education fund/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /Never write that a cover or amount is one person's and not another's/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /A point that mentions an amount gives it/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /gets an amount statement only when the event is on that list/);
 });
 console.log(`style: ${passed} passed, 0 failed`);
