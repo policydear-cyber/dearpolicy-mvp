@@ -5763,3 +5763,35 @@ new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s+(?:waiting|period|ago|since|notic
   - Low, note only: if a document prints only part of a member's name (for example "Mr Tan Yi Chuen" for a member recorded as "Tan Yi Chuen, Desmond"), the spouse note is no longer given and the model asks whose cover is meant. That is the safe direction. It is worth checking against DC's real documents for S048.
 - **`aDay`:** gives "An 8-day", "an 11-day" and "an 18-day", and "A" otherwise. Correct for the stay lengths the checks allow (up to 366).
 - **Free tests at c2621b6:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+## R156: PR #110 chat round 9 at 476516c (on main c098eb7)
+
+**Verdict: NOT READY. One fix (patch tested).** No path in this PR shows a wrong amount or a wrong person. The blocker is a documented benefit hidden on missing information. Free tests at 476516c pass: chat-test 76/76, headline-test 13/13, benefit-table test 106/106.
+
+### R156-1 (high, blocking): an event with no date is taken as today, so a trip card is hidden whenever the trip has ended
+`outsidePeriod` uses `printedDay(p.eventOn) ?? today`. The prompt tells the model to give "" when the household did not say a date. So any travel question asked after the trip hides the trip's card with "its cover period ended on …". Two examples:
+- S048 itself: "my husband was hospitalised for 15 days with pneumonia". No date was given, and the trip ran 29/09 to 04/10, so the stay may have been during the trip.
+- The ordinary travel claim: "I got food poisoning on my trip, how much can I claim?"
+
+Claims are usually asked after the trip, so this hides the travel cover in its most common question. That breaks the standing rule that missing information is not an exclusion.
+
+**Fix (tested):**
+1. With no event date, `outsidePeriod` returns null.
+2. The card stays and says "Its cover period ended on 04/10/2026, so it pays only for an event on or before that day." This uses the same `periodEnded` note, now also for undated event cards.
+3. The prompt's `eventOn` asks for today's date when the household says the event is happening now. An explicit date outside the period (including today's) still hides the card.
+
+The test changes:
+- `any_event` with eventOn "" is now shown with that note.
+- `any_event` with eventOn "23/10/2026" is hidden.
+
+All suites pass (76/13/106). The patch is in the Critic scratchpad as `r156-fix.diff` and quoted in the relay.
+
+### Checked and holding
+- **`asksFor`** (`not_described` shown when the question names the benefit, through `namesRow` or a name head of 2 or more words): it only reverses a model refusal for a row the household named. It changes no amount or person.
+- **`NOTHING_SHOWN`** only after an introducing bottom line: fine. Money is stripped from any bottom line anyway.
+- **`dropAgreeingDayRules`** acts only when every daily card has the same non-null start and most days, and the sentence states that start at least twice, with every most-days figure the same. A stay length ("for 12 days") breaks the match, so the sentence is kept. Labels are untouched.
+  - Low: a sentence that also says something else ("…so 2 days are paid") is dropped whole. The stay card carries that.
+- **`periodsNote`** is descriptive only: up to 3 date ranges per document, with ended/running/not started by Singapore date. Low: a range could be a premium or claims window rather than the cover period. The note only says what is printed.
+- **The no-event "ended" note:** it is added to the label before the label is recorded, so `keepLabelledAmounts` keeps the card.
+- **Schema:** `period` is three plain strings, keeping the API within 16 union parameters (a test guards this).
+- **Known gap S088** (the model gives the wrong row id): agreed, out of scope. A word-against-name guard dropping right cards on the 44 is the worse trade.
