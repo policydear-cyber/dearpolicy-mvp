@@ -5875,3 +5875,18 @@ Two rows with **identical** benefit names (for example "Hospital cash" on two co
 - **N5:** `INTRODUCES` matches "below" only at the end of a sentence, and "these are" only when "not" does not follow.
 - **`asksFor`:** needs a whole name of at least two words, so "hip" alone no longer counts.
 - **Free tests at d223ff2:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R162 — PR #111 (round 10, head 877dcbd) vs main 762bd83
+
+Free tests on 877dcbd: chat 82/82, headline 13/13, table 106/106.
+
+**Verdict: no blocker. One medium fix (R162-1), three low notes.**
+
+- **R162-1 (medium) `lib/benefit-table/chat.ts:465`** `PREMIUM_ROW = /\bpremiums?\b/i` also matches "Waiver of Premium", "Premium Waiver" and "Return/Refund of Premium". Those are event-paid benefits that can carry a waiting period or cover period, and line 324 now skips both checks for them, so a card could show inside a waiting period or after cover ended. Fix (checked on 7 labels: plain premium rows still exempt, waiver/return/refund not):
+  `const PREMIUM_ROW = /^(?!.*\b(?:waiver|waive[sd]?|return|refund)\b).*\bpremiums?\b/i;`
+  Suggest one chat-test case: a "Waiver of Premium" row with a waiting period is still held back.
+- **Q1 looser copiedName / LIST_MARKS: no wrong-row or wrong-amount path found.** A shortened copy binds only when no other row of that person has the same short name; the only exception is a same-cover, same-qualifier sameBenefit twin, which shows as a companion anyway. A copy that adds a note ("(per child)") is still rejected; premium first-year vs later-year rows stay apart.
+  - Low: sameBenefit now equates rows that differ only by a list mark ("1. X" vs "2. X"). ruledOut has no document check, so two such rows in one document could be ruled out together. That withholds, it never shows a wrong amount. Single-letter brackets like "(s)" are also stripped; harmless.
+- **Q2 dedupe: cannot hide a different figure.** The skip needs same person, cover, qualifier, sameBenefit, a different document, and sameFigure (same amount and unit). Low: the skipped twin's own carried points/conditions are dropped with it; if the two documents print different conditions, only the first card's show.
+- **Low `lib/simple-chat/hook.ts` datesSaidNote:** "24/7", "1/2", "3/4" are read as dd/mm dates (24 Jul, 1 Feb, 3 Apr), adding a wrong "days before today" line. Suggest requiring a year in the slash form, or a lead word (on, since, from, by, dated, until).
+- Holds: AMOUNT_POINTER widening (end-of-clause only), points after the card, deadline prompt rule.
