@@ -5239,3 +5239,32 @@ A refused point whose refusal and pointer sit in one clause is dropped whole, fo
 - benefit-table chat-test: 61/61
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 136: PR #105 at 66bd9cc (delta from 003a4fc)
+
+**Verdict: READY.**
+
+### Y13
+A point that says something about "this amount" without saying it is shown is now kept, reworded to be about the benefit. The rewording happens only on paths that make no card (`withoutPointer`), so it cannot add an amount.
+
+I re-ran my R134 and R135 probe:
+
+| Point | Now reads |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | "…so this benefit is not payable." |
+| "This amount does not apply, because the policy ended…" | "This benefit does not apply, because…" |
+
+Both refusals now survive instead of being dropped, which is better than R135. The conditional B7-style card is unchanged. No refusal or other-person point makes a card.
+
+### W3
+A footnote mark must now match exactly: a "*" condition no longer attaches to a "**" row. This only tightens matching.
+
+### R136-1 (low, not blocking)
+"That limit is for Tan Mei Ling's policy only." in Lim's answer is now kept as "That benefit is for Tan Mei Ling's policy only." It used to be dropped.
+
+No card goes with it, but it is the ownership kind of claim from C5. `dropPeopleShutOut` misses it because "<Y>'s policy only" with no "not <X>" is not one of its patterns. One fix is to add "<X>'s (cover|policy) only" / "for <X>'s … only" to the exclusivity patterns.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
