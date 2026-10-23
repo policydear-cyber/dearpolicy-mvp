@@ -1143,6 +1143,14 @@ test("a card whose copied benefit name is not its row's is left out: the id slip
   for (const n of ["K. Child Education Fund Benefit", "Child Education Fund Benefit", "child education fund"]) assert.equal(run(cef.id, n).labels.length, 1, n);
   // One word, an empty name, another row's, or a name with words added: left out (copied exactly, or not at all).
   for (const n of ["Fund", "", "Ambulance Cost", "Child Education Fund (per child)"]) assert.equal(run(cef.id, n).labels.length, 0, n);
+  // A name inside another is not that name (Critic R157-1).
+  const icu: ChatRow = { ...amb, id: "R964", benefit: "ICU Hospital Cash" }, cash: ChatRow = { ...amb, id: "R965", benefit: "Hospital Cash" };
+  const nested = (row: ChatRow, rowBenefit: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "any_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, [...rows, icu, cash], HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.length;
+  assert.equal(nested(icu, "Hospital Cash"), 0);
+  assert.equal(nested(cash, "ICU Hospital Cash"), 0);
+  assert.equal(nested(icu, "ICU Hospital Cash"), 1);
+  assert.equal(nested(cash, "Hospital Cash Benefit"), 1);
   // An answer recorded before the field existed is not checked.
   assert.equal(run(cef.id, undefined).labels.length, 1);
 });

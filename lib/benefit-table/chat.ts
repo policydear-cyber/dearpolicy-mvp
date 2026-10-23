@@ -624,15 +624,17 @@ const nameParts = (benefit: string) => {
   return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
 };
 /** Whether a benefit name the model copied is the row's: the same name, letters and digits only, with any list letter
- * ("D.", "J,") and section dropped by sameBenefit; or the one name inside the other, at least two words of it ("Child
+ * ("D.", "J,") and section dropped by sameBenefit; or the same once words that name no benefit are taken out ("Child
  * Education Fund" of "Child Education Fund Benefit"). */
 function copiedName(copied: string, row: ChatRow): boolean {
   const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/^\s*[a-z]\s*[.,]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
   const a = plain(copied), b = plain(row.benefit);
   if (!a) return false;
   if (a === b || sameBenefit(copied, row.benefit)) return true;
-  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
-  return short.split(" ").length >= 2 && ` ${long} `.includes(` ${short} `);
+  // Never one name inside another: "Hospital Cash" is not "ICU Hospital Cash" (Critic R157-1). Only words that name no
+  // benefit ("the", "benefit", "cover", "limit") may differ.
+  const core = (t: string) => ` ${t} `.replace(/\s(?:the|benefits?|cover(?:age)?|amount|limit|plan|payment)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
+  return !!core(a) && core(a) === core(b);
 }
 /** One benefit printed in two documents: the same name, or the same benefit where only one of them prints a section
  * before it. Two different sections ("Simple Fracture: Wrist", "Compound Fracture: Wrist") are different benefits (TE #103 C4). */
