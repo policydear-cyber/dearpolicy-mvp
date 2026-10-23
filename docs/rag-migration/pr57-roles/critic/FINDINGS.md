@@ -5205,3 +5205,37 @@ Also skip it when the bottom line says the event is not covered or not shown to 
 - benefit-table chat-test: 61/61
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 135: PR #105 at 003a4fc (delta from 086b123)
+
+**Verdict: READY.** R134-1 is fixed.
+
+`pointedRows` now gives a card from a point only when all three hold:
+- the point says the amount is shown (`POSITIVE_POINTER`);
+- the point has no word saying it is not paid, does not apply or is someone else's (`NOT_PAID`);
+- the point names no household member other than the person it is about.
+
+Any other pointing point loses its pointing words.
+
+I re-ran the probe (`scratchpad/r135/scripts/benefit-table/probe.ts`) with the bottom line "Not covered.":
+
+| Point | Result |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | no card; "No ambulance was used." |
+| "This amount does not apply, because the policy ended…" | no card; dropped |
+| "That limit is for Tan Mei Ling's policy only." | no card; dropped |
+| "The policy has ended. The scheme terms show this amount." | no card; "The policy has ended." |
+| "Tan Mei Ling's terms show this amount." (person Lim) | no card; dropped |
+| "If it was an emergency, the scheme terms show this amount." | card Up to S$500, with the point kept beside it |
+
+**Bottom-line rule: not needed.** I accept the reasoning. The B7 card is the printed term, shown with its "if" condition, under a "not shown to be covered" bottom line. Each of my probes is now stopped by the refusal inside its own sentence.
+
+### R135-1 (low, not blocking)
+On a converted point, the "if" clause stays in the point's own text. It goes onto the card only when the model also listed it as a condition. To keep it attached to the figure, consider copying a leading "if …" clause into the card's conditions.
+
+A refused point whose refusal and pointer sit in one clause is dropped whole, for example "the terms show this amount, payable only if an ambulance was needed". The condition goes with it, but so does any card, so nothing is overstated.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
