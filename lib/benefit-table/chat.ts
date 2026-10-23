@@ -11,11 +11,14 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
-export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null };
+export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
+  /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
+   * cost is paid when it is less ("up to $10,000 of the costs ..., whichever is lesser", release-set H7). */
+  lesserOf?: boolean };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string }[]; labels: string[];
@@ -56,8 +59,15 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     if (firstYear) firstYears.push(r); else add(r);
   }
   for (const r of firstYears) add(r);
+  for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
+    r.lesserOf = true;
   return rows;
 }
+
+/** The same benefit of the same cover, for the same person and group, printed in another of their documents. */
+const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row && o.personId === row.personId && o.coverKey === row.coverKey
+  && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit));
+const lesserOf = (excerpt: string) => /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less)\b|\b(?:the\s+)?(?:lesser|lower)\s+of\b/i.test(excerpt);
 
 /** The words a cover is named by on an answer card: the full product, cover and plan, as printed ("MINDEF & MHA GROUP
  * INSURANCE SCHEME (GROUP POLICY NO. G007500), GROUP TERM LIFE(POLICY NO.3037850)"). */
@@ -175,7 +185,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const labels = coverLabels(rows), names = benefitNames(rows);
   const statements: unknown[] = [];
   const given = new Set<string>();
-  for (const raw of (json as { statements: Record<string, unknown>[] }).statements) {
+  const away = new Map<string, Record<string, unknown>>();
+  for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
@@ -207,6 +218,20 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the named row's document (Critic R131-2).
     for (const c of carried) statements.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
       quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+    // The model's conditions that the given row's page does not print, but the same benefit's row in another of the
+    // person's documents does (the Benefit Summary's "proof of need" for the Product Summary's mobility aid row,
+    // release-set H7), are points of their own quoting that document. Each must apply to that row there (conditionApplies:
+    // its section, its footnote mark), and never states money.
+    // One point for everyone it is carried for: said for nobody in particular once it is carried for a second person.
+    for (const c of awayConditions(row, raw.conditions, rows, household)) {
+      if (carried.includes(c.text)) continue;
+      const text = `${names(row)} also depends on this: ${c.text}`, key = `${text}|${c.at.docIndex}`;
+      const seen = away.get(key);
+      if (seen) { if (seen.person !== baseName(row.person)) seen.person = null; continue; }
+      const st: Record<string, unknown> = { kind: "fact", text, person: baseName(row.person), document: documentId(c.at.docIndex),
+        quote: c.quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
+      away.set(key, st); statements.push(st);
+    }
     for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -222,6 +247,99 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
+}
+
+/** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"). */
+export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+/** "this amount" in a sentence that says something of it ("This amount is not paid if the injury was self-inflicted"): the
+ * benefit is meant, and the sentence is kept saying so (TE #105 Y13). */
+const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\s+(?:insured|assured)\b)/gi;
+const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string, _n: string, pl: string) => `${w} benefit${pl ? "s" : ""}`);
+/** A sentence without the clauses that point at an amount; null when its first clause does. A clause that only says the
+ * amount is shown goes; one that says something of "this amount" keeps it, said of the benefit. */
+function withoutPointer(sentence: string): string | null {
+  if (!AMOUNT_POINTER.test(sentence)) return sentence;
+  if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
+  const parts = sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
+  if (AMOUNT_POINTER.test(parts[0])) return null;
+  const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
+  return /[.!?]$/.test(kept) ? kept : `${kept}.`;
+}
+/** A text without what points at an amount. */
+export const withoutPointers = (text: string) => sentences(text ?? "").map(withoutPointer).filter((x): x is string => !!x).join(" ").trim();
+
+/** A point the model wrote about an amount it did not give ("If it is a full break of the spine ... the Product Summary shows
+ * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
+ * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
+ * one (dropAmountPointers). */
+function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+  const out: Record<string, unknown>[] = [];
+  for (const raw of raws) {
+    const text = raw && typeof raw.text === "string" ? raw.text : "";
+    if (!raw || typeof raw !== "object" || raw.kind === "amount" || !AMOUNT_POINTER.test(text)) { out.push(raw); continue; }
+    const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
+    const di = typeof raw.document === "string" ? Number(/^D(\d+)$/i.exec(raw.document.trim())?.[1] ?? NaN) - 1 : NaN;
+    const quote = typeof raw.quote === "string" ? norm(raw.quote) : "";
+    // Only a point that says the amount is shown, about the person it is for and no one else, with no word that it is not
+    // paid, does not apply or is someone else's ("this amount is not payable", "that limit is for Tan's policy only",
+    // Critic R134-1). Any other point loses its pointing words.
+    const shows = POSITIVE_POINTER.test(text) && !NOT_PAID.test(text) && membersNamedIn(household, text).every((m) => m === person);
+    const hits = shows && person && Number.isFinite(di) && quote.length >= 8 ? rows.filter((r) => baseName(r.person) === person && r.docIndex === di
+      && (norm(r.source.excerpt) === quote || (norm(r.source.excerpt).includes(quote) && norm(benefitName(r.benefit)).length && quote.includes(norm(benefitName(r.benefit)))))) : [];
+    if (hits.length === 1) {
+      out.push({ ...raw, conditions: [] });
+      out.push({ ...raw, kind: "amount", row: hits[0].id, amount: null, percentOf: null, alternativeGroup: null, perDay: null, ofBill: null });
+      continue;
+    }
+    const kept = withoutPointers(text);
+    if (kept) out.push({ ...raw, text: kept });
+  }
+  return out;
+}
+const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
+
+/** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
+ * and points. A server label is never changed. */
+export function dropAmountPointers<T extends { text: string; fullText?: string; amount?: unknown }>(answer: { summary: string; bottomLine?: string | null; statements?: T[] }, labels: readonly string[]): string[] {
+  const statements = answer.statements ?? [];
+  if (statements.some((s) => s.amount)) return [];
+  const left: string[] = [];
+  const cut = (text: string) => { const kept = withoutPointers(text); if (kept !== text.trim()) left.push(...sentences(text).filter((x) => withoutPointer(x) !== x)); return kept; };
+  const bottom = answer.bottomLine ?? answer.summary;
+  if (bottom && AMOUNT_POINTER.test(bottom)) {
+    const b = cut(bottom) || "Here is what your documents say.";
+    answer.summary = b;
+    if (answer.bottomLine != null) answer.bottomLine = b;
+  }
+  for (const s of [...statements]) {
+    if (labels.includes(s.text) || !AMOUNT_POINTER.test(s.text)) continue;
+    const text = cut(s.text);
+    if (!text) statements.splice(statements.indexOf(s), 1);
+    else { s.text = text; s.fullText = text; }
+  }
+  return left;
+}
+
+/** The model's conditions for a row that its own page does not print but a sibling row's page does, where they apply to
+ * that sibling row. */
+function awayConditions(row: ChatRow, conditions: unknown, rows: ChatRow[], household: Household): { text: string; quote: string; at: ChatRow }[] {
+  if (!Array.isArray(conditions)) return [];
+  const own = locateQuote(household, row.source.excerpt, row.docIndex);
+  const out: { text: string; quote: string; at: ChatRow }[] = [];
+  for (const c of conditions as { text?: unknown; quote?: unknown }[]) {
+    const text = typeof c?.text === "string" ? c.text.trim() : "", quote = typeof c?.quote === "string" ? c.quote.trim() : "";
+    if (!text || !quote || statesMoney(text)) continue;
+    if (own && own.docIndex === row.docIndex && conditionApplies(household, own, quote)) continue;
+    for (const o of siblings(row, rows)) {
+      const at = locateQuote(household, o.source.excerpt, o.docIndex);
+      // The point cites where its quote is first printed in that document, so it must be the sibling row's page.
+      const cited = locateQuote(household, quote, o.docIndex);
+      if (at && at.docIndex === o.docIndex && at.page === o.source.page && cited?.docIndex === o.docIndex && cited.page === o.source.page && conditionApplies(household, at, quote)) { out.push({ text, quote, at: o }); break; }
+    }
+  }
+  return out;
 }
 
 /** The row to give for the one the model named: itself, unless the checks would refuse its amount (a percentage printed in
@@ -289,7 +407,7 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
 export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (row: ChatRow) => string): string {
   const f = row.figure;
   const cover = labels?.get(fullCover(row)) ?? fullCover(row);
-  const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? "up to this limit" : null)
+  const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? (row.lesserOf ? "the cost, up to this limit, whichever is less" : "up to this limit") : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
     // A worked-out figure's card shows how it is worked out ("25% of S$5,000") on its own line, so the label does not. A
@@ -425,7 +543,7 @@ export function dropPeopleShutOut<T extends { kind: string; text: string; fullTe
     const Y = alt(y);
     if (!Y) return false;
     const notY = OWNED.test(sentence) && new RegExp(String.raw`\b(?:not|but\s+not|rather\s+than|instead\s+of)\s+(?:to\s+|by\s+)?${Y}\b`, "i").test(sentence);
-    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:[a-z]+\s+){0,3}?${alt(x)}(?:\s+[a-z]+){0,3}?(?:'s)?\s+(?:has|have|holds?|owns?|is\s+covered|are\s+covered)\b|\b${alt(x)}'s\s+alone\b|\b${alt(x)}\s+alone\s+(?:has|holds?|owns?|is\s+covered)\b|\bbelongs?\s+only\s+to\s+${alt(x)}\b|\bonly\s+(?:belongs?|held)\s+(?:to|by)\s+${alt(x)}\b`, "i").test(sentence));
+    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:[a-z]+\s+){0,3}?${alt(x)}(?:\s+[a-z]+){0,3}?(?:'s)?\s+(?:has|have|holds?|owns?|is\s+covered|are\s+covered)\b|\b${alt(x)}'s\s+alone\b|\b${alt(x)}'s\s+(?:[a-z]+\s+)?(?:cover|policy|policies|plan|benefit)s?\s+only\s*(?:[.,;:!?)]|$)|\b${alt(x)}\s+alone\s+(?:has|holds?|owns?|is\s+covered)\b|\bbelongs?\s+only\s+to\s+${alt(x)}\b|\bonly\s+(?:belongs?|held)\s+(?:to|by)\s+${alt(x)}\b`, "i").test(sentence));
     const shut = notY || (others.length > 0 && !new RegExp(String.raw`\b${Y}\b`, "i").test(sentence));
     return shut && has(y, sentence);
   });
