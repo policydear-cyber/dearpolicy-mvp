@@ -5164,3 +5164,44 @@ When `checkedRow` swaps in a twin, the named row's table conditions that are not
 - benefit-table chat-test: 59/59
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 134: PR #105 at 086b123 (round 5, diff vs main)
+
+**Verdict: NOT READY. One blocker (R134-1).**
+
+### R134-1 (blocker): `pointedRows` turns "this amount is not payable" into a card
+`pointedRows` (`chat.ts`) turns any non-amount statement that matches `AMOUNT_POINTER` into an extra amount card. It does this whenever the statement's quote is one row's own line, whatever the sentence says about that amount. It never checks whether the pointer is positive.
+
+My probe used the test's own `run` helper and the ambulance line "Ambulance Cost Up to S$500 per incident" (D2), with the bottom line "Not covered.":
+
+| The model's fact | Result |
+|---|---|
+| "No ambulance was used, so this amount is not payable." | **card: Lim, Up to S$500** |
+| "This amount does not apply, because the policy ended before the accident." | **card: Lim, Up to S$500** |
+| "That limit is for Tan Mei Ling's policy only." (person: Lim) | **card: Lim, Up to S$500** |
+
+The answer says "Not covered" and then shows a payable-looking card. That breaks the prompt's own rule ("Give no amount for a cover whose terms … this event does not meet"). The card is labelled, but a card for an amount the answer itself says does not apply amounts to a wrong claimable amount.
+
+**Fix:** give a pointed row only when both of these hold:
+- The pointing clause is positive: "shows / gives / is / pays this amount", "the amount below".
+- The statement has no negation or refusal word: not, no, never, n't, does not apply, not payable, excluded, ended, expired, only for, instead.
+
+Also skip it when the bottom line says the event is not covered or not shown to be covered. Otherwise drop the pointing words as `dropAmountPointers` already does. Add these three sentences as tests.
+
+### Checked and holding
+- **awayConditions.** The model's condition becomes a separate point quoting the sibling's document only when all of these hold:
+  - it is not printed on the row's own page;
+  - it applies at the sibling row (`conditionApplies` checks the section and footnote mark, as tested since R62-1);
+  - its first place in that document is the sibling's own page;
+  - its text states no money.
+
+  The sibling must have the same person, cover, qualifier and benefit, in another document. The point is extra wording, never moved onto a card, so it cannot raise an amount. Shown once with no person when carried for two people: fine.
+
+  Low note: only the condition's *text* is checked for money, not its quote. That is harmless, because the point shows the model's text through the money filter, and the quote is only located.
+- **lesserOf.** It only adds wording that narrows the payout ("the cost, up to this limit, whichever is less") to an up_to row whose own line, or a same-figure sibling's line, says so. It never changes an amount.
+- **dropAmountPointers.** It runs only when no card is shown, and removes only the pointing clause. The tests cover "these sums insured" staying, and a pointer whose first clause is the whole sentence being dropped.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
