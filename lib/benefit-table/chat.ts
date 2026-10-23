@@ -320,8 +320,18 @@ function rowOfQuote(raw: Record<string, unknown>, rows: ChatRow[], household: Ho
     const line = normQuote(r.source.excerpt), name = normQuote(benefitName(r.benefit));
     return line === quote || (!!name && quote.includes(name) && (line.includes(quote) || quote.includes(line)));
   });
-  return hits.length === 1 ? hits[0] : undefined;
+  if (hits.length) return hits.length === 1 ? hits[0] : undefined;
+  // The same figure printed in another of the person's documents ("Total premium S$73.17" on the tax invoice, the row's
+  // "Premium paid : S$73.17" on the policy summary, live run 23 Oct, A6): the quote prints one figure, exactly one of the
+  // person's rows prints that figure, and the quote names what that row is for.
+  const figures = moneyFiguresIn(String(raw.quote));
+  if (figures.length !== 1) return undefined;
+  const words = (t: string) => normQuote(t).split(" ").filter((w) => w.length > 3 && !FILLER.has(w));
+  const said = new Set(words(String(raw.quote)));
+  const same = rows.filter((r) => baseName(r.person) === person && r.figure.kind === "printed" && Math.abs(r.figure.amount - figures[0].value) < 0.005);
+  return same.length === 1 && words(benefitName(same[0].benefit)).some((w) => said.has(w)) ? same[0] : undefined;
 }
+const FILLER = new Set(["benefit", "benefits", "amount", "total", "sum", "insured", "assured", "plan", "cover", "coverage", "policy", "payable", "paid", "limit", "each", "per", "with", "from", "this", "that", "group"]);
 
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();

@@ -142,13 +142,24 @@ test("an amount sent without its row is that row when it quotes the row's own li
     assert.ok(!r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
   }
   assert.ok(ambulance);
-  // Nobody in the household, another document, a quote that is only a figure, or a line two rows share: still dropped.
-  for (const o of [{ person: "Someone Else" }, { document: "D1" }, { quote: "Up to S$500" }]) {
+  // Nobody in the household, a quote that is only a figure, or a line two rows share: still dropped.
+  for (const o of [{ person: "Someone Else" }, { quote: "Up to S$500" }]) {
     const r = answer([{ person: "Lim Ah Kow", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "x", ...o }]);
     assert.equal(r.amounts.length, 0, JSON.stringify(o));
   }
   const twin = { ...rows.find((x) => x.id === ambulance)!, id: "R998", benefit: "Ambulance Cost" };
   assert.equal(answer([{ person: "Lim Ah Kow", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "x" }], [...rows, twin]).amounts.length, 0);
+});
+test("an amount sent without its row, quoting the same figure printed in another document, is the one row of that person printing that figure for what it names (live A6, the tax invoice)", () => {
+  const ambulance = rows.find((x) => x.id === idOf("Lim Ah Kow", "Ambulance Cost"))!;
+  assert.equal(ambulance.figure.kind, "printed");
+  const give = (quote: string, rs = rows) => answer([{ person: "Lim Ah Kow", quote, document: "D1", text: "x" }], rs).amounts.map((a) => a.amount);
+  assert.deepEqual(give("Ambulance claims\tS$500"), ["Up to S$500"]);
+  // A quote that names something else, prints no figure or two, or a figure two of the person's rows print: dropped.
+  assert.deepEqual(give("Total premium\tS$500"), []);
+  assert.deepEqual(give("Ambulance claims"), []);
+  assert.deepEqual(give("Ambulance claims S$500 and S$600"), []);
+  assert.deepEqual(give("Ambulance claims\tS$500", [...rows, { ...ambulance, id: "R997", benefit: "Ambulance transfer", source: { ...ambulance.source, excerpt: "Ambulance transfer S$500" } }]), []);
 });
 
 test("money in the model's own sentence never removes what the amount is for (R90-1)", () => {
