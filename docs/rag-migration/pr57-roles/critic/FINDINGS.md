@@ -5856,3 +5856,13 @@ Two rows with **identical** benefit names (for example "Hospital cash" on two co
 - **R157-1 is fixed, exactly as patched.** `copiedName` now needs the two names to be equal once generic words are taken out. A slip between ICU Hospital Cash and Hospital Cash is dropped in both directions. The exact name and "Hospital Cash Benefit" are still shown. All four cases are tests.
 - **Free tests at 4ddcd71:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
 - **Low note from R157 stands, with no change needed:** a slip between rows with identical names on different covers still passes.
+
+## R160: PR #110 at f6855ca (diff 4ddcd71..f6855ca, Test Engineer findings)
+
+**Verdict: READY still holds.**
+
+- **K8, `copiedName`:** the `sameBenefit` acceptance is gone, so the section is part of the name. That is stricter, and the failure it adds is a card left out, never a wrong one.
+- **A3, `asksFor`:** matches the benefit's own name or name head only, never the cover. That narrows it.
+- **N3/N4, `INTRODUCES`:** now matches only wording that points forward. `NOTHING_SHOWN` appears less often, and that line has no money in it.
+- **D8/D9, `dayRulesIn`:** it now reads "after 10 days", and a date such as "on 11th October" no longer counts as a day. It only feeds `dropAgreeingDayRules`, which still requires every start and most-days figure to match the cards' one rule.
+- **Free tests at f6855ca:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
