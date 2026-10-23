@@ -320,7 +320,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the mobility aid benefit" lost its S$10,000).
     const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list`
       : x.eventFit === "not_described" ? (asksFor(question, r) ? null : `${names(r)} pays only on something not described`)
-      : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
+      // A premium is charged, never paid on an event: no waiting period or cover dates hide it (live run 23 Oct, A6).
+      : PREMIUM_ROW.test(r.benefit) ? null : insideWaiting(x, r, today, household) ?? outsidePeriod(x, r, today);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {
@@ -331,7 +332,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // The model copies the benefit name of the row it gives: a name that is not that row's means the id slipped to another
     // row (round 9 check, S088: the recuperation benefit given as the Child Education Fund's row). The card is left out: a
     // missing amount, never a wrong one. An answer recorded before the field existed has none, and is not checked.
-    if (typeof raw.rowBenefit === "string" && !copiedName(raw.rowBenefit, named)) {
+    if (typeof raw.rowBenefit === "string" && !copiedName(raw.rowBenefit, named, rows)) {
       report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text }); continue;
     }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
@@ -346,8 +347,27 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (nameStatesMoney(row.benefit) || nameStatesMoney(row.qualifier ?? "") || nameStatesMoney(row.product, "product") || nameStatesMoney(row.cover, "product") || nameStatesMoney(row.plan ?? "", "plan")) {
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
     }
-    // The same row named twice is given once (Critic R91-3).
+    // The same row named twice is given once (Critic R91-3). So is the same benefit with the same figure printed in
+    // another of the person's documents, already given: it adds nothing (live run 23 Oct, B5: S$600,000 shown twice).
     if (given.has(row.id) || given.has(named.id)) continue;
+    const kept = rows.find((o) => given.has(o.id) && twinOf(o, row) && sameFigure(o.figure, row.figure));
+    if (kept) {
+      // The skipped card's own conditions are not lost: each is a point quoting the skipped row's document, as a carried
+      // condition is (TE #111 T5: "Death must occur within 365 days of the accident" printed only with the second card).
+      for (const c of Array.isArray(raw.conditions) ? raw.conditions as { text?: unknown; quote?: unknown }[] : []) {
+        const t = typeof c?.text === "string" ? c.text.trim() : "", quote = typeof c?.quote === "string" ? c.quote.trim() : "";
+        const said = `${names(kept)} also depends on this: ${t}`;
+        // One the answer already gives in other words ("... within 365 days." and "... within 365 days of the accident.") is
+        // not said twice: most of its words are in a condition already given.
+        const words = (x: unknown) => new Set(typeof x === "string" ? x.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3) : []);
+        const same = (x: unknown) => { const a = words(t), b = words(x); return a.size > 0 && [...a].filter((w) => b.has(w)).length >= 0.8 * a.size; };
+        if (!t || !quote || statesMoney(t) || statements.some((x) => { const y = x as { text?: unknown; conditions?: unknown };
+          return y.text === said || (Array.isArray(y.conditions) && (y.conditions as { text?: unknown }[]).some((k) => same(k?.text))); })) continue;
+        statements.push({ kind: "fact", text: said, person: baseName(row.person), document: documentId(row.docIndex), quote, amount: null, percentOf: null,
+          conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+      }
+      continue;
+    }
     given.add(row.id); given.add(named.id);
     // The same benefit of the same cover printed in another of the person's documents ("Neck, Skull or Spine (Full Break)"
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
@@ -364,7 +384,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
     // The named row's own conditions that the row given in its place does not print go with it, each as a point quoting
     // the named row's document (Critic R131-2).
-    for (const c of carried) statements.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
+    // Said after the card they belong to, never before it (live run 23 Oct, S087: a condition line with no card above it).
+    const points: Record<string, unknown>[] = [];
+    for (const c of carried) points.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
       quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
     // The model's conditions that the given row's page does not print, but the same benefit's row in another of the
     // person's documents does (the Benefit Summary's "proof of need" for the Product Summary's mobility aid row,
@@ -378,7 +400,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (seen) { if (seen.person !== baseName(row.person)) seen.person = null; continue; }
       const st: Record<string, unknown> = { kind: "fact", text, person: baseName(row.person), document: documentId(c.at.docIndex),
         quote: c.quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
-      away.set(key, st); statements.push(st);
+      away.set(key, st); points.push(st);
     }
     for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
@@ -398,6 +420,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       }
       else if (r === row) report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
     }
+    statements.push(...points);
   }
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
@@ -405,7 +428,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
 }
 
 /** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"). */
-export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:amounts?|figures?)\s+(?:is|are)\s+(?:shown\s+|listed\s+)?below(?=\s*(?:[.,;:!]|$))|\b(?:shown|listed|set\s+out)\s+below\b/i;
 /** "this amount" in a sentence that says something of it ("This amount is not paid if the injury was self-inflicted"): the
  * benefit is meant, and the sentence is kept saying so (TE #105 Y13). */
 const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\s+(?:insured|assured)\b)/gi;
@@ -456,6 +479,12 @@ function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
  * different premium for the first policy year)"). */
 const PERIOD_ROW = /first policy year(?: only)?\)$/;
+/** A row for a premium the household pays: never a benefit paid on an event that names premiums ("Waiver of Premium",
+ * "Return of Premium", Critic R162-1). */
+const PREMIUM_ROW = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
+/** The same benefit of the same cover, printed in another of the person's documents. */
+const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && o.coverKey === row.coverKey
+  && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit);
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
   const out: Record<string, unknown>[] = [];
@@ -625,13 +654,16 @@ function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[],
  * benefit ("Neck, Skull or Spine (Full Break)"). */
 const nameParts = (benefit: string) => {
   const at = benefit.lastIndexOf(": ");
-  const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // The list numbers a document prints ("2.", "(a)", "(iii)") are where it puts the benefit, not its name: the Benefit
+  // Summary's "2. Permanent Total Loss of (a) Sight in at least one eye" is the Product Summary's "Permanent Total Loss of
+  // Sight in at least one eye" (live run 23 Oct, B5).
+  const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(LIST_MARKS, " ").replace(/[^a-z0-9]+/g, " ").trim();
   return { section: at < 0 ? null : plain(benefit.slice(0, at)), core: plain(at < 0 ? benefit : benefit.slice(at + 1)) };
 };
 /** Whether a benefit name the model copied is the row's: the same name, letters and digits only, with any list letter
  * ("D.", "J,") dropped and its section kept; or the same once words that name no benefit are taken out ("Child
  * Education Fund" of "Child Education Fund Benefit"). */
-function copiedName(copied: string, row: ChatRow): boolean {
+function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean {
   const plain = (t: string) => benefitName(t.trim()).toLowerCase().replace(/^\s*[a-z]\s*[.,]\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
   const a = plain(copied), b = plain(row.benefit);
   if (!a) return false;
@@ -640,8 +672,26 @@ function copiedName(copied: string, row: ChatRow): boolean {
   // Never one name inside another: "Hospital Cash" is not "ICU Hospital Cash" (Critic R157-1). Only words that name no
   // benefit ("the", "benefit", "cover", "limit") may differ.
   const core = (t: string) => ` ${t} `.replace(/\s(?:the|benefits?|cover(?:age)?|amount|limit|plan|payment)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
-  return !!core(a) && core(a) === core(b);
+  if (core(a) && core(a) === core(b)) return true;
+  // A copy without what the server adds to a name, or a document prints after it: a note in brackets ("(first policy year
+  // only)", "(the page prints a different premium for the first policy year)"), a premium's frequency (", Monthly") and
+  // list numbers ("2.", "(a)"). Live run 23 Oct, A6 and A2: the CI II premiums and death benefit were left out. Taken only
+  // when no other of the person's rows has that short name, other than the same benefit in another document. A copy may
+  // leave a note out, never add one ("Child Education Fund (per child)" is not "Child Education Fund").
+  const short = (t: string, notes: RegExp) => core(plain(t.replace(notes, "").replace(LIST_MARKS, " ")));
+  const s = short(copied, FREQUENCY);
+  if (!s || s !== short(row.benefit, TRAILING_NOTES)) return false;
+  // A frequency may be left out, never changed: "Premium, Annual" is not the monthly row (TE #111 C5).
+  const freq = (t: string) => FREQUENCY.exec(t.replace(/(?:\s*\([^()]*\))+\s*$/, ""))?.[0].toLowerCase().replace(/[^a-z]/g, "").replace(/ly$/, "") ?? null;
+  if (freq(copied) && freq(copied) !== freq(row.benefit)) return false;
+  return !rows.some((o) => o.id !== row.id && o.personId === row.personId && short(o.benefit, TRAILING_NOTES) === s
+    && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)));
 }
+/** A premium's frequency at the end of a name; with notes in brackets. */
+const FREQUENCY = /,\s*(?:monthly|quarterly|half[-\s]?yearly|semi[-\s]?annual(?:ly)?|annual(?:ly)?|yearly|single)\s*$/i;
+const TRAILING_NOTES = /(?:\s*(?:\([^()]*\)|,\s*(?:monthly|quarterly|half[-\s]?yearly|semi[-\s]?annual(?:ly)?|annual(?:ly)?|yearly|single)))+\s*$/i;
+/** List numbers a document prints in or before a benefit's name: "2.", "B.", "(a)", "(iii)". */
+const LIST_MARKS = /^\s*(?:\d{1,2}|[a-z])\s*[.,]\s+|\(\s*(?:[a-z]|[ivx]{1,4})\s*\)/gi;
 /** One benefit printed in two documents: the same name, or the same benefit where only one of them prints a section
  * before it. Two different sections ("Simple Fracture: Wrist", "Compound Fracture: Wrist") are different benefits (TE #103 C4). */
 function sameBenefit(a: string, b: string): boolean {

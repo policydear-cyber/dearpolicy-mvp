@@ -89,6 +89,38 @@ export function periodsNote(household: Household, now: Date): string {
   return said.length ? `(Dates printed: ${said.join("; ")}.) ` : "";
 }
 
+/** The days the household's message names ("on 29 september", "29/09"), as dates with how far each is from today, so a
+ * deadline counted from the event is worked out by the server's calendar, not the model's (live run 23 Oct, S060: "he has
+ * already been outside the 30-day claim window ... since 29/10/2026 is not yet here"). A day with no year is this year's;
+ * when that is still to come, last year's is said too. */
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const MONTH = "(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
+export function datesSaidNote(message: string, now: Date): string {
+  const today = Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
+  const year = new Date(today * 86_400_000).getUTCFullYear();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const said: string[] = [], seen = new Set<number>();
+  const away = (day: number) => { const gap = today - day; return gap === 0 ? "today" : `${Math.abs(gap)} day${Math.abs(gap) === 1 ? "" : "s"} ${gap > 0 ? "before" : "after"} today`; };
+  const add = (words: string, d: number, mo: number, y: number | null) => {
+    const day = printedDay(`${pad(d)}/${pad(mo)}/${y ?? year}`);
+    if (day == null || seen.has(day) || seen.size >= 3) return;
+    seen.add(day);
+    const last = y == null && day > today ? printedDay(`${pad(d)}/${pad(mo)}/${year - 1}`) : null;
+    // A day still to come this year may be last year's: both are said, never a guess between them.
+    said.push(`"${words}" is ${pad(d)}/${pad(mo)}/${y ?? year}, ${away(day)}${last != null ? `, or ${pad(d)}/${pad(mo)}/${year - 1}, ${away(last)}, if last year's` : ""}`);
+  };
+  const of = (word: string) => MONTHS.indexOf(word.slice(0, 3).toLowerCase()) + 1;
+  for (const m of message.matchAll(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH}(?:\\s+(\\d{4}))?(?![a-z])`, "gi")))
+    add(m[0], Number(m[1]), of(m[2]), m[3] ? Number(m[3]) : null);
+  // Month first, but never "may 3" ("it may 3 ...").
+  for (const m of message.matchAll(new RegExp(`\\b(?!may\\b)${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "gi")))
+    add(m[0], Number(m[2]), of(m[1]), m[3] ? Number(m[3]) : null);
+  // "24/7" and "3/4" are not dates: a slash date has its year, or a word before it that leads a date (Critic R162).
+  for (const m of message.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b|\b(?:on|since|from|by|dated|until|till)\s+(\d{1,2})\/(\d{1,2})(?![\/\d])/gi))
+    add(m[0], Number(m[1] ?? m[4]), Number(m[2] ?? m[5]), m[3] ? Number(m[3]) : null);
+  return said.length ? `(Days the household named: ${said.join("; ")}.) ` : "";
+}
+
 /** A bottom line that introduces points below it ("here is each adult's list", "the amounts are below:"). */
 // Only words that point at what comes next: "below" ending its sentence, not "below the knee" or "below the limit" (TE N3,
 // N4, N5).
@@ -123,7 +155,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
+    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
