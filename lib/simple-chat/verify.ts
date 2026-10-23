@@ -956,7 +956,7 @@ const people = (d: HouseholdDocument) => [...d.linkedPeople].map(baseName).sort(
  *   people (the Living Care 90-day waiting period), R62-1.
  * A condition from another document's row is never put on this one (the Benefit Summary's "Core or Voluntary" on the
  * Product Summary's wrist row). */
-function conditionApplies(household: Household, found: Found, quote: string): boolean {
+export function conditionApplies(household: Household, found: Found, quote: string): boolean {
   const doc = household.documents[found.docIndex];
   const page = doc.pages.find((p) => p.page === found.page);
   if (!page) return false;

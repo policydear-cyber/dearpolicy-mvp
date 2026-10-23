@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, chatRows, coverLabels, citedPages, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -706,6 +706,72 @@ test("the same benefit of the same cover in another document is given with it, n
   // The same figure printed again is not given twice.
   assert.deepEqual(ask(/^Ankle$/).filter((x) => x.amount).map((x) => x.amount!.text), ["S$2,500"]);
 });
+test("a condition printed only for the same benefit in another document goes with it as its own point; a limit paid as the lesser of the cost says so (release-set H7)", () => {
+  const OTHER = "aaaaaaaa-0000-0000-0000-00000000000d";
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(OTHER, "Benefit summary.pdf", [{ page: 8, text:
+    "J. Ambulance Cost\nWe will, upon proof of the emergency call, pay up to $500 of the ambulance cost, whichever is lesser.\nOnly for an emergency ambulance called within 24 hours.\n"
+    + "K. Hospital Cash Benefit\nPayable only after 3 days in hospital.\nWe will pay S$50 a day." }])] };
+  const other = checkReading(src(H.documents[3]), reading("scheme_terms", "Group Scheme", [], [
+    b({ benefit: "J. Ambulance Cost", pays: "up_to", value: 500, page: 8, quote: "We will, upon proof of the emergency call, pay up to $500 of the ambulance cost, whichever is lesser." })]));
+  const rs = chatRows(assembleTable([certR, termsR, other], family, [...links, { section: sectionKeyOf(OTHER, { section: "Accident", column: null }), cover: gpa, why: "ambulance" }]), H);
+  const amb = (p: string) => rs.find((r) => r.person === p && r.source.documentId === TERMS && r.benefit === "Ambulance Cost")!;
+  assert.ok(amb("Lim Ah Kow").lesserOf, "the other document's line for the same figure says whichever is lesser");
+  const run = (statements: Record<string, unknown>[]) => {
+    const fromRows = amountsFromRows({ bottomLine: "b", nextSteps: [], question: null, statements: statements.map((x) => ({ kind: "amount", text: "x", document: null, quote: null, amount: null, percentOf: null,
+      conditions: [], alternativeGroup: null, perDay: null, ofBill: null, ...x })) }, rs, H);
+    const { answer: a } = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+    return a.statements ?? [];
+  };
+  const proof = { text: "The emergency call must be proved.", quote: "upon proof of the emergency call" };
+  const within = { text: "It must be an emergency ambulance called within 24 hours.", quote: "Only for an emergency ambulance called within 24 hours" };
+  let st = run([{ row: amb("Lim Ah Kow").id, person: "Lim Ah Kow", conditions: [proof, within] }]);
+  const card = st.find((x) => x.amount)!;
+  assert.equal(card.amount!.text, "Up to S$500");
+  assert.match(card.text, /the cost, up to this limit, whichever is less/);
+  const points = st.filter((x) => !x.amount).map((x) => [x.text, x.personName ?? null, x.source?.page ?? null]);
+  assert.deepEqual(points, [["Ambulance Cost also depends on this: The emergency call must be proved.", "Lim Ah Kow", 8], ["Ambulance Cost also depends on this: It must be an emergency ambulance called within 24 hours.", "Lim Ah Kow", 8]]);
+  // For both people: one point each, said for nobody in particular.
+  st = run([{ row: amb("Lim Ah Kow").id, person: "Lim Ah Kow", conditions: [within] }, { row: amb("Tan Mei Ling").id, person: "Tan Mei Ling", conditions: [within] }]);
+  assert.deepEqual(st.filter((x) => !x.amount).map((x) => [x.text, x.personName ?? null]), [["Ambulance Cost also depends on this: It must be an emergency ambulance called within 24 hours.", null]]);
+  assert.equal(st.filter((x) => x.amount).length, 2);
+  // Never another sub-benefit's condition, one printed nowhere, or one that states money.
+  for (const c of [{ text: "Only after 3 days in hospital.", quote: "Payable only after 3 days in hospital" }, { text: "Must be in Singapore.", quote: "only in Singapore" }, { text: "Up to $500 a trip.", quote: "Only for an emergency ambulance called within 24 hours" }])
+    assert.deepEqual(run([{ row: amb("Lim Ah Kow").id, person: "Lim Ah Kow", conditions: [c] }]).filter((x) => !x.amount), [], c.text);
+  // A limit no line calls the lesser of the cost is "up to this limit".
+  assert.ok(!rows.find((r) => r.benefit === "Ambulance Cost")!.lesserOf);
+});
+
+test("a point that says it shows an amount is given that row's amount; with no amount at all, nothing points at one (live run 23 Oct, B7)", () => {
+  const run = (bottomLine: string, statements: Record<string, unknown>[]) => {
+    const fromRows = amountsFromRows({ bottomLine, nextSteps: [], question: null, statements: statements.map((x) => ({ kind: "fact", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null,
+      conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...x })) }, rows, HOUSE);
+    const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+    const left = dropAmountPointers(a, fromRows.report.labels);
+    return { bottom: a.bottomLine, texts: (a.statements ?? []).filter((x) => !x.amount).map((x) => x.text), amounts: (a.statements ?? []).filter((x) => x.amount).map((x) => [x.personName, x.amount!.text]), left };
+  };
+  const said = "If it was an emergency, the ambulance benefit applies. The scheme terms show this amount.";
+  // Its quote is the row's own line, in the document it names, for the person it is about: that row's amount is given.
+  let r = run("Here.", [{ text: said, document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
+  assert.deepEqual(r.amounts, [["Lim Ah Kow", "Up to S$500"]]);
+  assert.deepEqual(r.texts, [said]);
+  r = run("Here.", [{ text: said, person: "Tan Mei Ling", document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
+  assert.deepEqual(r.amounts, [["Tan Mei Ling", "Up to S$500"]]);
+  // A quote that is no row's line, or names another document: no amount, and with none in the answer the pointing words go.
+  for (const x of [{ document: "D2", quote: "Compensation (% of S$5,000)" }, { document: "D1", quote: "Ambulance Cost Up to S$500 per incident" }]) {
+    r = run("It is not shown as covered, and the amounts below only apply if the terms are met.", [{ text: said, ...x }]);
+    assert.deepEqual(r.amounts, [], JSON.stringify(x));
+    assert.equal(r.bottom, "It is not shown as covered.");
+    assert.deepEqual(r.texts, ["If it was an emergency, the ambulance benefit applies."]);
+    assert.equal(r.left.length, 2);
+  }
+  // With an amount in the answer, nothing is cut; "these sums insured" points at nothing.
+  r = run("The amounts below are separate.", [{ kind: "amount", row: idOf("Lim Ah Kow", "Hip"), text: "Hip." }, { text: "The certificate showing these sums insured is dated 01/01/2026.", document: "D1", quote: "As of 01/01/2026" }]);
+  assert.equal(r.bottom, "The amounts below are separate.");
+  assert.equal(r.texts.length, 1);
+  r = run("Here.", [{ text: "The certificate showing these sums insured is dated 01/01/2026.", document: "D1", quote: "As of 01/01/2026" }]);
+  assert.deepEqual(r.texts, ["The certificate showing these sums insured is dated 01/01/2026."]);
+});
+
 test("a short document no row comes from is sent whole, unless it could not be read; payee rules are sent (release-set E1, E2, H10)", () => {
   const RECEIPT = "aaaaaaaa-0000-0000-0000-000000000008", LONG = "aaaaaaaa-0000-0000-0000-000000000009", FAILED = "aaaaaaaa-0000-0000-0000-00000000000a";
   const H: Household = { ...HOUSE, documents: [...HOUSE.documents,
