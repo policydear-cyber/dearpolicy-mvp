@@ -5661,3 +5661,19 @@ With no card shown, "The Advance Payment amount below is not paid in addition to
 - **B6:** `startDay` no longer counts "beyond". That only narrows it: a quote that loses its day keeps the reading's printed day, or none, and the stay card still parses on its own.
 - **D8:** "cannot" was missing from the negation list in `CONDITION_OF_AMOUNT`, because `n't` does not match "cannot". Adding it is correct.
 - **Free tests at 46f5a10:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+
+## R152: PR #108 at a596032 (diff 46f5a10..a596032, Test Engineer: negated "after")
+
+**Verdict: READY still holds.**
+
+- **The change works as described.** A from/after day whose own clause has not/no/never/cannot/n't is skipped. A quote with only such a limit gives null. Probes:
+
+  | Quote | Day |
+  |---|---|
+  | "Not payable after the 30th day" | null |
+  | "S$50 per day from day 1, not payable after the 30th day" | 1 |
+  | "No benefit for the first 10 days; payable from the 11th day" | 11 |
+  | "S$30 per day from the 11th day onwards. Max: 30 days" | 11 |
+
+- **Low, note only.** A negation in the same clause that is not about the day also blanks the day. "There is no waiting period and payment starts from the 11th day" gives null, and so does "…isn't reduced and is paid from the 4th day". The result is null, which never lengthens a stay card and only drops the row's "from day" text. That is the safe direction.
+- **Free tests at a596032:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
