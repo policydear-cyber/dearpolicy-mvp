@@ -5268,3 +5268,26 @@ No card goes with it, but it is the ownership kind of claim from C5. `dropPeople
 - benefit-table chat-test: 61/61
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 137: PR #105 at 6a46183 (delta from 66bd9cc)
+
+**Verdict: NOT READY. One small blocker (R137-1), a one-line fix.**
+
+### R137-1 (blocker, same class as R131-1): the new "X's … only" pattern drops a true payee rule
+The R136-1 fix adds `X's (up to two words) only` to the exclusivity patterns. Because any two words may come between "X's" and "only", it also matches true rules that are not about who owns a cover.
+
+I re-ran the shut-out probe with Tan's hip card shown:
+
+| Sentence | Result |
+|---|---|
+| "It is paid to Tan Mei Ling's estate only." | **dropped** |
+| "Tan Mei Ling can claim this only once." | kept |
+| The 5 reason or condition sentences from R131 | kept |
+| The 4 ownership claims | dropped |
+
+Whom a claim is paid to is a printed rule; the H10 payee pages are sent for exactly this. Dropping it hides a documented condition.
+
+**Fix:** limit the words in between to cover words only: `X's (?:[a-z]+\s+)?(?:cover|policy|policies|plan|benefit)s?\s+only`. "That benefit is for Lim's policy only" is still dropped, and "Tan's estate only" is kept. Add the estate sentence as a test.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
