@@ -5509,3 +5509,15 @@ U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The
   - There is a test for the unnamed case, which gets the note.
 - **Low, note only.** `namesRow` matches substrings, so "Living Care" is found inside "Living Care Plus". Suppose the model wrongly flagged Living Care `not_on_list` while its text named only Living Care Plus. Living Care would then be hidden with no note. This needs a wrong flag and an unlucky overlap of names. Not worth more code now. If it ever matters, match on whole names (for example, not followed by " plus").
 - **Free tests at 4e4b43e:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R145: PR #107 at 46cd590 (diff 4e4b43e..46cd590, Test Engineer fixes E7, E8b, E8c, L4)
+
+**Verdict: READY still holds.**
+
+- **`ruledOut` is right.** It holds a `not_on_list` row plus its twins: same person, same cover, same qualifier, and `sameBenefit`. It is checked against both the named row and the row `checkedRow` swaps to, and it is excluded from companions. So a ruled-out row can no longer come back as a twin swap, a companion or a repeat name.
+- **`namesRow` is right.** It blanks out longer cover names first ("Living Care Plus") before looking for a shorter one ("Living Care"). That closes my R144 low note.
+- **Free tests at 46cd590:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+### Low, note only
+- **Conflicting flags hide the row for the whole answer.** In a two-event question ("heart attack or stroke"), suppose the model gives Living Care Plus `not_on_list` for one event and `on_list` for the other. Its card is then hidden for both events. That errs toward withholding, which meets the project bar, and the answer text still says what it covers. No change needed now. Worth one item in the next unseen sweep.
+- **A pointer fact with `not_on_list` but `row: null` is not collected up front.** The card made from it is still dropped by its own flag, so only that row's twins could come back, as a companion of another card for the same benefit. That needs the model to contradict itself. No change needed.
