@@ -5795,3 +5795,47 @@ All suites pass (76/13/106). The patch is in the Critic scratchpad as `r156-fix.
 - **The no-event "ended" note:** it is added to the label before the label is recorded, so `keepLabelledAmounts` keeps the card.
 - **Schema:** `period` is three plain strings, keeping the API within 16 union parameters (a test guards this).
 - **Known gap S088** (the model gives the wrong row id): agreed, out of scope. A word-against-name guard dropping right cards on the 44 is the worse trade.
+
+## R157: PR #110 at e29365d (diff 476516c..e29365d, wrong-row check)
+
+**Verdict: NOT READY.** R156-1 is still open: line 266 is unchanged, `on = printedDay(p.eventOn) ?? today`, so undated trip events are still hidden. My tested patch from R156 still applies. The new wrong-row check is a good idea, with one hole. Free tests at e29365d pass: chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+### R156-1 (high, blocking): still open
+Apply the R156 patch:
+- `outsidePeriod` returns null with no event date.
+- Undated event cards carry "Its cover period ended on X, so it pays only for an event on or before that day."
+- The prompt's `eventOn` says "today's date when they say it is happening now".
+- The test changes as listed in R156.
+
+### R157-1 (medium, fix this round): `copiedName`'s "one name inside the other" lets a slip between nested names through
+Containment of at least two words accepts "Hospital Cash" for an "ICU Hospital Cash" row, and the reverse. Probe (added to the S088 test in a scratch copy):
+
+| row id given | rowBenefit copied | e29365d | right |
+|---|---|---|---|
+| ICU Hospital Cash | "Hospital Cash" | **shown** (the ICU rate on a hospital-cash answer) | left out |
+| Hospital Cash | "ICU Hospital Cash" | **shown** | left out |
+| ICU Hospital Cash | "ICU Hospital Cash" | shown | shown |
+
+The same applies to "Accidental Death" against "Accidental Death and Dismemberment", or a base benefit against its "Enhanced …" variant. These are exactly the slips this check exists to stop, and each shows another row's amount.
+
+**Fix (tested):** in place of containment, allow only generic words to differ:
+```ts
+const core = (t: string) => ` ${t} `.replace(/\s(?:the|benefits?|cover(?:age)?|amount|limit|plan|payment)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
+return !!core(a) && core(a) === core(b);
+```
+With this:
+- The existing S088 test still passes, including "child education fund" for "K. Child Education Fund Benefit".
+- All three probe rows give the right result.
+- chat-test 77/77.
+
+Please add the ICU/Hospital Cash pair as tests.
+
+### Low, note only
+Two rows with **identical** benefit names (for example "Hospital cash" on two covers of the same person) still pass a slip between them, because the copied name is the same. A later `rowCover` copy would close it. That is not needed this round.
+
+### Checked and holding
+- Cards bound by pointer have `rowBenefit` unset, so they are not checked. That is correct: they are bound by quote.
+- An empty `rowBenefit` on an amount drops the card. That is the safe direction, and the prompt says to copy the name exactly.
+- A recording with no field (undefined) is not checked, so replays are unchanged.
+- The check runs before `checkedRow`, so it judges the row the model named.
+- `rowBenefit` is a plain string, so the 16-union limit holds.
