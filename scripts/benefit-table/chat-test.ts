@@ -1256,8 +1256,15 @@ test("a premium is never hidden by a waiting period or the cover's dates (live r
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit: row.benefit, eventFit: "any_event", waiting: { applies: "yes", days: 90, from: "19/10/2026" },
     period: { from: "19/10/2026", to: "19/10/2036", eventOn: "01/10/2026" } }] }, [...rows, prem, { ...amb, id: "R975", benefit: "Death Benefit" }], HOUSE, new Date("2026-10-23T02:00:00Z")).report;
   assert.equal(run(prem).labels.length, 1);
-  // A benefit paid on the event still is.
+  // A benefit paid on the event still is, also one that names premiums (Critic R162-1).
   assert.equal(run({ ...amb, id: "R975", benefit: "Death Benefit" }).labels.length, 0);
+  for (const b of ["Waiver of Premium", "Premium Waiver Benefit", "Return of Premiums", "Refund of Premium"]) {
+    const w: ChatRow = { ...amb, id: "R976", benefit: b };
+    const held = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+      percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: w.id, rowBenefit: b, eventFit: "any_event", waiting: { applies: "yes", days: 90, from: "19/10/2026" },
+      period: { from: "", to: "", eventOn: "" } }] }, [...rows, w], HOUSE, new Date("2026-10-23T02:00:00Z")).report;
+    assert.equal(held.labels.length, 0, b);
+  }
 });
 
 test("the same benefit with the same figure from another document is shown once, list numbers aside (live run 23 Oct, B5)", () => {
@@ -1289,6 +1296,9 @@ test("the days a message names are given as dates with how far they are from tod
   assert.match(datesSaidNote("baggage arrived 10 hours late in tokyo on 29 september", now), /"29 september" is 29\/09\/2026, 24 days before today/);
   assert.match(datesSaidNote("admitted on Oct 20th", now), /20\/10\/2026, 3 days before today/);
   assert.match(datesSaidNote("fell on 3/10", now), /03\/10\/2026, 20 days before today/);
+  assert.match(datesSaidNote("admitted 03/10/2026", now), /03\/10\/2026, 20 days before today/);
+  // Not dates (Critic R162).
+  for (const t of ["open 24/7", "about 1/2 of the bill", "3/4 of the sum"]) assert.equal(datesSaidNote(t, now), "", t);
   // A day still to come this year may be last year's: both are said.
   assert.match(datesSaidNote("flying on 5 december", now), /05\/12\/2026, 43 days after today, or 05\/12\/2025, 322 days before today/);
   // Singapore's date.

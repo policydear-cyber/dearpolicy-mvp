@@ -115,8 +115,9 @@ export function datesSaidNote(message: string, now: Date): string {
   // Month first, but never "may 3" ("it may 3 ...").
   for (const m of message.matchAll(new RegExp(`\\b(?!may\\b)${MONTH}\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "gi")))
     add(m[0], Number(m[2]), of(m[1]), m[3] ? Number(m[3]) : null);
-  for (const m of message.matchAll(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/g))
-    add(m[0], Number(m[1]), Number(m[2]), m[3] ? Number(m[3]) : null);
+  // "24/7" and "3/4" are not dates: a slash date has its year, or a word before it that leads a date (Critic R162).
+  for (const m of message.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b|\b(?:on|since|from|by|dated|until|till)\s+(\d{1,2})\/(\d{1,2})(?![\/\d])/gi))
+    add(m[0], Number(m[1] ?? m[4]), Number(m[2] ?? m[5]), m[3] ? Number(m[3]) : null);
   return said.length ? `(Days the household named: ${said.join("; ")}.) ` : "";
 }
 

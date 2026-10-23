@@ -461,8 +461,9 @@ function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
  * different premium for the first policy year)"). */
 const PERIOD_ROW = /first policy year(?: only)?\)$/;
-/** A row for a premium the household pays. */
-const PREMIUM_ROW = /\bpremiums?\b/i;
+/** A row for a premium the household pays: never a benefit paid on an event that names premiums ("Waiver of Premium",
+ * "Return of Premium", Critic R162-1). */
+const PREMIUM_ROW = /^(?!.*\b(?:waiver|waive[sd]?|return|refund)\b).*\bpremiums?\b/i;
 /** The same benefit of the same cover, printed in another of the person's documents. */
 const twinOf = (o: ChatRow, row: ChatRow) => o.id !== row.id && o.personId === row.personId && o.coverKey === row.coverKey
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit);
