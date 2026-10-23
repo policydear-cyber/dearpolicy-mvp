@@ -827,7 +827,7 @@ test("a sentence that shuts a person out of a cover their own cards or rows show
   }
   // A sentence that gives a reason or a condition, or does not speak of ownership, is never left out (Critic R131-1).
   for (const s of ["Tan does not get the ambulance benefit, because no ambulance was used.", "Tan is not covered for this event, because a hairline crack is not a listed fracture.",
-    "Tan cannot claim the recuperation benefit unless she stays in hospital for 24 hours.", "It is paid to Tan Mei Ling's estate only.", "Mei Ling has no accident cover.", "Only Lim's hip card is shown here, if Mei Ling was not hurt."]) {
+    "Tan cannot claim the recuperation benefit unless she stays in hospital for 24 hours.", "It is paid to Tan Mei Ling's estate only.", "Lim's hip benefit only pays for a full break.", "Mei Ling has no accident cover.", "Only Lim's hip card is shown here, if Mei Ling was not hurt."]) {
     r = shutOut("Here it is.", [...hips, fact(s)]);
     assert.deepEqual(r.left, [], s);
   }
