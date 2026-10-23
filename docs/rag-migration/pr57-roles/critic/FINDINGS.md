@@ -5307,3 +5307,17 @@ I re-ran the shut-out probe:
 - benefit-table chat-test: 61/61
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## Round 139: PR #105 at 8c19160 (delta from 9b1e0f6)
+
+**Verdict: READY.** For TE O2, "X's … cover/policy/plan/benefit only" now needs "only" to end its clause. That only tightens what is dropped.
+
+My probe results are unchanged:
+- The 5 sentences that give a reason or condition are kept, along with "estate only" and "only once".
+- The 4 ownership claims and "That cover is Lim's policy only." are dropped.
+
+### Low (pre-existing, not from this delta)
+"It is Lim's policy only, so Tan Mei Ling cannot use it." is kept. The exclusivity branch skips any sentence that also names the shut-out person. It carries no amount, so it does not block.
+
+### Tests
+- benefit-table chat-test: 61/61
