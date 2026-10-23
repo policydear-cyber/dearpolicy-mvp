@@ -5645,3 +5645,11 @@ With no card shown, "The Advance Payment amount below is not paid in addition to
   - A bare "The amounts below for Living Care Plus don't apply." is still cut.
   - "This amount is not payable." still reads "This benefit is not payable.", the same as before.
 - **Free tests at ee44388:** chat-test 65/65 (the rowOfQuote tests are gone), headline-test 13/13, benefit-table test 106/106. The same counts pass with the patch.
+
+## R150: PR #108 at 21d1f3f (diff ee44388..21d1f3f)
+
+**Verdict: READY.**
+
+- **R149-1 and R149-2 are in, exactly as patched.** Each has a new test: a waiting-period quote gives fromDay null, and the no-card Advance Payment sentence now reads "The Advance Payment benefit …".
+- **Free tests at 21d1f3f:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+- **The R149 low note stands, with no change needed:** "backdated to the first day" still gives day 4.
