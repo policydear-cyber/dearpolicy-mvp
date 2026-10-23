@@ -5611,3 +5611,37 @@ Please add the first two rows as tests. The full patch for R147-1 and R147-2 is 
 - **The five probes are now tests.**
 - **Free tests at 58cf8cc:** chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
 - **The R147 low notes stand, with no change needed:** an excess quote can still give the real row's card, and the `firstDay` edge case remains.
+
+## R149: PR #108 at ee44388 (structural: bind by row id only; startDay; condition pointers kept)
+
+**Verdict: no blocker. Two small fixes are recommended this round (patch tested).** Removing `rowOfQuote` is the right call: cards now bind only by the row id the model names, so the whole R147-1 class is gone. The A6 trade-off (a premium without its id is left out, with a note) is the safe direction.
+
+### R149-1 (medium, fix this round): `startDay` reads a waiting period as the first paid day
+`startDay` treats any "after N days" in a per-day row's quote as day N+1. It runs for every `per_day` row, even when the reading gave no fromDay. So "Hospital cash S$50 per day, payable after 30 days of continuous cover." gets **"from day 31"** on the row.
+
+The model reads that row, so it can tell the household the benefit starts on day 31 of the stay. That understates the benefit. The stay card itself is safe: `keepLabelledAmounts` refuses it when the days disagree, and `stayPays` parses the days on its own.
+
+**Fix (tested):** count "after" only as "after the Nth day" (an ordinal and a singular "day"), or as "after N days of hospital/hospitalisation/confinement/stay/admission" or "in hospital":
+```ts
+for (const m of text.matchAll(/\b(?:after|beyond)\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) days.add(Number(m[1] ?? m[2]) + 1);
+```
+With this:
+- The B3 quotes still give day 11: "after the 10th day of Hospital stay" and "after 10 days in hospital".
+- "after 30 days of continuous cover" gives no day.
+- All suites pass.
+
+Low, note only: "payable after 3 days of hospitalisation, backdated to the first day" gives day 4. That understates, and it is rare wording.
+
+### R149-2 (low-medium, fix this round): `ofBenefit` garbles a pointer that has a noun before it
+With no card shown, "The Advance Payment amount below is not paid in addition to the death benefit." becomes **"The Advance Payment this benefit is not paid in addition to the death benefit."** The coordination rule survives, but the sentence is broken.
+
+**Fix (tested):** use "this benefit" or "these benefits" only when the match starts with a determiner (the/this/that/these/those). Otherwise use a bare "benefit" or "benefits". The example then reads "The Advance Payment benefit is not paid in addition to the death benefit."
+
+### Checked and holding
+- **Binding by row id only.** The `renderTable` line asks for the id even when the figure comes from another document. A missing or unknown id is dropped with the left-out note.
+- **`startDay` is used safely.** Two different days give null, and a null day can never lengthen a stay card, because `stayPays` needs exactly one start. A quote with no day keeps the reading's day only when that day is printed.
+- **`CONDITION_OF_AMOUNT` behaves as intended:**
+  - With cards shown, conditions and coordination rules stay word for word.
+  - A bare "The amounts below for Living Care Plus don't apply." is still cut.
+  - "This amount is not payable." still reads "This benefit is not payable.", the same as before.
+- **Free tests at ee44388:** chat-test 65/65 (the rowOfQuote tests are gone), headline-test 13/13, benefit-table test 106/106. The same counts pass with the patch.
