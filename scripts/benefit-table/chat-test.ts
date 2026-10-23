@@ -160,6 +160,10 @@ test("an amount sent without its row, quoting the same figure printed in another
   assert.deepEqual(give("Ambulance claims"), []);
   assert.deepEqual(give("Ambulance claims S$500 and S$600"), []);
   assert.deepEqual(give("Ambulance claims\tS$500", [...rows, { ...ambulance, id: "R997", benefit: "Ambulance transfer", source: { ...ambulance.source, excerpt: "Ambulance transfer S$500" } }]), []);
+  // A figure worked from the row's figure is not the row's amount (Critic R147-1).
+  assert.deepEqual(give("Overseas ambulance evacuation: 50% of the Ambulance Cost limit of S$500"), []);
+  assert.deepEqual(give("Ambulance for ICU: 200% of S$500"), []);
+  assert.deepEqual(give("Ambulance cost doubled (2 x S$500)"), []);
 });
 
 test("money in the model's own sentence never removes what the amount is for (R90-1)", () => {
@@ -897,6 +901,12 @@ test("with amounts shown, words that say the amounts shown do not apply go; othe
   assert.equal(a.summary, a.bottomLine);
   assert.deepEqual(a.statements.map((x) => x.text), ["Up to S$350,000", "The amount below is not payable for an illness diagnosed in the first 90 days.", "The amounts below only apply after the waiting period."]);
   assert.ok(left.includes(b));
+  // A coordination rule about the amount shown stays (Critic R147-2).
+  for (const t of ["The Advance Payment amount below is not paid in addition to the death benefit.", "The amount below is not payable on top of the Advance Payment already paid."]) {
+    const c = { summary: "s", bottomLine: "s", statements: [{ text: "Up to S$350,000", amount: { text: "S$350,000" } }, { text: t, amount: null }] };
+    dropAmountPointers(c, ["Up to S$350,000"]);
+    assert.deepEqual(c.statements.map((x) => x.text), ["Up to S$350,000", t]);
+  }
 });
 
 test("a short document no row comes from is sent whole, unless it could not be read; payee rules are sent (release-set E1, E2, H10)", () => {

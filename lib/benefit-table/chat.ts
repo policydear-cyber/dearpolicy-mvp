@@ -12,7 +12,7 @@ import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
-import { CAP_WORDS } from "./check";
+import { CAP_WORDS, numbersIn } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
@@ -324,8 +324,10 @@ function rowOfQuote(raw: Record<string, unknown>, rows: ChatRow[], household: Ho
   // The same figure printed in another of the person's documents ("Total premium S$73.17" on the tax invoice, the row's
   // "Premium paid : S$73.17" on the policy summary, live run 23 Oct, A6): the quote prints one figure, exactly one of the
   // person's rows prints that figure, and the quote names what that row is for.
+  // Only a quote that prints that one figure and nothing worked from it: "50% of the limit of S$500" or "2 x S$50 per
+  // day" is not the row's amount (Critic R147-1).
   const figures = moneyFiguresIn(String(raw.quote));
-  if (figures.length !== 1) return undefined;
+  if (figures.length !== 1 || numbersIn(String(raw.quote)).length !== 1 || /%|\b(?:x|times|twice|double[ds]?|half|triple[ds]?|percent)\b/i.test(String(raw.quote))) return undefined;
   const words = (t: string) => normQuote(t).split(" ").filter((w) => w.length > 3 && !FILLER.has(w));
   const said = new Set(words(String(raw.quote)));
   const same = rows.filter((r) => baseName(r.person) === person && r.figure.kind === "printed" && Math.abs(r.figure.amount - figures[0].value) < 0.005);
@@ -363,6 +365,7 @@ const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|en
 
 /** Words that say an amount does not apply or is not paid. */
 const DENIES_AMOUNT = /\b(?:don['’]t|do\s+not|does\s+not|doesn['’]t|won['’]t|will\s+not|would\s+not|wouldn['’]t|cannot|can['’]t)\s+(?:apply|be\s+paid|pay|count)\b|\bnot\s+(?:payable|paid|applicable)\b/i;
+const DENIES_END = new RegExp(`(?:${DENIES_AMOUNT.source})(?:\\s+(?:here|to\\s+(?:it|this|them|this\\s+event)|for\\s+(?:it|this|that|them)))?\\s*[.!?]?\\s*$`, "i");
 const CONDITIONAL = /\b(?:if|unless|until|within|before|after|during|while|when|where|provided|except|only|for\s+(?:a|an|any)|in\s+the\s+first)\b/i;
 const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b|\bnot\s+(?:a|the)\s+total\b/i;
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
@@ -377,7 +380,9 @@ export function dropAmountPointers<T extends { text: string; fullText?: string; 
   // unseen set U8): they were about a card the server did not show, and every card shown is one the answer gives.
   // A denial with a condition ("the amount below is not payable for an illness diagnosed in the first 90 days") is a
   // condition, and stays.
-  const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_AMOUNT.test(c) && !CONDITIONAL.test(c));
+  // Only a denial that ends its clause: "is not paid in addition to the death benefit" is a coordination rule, and stays
+  // (Critic R147-2).
+  const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_END.test(c) && !CONDITIONAL.test(c));
   const point = (x: string) => (!shown ? (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x)) : denies(x) ? withoutPointer(x) : x);
   const flagged = (x: string) => (!shown ? AMOUNT_POINTER.test(x) || DIFFERENT_FIGURES.test(x) : denies(x));
   const cut = (text: string) => {
