@@ -22,7 +22,7 @@ import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./lib
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
-import { amountsFromRows, chatRows, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
+import { amountsFromRows, printedDay, chatRows, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number }; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
@@ -71,6 +71,29 @@ function chatFor(context: ChatContext): string {
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";
 }
 
+/** Each date range a document prints ("29/09/2026 to 04/10/2026"), with whether it has ended, is running or has not
+ * started by today's date in Singapore: worked out here, so the answer never calls an ended trip "not started" (live run
+ * 23 Oct, S048). At most three ranges a document. */
+export function periodsNote(household: Household, now: Date): string {
+  const today = Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
+  const said: string[] = [];
+  for (const d of household.documents) {
+    const seen = new Set<string>();
+    for (const p of d.pages) for (const m of p.text.matchAll(/\b(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:to|until|-|–|—)\s*(\d{1,2}\/\d{1,2}\/\d{4})\b/gi)) {
+      const from = printedDay(m[1]), to = printedDay(m[2]);
+      if (from == null || to == null || to <= from || seen.has(`${m[1]}|${m[2]}`) || seen.size >= 3) continue;
+      seen.add(`${m[1]}|${m[2]}`);
+      said.push(`${d.productName ?? d.name} prints ${m[1]} to ${m[2]}: ${to < today ? "ended before today" : from > today ? "not started yet" : "running today"}`);
+    }
+  }
+  return said.length ? `(Dates printed: ${said.join("; ")}.) ` : "";
+}
+
+/** A bottom line that introduces points below it ("here is each adult's list", "the amounts are below:"). */
+// Only words that point at what comes next: "below" ending its sentence, not "below the knee" or "below the limit" (TE N3,
+// N4, N5).
+const INTRODUCES = /:\s*$|\bas\s+follows\b|\bbelow\s*(?:[.:]|$)|(?:^|[.!?]\s+)(?:here(?:'s|’s|\s+is|\s+are)|these\s+are\s+(?!not\b))/i;
+
 /** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). The latest
  * mention counts: the message, then earlier turns newest first (TE S4). */
 function spouseNote(household: Household, said: string[]): string {
@@ -100,13 +123,13 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
+    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
-  const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household, now) : { json: reply.json, report: null };
+  const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household, now, message) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
@@ -117,11 +140,13 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     // A sentence that shuts a person out of a cover their own cards or rows show is left out (live run 22 Oct, C5).
     report.sentencesLeftOut.push(...dropPeopleShutOut(answer, rows!, household, fromRows.report.labels));
     report.sentencesLeftOut.push(...dropAmountPointers(answer, fromRows.report.labels));
+    report.sentencesLeftOut.push(...dropAgreeingDayRules(answer, fromRows.report));
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     answer.statements = noteNarrowedPages(answer.statements, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
-  // Points were given and none survived the checks: the answer says so, never a bare introduction to nothing.
-  if (parsed?.statements.length && !(answer.statements ?? []).length) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
+  // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
+  // introduction to nothing. A bottom line that answers on its own stands alone (live run 23 Oct, E2).
+  if (parsed?.statements.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
