@@ -55,15 +55,23 @@ export function numbersIn(text: string): number[] {
 }
 /** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
  * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it
- * states more than one. */
+ * states more than one, or only a limit ("not payable after the 30th day"). */
 export function startDay(text: string): number | null | undefined {
   const days = new Set<number>();
-  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) days.add(Number(m[1] ?? m[2]));
+  // "Not payable after the 30th day" is a limit, not a start: a day after a not/no/never in its own clause (up to a comma) never counts,
+  // and a quote with only such a limit states no first paid day, whatever was read (TE #108).
+  let limit = false;
+  const negated = (at: number) => {
+    const no = /\b(?:not|no|never|cannot)\b|n['’]t\b/i.test(text.slice(0, at).split(/[.,;:\n]/).pop() ?? "");
+    limit ||= no;
+    return no;
+  };
+  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
   // "After" counts only for a day of the stay ("after the 10th day", "after 10 days in hospital"), never a waiting period
   // ("payable after 30 days of continuous cover", Critic R149-1). "Beyond the 30th day" is as often a limit as a start,
   // so it never counts (TE #108 B6).
-  for (const m of text.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) days.add(Number(m[1] ?? m[2]) + 1);
-  return days.size === 0 ? undefined : days.size === 1 ? [...days][0] : null;
+  for (const m of text.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]) + 1);
+  return days.size === 0 ? (limit ? null : undefined) : days.size === 1 ? [...days][0] : null;
 }
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
