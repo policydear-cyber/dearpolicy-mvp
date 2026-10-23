@@ -18,9 +18,9 @@ import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer } from "@/types";
 import { simpleChatModel } from "./flag";
-import { loadHousehold, renderLibrary, type Household } from "./library";
+import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
 import { ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
-import { answerAsText, NO_ANSWER, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
+import { answerAsText, NO_ANSWER, NOTHING_SHOWN, readModelAnswer, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { amountsFromRows, chatRows, dropAmountPointers, dropPeopleShutOut, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -71,6 +71,13 @@ function chatFor(context: ChatContext): string {
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";
 }
 
+/** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). The latest
+ * mention counts: the message, then earlier turns newest first (TE S4). */
+function spouseNote(household: Household, said: string[]): string {
+  const meant = spouseMeant(household, said);
+  return meant ? `("${meant.word}" is ${meant.member}: the documents print "${meant.printed}".) ` : "";
+}
+
 export async function runSimpleChat(context: ChatContext, opts: { check?: () => Promise<void>; jobId?: string } = {}, deps: SimpleDeps = {}): Promise<ChatResult> {
   const { request, conversation } = context;
   const message = request.submittedQuestion ?? request.question;
@@ -86,19 +93,20 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   ]);
   if (household.accountId !== request.accountId) throw new Error("The library read is for another household; refusing to answer");
   const rows = table ? chatRows(table, household) : null;
+  const now = (deps.today ?? (() => new Date()))();
   const started = Date.now();
   const loadMs = started - loadStarted;
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated((deps.today ?? (() => new Date()))()) + chatFor(context) + message });
+    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }
   const modelEnded = Date.now();
   // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
-  const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household) : { json: reply.json, report: null };
+  const fromRows: { json: unknown; report: RowReport | null } = rows ? amountsFromRows(reply.json, rows, household, now) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
@@ -112,6 +120,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     answer.statements = noteNarrowedPages(answer.statements, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
+  // Points were given and none survived the checks: the answer says so, never a bare introduction to nothing.
+  if (parsed?.statements.length && !(answer.statements ?? []).length) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });

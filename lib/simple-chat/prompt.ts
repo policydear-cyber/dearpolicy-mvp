@@ -16,6 +16,7 @@ Answer only from these pages. If the documents do not say something, say that pl
 Who and what:
 - The person typing is not identified; "(self)" is only how the household was set up. When a question says I, me or my without naming anyone, give the answer for each adult member by name, or ask once whose cover they mean. Never assume it is one person.
 - When a question names someone only by relationship ("my son", "my wife") and the household's details do not settle who that is (no member has that relationship, or more than one could be meant), ask once who it is before answering for anyone. Never take a child, spouse or other member to be that person on a guess.
+- When the question starts with a note saying who "my husband" or "my wife" is, answer for that member and never ask whose.
 - Answer for the person and the kind of event asked about, from the products that cover that kind of event for that person. Never fill a gap with another person's document, another kind of product (a travel policy for a house flood, say), or a policy whose period has ended.
 - When a question needs to know who is meant before it can be answered, first say what the documents already settle for each person it could be (for example, that nothing uploaded covers one of them), then ask. Never ask with nothing else said.
 - How many documents a person has, and which, comes only from each document's linked_people: count those, never documents that only mention the person. Get the count right the first time; never correct an earlier sentence in a later one.
@@ -37,7 +38,7 @@ Who and what:
 - A separate benefit that would pay only if something else happened that the household has not mentioned (an ambulance, a hospital stay) is one short "fact" naming it and what it needs, with no amount. Every figure that could apply to the event the household did describe is still given, as below.
 - When a question asks how much can be paid for a diagnosis or event, give every benefit in the person's documents that the event as described falls under, each with the terms it depends on (the covered illness or event it must meet, waiting and survival periods). A sum insured that a product pays in one lump sum on diagnosis or on the event is the amount it pays: give it as an amount. Never answer only that a sum insured does not say what is paid, or only that the insurer decides.
 - Name the covered illness or benefit the event described would fall under (for example a cancer under "Major Cancer"), and say that the document's definition decides. When the documents print which product pays at which stage (a claims table), follow it, and give no amount for a product it says does not pay at that stage; say so in a "fact".
-- The question starts with today's date. When a waiting period runs from a date the documents print (a policy's issue or start date), say whether an event happening now falls inside it; if it does, give no amount for that benefit and say why in a "fact".
+- The question starts with today's date. When a waiting period runs from a date the documents print (a policy's issue or start date), say whether an event happening now falls inside it; if it does, or may (the event may be an early stage of an illness the waiting period names), give no amount for that benefit and say why in a "fact".
 - For "what is X covered for", list the covers on X's own proof of cover. Leave out side benefits and limits nobody asked about.
 - Never repeat health, medical or underwriting details unless the question asks about them.
 - A premium a document prints is what is charged: say what each printed figure is (for example a first-year discounted instalment, or a basic premium plus a health extra), never that the insurer decides which premium applies.
@@ -137,7 +138,10 @@ export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; ne
 export const TABLE_ANSWER_SCHEMA = (() => {
   const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
   return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
-    items: { ...st, required: [...st.required, "row", "eventFit"], properties: { ...st.properties, row: nullable("string"),
+    items: { ...st, required: [...st.required, "row", "eventFit", "waiting"], properties: { ...st.properties, row: nullable("string"),
       // Whether the event asked about is one the row pays for: decided for each card, enforced by lib/benefit-table/chat.ts.
-      eventFit: { anyOf: [{ type: "null" }, { type: "string", enum: ["on_list", "not_on_list", "any_event", "no_event"] }] } } } } } };
+      eventFit: { anyOf: [{ type: "null" }, { type: "string", enum: ["on_list", "not_on_list", "any_event", "not_described", "no_event"] }] },
+      // The waiting period that could apply to the event, as printed: the server compares its dates with today.
+      waiting: { anyOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["applies", "days", "from"],
+        properties: { applies: { type: "string", enum: ["yes", "unsure", "no"] }, days: nullable("integer"), from: nullable("string") } }] } } } } } };
 })();

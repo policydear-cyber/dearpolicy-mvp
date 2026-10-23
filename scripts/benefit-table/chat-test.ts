@@ -5,8 +5,8 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, coverLabels, citedPages, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
-import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
+import { type ChatRow, amountsFromRows, chatRows, printedDay, coverLabels, citedPages, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
@@ -807,7 +807,8 @@ test("a point that says it shows an amount is given that row's amount; with no a
 
 test("a card whose event is not on its cover's list is never shown, decided per card and never from the prose (live run 23 Oct, H2; unseen U4)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
-  const listCover = (id: string, cover: string, benefit: string): ChatRow => ({ ...amb, id, cover, benefit, coverKey: coverKeyOf({ product: amb.product, cover, plan: null }) });
+  // Covers that started long ago: no waiting period can still run (that is tested on its own below).
+  const listCover = (id: string, cover: string, benefit: string): ChatRow => ({ ...amb, id, cover, benefit, coverKey: coverKeyOf({ product: amb.product, cover, plan: null }), coverSince: "01/01/2020" });
   const lc = listCover("R901", "GROUP LIVING CARE(POLICY NO. 1)", "Coverage against 37 critical illnesses"), lcp = listCover("R902", "GROUP LIVING CARE PLUS(POLICY NO. 1)", "Coverage against 10 early critical illnesses");
   const all = [...rows, lc, lcp];
   const run = (cards: [string, unknown][], facts: string[] = [], bottomLine = "q") => {
@@ -826,6 +827,9 @@ test("a card whose event is not on its cover's list is never shown, decided per 
   assert.deepEqual(run([[lc.id, "not_on_list"], [lcp.id, "not_on_list"]]).cards, []);
   // Every other value, or none (an older answer), is shown as before.
   for (const fit of ["on_list", "any_event", "no_event", null, undefined, "maybe"]) assert.deepEqual(run([[lc.id, fit], [lcp.id, fit]]).cards, [LC, LCP], String(fit));
+  // A card that pays only on something the household has not described (an ambulance) is never shown either (S088).
+  assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "not_described"]], ["Living Care Plus needs an ambulance."]).cards, [LC]);
+  assert.deepEqual(run([[lc.id, "not_described"], [lcp.id, "on_list"]]).cards, [LCP]);
   // The prose never decides: wording that rules a cover out, or keeps it in, changes no card (TE #107 N1, N8, K1, K6).
   for (const text of ["A heart attack is not on the Living Care Plus list.", "A fracture doesn't appear on the Living Care list.", "A heart attack is on the Living Care list. It is not on the Living Care Plus list."])
     assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "on_list"]], [text]).cards, [LC, LCP], text);
@@ -1059,6 +1063,119 @@ test("a number the documents print as a policy number is no money when the sente
   // Not called a policy number, or a figure the documents never print as one: still money.
   assert.notEqual(said("Group Term Life pays 3037850."), "Group Term Life pays 3037850.");
   assert.notEqual(said("The policy number is fine and the payout is 3037851."), "The policy number is fine and the payout is 3037851.");
+});
+
+test("a card inside a waiting period is never shown: the model gives the period as printed, the server compares the dates (stress run 23 Oct, S023)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const ci = (id: string, coverSince: string | null, docIndex = amb.docIndex): ChatRow => ({ ...amb, id, cover: "CRITICAL ILLNESS PLAN", benefit: "Critical Illness Benefit", docIndex,
+    coverKey: coverKeyOf({ product: amb.product, cover: "CRITICAL ILLNESS PLAN", plan: null }), coverSince });
+  // The backstop only acts where the row's own document prints a waiting period next to the cover's name (Critic R153-1).
+  const PRINTS = { ...HOUSE, documents: HOUSE.documents.map((d, i) => i === amb.docIndex ? { ...d, pages: [...d.pages, { ...d.pages[0], text: "Critical Illness Plan\nWaiting Period: 90 days from the issue date" }] } : d) };
+  const shown = (row: ChatRow, waiting: unknown, eventFit: unknown = "on_list", now = new Date("2026-10-23T02:00:00Z"), house = PRINTS) => {
+    const fromRows = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+      percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit, waiting }] }, [...rows, row], house, now);
+    return { labels: fromRows.report.labels.length, why: fromRows.report.dropped.map((d) => d.why) };
+  };
+  const old = ci("R950", "01/01/2020"), fresh = ci("R951", "20/10/2026");
+  // Inside a period that applies, or may apply: hidden. Past it, or one that does not apply: shown.
+  assert.deepEqual(shown(old, { applies: "yes", days: 90, from: "20/10/2026" }), { labels: 0, why: ["the event falls inside its 90-day waiting period"] });
+  assert.equal(shown(old, { applies: "unsure", days: 90, from: "20/10/2026" }).labels, 0);
+  assert.equal(shown(old, { applies: "yes", days: 90, from: "20/10/2026" }, "on_list", new Date("2027-01-18T02:00:00Z")).labels, 1);
+  assert.equal(shown(old, { applies: "yes", days: 90, from: "20/10/2026" }, "on_list", new Date("2027-01-17T02:00:00Z")).labels, 0);
+  assert.equal(shown(old, { applies: "no", days: 90, from: "20/10/2026" }).labels, 1);
+  // Singapore's date: 18 Jan 2027 begins at 16:00 UTC on 17 Jan.
+  assert.equal(shown(old, { applies: "yes", days: 90, from: "20/10/2026" }, "on_list", new Date("2027-01-17T16:30:00Z")).labels, 1);
+  // A period that applies but cannot be dated is never taken as over.
+  assert.equal(shown(old, { applies: "yes", days: 90, from: null }).labels, 0);
+  assert.equal(shown(old, { applies: "unsure", days: null, from: "20/10/2026" }).labels, 0);
+  assert.equal(shown(old, { applies: "yes", days: 90, from: "sometime last year" }).labels, 0);
+  // No period said: a list cover that started within a year is hidden (not checked); an older one, or any other card, is not.
+  assert.equal(shown(fresh, null).labels, 0);
+  assert.equal(shown(old, null).labels, 1);
+  // A cover whose document prints no waiting period with its name (a group accident plan) is not held back for a year.
+  assert.equal(shown(fresh, null, "on_list", undefined, HOUSE).labels, 1);
+  assert.equal(shown(fresh, null, "any_event").labels, 1);
+  assert.equal(shown(fresh, null, "no_event").labels, 1);
+  // With no event asked about, a waiting period hides nothing ("what is he covered for").
+  assert.equal(shown(old, { applies: "yes", days: 90, from: "20/10/2026" }, "no_event").labels, 1);
+  // The same benefit of the same cover in another document is hidden with it.
+  const twin = ci("R952", "01/01/2020", amb.docIndex === 0 ? 1 : 0);
+  const both = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [old.id, twin.id].map((row, i) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row, eventFit: "on_list", waiting: i ? null : { applies: "yes", days: 90, from: "20/10/2026" } })) }, [...rows, old, { ...twin, source: { ...twin.source, documentId: "other" } }], HOUSE, new Date("2026-10-23T02:00:00Z"));
+  assert.equal(both.report.labels.length, 0);
+});
+
+test("a printed date is read day first, and only as a real date", () => {
+  assert.equal(printedDay("20/10/2026")! - printedDay("2026-10-20")!, 0);
+  assert.equal(printedDay("20 October 2026"), printedDay("20/10/2026"));
+  assert.equal(printedDay("01/02/2026")! - printedDay("31/01/2026")!, 1);
+  for (const x of ["31/02/2026", "10/2026", "2026", "", null, "20/10/26"]) assert.equal(printedDay(x), null, String(x));
+});
+
+test("a limit whose own line prints one daily rate gives that rate as a row of its own, after every other row (stress run 23 Oct, S016)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const t = tableWith();
+  const person = t.people.find((p) => p.name === "Lim Ah Kow")!;
+  const capped = { ...person.rows.find((r) => r.benefit === "Ambulance Cost")!, benefit: "Daily hospital cash while overseas", source: { ...amb.source, excerpt: "Capped at S$200 per day\nS$5,000\tS$8,000\tS$10,000" }, figure: { kind: "printed" as const, amount: 8000, currency: "SGD", unit: "up_to" as const } };
+  const withRate = chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, capped] } : p) }, HOUSE);
+  const daily = withRate.filter((r) => r.benefit === "Daily hospital cash while overseas");
+  assert.deepEqual(daily.map((r) => [r.figure.kind === "printed" ? [r.figure.amount, r.figure.unit] : null]), [[[8000, "up_to"]], [[200, "per_day"]]]);
+  assert.equal(withRate.at(-1)!.benefit, "Daily hospital cash while overseas");
+  assert.deepEqual(withRate.slice(0, rows.length).map((r) => r.id), rows.map((r) => r.id));
+  // Two rates, or only the limit itself, give none.
+  // Only a rate the line prints as a limit counts; ICU, excess, companion and allowance figures never do (Critic R153-2).
+  const rateOf = (excerpt: string) => chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE)
+    .filter((r) => r.benefit === "Daily hospital cash while overseas" && r.figure.kind === "printed" && r.figure.unit === "per_day").map((r) => r.figure.kind === "printed" ? r.figure.amount : null);
+  assert.deepEqual(rateOf("Maximum S$300 per day"), [300]);
+  for (const excerpt of ["S$200 per day or S$400 per day in intensive care", "S$8,000 per day", "Up to S$8,000",
+    "Hospital Cash: Up to S$8,000; companion bed S$50 per day", "Capped at S$200 per day from the 11th day", "Up to S$200 per day after day 10",
+    "ICU: capped at S$300 per day", "An excess of S$100 per day applies", "Companion: up to S$100 per day", "Daily allowance up to S$50 per day", "Pays S$200 per day"]) {
+    const other = chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE);
+    assert.equal(other.filter((r) => r.benefit === "Daily hospital cash while overseas").length, 1, excerpt);
+  }
+});
+
+test("a daily card says its first paid day and most days (stress run 23 Oct, S008)", () => {
+  const cash = rows.find((r) => r.benefit === "Hospital cash")!;
+  assert.match(rowLabel({ ...cash, fromDay: 11, maxDays: 30 }), /: paid per day, from day 11 of the stay, for at most 30 days\.$/);
+  assert.match(rowLabel({ ...cash, fromDay: 1, maxDays: null }), /: paid per day\.$/);
+  assert.match(rowLabel({ ...cash, fromDay: null, maxDays: 60 }), /: paid per day, for at most 60 days\.$/);
+});
+
+test("\"my husband\" is settled only by a title the documents print before that member's own name (stress run 23 Oct, S048)", () => {
+  const titled = (text: string): Household => ({ ...HOUSE, documents: [...HOUSE.documents, doc("aaaaaaaa-0000-0000-0000-0000000000e1", "Schedule.pdf", [{ page: 1, text }])] });
+  assert.deepEqual(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["my husband was in hospital"]), { word: "my husband", member: "Lim Ah Kow", printed: "Mr Lim Ah Kow" });
+  assert.deepEqual(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["what does my wife have"])?.member, "Tan Mei Ling");
+  // Said earlier in the conversation counts too.
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["how much a day", "my husband was in hospital"])?.member, "Lim Ah Kow");
+  // One word of the name is not enough ("Dear Mr Lim"); a title for the other kind of spouse settles nothing; both printed
+  // with it settles nothing; no title, no answer.
+  assert.equal(spouseMeant(titled("Dear Mr Lim,"), ["my husband"]), null);
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["my wife"]), null);
+  assert.equal(spouseMeant(titled("Mr Lim Ah Kow and Mr Tan Mei Ling"), ["my husband"]), null);
+  // A relative who shares two of the member's name words is not the member (TE S3).
+  assert.equal(spouseMeant(titled("Nominee: Mr Lim Ah Tan (brother)"), ["my husband"]), null);
+  // The caller passes the message, then earlier turns newest first: the latest mention decides (TE S4).
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["how much a day?", "and my husband was in hospital", "what does my wife have?"])?.word, "my husband");
+  // A member also printed as "Mrs" is never taken as the husband (Critic R153, low).
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Lim Ah Kow,"), ["my husband"]), null);
+  assert.equal(spouseMeant(HOUSE, ["my husband"]), null);
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["his cover"]), null);
+  // Only for a household set up as one couple (self and spouse).
+  assert.equal(spouseMeant({ ...titled("Life Assured : Mr Lim Ah Kow"), members: HOUSE.members.map((m) => ({ ...m, relationship: "child" })) }, ["my husband"]), null);
+});
+
+test("for a question about the documents, a point about one person's files is that person's list from the library (stress run 23 Oct, S070)", () => {
+  const ask = (statements: Record<string, unknown>[], q = "list my documents") => verifyAnswer(HOUSE, readModelAnswer({ bottomLine: "Here is each adult's list.", nextSteps: [], question: null,
+    statements: statements.map((x) => ({ kind: "fact", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, ...x })) })!, [q]).answer.statements!.map((x) => x.text);
+  assert.deepEqual(ask([{ text: "Lim Ah Kow has 2 documents.", person: "Lim Ah Kow" }, { text: "Tan Mei Ling has the certificate and terms." }, { text: "Ah Kow again.", person: "Lim Ah Kow" }]), [
+    "Lim Ah Kow has 3 documents linked in DearPolicy: Certificate (Certificate.pdf); Scheme terms (Scheme terms.pdf); Policy illustration (Policy illustration.pdf).",
+    "Tan Mei Ling has 3 documents linked in DearPolicy: Certificate (Certificate.pdf); Scheme terms (Scheme terms.pdf); Policy illustration (Policy illustration.pdf)."]);
+  const H: Household = { ...HOUSE, members: [...HOUSE.members, { name: "Lim Xiao Ming", relationship: "child" }] };
+  assert.deepEqual(verifyAnswer(H, readModelAnswer({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "fact", text: "Xiao Ming has none.", person: "Lim Xiao Ming", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null }] })!, ["show our files"]).answer.statements!.map((x) => x.text),
+    ["No document is linked to Lim Xiao Ming in DearPolicy."]);
+  // Not a question about the documents: an unquoted point is left out as before.
+  assert.deepEqual(ask([{ text: "Lim Ah Kow has 2 documents.", person: "Lim Ah Kow" }], "how much for a broken wrist"), []);
 });
 
 async function atest(name: string, fn: () => Promise<void>) {

@@ -18,7 +18,10 @@ import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
    * cost is paid when it is less ("up to $10,000 of the costs ..., whichever is lesser", release-set H7). */
-  lesserOf?: boolean };
+  lesserOf?: boolean;
+  /** The date the person's cover started, as its own cover line prints it (a start date, or the date the line is printed
+   * for): a cover this new may still be inside a waiting period. */
+  coverSince?: string | null };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
 export type RowReport = { dropped: { why: string; text: string; notFit?: boolean }[]; labels: string[];
@@ -59,9 +62,36 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     if (firstYear) firstYears.push(r); else add(r);
   }
   for (const r of firstYears) add(r);
+  // A limit whose own line prints one daily rate ("Capped at S$200 per day" over "S$8,000") pays that rate a day, up to the
+  // limit: the rate is a row of its own after it, so the card for "how much a day" is the rate, never the limit (stress run
+  // 23 Oct, S016). Added last, so every other row keeps its number.
+  for (const r of [...rows]) {
+    const rate = r.figure.kind === "printed" && r.figure.unit === "up_to" ? dailyRateOf(r.source.excerpt, r.figure.amount) : null;
+    if (rate != null && r.figure.kind === "printed") add({ ...r, figure: { kind: "printed", amount: rate, currency: r.figure.currency, unit: "per_day" }, fromDay: null, maxDays: null });
+  }
+  const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
+  for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
     r.lesserOf = true;
   return rows;
+}
+
+/** The one daily rate a limit's own line caps it at ("Capped at S$200 per day", "maximum S$300 per day"), when it is not the
+ * limit itself; null when it prints none, or more than one. */
+function dailyRateOf(excerpt: string, limit: number): number | null {
+  // A daily figure that is something else (an ICU rate, an excess, a companion's or an allowance's) is never the limit's
+  // own rate, so a line that names one gives none (Critic R153-2).
+  if (/\b(?:ICU|intensive|excess|deductible|co-?pay\w*|companion|allowance)\b/i.test(excerpt)) return null;
+  // A line with its own day rule ("from the 11th day") would lose it on a row of its own (TE R6).
+  if (/\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(excerpt)) return null;
+  const rates = new Set(moneyFiguresIn(excerpt).filter((f) => {
+    const at = excerpt.indexOf(f.raw ?? "");
+    // Only a rate that caps what is paid: "Capped at S$200 per day", "maximum S$300 per day".
+    return at >= 0 && /^\s*(?:per|a|each|every)\s+day\b/i.test(excerpt.slice(at + (f.raw ?? "").length))
+      && /\b(?:capped\s+at|up\s+to|maximum(?:\s+of)?|max\.?|limited\s+to|not\s+exceeding)\s*:?\s*$/i.test(excerpt.slice(Math.max(0, at - 30), at));
+  }).map((f) => f.value));
+  const [rate] = [...rates];
+  return rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit ? rate : null;
 }
 
 /** The same benefit of the same cover, for the same person and group, printed in another of their documents. */
@@ -172,14 +202,63 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "not_described" when the row pays only if something happened that the household has not described (an ambulance, a hospital or intensive care stay, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+/** A printed date as a day count (UTC midnight): "20/10/2026" (day first, as Singapore prints it), "2026-10-20",
+ * "20 October 2026". Null for anything else. */
+export function printedDay(text: unknown): number | null {
+  if (typeof text !== "string") return null;
+  const t = text.trim();
+  let m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
+  const at = (y: number, mo: number, d: number) => {
+    const ms = Date.UTC(y, mo - 1, d), x = new Date(ms);
+    return x.getUTCFullYear() === y && x.getUTCMonth() === mo - 1 && x.getUTCDate() === d ? ms / 86_400_000 : null;
+  };
+  if (m) return at(Number(m[3]), Number(m[2]), Number(m[1]));
+  m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (m) return at(Number(m[1]), Number(m[2]), Number(m[3]));
+  m = /^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3})[a-z]*\.?,?\s+(\d{4})$/i.exec(t);
+  if (m && MONTHS.includes(m[2].toLowerCase())) return at(Number(m[3]), MONTHS.indexOf(m[2].toLowerCase()) + 1, Number(m[1]));
+  return null;
+}
+/** Today in Singapore (UTC+8), as a day count. */
+const singaporeDay = (now: Date) => Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
+/** A waiting period runs this long at most: a cover that started earlier is past every one. */
+const LONGEST_WAIT_DAYS = 365;
+/** Why a card is not shown because of a waiting period, or null. The model says for each card whether a waiting period
+ * applies to the event and, as printed, how many days it runs and from what date; the server compares the dates itself.
+ * A period that applies or may apply, and has not ended today (or cannot be dated), hides the card: an amount inside a
+ * waiting period is never shown as payable (stress run 23 Oct, S023). A list cover (critical illnesses, listed injuries)
+ * whose cover started within a year, for an event, with no waiting period said, is hidden too: it was not checked. */
+function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number, household: Household): string | null {
+  // Only for an event: a cover listed with no event asked about ("what is Desmond covered for") is not a payment.
+  if (raw.eventFit !== "on_list" && raw.eventFit !== "any_event") return null;
+  const w = raw.waiting as { applies?: unknown; days?: unknown; from?: unknown } | null | undefined;
+  if (w && typeof w === "object") {
+    if (w.applies === "no") return null;
+    const days = typeof w.days === "number" && Number.isInteger(w.days) && w.days > 0 ? w.days : null;
+    const from = printedDay(w.from);
+    if (days != null && from != null) return today < from + days ? `the event falls inside its ${days}-day waiting period` : null;
+    return "a waiting period applies that could not be dated";
+  }
+  // Only where the row's own document prints a waiting period on a page that names the row's cover: a fracture scale on a
+  // certificate printed this year prints none, and is not hidden for it (Critic R153-1). The live readings carry no start
+  // date, so the cover line's own date (a schedule's issue date) stands in for it.
+  const since = printedDay(row.coverSince);
+  if (raw.eventFit !== "on_list" || since == null || today - since >= LONGEST_WAIT_DAYS) return null;
+  const cover = noNumbers(row.cover).replace(/^group\s+/i, "").toLowerCase();
+  const prints = cover.length > 2 && (household.documents[row.docIndex]?.pages.some((p) => /\bwaiting\s+period/i.test(p.text) && p.text.toLowerCase().includes(cover)) ?? false);
+  return prints ? "its cover started less than a year ago and no waiting period was checked" : null;
+  return null;
+}
+
 /** The model's raw reply with every amount statement rewritten from its row, before readModelAnswer and verifyAnswer see
  * it. Statements of other kinds are left as they are. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household): { json: unknown; report: RowReport } {
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date()): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {} };
   if (!json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return { json, report };
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -193,10 +272,15 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   // named again with another flag, pointed at, or brought back as a companion (TE #107 E7, E8b, E8c).
   // Built after pointers become cards, so a ruled-out pointer counts too (TE #107 E8d).
   const pointed = pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household);
-  const ruledOut = new Set<string>();
+  const ruledOut = new Map<string, string>();
+  const today = singaporeDay(now);
   for (const x of pointed) {
-    const r = x && x.eventFit === "not_on_list" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined;
-    if (r) for (const o of rows) if (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit))) ruledOut.add(o.id);
+    const r = x && x.kind === "amount" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined;
+    // A cover still inside a waiting period for the event is ruled out with its twins, like one the event is not listed for.
+    // So is one that pays only on something the household has not described (an ambulance, a hospital stay; stress run
+    // 23 Oct, S088).
+    const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list` : x.eventFit === "not_described" ? `${names(r)} pays only on something not described` : insideWaiting(x, r, today, household);
+    if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
@@ -208,7 +292,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the event not on that list, is never shown (live run 23 Oct, H2). Decided per card, never read from the prose.
     // The answer says why only when its own words name the cover or benefit; otherwise the household hears an amount was
     // left out (Critic R143-2).
-    if (raw.eventFit === "not_on_list" || ruledOut.has(row.id) || ruledOut.has(named.id)) { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row, rows) }); continue; }
+    if (raw.eventFit === "not_on_list" || ruledOut.has(row.id) || ruledOut.has(named.id)) { report.dropped.push({ why: ruledOut.get(named.id) ?? ruledOut.get(row.id) ?? `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row, rows) }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -474,7 +558,10 @@ function dailyRateAlone(row: ChatRow, household: Household): boolean {
 export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (row: ChatRow) => string): string {
   const f = row.figure;
   const cover = labels?.get(fullCover(row)) ?? fullCover(row);
-  const how = f.kind === "printed" ? (f.unit === "per_day" ? "paid per day" : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? (row.lesserOf ? "the cost, up to this limit, whichever is less" : "up to this limit") : null)
+  // A daily row's first paid day and most days are part of what it pays, so its card always says them (stress run 23 Oct,
+  // S008, S016: "S$30 per day" shown without "from day 11").
+  const daily = `paid per day${row.fromDay != null && row.fromDay > 1 ? `, from day ${row.fromDay} of the stay` : ""}${row.maxDays != null ? `, for at most ${row.maxDays} days` : ""}`;
+  const how = f.kind === "printed" ? (f.unit === "per_day" ? daily : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? (row.lesserOf ? "the cost, up to this limit, whichever is less" : "up to this limit") : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
     // A worked-out figure's card shows how it is worked out ("25% of S$5,000") on its own line, so the label does not. A
