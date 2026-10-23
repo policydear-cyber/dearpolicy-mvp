@@ -1252,6 +1252,62 @@ test("a copy without the server's note or a premium's frequency is the row's, wh
   assert.equal(shown(full, "Neck, Skull or Spine (Full Break)"), 1);
 });
 
+test("a copy in the model's own words is the row's when every word is printed with it and no other row fits as well (live run 23 Oct after #111, A6, D1)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const at = (id: string, benefit: string, doc = amb.source.documentId): ChatRow => ({ ...amb, id, benefit, source: { ...amb.source, documentId: doc } });
+  const later = at("R990", "Instalment Premium, Monthly (the page prints a different premium for the first policy year)"), first = at("R991", "First Year Instalment Premium, Monthly (first policy year only)");
+  const bs = at("R992", "Simple Fracture or Other Fracture due to Accident: Arm, Elbow, Wrist or Ribs (Other Fracture)", "doc-bs"), ps = at("R993", "Arm, Elbow, Wrist or Ribs", "doc-ps");
+  const hip = at("R994", "Simple Fracture or Other Fracture due to Accident: Hip", "doc-bs"), cef = at("R995", "K. Child Education Fund Benefit"), rec = at("R996", "J. Accidental Hospital Recuperation Benefit");
+  const icu = at("R997", "ICU Hospital Cash"), cash = at("R998", "Hospital Cash");
+  const all = [...rows, later, first, bs, ps, hip, cef, rec, icu, cash];
+  const shown = (row: ChatRow, rowBenefit: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "no_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, all, HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.some((l) => l.includes(benefitOf(row)));
+  const benefitOf = (r: ChatRow) => r.benefit.replace(/^[A-Z]\.\s+/, "").split(" (")[0].split(": ").pop()!;
+  for (const [r, n] of [[later, "Monthly Instalment Premium"], [first, "First Year Monthly Instalment Premium"], [bs, "Arm, Elbow, Wrist or Ribs (Other Fracture)"], [bs, "Other Fracture: Arm, Elbow, Wrist or Ribs"]] as const) assert.ok(shown(r, n), n);
+  // Never a row another fits as well or better, or one missing a word of the copy.
+  for (const [r, n] of [[later, "First Year Instalment Premium"], [first, "Instalment Premium, Monthly"], [hip, "Arm, Elbow, Wrist or Ribs"], [bs, "Wrist"], [cef, "Accidental Hospital Recuperation Benefit"],
+    [icu, "Hospital Cash"], [cash, "ICU Hospital Cash"], [first, "First-year instalment premium (discounted)"]] as const) assert.ok(!shown(r, n), `${r.id} ${n}`);
+});
+
+test("a card whose quote is its row's own printed line, and no other row's, keeps its row whatever name was copied (round 11 check, A6)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const at = (id: string, benefit: string, excerpt: string): ChatRow => ({ ...amb, id, benefit, cover: "Comprehensive Critical Illness Benefit", source: { ...amb.source, excerpt } });
+  const later = at("R980", "Instalment Premium, Monthly (the page prints a different premium for the first policy year)", "Instalment Premium : 470.85 Currency");
+  const first = at("R981", "First Year Instalment Premium, Monthly (first policy year only)", "First Year Instalment Premium * : 376.68");
+  const cef = at("R982", "K. Child Education Fund Benefit", "Child Education Fund 5,000"), rec = at("R983", "J. Accidental Hospital Recuperation Benefit", "We will pay a one-time amount of $250 per hospitalisation.");
+  const all = [...rows, later, first, cef, rec];
+  const shown = (row: ChatRow, rowBenefit: string, quote: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "no_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, all, HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.length > 0;
+  assert.ok(shown(later, "Comprehensive Critical Illness Benefit", "Instalment Premium : 470.85"));
+  assert.ok(shown(first, "Comprehensive Critical Illness Benefit", "First Year Instalment Premium * : 376.68"));
+  // Another row's line, a line two rows print, or too short a quote: left out.
+  assert.ok(!shown(later, "Comprehensive Critical Illness Benefit", "First Year Instalment Premium * : 376.68"));
+  assert.ok(!shown(later, "Comprehensive Critical Illness Benefit", "Instalment Premium"));
+  assert.ok(!shown(later, "Comprehensive Critical Illness Benefit", "470.85"));
+  // The slipped id quoting the row meant (S088): still left out.
+  assert.ok(!shown(cef, "Accidental Hospital Recuperation Benefit", "We will pay a one-time amount of $250 per hospitalisation."));
+});
+
+test("a note only one document prints after a benefit's name is the same benefit; two different notes are not (live run 23 Oct after #111, D1; TE #111 C8)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const fig = (amount: number) => ({ kind: "printed", amount, currency: "SGD", unit: "lump_sum", period: null }) as ChatRow["figure"];
+  const bs: ChatRow = { ...amb, id: "R985", benefit: "Simple Fracture or Other Fracture due to Accident: Arm, Elbow, Wrist or Ribs (Other Fracture)", figure: fig(120000), source: { ...amb.source, documentId: "doc-bs" } };
+  const ps: ChatRow = { ...amb, id: "R986", benefit: "Arm, Elbow, Wrist or Ribs", figure: fig(1250), source: { ...amb.source, documentId: "doc-ps" } };
+  const full: ChatRow = { ...amb, id: "R987", benefit: "Neck, Skull or Spine (Full Break)", figure: fig(5000), source: { ...amb.source, documentId: "doc-ps" } };
+  const part: ChatRow = { ...amb, id: "R988", benefit: "Neck, Skull or Spine (Partial Break)", figure: fig(2500), source: { ...amb.source, documentId: "doc-bs" } };
+  const card = (row: ChatRow, rowBenefit = row.benefit) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null,
+    row: row.id, rowBenefit, eventFit: "on_list", waiting: null, period: { from: "", to: "", eventOn: "" } });
+  const go = (rs: ChatRow[], cards: Record<string, unknown>[]) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: cards }, [...rows, ...rs], HOUSE, new Date("2026-10-23T02:00:00Z"));
+  // One card brings the other document's figure with it, as an alternative.
+  assert.equal(go([bs, ps], [card(ps)]).report.labels.length, 2);
+  // A card left out for its copied name whose row is shown anyway is not "left out".
+  const r = go([bs, ps], [card(ps), card(bs, "Ribs fracture lump sum")]).report;
+  assert.equal(r.labels.length, 2);
+  assert.equal(r.dropped.length, 0);
+  // Two different notes are two benefits: no companion.
+  assert.equal(go([full, part], [card(full)]).report.labels.length, 1);
+});
+
 test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const prem: ChatRow = { ...amb, id: "R974", benefit: "Instalment Premium, Monthly" };
@@ -1288,6 +1344,18 @@ test("the same benefit with the same figure from another document is shown once,
   const out = (amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [card(bs), { ...card(ps), conditions: [cond] }] }, [...rows, bs, ps], HOUSE, new Date("2026-10-23T02:00:00Z")).json as { statements: { kind: string; text: string; quote?: string }[] }).statements;
   assert.equal(out.filter((x) => x.kind === "amount").length, 1);
   assert.ok(out.some((x) => x.kind === "fact" && /also depends on this: Death must occur within 365 days/.test(x.text) && x.quote === cond.quote), JSON.stringify(out));
+});
+
+test("with an amount left out, words pointing at the amounts shown go; the rest stays (live run 23 Oct after #111, A6)", () => {
+  const b = "Desmond pays two CI II premiums and a one-off travel premium, shown below.";
+  const a = { summary: b, bottomLine: b, statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }, { text: "The amounts below are monthly.", amount: null }] };
+  dropAmountPointers(a, ["Up to S$73.17"], true);
+  assert.equal(a.bottomLine, "Desmond pays two CI II premiums and a one-off travel premium.");
+  assert.deepEqual(a.statements.map((x) => x.text), ["Up to S$73.17"]);
+  // Nothing left out: pointers stay.
+  const c = { summary: b, bottomLine: b, statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }] };
+  dropAmountPointers(c, ["Up to S$73.17"]);
+  assert.equal(c.bottomLine, b);
 });
 
 test("'the amount is below' with no card goes; 'below the limit' is not a pointer (live run 23 Oct, S087)", () => {
