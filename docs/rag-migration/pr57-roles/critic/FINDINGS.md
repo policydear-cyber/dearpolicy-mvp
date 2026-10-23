@@ -5417,3 +5417,55 @@ Low, note only: `STATES_CONDITION` also matches "not covered", "after" and "befo
 
 ### Tests (run locally, free)
 - At db703c8: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R142: PR #107 re-review at d8f0181 (diff db703c8..d8f0181)
+
+**Verdict: NOT READY, two small fixes in the same function (patch tested below).** R141-1 is fixed: "not on the LCP list, but Living Care pays" now shows Living Care only. But "but" as a clause splitter opens two new holes.
+
+### R142-1 (high, blocking): a pronoun clause still reads the whole sentence, including the "but Living Care …" part
+`saidNotToFit`: when the not-fit clause uses a pronoun, `context` is the **whole sentence**. That includes the contrast clause after "but", which names the other cover. Probes (`r142/scripts/benefit-table/probe.ts`):
+
+| Model fact (LC R901 + LCP R902 named) | d8f0181 | right |
+|---|---|---|
+| "Living Care Plus only pays for 10 early illnesses, so a heart attack may not fall under it, but Living Care covers it." | **no cards** | LC |
+| "Living Care Plus covers 10 early illnesses. A heart attack is not on its list, but Living Care pays." | **LCP only** | LC |
+| "Living Care Plus covers 10 early illnesses. It is not on its list, but Living Care pays." | **no cards** | LC |
+
+- The first row is the existing H2 test wording plus a natural ", but Living Care covers it": the right cover is hidden.
+- The second row is inverted. The right card is hidden and the S$300,000 LCP card is shown: a wrong claimable amount.
+
+**Fix:** for a pronoun clause, read the sentence only **up to the end of the not-fit clause** (plus the sentence before it when it leans back), never the clauses after it.
+
+### R142-2 (medium): a hedge about the same cover after "but" is now refused
+| Model fact | d8f0181 | right |
+|---|---|---|
+| "Heart attack is not on the Living Care Plus list, but it may still be covered if it is diagnosed at an early stage." | LC only | LC + LCP |
+| "A mild heart attack is not on the Living Care Plus list as worded, but the insurer may still accept it." | LC only | LC + LCP |
+| "Heart attack is not named among the Living Care Plus illnesses, but it could be paid if it meets the early-stage definition." | LC only | LC + LCP |
+
+The answer itself says Living Care Plus could still pay, so dropping its card hides a documented benefit. Before d8f0181, "but" did not split, so the door words kept these cards.
+
+**Fix:** also keep the card when a "but" clause right after the not-fit clause starts with it/this/that/they/the insurer **and** has "if" or a door word. "Stroke is not on the LCP list, but it is on the LC list" still refuses LCP, because it has no door word.
+
+### Patch for both (tested in a scratch copy of d8f0181)
+```diff
+       if (/\bif\b/i.test(clause) || STILL_OPEN.test(clause)) return;
+-      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${x}` : x;
++      // "…, but it may still be covered if …": a "but" clause about the same thing (a pronoun, the insurer) that keeps a door open.
++      const after = x.slice(pos + clause.length).match(/^[\s,;]*but\b([^,;:]*)/i)?.[1] ?? "";
++      if (/^\s*(?:it|this|that|they|the\s+insurer)\b/i.test(after) && (/\bif\b/i.test(after) || STILL_OPEN.test(after))) return;
++      const upTo = x.slice(0, pos + clause.length);
++      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${upTo}` : upTo;
+```
+
+With it:
+- chat 63/63, headline 13/13 and table 105/105 pass.
+- The three R141 "but" sentences, "but Living Care pays" with no comma, and the two-sentence version all give LC only.
+- The H2 wording plus ", but Living Care covers it" gives LC only.
+- All three hedges above keep both cards.
+- The R140 ambulance case, the X-ray case and the B7 spine card keep their cards.
+
+**Left open (low):** "Living Care Plus covers 10 early illnesses. A heart attack is not on its list, but Living Care pays." keeps both cards with the patch. The clause does not lean back, so "its" is not resolved. This fails open. That is no worse than before #107, and the prompt is still the main guard. Please add the R142-1 rows and the first R142-2 row as tests.
+
+### Tests (run locally, free)
+- At d8f0181: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
