@@ -5923,3 +5923,7 @@ Free tests on 3f2547b: chat 86/86, headline 13/13, table 106/106.
 - Low: the one-sided note still pairs AD and AD (Public Transport) as cross-document twins (companions, ruledOut). Companions show their own labels and amounts, and dedupe needs the same figure, so this shows an extra card or withholds; it never puts a wrong amount on a label.
 - Low: withoutPointer's ", listed below" cut can leave a stray comma ("The amounts, apply only if ..."). Cosmetic.
 - Holds: the fit fallback (ties and better rivals reject; "Hospital Cash" vs "ICU Hospital Cash" rejects), the condition merge (same row only, money conditions dropped, quote from the row's own document), the dropped-list filter, and amountLeftOut.
+
+## R166 — PR #112 re-check (3f2547b..6de7b2f)
+
+**Verdict: READY.** R165-1 and R165-2 applied as patched, with a test that fails on 3f2547b. My four probes are false and the A6 quote still binds. Low (b) fixed (", shown below," eats its following comma). Low (a) accepted. Free tests on 6de7b2f: chat 87/87, headline 13/13, table 106/106.
