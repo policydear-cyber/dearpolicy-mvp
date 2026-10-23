@@ -5530,3 +5530,75 @@ U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The
 - **The loop is unchanged.** It iterates over the same `pointed` array. `pointedRows` builds a new array without changing its input, so reading it twice is safe.
 - **`said` is still built from the original statements.** That is still right: a pointer fact's own text stays in `said`.
 - **Free tests at b4bffaa:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R147: PR #108 chat round 7 at 5e84b6a (on main 28f2ca1)
+
+**Verdict: NOT READY. One blocker and one medium, both with a small patch tested below.** You asked whether the figure fallback can put a wrong amount on a card. It can: see R147-1.
+
+### R147-1 (high, blocking): the figure fallback in `rowOfQuote` gives a row's full amount for a quote that works a different amount out from it
+The fallback checks only three things: the quote prints one money figure, exactly one of the person's printed rows has that figure, and the two share one non-filler word. A percentage or a multiplier of that figure passes all three. Probes (`r147/scripts/benefit-table/probe.ts`, Lim Ah Kow, no row id):
+
+| Quote | Card at 5e84b6a | Right |
+|---|---|---|
+| "Overseas ambulance evacuation: 50% of the Ambulance Cost limit of S$500" | **Up to S$500** | S$250, or no card |
+| "Hospital cash for ICU: 200% of S$50 per day" | **S$50** | S$100, or no card |
+| "Hospital cash for ICU is doubled (2 x S$50 per day)" | **S$50** | S$100, or no card |
+
+These are wrong claimable amounts. The fallback also ignores the quote's document: the same quote marked D3, a document that does not exist, still matched.
+
+On DC's real documents, the same shape is "Terminal illness: 50% of the Death benefit of S$200,000", which would give the Death row's full amount. (In the test fixture, the accident base "Sum insured" row cannot match because its name is all filler words. That is luck, not a guard.)
+
+**Fix (tested):** take the figure path only when the quote prints exactly one number and has no `%` or multiplier word:
+```ts
+if (figures.length !== 1 || numbersIn(String(raw.quote)).length !== 1 || /%|\b(?:x|times|twice|double[ds]?|half|triple[ds]?|percent)\b/i.test(String(raw.quote))) return undefined;
+```
+`numbersIn` comes from `./check`, already imported for `CAP_WORDS`.
+
+With the fix:
+- All three probes give no card.
+- The A6 tests ("Ambulance claims S$500", "Total premium S$73.17" in its shape) still pass.
+- chat 66/66, headline 13/13 and table 106/106 pass.
+
+Please add the three rows above as tests.
+
+Low, no change needed: "Ambulance excess S$500 per claim" still gives the ambulance card. The card is the real row with its real amount, so this is not a wrong amount.
+
+### R147-2 (medium, fix this round): with cards shown, `dropAmountPointers` deletes coordination rules about the amount shown
+The new cut fires on any clause with AMOUNT_POINTER and DENIES_AMOUNT and no CONDITIONAL word. Real rules about the card match that test:
+
+| Statement next to a shown card | At 5e84b6a |
+|---|---|
+| "The Advance Payment amount below is not paid in addition to the death benefit." | **deleted** |
+| "The amount below is not payable on top of the Advance Payment already paid." | **deleted** |
+| "The amounts below don't count towards the yearly limit." | **deleted** |
+| "The amounts below for Living Care Plus don't apply." (the U8 target) | deleted, correctly |
+
+Those are the R124-2 coordination rules (Advance Payment balance, not paid on top). Deleting them strips a qualifier, and a household could then add the amounts together.
+
+**Fix (tested):** cut only when the denial **ends its clause**, optionally followed by "here", "to it/this/them/this event" or "for it/this/that/them":
+```ts
+const DENIES_END = new RegExp(`(?:${DENIES_AMOUNT.source})(?:\\s+(?:here|to\\s+(?:it|this|them|this\\s+event)|for\\s+(?:it|this|that|them)))?\\s*[.!?]?\\s*$`, "i");
+const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_END.test(c) && !CONDITIONAL.test(c));
+```
+With this:
+- The U8 test still passes, and the Living Care Plus row above is still cut.
+- The three rule sentences are kept.
+- All suites pass.
+
+Please add the first two rows as tests. The full patch for R147-1 and R147-2 is in the Critic scratchpad as `r147-fix.diff`. It is quoted in the relay too.
+
+### Checked and holding
+- **Rule 1, first branch** (the quote is the row's own line, for the same person and document, and only one row matches): same shape as the R134 pointer match. Fine.
+- **Rule 2, `firstDay`:** "after the 10th day" gives fromDay 11, and `renderTable` now shows from-day and at-most-days.
+  - Low: "Hospital cash from day 1 if hospitalised for more than 2 days" would also let a model's fromDay 3 through.
+  - It needs a misread plus that wording, and fromDay does not change a shown amount. Note only.
+- **Spend limit:**
+  - `overSpendCap` runs before `enqueueChat` and returns 429 with SPEND_LIMIT_TEXT.
+  - A failed query counts as zero, so it fails open, as before.
+  - `customerMessage` lets the text through: it is short and has no system words.
+  - `SpendCapReached` is now 429 with the same text. Correct.
+- **Prompt "same meaning in different words":** prose only. It only narrows when "they differ" may be said, when figures, days and conditions are the same.
+- **The percentage-cap inference left out:** agreed. It is safer than breaking the R95/R96/L22/L23 guards.
+
+### Tests (run locally, free)
+- At 5e84b6a: chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
