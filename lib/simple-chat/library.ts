@@ -125,3 +125,34 @@ export function renderLibrary(household: Household, pagesSent?: Set<string>): st
   return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent)).join("\n")}\n</documents>`;
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
+
+const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
+/** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
+ * the documents print with that kind of title ("Mr Tan Yi Chuen, Desmond") while the other is never printed with it. A
+ * title counts only before at least two words of that member's own name. Never read from a name itself. Null otherwise
+ * (stress run 23 Oct, S048: "my husband" was asked about as "Desmond's or Charmaine's?"). */
+export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
+  const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
+  if (!asked) return null;
+  const couple = household.members.filter((m) => m.relationship === "self" || m.relationship === "spouse");
+  if (couple.length !== 2 || new Set(couple.map((m) => m.relationship)).size !== 2) return null;
+  const base = (n: string) => n.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const words = (n: string) => base(n).toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 2);
+  const titles = (m: (typeof couple)[number]) => {
+    const own = new Set(words(m.name));
+    const out: { title: string; printed: string }[] = [];
+    for (const d of household.documents) for (const p of d.pages)
+      for (const x of p.text.matchAll(/\b(Mr|Mrs|Ms|Mdm|Miss|Madam)\.?(?=((?:[\s,]+[A-Za-z]+){2,5}))/g)) {
+        // The name words right after the title, as far as they are this member's.
+        const name = x[2].split(/[\s,]+/).filter(Boolean);
+        const n = name.findIndex((w) => !own.has(w.toLowerCase()));
+        const kept = n < 0 ? name.length : n;
+        if (kept >= 2) out.push({ title: x[1], printed: `${x[1]} ${name.slice(0, kept).join(" ")}` });
+      }
+    return out;
+  };
+  const want = asked === "husband" ? MALE_TITLE : FEMALE_TITLE;
+  const fits = couple.map((m) => ({ m, hits: titles(m).filter((t) => want.test(t.title)) }));
+  const yes = fits.filter((f) => f.hits.length);
+  return yes.length === 1 ? { word: `my ${asked}`, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
+}

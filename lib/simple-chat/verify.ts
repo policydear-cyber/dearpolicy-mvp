@@ -30,6 +30,9 @@ import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
+/** Said when the model gave points and none passed the checks, so a bottom line that introduces them ("here is each adult's
+ * list") never stands alone (stress run 23 Oct, S070). */
+export const NOTHING_SHOWN = "I couldn’t match the points behind this answer to words in your documents, so none are shown. Please ask again, or open the documents on the Documents page.";
 export const NO_ANSWER = "I couldn’t put together an answer from your documents. Please ask again, or ask about one benefit at a time.";
 export const ALTERNATIVES_NOTE = "These are alternatives under one benefit in the same document, not a total.";
 export const DISCLAIMER = "Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.";
@@ -642,6 +645,9 @@ const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitt
 function stayDaysWritten(asked: string[], days: number): boolean {
   const n = String.raw`(\d{1,3}|${Object.keys(NUMBER_WORDS).join("|")})`;
   const res = [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"), new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi")];
+  // Once the conversation is about a hospital stay, a later "and if it was 50 days?" or "3 days so far" gives its length
+  // (stress run 23 Oct, S050, S088).
+  if (asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))) res.push(new RegExp(String.raw`\b${n}[\s-]*days?\b`, "gi"));
   return asked.some((q) => res.some((re) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days)));
 }
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
@@ -1126,6 +1132,16 @@ function libraryFact(household: Household, d: HouseholdDocument): string {
   return `${read}${linked}${d.uploadedFor ? ` It was uploaded for ${baseName(d.uploadedFor)}.` : ""}`;
 }
 
+/** A person's documents, as the library records them, in the server's words: for a question about the documents, a point
+ * the model wrote about whose files are whose ("Desmond has 8 documents linked: ...") has no page to quote (stress run
+ * 23 Oct, S070: "here is each adult's list" with nothing listed). */
+function libraryList(household: Household, person: string): string {
+  const docs = household.documents.filter((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person));
+  if (!docs.length) return `No document is linked to ${person} in DearPolicy.`;
+  const named = (d: HouseholdDocument) => { const label = d.productName?.trim() ? docLabel(household, d) : d.name; return label === d.name ? d.name : `${label} (${d.name})`; };
+  return `${person} has ${docs.length} document${docs.length === 1 ? "" : "s"} linked in DearPolicy: ${docs.map(named).join("; ")}.`;
+}
+
 function libraryCount(household: Household): string {
   const bad = household.documents.filter(unreadable);
   const n = household.documents.length;
@@ -1295,6 +1311,14 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
           continue;
         }
+        // For a question about the documents, a point about one person's files is that person's list, as the library records it.
+        const named = membersNamedIn(household, st.text);
+        const whose = person ?? (named.length === 1 ? named[0] : null);
+        if (di < 0 && aboutLibrary(written[0] ?? "") && whose) {
+          const key = -2 - household.members.findIndex((m) => baseName(m.name) === whose);
+          if (!aboutFiles.has(key)) { aboutFiles.add(key); checked.push({ s: { ...st, text: libraryList(household, whose), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
+          continue;
+        }
         // A point about several files at once ("The other documents (D1, D2, ...) were read") is stated as the library's count.
         if (di < 0 && /\bD\d+\b/.test(st.text) && ABOUT_FILE.test(st.text)) {
           if (!aboutFiles.has(-1)) { aboutFiles.add(-1); checked.push({ s: { ...st, text: libraryCount(household), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
@@ -1391,6 +1415,13 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         citations.push({ chunkId: baseId, policyId: bdoc.policyId, policyName: docLabel(household, bdoc), insurer: bdoc.insurer ?? undefined, pageStart: c.base.found.page, pageEnd: c.base.found.page, documentRole: bdoc.documentRole ?? undefined, excerpt: c.base.found.excerpt, documentDate: bdoc.effectiveDate ?? undefined } as ChatCitation);
         source.citationIds.push(baseId);
       }
+    }
+    // A stay that ends before the daily benefit starts is paid nothing: the daily rate is not shown as a card for it, only
+    // said with the day it starts (stress run 23 Oct, S088).
+    if (c.stay && c.stay.payable === 0 && c.amount) {
+      const said = `${text.replace(/[.\s]+$/, "")}. A ${c.stay.stay}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
+      statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions, asOf: null, source, group: null });
+      return;
     }
     const kind: AnswerStatement["kind"] = c.amount ? (c.amount.illustration ? "calculation" : "benefit_terms") : c.s.kind === "fact" || c.s.kind === "amount" ? "fact" : c.s.kind;
     const gid = groupOf.get(c);

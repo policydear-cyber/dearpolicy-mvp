@@ -646,7 +646,15 @@ async function main() {
     assert.deepEqual(cards(daily(12), ["he was in hospital 12 days"]), [["S$60", "For a 12-day stay, this works out to 2 days of the daily benefit."]]);
     assert.deepEqual(cards(daily(45), ["in hospital forty-five days"]).length, 0);
     assert.deepEqual(cards(daily(45), ["in hospital 45 days after a fall"]), [["S$900", "For a 45-day stay, this works out to 30 days of the daily benefit."]]);
-    assert.deepEqual(cards(daily(8), ["8 days in hospital"]), [[null, "A 8-day stay ends before this daily benefit starts, so it pays nothing for that stay."]]);
+    // A stay that ends before the benefit starts shows no daily card at all, only the point that it pays nothing yet (stress
+    // run 23 Oct, S088).
+    assert.deepEqual(cards(daily(8), ["8 days in hospital"]), []);
+    const short = fixAnswer([daily(8)], {}, ["8 days in hospital"]).answer.statements!;
+    assert.deepEqual(short.filter((x) => x.amount).length, 0);
+    assert.deepEqual(short.filter((x) => x.kind === "fact").map((x) => x.text), ["Daily hospital cash. A 8-day stay ends before this daily benefit starts, so it pays nothing for that stay."]);
+    // Once the conversation is about a stay, a later bare day count gives its length (S050).
+    assert.deepEqual(cards(daily(50), ["and if it was 50 days?", "he was hospitalised with pneumonia"]), [["S$900", "For a 50-day stay, this works out to 30 days of the daily benefit."]]);
+    assert.deepEqual(cards(daily(50), ["and if it was 50 days?", "what does his policy cover"]), []);
     assert.deepEqual(cards(daily(12), ["he was in hospital 21 days"]), []);
     assert.deepEqual(cards(daily(12), []), []);
     assert.deepEqual(cards(daily(12, "Hospital cash\tS$100 per day, maximum 30 days", "S$100"), ["12 days"]), []);
