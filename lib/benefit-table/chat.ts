@@ -462,7 +462,7 @@ const ofBenefit = (sentence: string) => {
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
   // "..., shown below" only says where: the sentence stays without it (live run 23 Oct after #111, A6).
-  const where = sentence.replace(/,\s*(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?(?:shown|listed|set\s+out)\s+below\b/gi, "").replace(/\s+([.,;:!?])/g, "$1").trim();
+  const where = sentence.replace(/,\s*(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?(?:shown|listed|set\s+out)\s+below\b,?/gi, "").replace(/\s+([.,;:!?])/g, "$1").trim();
   if (where !== sentence.trim() && where && !AMOUNT_POINTER.test(where)) return where;
   if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
   if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
@@ -698,7 +698,9 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
   const freq = (t: string) => FREQUENCY.exec(t.replace(/(?:\s*\([^()]*\))+\s*$/, ""))?.[0].toLowerCase().replace(/[^a-z]/g, "").replace(/ly$/, "") ?? null;
   if (freq(copied) && freq(copied) !== freq(row.benefit)) return false;
   // Rows that could be the one meant: the person's other rows, not the same benefit in another document.
-  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)));
+  // Only a same-name twin from another document is no rival; "Accidental Death (Public Transport)" still is.
+  const others = rows.filter((o) => o.id !== row.id && o.personId === row.personId && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier
+    && o.source.documentId !== row.source.documentId && nameParts(o.benefit).core === nameParts(row.benefit).core && sameBenefit(o.benefit, row.benefit)));
   const s = short(copied, FREQUENCY);
   if (s && s === short(row.benefit, TRAILING_NOTES)) return !others.some((o) => short(o.benefit, TRAILING_NOTES) === s);
   // Any other copy in the model's own words ("Monthly Instalment Premium", "Arm, Elbow, Wrist or Ribs (Other Fracture)"
@@ -732,7 +734,11 @@ function quotesRow(quote: unknown, row: ChatRow, rows: ChatRow[]): boolean {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const q = typeof quote === "string" ? norm(quote) : "";
   if (q.length < 8) return false;
-  const holds = (o: ChatRow) => { const e = norm(o.source.excerpt ?? ""); return e.length >= 8 && (e.includes(q) || q.includes(e)); };
+  // A short excerpt inside a longer quote counts only when it names its own benefit (not a bare "S$50,000").
+  const holds = (o: ChatRow) => {
+    const e = norm(o.source.excerpt ?? "");
+    return e.length >= 8 && (e.includes(q) || (q.includes(e) && nameWords(o.benefit).some((w) => e.split(" ").includes(w))));
+  };
   return holds(row) && !rows.some((o) => o.id !== row.id && o.personId === row.personId && holds(o));
 }
 /** A premium's frequency at the end of a name; with notes in brackets. */

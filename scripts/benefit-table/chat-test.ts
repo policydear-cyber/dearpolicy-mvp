@@ -1308,6 +1308,30 @@ test("a note only one document prints after a benefit's name is the same benefit
   assert.equal(go([full, part], [card(full)]).report.labels.length, 1);
 });
 
+test("a benefit with a note of its own stays a rival to the plain one when matching a copied name; a bare amount line binds no quote (Critic R165)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const fig = (amount: number) => ({ kind: "printed", amount, currency: "SGD", unit: "lump_sum", period: null }) as ChatRow["figure"];
+  const at = (id: string, benefit: string, amount: number, doc: string, excerpt = "x"): ChatRow => ({ ...amb, id, benefit, figure: fig(amount), source: { ...amb.source, documentId: doc, excerpt } });
+  const shown = (all: ChatRow[], row: ChatRow, rowBenefit: string, quote: string | null = null) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote,
+    amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "no_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, [...rows, ...all], HOUSE,
+    new Date("2026-10-23T02:00:00Z")).report.labels.length > 0;
+  for (const doc of ["doc-a", "doc-b"]) {
+    const ad = at("R960", "Accidental Death", 600000, "doc-a"), pt = at("R961", "Accidental Death (Public Transport)", 1200000, doc);
+    // "Accidental Death" is the plain row's; never the public-transport row, in the same document or another.
+    assert.ok(!shown([ad, pt], pt, "Accidental Death"), doc);
+    assert.ok(shown([ad, pt], pt, "Accidental Death (Public Transport)"), doc);
+    const cash = at("R962", "Hospital Cash", 100, "doc-a"), icu = at("R963", "Hospital Cash (ICU)", 200, doc);
+    assert.ok(!shown([cash, icu], icu, "Hospital Cash"), doc);
+  }
+  // A row whose whole line is a bare amount is not quoted by a long line about another benefit.
+  const coma = at("R964", "Comatose Benefit", 50000, "doc-a", "Comatose Benefit: 25% of the sum insured, capped at S$50,000 per life");
+  const bare = at("R965", "Natural Catastrophe Benefit", 50000, "doc-a", "S$50,000");
+  assert.ok(!shown([coma, bare], bare, "Comprehensive Critical Illness Benefit", "Comatose Benefit: 25% of the sum insured, capped at S$50,000 per life"));
+  // The row's own longer line still binds (A6).
+  const prem = at("R966", "Instalment Premium, Monthly", 470.85, "doc-a", "Instalment Premium : 470.85 Currency");
+  assert.ok(shown([prem], prem, "Comprehensive Critical Illness Benefit", "Instalment Premium : 470.85"));
+});
+
 test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const prem: ChatRow = { ...amb, id: "R974", benefit: "Instalment Premium, Monthly" };
@@ -1356,6 +1380,10 @@ test("with an amount left out, words pointing at the amounts shown go; the rest 
   const c = { summary: b, bottomLine: b, statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }] };
   dropAmountPointers(c, ["Up to S$73.17"]);
   assert.equal(c.bottomLine, b);
+  // No stray comma where the words sat mid-sentence (Critic R165).
+  const d = { summary: "", bottomLine: "The premiums, shown below, are paid monthly.", statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }] };
+  dropAmountPointers(d, ["Up to S$73.17"], true);
+  assert.equal(d.bottomLine, "The premiums are paid monthly.");
 });
 
 test("'the amount is below' with no card goes; 'below the limit' is not a pointer (live run 23 Oct, S087)", () => {
