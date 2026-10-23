@@ -788,55 +788,36 @@ test("a point that says it shows an amount is given that row's amount; with no a
   assert.deepEqual(r.texts, ["The certificate showing these sums insured is dated 01/01/2026."]);
 });
 
-test("a card for a cover or benefit the answer says the event is not on is never shown (live run 23 Oct, H2; unseen U4, U16)", () => {
+test("a card whose event is not on its cover's list is never shown, decided per card and never from the prose (live run 23 Oct, H2; unseen U4)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
-  const listCover = (id: string, cover: string, benefit: string, person = amb.person, personId = amb.personId): ChatRow => ({ ...amb, id, cover, benefit, person, personId, coverKey: coverKeyOf({ product: amb.product, cover, plan: null }) });
+  const listCover = (id: string, cover: string, benefit: string): ChatRow => ({ ...amb, id, cover, benefit, coverKey: coverKeyOf({ product: amb.product, cover, plan: null }) });
   const lc = listCover("R901", "GROUP LIVING CARE(POLICY NO. 1)", "Coverage against 37 critical illnesses"), lcp = listCover("R902", "GROUP LIVING CARE PLUS(POLICY NO. 1)", "Coverage against 10 early critical illnesses");
   const all = [...rows, lc, lcp];
-  const run = (bottomLine: string, facts: Record<string, unknown>[], named = [lc.id, lcp.id], rs = all) => {
-    const st = (x: Record<string, unknown>) => ({ kind: "fact", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...x });
-    const fromRows = amountsFromRows({ bottomLine, nextSteps: [], question: null, statements: [...facts.map(st), ...named.map((row) => st({ kind: "amount", row, text: "Cover." }))] }, rs, HOUSE);
+  const run = (cards: [string, unknown][], facts: string[] = [], bottomLine = "q") => {
+    const st = (x: Record<string, unknown>) => ({ kind: "fact", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null, ...x });
+    const fromRows = amountsFromRows({ bottomLine, nextSteps: [], question: null, statements: [...facts.map((text) => st({ kind: "uncertainty", text })), ...cards.map(([row, eventFit]) => st({ kind: "amount", row, text: "Cover.", eventFit }))] }, all, HOUSE);
     const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
     const kept = keepLabelledAmounts(a.statements ?? [], fromRows.report).kept;
     return { cards: kept.filter((x) => x.amount).map((x) => x.text.replace(/:.*$/, "")), notes: noteLeftOutAmounts(kept as never[], fromRows.report, (id, text) => ({ id, kind: "uncertainty", text }) as never).filter((x: { text: string }) => x.text === LEFT_OUT_AMOUNT).length };
   };
   const LC = "Coverage against 37 critical illnesses (GROUP LIVING CARE)", LCP = "Coverage against 10 early critical illnesses (GROUP LIVING CARE PLUS)";
-  // The live H2 answer: a sentence leaning on the one naming the cover says the event may not fall under it.
-  let r = run("Living Care pays for a heart attack.", [{ text: "Living Care Plus covers early critical illnesses. It pays only if the diagnosis meets that definition, so a heart attack may not fall under it." }]);
+  // The model says, card by card, whether the event is on the row's list: "not_on_list" is never shown, with no
+  // "left out an amount" note (the answer's own fact says why).
+  let r = run([[lc.id, "on_list"], [lcp.id, "not_on_list"]], ["A heart attack is not on the Living Care Plus list."]);
   assert.deepEqual(r.cards, [LC]);
   assert.equal(r.notes, 0);
-  // A relative clause names the cover the sentence is about (paid H2 wording).
-  assert.deepEqual(run("q", [{ text: "Living Care Plus covers early critical illnesses such as mild coronary artery disease, which a heart attack would not necessarily meet." }]).cards, [LC]);
-  // "but" opens another clause; it never saves the cover the first one rules out (Critic R141-1).
-  assert.deepEqual(run("q", [{ text: "Heart attack is not on the Living Care Plus list, but Living Care pays its sum insured." }]).cards, [LC]);
-  assert.deepEqual(run("q", [{ text: "A heart attack is not one of the 10 early illnesses on the Living Care Plus list, but Living Care covers it." }]).cards, [LC]);
-  // A pronoun is read back, never forward into a "but" clause about another cover (Critic R142-1).
-  assert.deepEqual(run("q", [{ text: "Living Care Plus only pays for 10 early illnesses, so a heart attack may not fall under it, but Living Care covers it." }]).cards, [LC]);
-  assert.deepEqual(run("q", [{ text: "Living Care Plus covers 10 early illnesses. It is not on its list, but Living Care pays." }]).cards, [LC]);
-  // A "but" that keeps the door open for the same cover keeps its card (Critic R142-2).
-  assert.deepEqual(run("q", [{ text: "Heart attack is not on the Living Care Plus list, but it may still be covered if it is diagnosed at an early stage." }]).cards, [LC, LCP]);
-  // Neither list names it: both go, whether said in a point or in the bottom line.
-  assert.deepEqual(run("q", [{ text: "Diabetes is not named among the 37 illnesses Living Care covers or the 10 early illnesses Living Care Plus covers." }]).cards, []);
-  assert.deepEqual(run("Not shown to be covered: diabetes is not on the Living Care or the Living Care Plus list.", []).cards, []);
-  // "Living Care" inside "Living Care Plus" does not name Living Care.
-  assert.deepEqual(run("q", [{ text: "Stroke is not on the Living Care Plus list, so no amount is shown for it." }]).cards, [LC]);
-  // Said of another person, or not about fit (an exclusion, a waiting period, what a payout does): every card stays.
-  for (const text of ["Tan Mei Ling's Living Care Plus is not on her certificate.", "Pre-existing conditions are excluded from Living Care Plus.",
-    "A heart attack now falls outside the Living Care Plus waiting period.", "A Living Care Plus payout does not reduce Living Care."])
-    assert.deepEqual(run("q", [{ text }]).cards, [LC, LCP], text);
-  // A cover with many benefits: only the benefit the sentence names goes ("the ankle row is for a fracture"), never the
-  // cover's other cards; a sentence naming only the cover takes none of them.
-  const hip = idOf("Lim Ah Kow", "Hip"), ankle = idOf("Lim Ah Kow", "Ankle");
-  assert.deepEqual(run("q", [{ text: "The ankle row is for a fracture, so a sprain is not on the ankle benefit's list." }], [hip, ankle], rows).cards.map((c) => c.replace(/ \(.*$/, "")), ["Hip"]);
-  // What the pages leave out ("not shown to be covered"), a door left open (still, unless, pending, yet, but, if), or a row
-  // named outside the clause that says it does not fit: every card stays (Critic R140-1).
-  const amb2 = idOf("Lim Ah Kow", "Ambulance Cost");
-  for (const text of ["A sprain is not shown to be covered by the fracture benefits, but the ambulance cost could still be paid if an ambulance was needed.",
-    "The ambulance cost is not shown to be covered unless an ambulance took him to hospital.", "The ankle benefit is not shown to be payable yet because the X-ray result is pending.",
-    "A back strain isn't one of the listed results; if it turns out to be a broken ankle, the scheme terms show the ankle amount.",
-    "A sprain is not on the fracture list, and the ambulance cost is paid for any emergency."])
-    assert.equal(run("q", [{ text }], [hip, ankle, amb2], rows).cards.length, 3, text);
-  assert.deepEqual(run("A back strain isn't one of the listed results of the Group Personal Accident cover.", [], [hip, ankle], rows).cards.length, 2);
+  assert.deepEqual(run([[lc.id, "not_on_list"], [lcp.id, "not_on_list"]]).cards, []);
+  // Every other value, or none (an older answer), is shown as before.
+  for (const fit of ["on_list", "any_event", "no_event", null, undefined, "maybe"]) assert.deepEqual(run([[lc.id, fit], [lcp.id, fit]]).cards, [LC, LCP], String(fit));
+  // The prose never decides: wording that rules a cover out, or keeps it in, changes no card (TE #107 N1, N8, K1, K6).
+  for (const text of ["A heart attack is not on the Living Care Plus list.", "A fracture doesn't appear on the Living Care list.", "A heart attack is on the Living Care list. It is not on the Living Care Plus list."])
+    assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "on_list"]], [text]).cards, [LC, LCP], text);
+  // A "not_on_list" card takes the same benefit's companion from another document with it.
+  const hip = idOf("Lim Ah Kow", "Hip");
+  assert.deepEqual(run([[hip, "not_on_list"]]).cards, []);
+  // The schema asks for the decision on every statement.
+  const items = (TABLE_ANSWER_SCHEMA.properties.statements as { items: { required: string[] } }).items;
+  assert.ok(items.required.includes("eventFit"));
 });
 test("a sentence that leans on one left out goes with it; with no amount shown, no sentence says the figures differ (unseen U3, U16)", () => {
   const run = (text: string) => verifyAnswer(HOUSE, readModelAnswer({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "uncertainty", text, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]);

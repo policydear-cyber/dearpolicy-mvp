@@ -137,5 +137,7 @@ export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; ne
 export const TABLE_ANSWER_SCHEMA = (() => {
   const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
   return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
-    items: { ...st, required: [...st.required, "row"], properties: { ...st.properties, row: nullable("string") } } } } };
+    items: { ...st, required: [...st.required, "row", "eventFit"], properties: { ...st.properties, row: nullable("string"),
+      // Whether the event asked about is one the row pays for: decided for each card, enforced by lib/benefit-table/chat.ts.
+      eventFit: { anyOf: [{ type: "null" }, { type: "string", enum: ["on_list", "not_on_list", "any_event", "no_event"] }] } } } } } };
 })();
