@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, coverLabels, citedPages, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, chatRows, coverLabels, citedPages, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
@@ -139,7 +139,7 @@ test("money in the model's own sentence never removes what the amount is for (R9
 });
 test("the model's sentence naming another benefit is not used: the row's own benefit is said (R90-2)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Death benefit pays this." }]);
-  assert.match(r.amounts[0]?.text ?? "", /^Ambulance Cost \(Group Personal Accident\): up to this limit\.$/);
+  assert.match(r.amounts[0]?.text ?? "", /^Ambulance Cost \(Group Personal Accident\): up to this limit, per incident\.$/);
   assert.doesNotMatch(JSON.stringify(r.statements), /Death benefit/);
 });
 test("with no table rows yet, an amount asked for is said plainly not to be ready (R90-3)", () => {
@@ -175,7 +175,7 @@ test("a plan named with a number of 100 or more keeps its amount and its name (R
   const named = rows.map((r) => ({ ...r, plan: r.product === "Group Scheme" ? "300" : r.plan }));
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Ambulance." }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "Hip." }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.statements));
-  assert.match(r.amounts[0].text, /^Ambulance Cost \(Group Personal Accident, plan 300\): up to this limit\.$/);
+  assert.match(r.amounts[0].text, /^Ambulance Cost \(Group Personal Accident, plan 300\): up to this limit, per incident\.$/);
   assert.match(r.amounts[0].amount, /500/);
   assert.match(r.amounts[1].amount, /450,000/);
 });
@@ -208,7 +208,7 @@ test("real names carry policy and scheme numbers: their rows keep their amounts"
   const named = rows.map((r) => r.product === "Group Scheme" ? { ...r, product: "MINDEF & MHA GROUP INSURANCE SCHEME (GROUP POLICY NO. G007500)", cover: "GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" } : r);
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "a" }, { row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", text: "b" }], named);
   assert.equal(r.amounts.length, 2, JSON.stringify(r.dropped));
-  assert.match(r.amounts[0].text, /^Ambulance Cost \(GROUP PERSONAL ACCIDENT\): up to this limit\.$/);
+  assert.match(r.amounts[0].text, /^Ambulance Cost \(GROUP PERSONAL ACCIDENT\): up to this limit, per incident\.$/);
   for (const name of ["GROUP POLICY NO. G007500", "POLICY NO.3037850", "Plan 300", "Plan 1000", "Plan 5000 Plus", "Option 2A", "Group Term Life (Policy 0012345678)", "Scheme 2026",
     "Policy No: 23-456789-01", "Certificate 000123", "SG-2026-001234", "12 Critical Illnesses", "Section 4.2.1", "Hospital & Surgical (Ward B1)", "Coverage against 37 critical illnesses", "Benefit 365 days", "Outpatient 120 visits"])
     assert.ok(!nameStatesMoney(name), name);
@@ -477,6 +477,49 @@ test("a qualified premium line, another life's or a rider's, is never the cover'
     reading("personal_proof", "CI Plan", [schedCover({ premium: 470.85, premiumQuote: "Instalment Premium\t: 470.85" })], []));
   assert.equal(two.covers[0].premium, null);
 });
+test("a first-year premium printed once on the premium's page is its own row, given with the premium (release-set A6)", () => {
+  const withFirst = (extra: string) => checkReading(src({ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text.replace("Instalment Premium\t: 470.85", `${extra}\nInstalment Premium\t: 470.85`) }] }),
+    reading("personal_proof", "CI Plan", [schedCover({ premium: 470.85, premiumQuote: "Instalment Premium\t: 470.85" })], []));
+  const c = withFirst("First Year Instalment Premium * : 376.68").covers[0];
+  assert.equal(c.firstYearPremium, 376.68);
+  assert.equal(c.firstYearLabel, "First Year Instalment Premium");
+  // Two first-year lines, or one with no figure of its own, give none (the note is still said).
+  assert.equal(withFirst("First Year Instalment Premium * : 376.68\nFirst Year Premium (Rider) : 12.00").covers[0].firstYearPremium ?? null, null);
+  assert.equal(withFirst("First Year Instalment Premium * : see page 4").covers[0].firstYearPremium ?? null, null);
+  assert.equal(withFirst("First Year Instalment Premium * : see page 4").covers[0].premiumNote, "the page prints a different premium for the first policy year");
+  // Named, the premium row brings the first-year row with it; both shown, never as alternatives.
+  const H: Household = { ...HOUSE2, documents: [{ ...HOUSE2.documents[0], pages: [{ page: 3, text: HOUSE2.documents[0].pages[0].text.replace("Instalment Premium\t: 470.85", "First Year Instalment Premium * : 376.68\nInstalment Premium\t: 470.85") }] }, ...HOUSE2.documents.slice(1)] };
+  const rs = chatRows(assembleTable([withFirst("First Year Instalment Premium * : 376.68")], family, []), H);
+  assert.deepEqual(rs.filter((r) => /Premium/.test(r.benefit)).map((r) => r.benefit), ["Instalment Premium (the page prints a different premium for the first policy year)", "First Year Instalment Premium (first policy year only)"]);
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: rs.find((r) => /^Instalment Premium/.test(r.benefit))!.id }] };
+  const fromRows = amountsFromRows(raw, rs, H);
+  const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["how much do we pay"], new Set(fromRows.report.labels)).answer;
+  const shown = keepLabelledAmounts(a.statements ?? [], fromRows.report).kept.filter((x) => x.amount);
+  assert.deepEqual(shown.map((x) => x.amount!.text), ["S$470.85", "S$376.68"]);
+  assert.ok(shown.every((x) => !x.group));
+});
+test("a figure printed per child (or per incident) says so on its card, never as a family total (release-set H10)", () => {
+  const amb = rows.find((r) => r.benefit === "Ambulance Cost")!;
+  const fund = { ...amb, benefit: "Child Education Fund Benefit", figure: { kind: "printed", amount: 5000, currency: "SGD", unit: "lump_sum" } as typeof amb.figure, source: { ...amb.source, excerpt: "Child Education Fund Benefit* S$5,000 per child (up to 2 children)" } };
+  assert.match(rowLabel(fund), /: per child \(up to 2 children\)\.$/);
+  // A "per" that follows another figure is not this one's.
+  assert.doesNotMatch(rowLabel({ ...fund, source: { ...fund.source, excerpt: "Child Education Fund Benefit S$5,000; Ambulance S$500 per incident" } }), /per/);
+});
+test("a premium sentence never says the insurer decides which premium applies (release-set A6)", () => {
+  const run = (bottomLine: string, text: string) => {
+    const a = verifyAnswer(HOUSE, readModelAnswer({ bottomLine, nextSteps: [], question: null, statements: [{ kind: "uncertainty", text, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]).answer;
+    return { bottom: a.bottomLine, texts: (a.statements ?? []).map((x) => x.text) };
+  };
+  const r = run("Here are the premiums. The pages print two premiums, so the insurer decides which applies.", "The proposal prints a different premium from the schedule, so the insurer decides which applies. The schedule is later.");
+  assert.equal(r.bottom, "Here are the premiums.");
+  assert.deepEqual(r.texts, []);
+  assert.deepEqual(run("b", "The documents print different premium figures, so Singlife decides if they differ.").texts, []);
+  assert.deepEqual(run("b", "The documents print different premium figures. The schedule is the one to rely on, and Singlife decides if they differ.").texts, []);
+  // A premium rule the documents print is not about which premium applies (Critic R131-3).
+  assert.deepEqual(run("b", "Premiums are waived if the insurer determines you are totally disabled.").texts, ["Premiums are waived if the insurer determines you are totally disabled."]);
+  // Not about a premium: kept.
+  assert.deepEqual(run("b", "Two documents print different amounts for the fracture, so the insurer decides which applies.").texts, ["Two documents print different amounts for the fracture, so the insurer decides which applies."]);
+});
 test("a premium on a page that names another life is not used (TE #97)", () => {
   const base = HOUSE2.documents[0].pages[0].text;
   for (const extra of ["Life Assured 2\t: Goh Siew Lan", "Insured\t: Tan Mei Ling", "Second life insured: Tan Mei Ling", "Name of Life Assured\t: Goh Siew Lan",
@@ -529,11 +572,49 @@ const whole = (quote: string, person = "Lim Ah Kow", baseQuote = "Critical Illne
 };
 const LUMP = "100% of the Sum Assured will be payable in one lump sum.";
 test("100% of the sum insured in a policy wording is the person's printed sum insured (release-set A3)", () => {
-  assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  assert.deepEqual(whole(LUMP).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
   // Wording that limits it (a cap, any figure) is never read as the whole sum insured.
   assert.deepEqual(whole("100% of the Sum Assured, up to S$400,000, will be payable.").amounts, []);
   // A sum insured on a page that does not name the person is not theirs.
   assert.deepEqual(whole(LUMP, "Tan Mei Ling").amounts, []);
+});
+// The CI II schedule as printed: "Sum" over "Assured/", the plan's name wrapped onto the next line, a second row (the death
+// benefit) and a proposal page whose table has no clean Sum Assured column (round 4, A3).
+const PLAN_SCHED = "Policy Schedule\nPlan\t: Comprehensive Critical Illness II\nAssured\t: Lim Ah Kow\nFirst Year Instalment Premium * : 376.68\n: Singapore Dollar\nInstalment Premium\t: 470.85\tCurrency\n"
+  + "Basic Benefits\tSum\tInstalment\tPremium\tBenefit\tBenefit\nAssured/\tPremium\tCessation\tCommencement\tCessation\nBenefit\tDate\tDate\tDate\n"
+  + "Comprehensive Critical\t300,000.00\t269.05\t19/10/2036\t19/10/2026\t19/10/2036\nIllness Benefit\n- Health Extra\t---\t201.80\t19/10/2036\t---\t---\nDeath Benefit\t5,000.00\t---\t---\t19/10/2026\t19/10/2036";
+const PROPOSAL = "Life Assured\t: LIM AH KOW\nCurrency\t: SGD\nSum Assured /\tDiscount\nComprehensive Critical\n10\t10\t300,000.00\t298.95\t10%\t269.05\nIllness II";
+const planHouse = (sched: string, extra: { page: number; text: string }[] = [], product = "Comprehensive Critical Illness II"): Household => ({ ...HOUSE, documents: [
+  { ...doc(WORDING, "CI policy.pdf", [{ page: 2, text: PROPOSAL }, { page: 3, text: sched }, ...extra, { page: 9, text: "2.2. Critical Illness Benefit\n100% of the Sum Assured will be payable in one lump sum." }]), productName: product },
+  doc(OTHER_POLICY, "Certificate.pdf", [{ page: 1, text: "GROUP TERM LIFE\nLim Ah Kow\tS$500,000\nTan Mei Ling\tS$1,000,000" }]),
+] });
+const PROPOSAL_ROW = "Comprehensive Critical\n10 10 300,000.00 298.95 10% 269.05\nIllness II";
+test("100% of the Sum Assured is the plan table's own Sum Assured cell, read only where it is plainly the plan's (round 4, A3)", () => {
+  const ok = [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (Comprehensive Critical Illness II, page 3)"]];
+  // The table row step's base is the proposal page; its schedule prints the plan's Sum Assured column.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED)).amounts, ok);
+  // A row above the plan's (a rider printed first) makes it no first row: refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t300,000.00", "Early Critical Illness Rider\t50,000.00\t12.00\t-\t-\t-\nComprehensive Critical\t300,000.00"))).amounts, []);
+  // A rider printed as the only first row, its name on the line above its cells or with the product's rider words, is
+  // never the plan's Sum Assured, even when the base worked out is the rider's figure (TE #104 P1, P2).
+  const rider = (row: string) => PLAN_SCHED.replace("Comprehensive Critical\t300,000.00", `${row}\t50,000.00\t12.00\t-\t-\t-\nComprehensive Critical\t300,000.00`);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early\nCritical Illness"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Early Critical Illness Rider\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early Critical Illness Rider"), [], "Comprehensive Critical Illness II with Early Critical Illness Rider")).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Early Critical Illness\t50,000.00\t12.00", "50,000.00", "D1", planHouse(rider("Early Critical Illness"), [], "Comprehensive Critical Illness II with Early Critical Illness Rider")).amounts, []);
+  // A first row naming another benefit ("Critical Illness Hospital Income") or words beyond the product's name is refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t", "Critical Illness Hospital Income\t").replace("\nIllness Benefit\n", "\n"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED, [], "Shield Plan")).amounts, []);
+  // A row that does not name the wording's benefit is refused.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Comprehensive Critical\t", "Comprehensive Life\t").replace("\nIllness Benefit\n", "\n"))).amounts, []);
+  // Another page of the document printing a different sum for the plan: neither is taken.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED, [{ page: 4, text: PLAN_SCHED.replace("300,000.00", "250,000.00") }])).amounts, []);
+  // A schedule that also names another member is never read.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED + "\nSpouse\t: Tan Mei Ling")).amounts, []);
+  // A limit column is not a Sum Assured column, and a cell that is not the worked-out sum is not taken.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Basic Benefits\tSum\t", "Basic Benefits\tLimit\t"))).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("\t300,000.00\t", "\t200,000.00\t"))).amounts, []);
+  // Spouse's own plan table does not answer for him.
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", PROPOSAL_ROW, "300,000.00", "D1", planHouse(PLAN_SCHED.replace("Assured\t: Lim Ah Kow", "Assured\t: Tan Mei Ling"))).amounts, []);
 });
 test("the 100% fallback never takes another policy's or person's sum, or overrides a table's own base (Critic R126-1)", () => {
   // Another policy's sum (the group certificate's term life line), even on a line naming the person.
@@ -546,13 +627,16 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   // A table that prints its own base ("Sum Insured S$5,000") settles it: never the person's S$600,000.
   assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Lim Ah Kow\tS$600,000", "S$600,000", "D2").amounts, []);
   assert.deepEqual(whole("Medical expenses\t100%", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1").amounts, []);
-  // A page printing two sums insured cannot say which one the wording's 100% is of (TE #103 A3).
-  const two: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nDeath Benefit\t5,000.00\nTerm Rider\t150,000.00" }) }) };
+  // A page printing two sums insured, not as a plan table's Sum Assured column, cannot say which one the wording's 100% is
+  // of (TE #103 A3).
+  const two: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text.replace("Benefit\tSum Assured\n", "Sum Assured\n") + "\nDeath Benefit\t5,000.00\nTerm Rider\t150,000.00" }) }) };
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", two).amounts, []);
-  // A schedule printing the CI sum and a smaller death benefit: neither is "the" sum insured, whichever line is quoted
-  // (Critic R127-1, the CI II schedule's shape).
+  // Under a plan table's Sum Assured column, the CI row's own cell is the CI wording's sum, whatever rows follow it; a death
+  // wording never takes it (Critic R127-1, the CI II schedule's shape; round 4 A3).
   const withDeath: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85\nDeath Benefit\t5,000.00" }) }) };
-  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withDeath).amounts, []);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withDeath).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
+  const deathToo: Household = { ...withDeath, documents: withDeath.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
+  assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Death Benefit\t5,000.00", "5,000.00", "D1", deathToo).amounts, []);
   // With one amount line, wording headed by another benefit ("DEATH BENEFIT") never takes the CI line.
   const deathWording: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 11, text: "DEATH BENEFIT\n100% of the Sum Assured will be payable on death." }] }) };
   assert.deepEqual(whole("100% of the Sum Assured will be payable on death.", "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", deathWording).amounts, []);
@@ -567,7 +651,7 @@ test("the 100% fallback never takes another policy's or person's sum, or overrid
   assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Hospital Income\t300,000.00", "300,000.00", "D1", income).amounts, []);
   // A premium line on the page is not a second benefit amount.
   const withPremium: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: d.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nInstalment Premium\t: 470.85" }) }) };
-  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of the sum insured, which is the amount shown"]]);
+  assert.deepEqual(whole(LUMP, "Lim Ah Kow", "Critical Illness Benefit\t300,000.00", "300,000.00", "D1", withPremium).amounts, [["S$300,000", "100% of Lim Ah Kow's sum insured of S$300,000 (CI policy, page 3)"]]);
   // Wording that deducts, pro-rates, excludes or aggregates is not the whole sum (TE #103 A5).
   for (const words of ["after deducting any amount already paid", "pro-rated by age", "in proportion to the loss", "excluding any Advance Payment", "net of any claim paid", "in the aggregate"]) {
     const H: Household = { ...HOUSE3, documents: HOUSE3.documents.map((d, i) => i ? d : { ...d, pages: [...d.pages, { page: 10, text: `TOTAL DISABLEMENT\n100% of the Sum Assured, ${words}.` }] }) };
@@ -638,6 +722,136 @@ test("a short document no row comes from is sent whole, unless it could not be r
   assert.equal(extra, 14);
   const payee = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: 37, text: "All claims will be paid directly to the Insured Person, proper claimant or legal representative, as applicable." }] }) };
   assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
+});
+
+// ------------------------------------------------------------------ live run 22 Oct (ab4026a) round 4
+/** The answer for these model statements, as the chat turn has it before the shut-out check, and that check's result. */
+function shutOut(bottomLine: string, statements: Record<string, unknown>[]) {
+  const raw = { bottomLine, nextSteps: [], question: null, statements: statements.map((s) => ({
+    kind: "amount", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, ...s })) };
+  const fromRows = amountsFromRows(raw, rows, HOUSE);
+  const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+  const left = dropPeopleShutOut(a, rows, HOUSE, fromRows.report.labels);
+  return { left, bottom: a.bottomLine, texts: (a.statements ?? []).filter((s) => !s.amount).map((s) => s.text), amounts: (a.statements ?? []).filter((s) => s.amount).length };
+}
+const fact = (text: string, person: string | null = null) => ({ kind: "uncertainty", text, person, quote: null, document: null });
+test("a sentence that shuts a person out of a cover their own cards or rows show is left out (live run 22 Oct, C5)", () => {
+  const hips = [{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow" }, { row: idOf("Tan Mei Ling", "Hip"), person: "Tan Mei Ling" }];
+  // "not Tan" while Tan's own card is shown: left out, and the bottom line is the server's.
+  let r = shutOut("Both are real, and they belong to Lim, not Tan Mei Ling.", hips);
+  assert.equal(r.left.length, 1);
+  assert.doesNotMatch(String(r.bottom), /not Tan/);
+  assert.equal(r.amounts, 2);
+  // Only Lim's card shown, but Tan has her own row for the same benefit: still left out.
+  r = shutOut("This is Lim's alone. The hip benefit pays a share of the sum insured.", [hips[0]]);
+  assert.deepEqual(r.left, ["This is Lim's alone."]);
+  assert.match(String(r.bottom), /hip benefit/);
+  for (const s of ["Only Lim Ah Kow has this accident cover.", "This accident cover belongs only to Lim.", "The accident cover is Lim's, not Mei Ling's.", "It is held by Lim, not Tan Mei Ling."]) {
+    r = shutOut("Here it is.", [hips[0], fact(s)]);
+    assert.deepEqual(r.left, [s], s);
+  }
+  // A sentence that gives a reason or a condition, or does not speak of ownership, is never left out (Critic R131-1).
+  for (const s of ["Tan does not get the ambulance benefit, because no ambulance was used.", "Tan is not covered for this event, because a hairline crack is not a listed fracture.",
+    "Tan cannot claim the recuperation benefit unless she stays in hospital for 24 hours.", "Mei Ling has no accident cover.", "Only Lim's hip card is shown here, if Mei Ling was not hurt."]) {
+    r = shutOut("Here it is.", [...hips, fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
+  // A kind of cover she has no row for is not shut out of anything she has.
+  for (const s of ["The travel policy belongs to Lim, not Tan Mei Ling.", "Only Lim has motor cover."]) {
+    r = shutOut("Here it is.", [hips[0], fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
+  // A card of hers for another cover or policy says nothing about this one (TE #104 S4).
+  for (const s of ["Only Lim has the SaveMore policy.", "The SaveMore policy belongs to Lim, not Tan Mei Ling."]) {
+    r = shutOut("Here it is.", [hips[1], fact(s)]);
+    assert.deepEqual(r.left, [], s);
+  }
+  // Naming both, or saying what is the person's own, shuts no one out.
+  for (const s of ["Lim and Tan Mei Ling each have their own accident cover.", "The amount below is Lim's own accident cover."]) {
+    r = shutOut(s, hips);
+    assert.deepEqual(r.left, [], s);
+  }
+});
+
+test("what prose says about the library is held to the library's own record (live run 22 Oct, E4, A8)", () => {
+  // Three documents: two linked to both, one (the illustration) to Lim only, uploaded for him.
+  const H: Household = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId === ILP ? { ...d, linkedPeople: ["Lim Ah Kow"], uploadedFor: "Lim Ah Kow" } : { ...d, uploadedFor: "Tan Mei Ling" }) };
+  const run = (bottomLine: string, statements: Record<string, unknown>[] = [], q = "show me mei ling's documents") => {
+    const { answer: a, report } = verifyAnswer(H, readModelAnswer({ bottomLine, nextSteps: [], question: null, statements: statements.map((x) => ({ kind: "fact", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, ...x })) })!, [q]);
+    return { bottom: a.bottomLine, texts: (a.statements ?? []).map((x) => x.text), left: report.sentencesLeftOut };
+  };
+  // A wrong count is replaced by the record's count; a right one is kept.
+  assert.equal(run("Mei Ling has four documents linked to her.").bottom, "Tan Mei Ling has 2 documents linked in DearPolicy.");
+  assert.equal(run("Mei Ling has two documents linked to her.").bottom, "Mei Ling has two documents linked to her.");
+  assert.equal(run("You have 5 documents uploaded.").bottom, "Your library has 3 documents.");
+  // A count of some kind of document is not the library count (Critic R131-4).
+  assert.equal(run("Mei Ling has two travel documents.").bottom, "Mei Ling has two travel documents.");
+  // A count of documents that print or show something is not a library count.
+  assert.equal(run("Two documents print different amounts for this.").bottom, "Two documents print different amounts for this.");
+  // Uploaded for, or linked to, someone the record does not say: left out.
+  let r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate and the Policy illustration were uploaded under Mei Ling's name. Both are read." }]);
+  assert.deepEqual(r.texts, ["Both are read."]);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Policy illustration is linked to Lim Ah Kow and Tan Mei Ling." }]);
+  assert.deepEqual(r.texts, []);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate is linked only to Lim." }]);
+  assert.deepEqual(r.texts, []);
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Policy illustration is linked only to Lim Ah Kow. The Certificate was uploaded for Mei Ling." }]);
+  assert.deepEqual(r.texts, ["The Policy illustration is linked only to Lim Ah Kow. The Certificate was uploaded for Mei Ling."]);
+  // What no file is ("no document is linked to Mei Ling") is not a claim about the file the sentence names.
+  r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate lists only Lim, and no document is linked to Mei Ling alone." }]);
+  assert.equal(r.texts.length, 1);
+  // Asked about documents, an unquoted point about one file is said from its record, never dropped.
+  r = run("Mei Ling has two documents.", [{ text: "The group certificate for the scheme.", document: "D1" }, { text: "The scheme's terms.", document: "D2" }]);
+  assert.equal(r.texts.length, 2);
+  assert.match(r.texts[0], /^Certificate \(Certificate\.pdf\) was read\. It is linked to Lim Ah Kow and Tan Mei Ling in DearPolicy\. It was uploaded for Tan Mei Ling\.$/);
+  // Asked how to file a claim, or which documents a claim needs, the question is not about the library (TE #104 L9).
+  for (const q of ["how do I file a claim for Lim's hip", "what documents do I need to claim"])
+    assert.deepEqual(run("Here.", [{ text: "Notice must be given within 30 days.", document: "D2" }], q).texts.filter((t) => /was read\./.test(t)), [], q);
+  // Not asked about documents, it is not.
+  assert.equal(run("Here.", [{ text: "The group certificate for the scheme.", document: "D1" }], "how much is the accident cover").texts.length, 0);
+});
+
+test("a row the checks refuse is given as the same benefit's same figure from another document, never another figure (H1)", () => {
+  const PROSE = "aaaaaaaa-0000-0000-0000-00000000000c";
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(PROSE, "Benefit summary.pdf", [{ page: 5, text: "BENEFIT 2: GROUP PERSONAL ACCIDENT\nB. Hip\nIn the event of a fracture the Company will pay seventy five\npercent (75%) of the Sum Insured in the following manner" }])] };
+  const hip = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Hip")!;
+  const twin = { ...hip, id: `R${rows.length + 1}`, docIndex: H.documents.length - 1, source: { ...hip.source, documentId: PROSE, page: 5, excerpt: "the Company will pay seventy five\npercent (75%) of the Sum Insured in the following manner" } };
+  const rs = [...rows, twin];
+  const give = (id: string, r2 = rs) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: id }] };
+    const fromRows = amountsFromRows(raw, r2, H);
+    const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer;
+    return (a.statements ?? []).filter((x) => x.amount).map((x) => [x.amount!.text, x.source?.page]);
+  };
+  // The prose row alone is refused (its percentage is wrapped onto the next line); named, the table row is given instead.
+  assert.deepEqual(give(twin.id, [twin]), []);
+  assert.deepEqual(give(twin.id), [["S$450,000", 2]]);
+  // Named itself, the table row is given, once.
+  assert.deepEqual(give(hip.id), [["S$450,000", 2]]);
+  // The named row's own condition, printed only on its page, goes with the stand-in as a point quoting that page; one that
+  // states money cannot, so there is then no stand-in (Critic R131-2).
+  const all = (r2: ChatRow[], H2 = H) => {
+    const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: twin.id }] };
+    const fromRows = amountsFromRows(raw, r2, H2);
+    return (verifyAnswer(H2, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer.statements ?? []).map((x) => [x.amount?.text ?? null, x.text, x.source?.page]);
+  };
+  const conditioned = { ...twin, conditions: ["In the event of a fracture"] };
+  assert.deepEqual(all([...rows, conditioned]).filter(([, t]) => /also depends on/.test(String(t))), [[null, "Hip also depends on this: In the event of a fracture", 5]]);
+  const H3: Household = { ...H, documents: H.documents.map((d) => d.policyId !== PROSE ? d : { ...d, pages: [{ ...d.pages[0], text: d.pages[0].text + "\nNo more than S$1,000 is paid for any one fracture." }] }) };
+  const moneyed = { ...twin, conditions: ["No more than S$1,000 is paid for any one fracture."] };
+  assert.deepEqual(all([...rows, moneyed], H3).filter(([a]) => a), []);
+  // A twin with another figure is no stand-in.
+  const other = { ...hip, figure: { ...hip.figure, amount: 300000 } as typeof hip.figure, id: twin.id, docIndex: twin.docIndex, source: twin.source };
+  assert.deepEqual(give(twin.id, [...rows.filter((r) => r !== hip), other]).filter(([t]) => t === "S$450,000"), []);
+});
+
+test("a number the documents print as a policy number is no money when the sentence calls it a policy number (H8)", () => {
+  const H: Household = { ...HOUSE, documents: [...HOUSE.documents, doc("aaaaaaaa-0000-0000-0000-00000000000d", "Group cert.pdf", [{ page: 1, text: "GROUP TERM LIFE(POLICY NO.3037850)\nLim Ah Kow\tS$500,000" }])] };
+  const said = (text: string) => (verifyAnswer(H, readModelAnswer({ bottomLine: text, nextSteps: [], question: null, statements: [] })!, ["q"]).answer.bottomLine);
+  assert.equal(said("The cover's own policy number, shown against Group Term Life, is 3037850."), "The cover's own policy number, shown against Group Term Life, is 3037850.");
+  // Not called a policy number, or a figure the documents never print as one: still money.
+  assert.notEqual(said("Group Term Life pays 3037850."), "Group Term Life pays 3037850.");
+  assert.notEqual(said("The policy number is fine and the payout is 3037851."), "The policy number is fine and the payout is 3037851.");
 });
 
 async function atest(name: string, fn: () => Promise<void>) {

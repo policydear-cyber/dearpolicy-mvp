@@ -399,7 +399,7 @@ const WHOLE_FALLBACK = new Set(["the percentage is not the quoted row's own figu
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
  *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
  *   amount (A10c). */
-function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string): Found | null {
+function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string, serverWords: ReadonlySet<string> = new Set()): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
   const preferred = po.baseDocument ? Number(/^D(\d+)$/i.exec(po.baseDocument.trim())?.[1] ?? NaN) - 1 : null;
@@ -407,35 +407,108 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (!bf) return null;
   const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
   const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  if (bf.docIndex !== wording.docIndex && !(number(wdoc) && number(wdoc) === number(bdoc))) return null;
-  const page = bdoc.pages.find((p) => p.page === bf.page);
-  if (!page) return null;
+  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc));
+  if (samePolicy && quotedLineIsWhole(bf, wording, household, person)) return bf;
+  // Otherwise the plan's own Sum Assured cell, in the wording's document or the base's (when it is the same policy).
+  const want = moneyFiguresIn(po.baseAmount)[0]?.value ?? numbersIn(po.baseAmount)[0];
+  if (want == null) return null;
+  // Words a plan row's name may print besides the benefit's: the product's name as the app read it (the document's own
+  // record, or the server's label for a table row; never the model's words).
+  // A rider's words in the product's name ("... II with Early Critical Illness Rider") are not the plan's (TE #104 P2).
+  const product = [wdoc, ...(samePolicy ? [bdoc] : [])].flatMap((d) => tokens((d.productName ?? "").split(RIDER_PART)[0]));
+  return planSumAssured(household, [wording.docIndex, ...(samePolicy && bf.docIndex !== wording.docIndex ? [bf.docIndex] : [])], wording, person, want,
+    new Set([...product, ...(serverWords.has(st.text) ? tokens(st.text) : [])]));
+}
+/** A policy schedule's plan table: a header line with exactly one "Sum Assured" (or "Sum Insured") column, which may be
+ * printed over two lines ("Sum" above "Assured/"), and the first row under it, with as many cells: the basic plan, whose
+ * sum assured is "the Sum Assured" its wording pays a percentage of. Only the header's own continuation lines (each with
+ * a tab) may come between the header and the row: an amount, or a line with no tab (a row's name printed above its cells,
+ * "Early" over "Critical Illness\t50,000.00"), makes it no first row (TE #104 P1). A rider's row is never the plan's. The row's name is its first cell and the lines right after it that continue the
+ * name ("Comprehensive Critical" / "Illness Benefit"). */
+const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
+const RIDER_PART = /\b(?:with|riders?|plus|supplementary|add-?ons?)\b|[+&]/i;
+const SA_CELL = /^(?:S\$|SGD|US\$|\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$/;
+function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
+  const cells = lines[i].split("\t").map((c) => c.trim());
+  if (cells.length < 2 || !/[A-Za-z]/.test(cells[0]) || /\d/.test(cells[0])) return null;
+  for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
+    if (AMOUNT.test(lines[j]) || !/\t/.test(lines[j])) return null;
+    const head = lines[j].split("\t").map((c) => c.trim());
+    if (head.length !== cells.length) continue;
+    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
+    if (k.length !== 1 || k[0] === 0) return null;
+    const cell = SA_CELL.exec(cells[k[0]]);
+    if (!cell) return null;
+    let name = cells[0];
+    for (const l of lines.slice(i + 1, i + 3)) { if (!l.trim() || /\t|\d/.test(l)) break; name += ` ${l.trim()}`; }
+    if (RIDER_PART.test(name)) return null;
+    return { name, value: Number(cell[1].replace(/,/g, "")), line: lines[i] };
+  }
+  return null;
+}
+/** The person's sum assured for the plan a 100% wording is from, read from the plan table's Sum Assured cell (planRow) in
+ * the given documents (release-set A3: "Comprehensive Critical	300,000.00	269.05 ..." under "Sum / Assured/"). Taken
+ * only when every such row says the same:
+ * - its page names the person and no other life;
+ * - its name prints every word of the benefit the wording is headed by ("critical illness"), and no other word but the
+ *   product's own name (`allowed`): "Personal Accident Hospital Income" is another benefit (TE #103 A10c);
+ * - its line prints no limit, expense or "per" word;
+ * - its cell is the sum the row step worked the 100% out on (`want`), and no other such row prints another sum.
+ * Fail-safe: anything else is null and the percentage stays a fact. */
+function planSumAssured(household: Household, docs: number[], wording: Found, person: string, want: number, allowed: Set<string>): Found | null {
+  const name = headingWords(household, wording);
+  if (!name.length) return null;
   const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
-  if (otherLife(page.text, person, people)) return null;
+  const hits: { found: Found; value: number }[] = [];
+  for (const di of docs) for (const page of household.documents[di].pages) {
+    if (!nameOnPage(person, page.text) || otherLife(page.text, person, people)) continue;
+    const lines = page.text.split("\n");
+    let at = 0;
+    lines.forEach((l, i) => {
+      const start = at; at += l.length + 1;
+      if (!/\t/.test(l)) return;
+      const row = planRow(lines, i);
+      if (!row) return;
+      const words = tokens(row.name);
+      if (!name.every((w) => words.includes(w)) || words.some((w) => !name.includes(w) && !allowed.has(w) && !HEADING_STOP.has(w))) return;
+      if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(row.line)) return;
+      hits.push({ found: { docIndex: di, page: page.page, excerpt: row.line.trim().replace(/[ \t]+/g, " "), offset: start + (l.length - l.trimStart().length) }, value: row.value });
+    });
+  }
+  if (!hits.length || hits.some((h) => !sameValue(h.value, want))) return null;
+  return hits[0].found;
+}
+/** The quoted base line itself is the person's whole sum insured for this policy (the checks listed on wholeSumInsured). */
+function quotedLineIsWhole(bf: Found, wording: Found, household: Household, person: string): boolean {
+  const bdoc = household.documents[bf.docIndex];
+  const page = bdoc.pages.find((p) => p.page === bf.page);
+  if (!page) return false;
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  if (otherLife(page.text, person, people)) return false;
   // The base line names the person, or names nobody on a page about them alone (a one-life schedule's "Life Assured : ...").
   const lines = page.text.split("\n");
   const line = lines[page.text.slice(0, bf.offset).split("\n").length - 1] ?? "";
-  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return null;
+  if (!nameOnPage(person, line) && !(nameOnPage(person, page.text) && !people.some((n) => nameOnPage(n, line)))) return false;
   // Exactly one benefit-amount line on the page, of any size ("Death Benefit 5,000.00" counts as much as "300,000.00"); a
   // premium, total, discount or tax line is not a benefit amount. Two lines cannot say which one the 100% is of (Critic R127-1).
   const amountLines = lines.filter((l) => AMOUNT.test(l) && !NOT_BENEFIT_AMOUNT.test(l));
-  if (amountLines.length !== 1) return null;
+  if (amountLines.length !== 1) return false;
   // The base's lines (with the line either side, where a wrapped name continues) name the benefit the wording is headed by.
   const name = headingWords(household, wording);
   const at = page.text.slice(0, bf.offset).split("\n").length - 1;
   const near = new Set(tokens(lines.slice(Math.max(0, at - 1), at + bf.excerpt.split("\n").length + 1).join(" ")));
-  if (!name.length || !name.every((w) => near.has(w))) return null;
+  if (!name.length || !name.every((w) => near.has(w))) return false;
   // It is a sum insured: its lines, or the table heading just above them ("Sum Assured / ..."), say so, and its lines are
   // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
   const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
-  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return null;
-  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return null;
+  if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return false;
+  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
   // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
   // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
   // make it another benefit's amount, so it is refused (TE #103 A10c).
   const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(/(?:S\$|SGD|US\$|USD|\$)?\s*\d[\d,]*(?:\.\d+)?/gi, " ").replace(/\b(?:SGD|USD)\b/gi, " ");
-  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return null;
-  return bf;
+  if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return false;
+  return true;
 }
 /** A printed amount: a figure with thousands separators or two decimals (not a phone number, code or count). */
 const AMOUNT = /(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?![\d,])|(?<![\w.,])\d+\.\d{2}(?![\d])/;
@@ -728,7 +801,7 @@ export function statesMoney(sentence: string): boolean {
 }
 /** Sentences, without splitting after an abbreviation ("Group Policy No. G00750", "p. 13"). */
 const JOIN = "\u2060";
-const sentences = (text: string) => sentencesOf((text ?? "").replace(/\b(No|Nos|no|nos|p|pp|Cl|cl|Ref|ref|approx|e\.g|i\.e|vs)\.\s+(?=[A-Z0-9])/g, `$1.${JOIN}`)).map((x) => x.replace(new RegExp(JOIN, "g"), " "));
+export const sentences = (text: string) => sentencesOf((text ?? "").replace(/\b(No|Nos|no|nos|p|pp|Cl|cl|Ref|ref|approx|e\.g|i\.e|vs)\.\s+(?=[A-Z0-9])/g, `$1.${JOIN}`)).map((x) => x.replace(new RegExp(JOIN, "g"), " "));
 function withoutMoney(text: string, dropped: string[], keep: (s: string) => string = (s) => s): string {
   return sentences(text ?? "").filter((s) => { const money = statesMoney(keep(s)); if (money) dropped.push(s); return !money; }).join(" ").trim();
 }
@@ -778,8 +851,11 @@ function proseRead(household: Household): (s: string) => string {
   return (s) => s.replace(FILE_NAME, " ").replace(IDENTIFIER, (m, at: number, whole: string) => {
     const kinds = ids.get(idKey(m));
     const kind = idKind(m, whole.slice(Math.max(0, at - 40), at));
-    // A bare number with no label in the answer is read past only when the documents print it as plain number too.
-    return kinds && kinds.has(kind) ? " " : m;
+    // A bare number with no label in the answer is read past only when the documents print it as plain number too, or when
+    // the sentence calls it by the label the documents print it under ("the cover's own policy number ... is 3037850",
+    // release-set H8).
+    const named = kind === "number" && [...(kinds ?? [])].some((k) => /^(?:policy|certificate|claim)$/.test(k) && new RegExp(String.raw`\b${k}\s*(?:no\.?|number|#)`, "i").test(whole));
+    return kinds && (kinds.has(kind) || named) ? " " : m;
   });
 }
 /** A next step may keep a helpline, policy, certificate or claim number, or a page, when it is labelled as one and the
@@ -1025,6 +1101,11 @@ export function personalFileName(name: string): string | null {
 }
 
 /** What the library records about a file, in the server's words. */
+/** A question about the library itself: which documents there are, or whose. */
+const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\bfile\b(?!\s+(?:(?:a|an|the|my|your|his|her|their|our|this)\s+)?claims?\b)/i;
+/** A question about claiming ("how do I file a claim", "what documents do I need to claim") is not about the library,
+ * unless it also asks what was uploaded or linked (TE #104 L9). */
+const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
@@ -1043,6 +1124,70 @@ function libraryCount(household: Household): string {
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
+/** The household members a sentence names, by the words of each one's name that no other member's name has ("Desmond",
+ * "Charmaine"). */
+export function membersNamedIn(household: Household, text: string): string[] {
+  const people = household.members.map((m) => baseName(m.name));
+  const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+  const t = ` ${text.toLowerCase().replace(/[^a-z]+/g, " ")} `;
+  return people.filter((p) => words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w))).some((w) => t.includes(` ${w} `)));
+}
+const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+// Only a plain count ("four documents", "3 uploaded files"): "two travel documents" counts something else (Critic R131-4).
+const DOC_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:(?:uploaded|linked)\s+)?(?:documents?|files?|uploads?)\b`, "i");
+/** The names a sentence can call a document by: its file name when it is a name ("Product Summary.pdf"), and its product. */
+function docNames(d: HouseholdDocument): string[] {
+  const own = personalFileName(d.name);
+  return [own, d.name.replace(/\.[a-z0-9]{2,4}$/i, ""), d.productName].filter((x): x is string => !!x && /[a-z]{3}/i.test(x) && x.split(/\s+/).length <= 8 && !/^[0-9a-f-]{20,}$/i.test(x));
+}
+/** Sentences of the model's own words about the library itself, held to the library's own record (live run 22 Oct, E4, A8):
+ * - a count of a person's (or the household's) documents that is not the count of documents linked to them (or uploaded)
+ *   is replaced by the right count, in the server's words;
+ * - "uploaded for (under) <person>" or "linked (only) to <people>" said of a document the record does not upload for, or
+ *   link to, them is left out;
+ * - a premium sentence saying the insurer decides which premium applies is left out (a printed premium is what is charged).
+ * Any other sentence is kept as written. */
+/** "The insurer decides which premium applies", "Singlife decides if they differ", "the one to rely on": said of premiums, never
+ * of a printed rule such as a premium waiver ("waived if the insurer determines you are disabled", Critic R131-3). */
+const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?)\s+(?:which|what)\b|\b(?:decides?|will\s+decide|determines?)\s+(?:if|whether)\s+(?:they|the\s+\w+(?:\s+\w+)?)\s+(?:differ|appl(?:y|ies))\b|\bwhich\s+(?:premium|figure|amount|one)\s+applies\b|\bto\s+rely\s+on\b/i.test(x);
+function libraryClaimsRead(household: Household, left: string[]): (text: string, statement?: boolean) => string {
+  const live = household.documents.filter((d) => !d.supersededAt);
+  return (text: string, statement = false) => {
+    // A printed premium is what is charged: "the insurer decides which premium applies" is never said (release-set A6). A
+    // statement built on it is left out whole, so no sentence that only explained it is left standing.
+    if (statement && PREMIUM_DECIDES(text)) { left.push(text); return ""; }
+    return sentences(text).flatMap((x) => {
+    if (PREMIUM_DECIDES(x)) { left.push(x); return []; }
+    const named = membersNamedIn(household, x);
+    const count = DOC_COUNT.exec(x);
+    if (count && /\b(?:has|have|had|linked|uploaded|in\s+(?:your|the)\s+library|there\s+(?:are|is))\b/i.test(x) && !/\b(?:print|prints|printed|show|shows|say|says|list|lists|give|gives|differ|different)\b/i.test(x) && named.length <= 1) {
+      const said = COUNT_WORDS.indexOf(count[1].toLowerCase()) >= 0 ? COUNT_WORDS.indexOf(count[1].toLowerCase()) : Number(count[1]);
+      const person = named[0] ?? null;
+      const truth = person ? live.filter((d) => d.linkedPeople.some((p) => baseName(p) === person)).length : live.length;
+      if (said !== truth) {
+        left.push(x);
+        const n = `${truth} document${truth === 1 ? "" : "s"}`;
+        return [person ? `${person} has ${n} linked in DearPolicy.` : `Your library has ${n}.`];
+      }
+    }
+    const docs = live.filter((d) => docNames(d).some((n) => x.toLowerCase().includes(n.toLowerCase())));
+    // "No document is linked to Alex" says what no file is: not a claim about a named file.
+    const negated = (at: number) => /\b(?:no|not|never|none|nothing|neither|nor)\b|n't\b/i.test(x.slice(0, at).split(/[,;]|\b(?:and|but|while)\b/i).pop() ?? "");
+    const uploaded = /\buploaded\s+(?:under|for|in)\b([^.;]*)/i.exec(x);
+    if (uploaded && docs.length && !negated(uploaded.index)) {
+      const whom = membersNamedIn(household, uploaded[1]);
+      if (whom.length && docs.some((d) => !d.uploadedFor || !whom.includes(baseName(d.uploadedFor)))) { left.push(x); return []; }
+    }
+    const linked = /\blinked\s+(only\s+)?to\b([^.;]*)/i.exec(x);
+    if (linked && docs.length && !negated(linked.index)) {
+      const whom = membersNamedIn(household, linked[2]);
+      const to = (d: HouseholdDocument) => d.linkedPeople.map(baseName);
+      if (whom.length && docs.some((d) => whom.some((w) => !to(d).includes(w)) || (!!linked[1] && to(d).some((p) => !whom.includes(p))))) { left.push(x); return []; }
+    }
+    return [x];
+  }).join(" ");
+  };
+}
 function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = false): boolean {
   // "The Product Summary and the Benefit Summary print different wrist fracture figures, so the insurer decides which
   // applies." says what the server's note says, once the documents' and the benefit's names are set aside, but only when
@@ -1076,6 +1221,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [] };
   const checked: Checked[] = [];
   const read = proseRead(household);
+  const library = libraryClaimsRead(household, report.sentencesLeftOut);
   const aboutFiles = new Set<number>();
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
@@ -1089,9 +1235,13 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // (live run 22 Oct, A3), only where wholeSumInsured finds it is theirs for this policy (Critic R126-1).
       let whole: string | null = null;
       if (!r.ok && WHOLE_FALLBACK.has(r.why) && st.percentOf?.percent === 100 && person && !limitedWords(household, found)) {
-        const bf = wholeSumInsured(st, found, household, person);
+        const bf = wholeSumInsured(st, found, household, person, serverWords);
         const plain = bf ? plainAmount({ ...st, percentOf: null, amount: st.percentOf.baseAmount, quote: bf.excerpt }, bf, household) : null;
-        if (bf && plain?.ok) { r = { ...plain, found: bf }; whole = "100% of the sum insured, which is the amount shown"; }
+        // The card stays on the wording's own page, so its conditions are read there, and says where the sum is printed.
+        if (bf && plain?.ok) {
+          r = { ...plain, found };
+          whole = `100% of ${person}'s sum insured of ${plain.amount.text} (${docLabel(household, household.documents[bf.docIndex])}, page ${bf.page})`;
+        }
       }
       if (!r.ok) {
         if (!r.asFact) report.dropped.push({ kind: st.kind, why: r.why, text: st.text });
@@ -1111,7 +1261,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
         // is stated from the library's own record of that file instead, in the server's words (release-set E2, E3).
         const di = Number.isFinite(preferred) ? (preferred as number) : -1;
-        if (di >= 0 && di < household.documents.length && ABOUT_FILE.test(st.text)) {
+        // When the question is about the documents themselves ("show me Charmaine's documents"), any unquoted point about one
+        // file is said the same way (release-set E4).
+        if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || aboutLibrary(written[0] ?? ""))) {
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
           continue;
         }
@@ -1191,7 +1343,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    let text = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    const said = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    let text = serverWords.has(c.s.text) ? said : library(said, true);
+    // A point the library's record or the premium rule leaves out is not shown at all.
+    if (said && !text && !c.amount) return;
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
     if (!text && doc && c.found) text = `${docLabel(household, doc)} prints: “${c.found.excerpt}”`;
     // A finding left with no words (its only sentence stated money) still shows the bill it says is uncovered (TE #91 Q8).
@@ -1275,7 +1430,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   // A left-out amount is always said, so the household never takes the cards shown for all there is. A left-out point that
   // is not an amount stays in the report only: a line saying a point was left out tells the household nothing they can use.
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
-  let bottomLine = withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read);
+  let bottomLine = library(withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read));
   const labelled = labelledNumbersRead(citations);
   const nextSteps = model.nextSteps.map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, (t) => read(labelled(t)))).filter(Boolean);
   // One question back at most: the first one the model asks; any further question is left out.

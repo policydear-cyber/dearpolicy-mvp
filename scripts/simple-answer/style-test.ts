@@ -166,4 +166,8 @@ t("a clarifying question says what is settled first; identifiers by their label;
   assert.match(SIMPLE_SYSTEM_PROMPT, /Never say such a document could not be read or has no text/);
   assert.ok(RULE_PAGE.test("All claims will be paid directly to the Insured Person, proper claimant or legal representative, as applicable."));
 });
+t("same-event smaller benefits are given, and no sentence says a cover is one person's and not another's (live run 22 Oct, H10, C5)", () => {
+  assert.match(SIMPLE_SYSTEM_PROMPT, /smaller benefits a cover pays on that same event \(a funeral or compassionate allowance, a child education fund/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /Never write that a cover or amount is one person's and not another's/);
+});
 console.log(`style: ${passed} passed, 0 failed`);

@@ -11,7 +11,7 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, rowWithContinuation } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
@@ -44,14 +44,18 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   for (const p of table.people) for (const r of p.rows) add(r);
   // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
   const premiums = new Set<string>();
+  // First-year premiums come last, so the other rows keep their numbers.
+  const firstYears: TableRow[] = [];
   for (const p of table.people) for (const c of p.covers) for (const r of coverRows(c, p.name)) {
-    if (r.benefit === premiumName(c)) {
-      const key = [p.id, c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
+    const firstYear = r.source === c.firstYearSource;
+    if (r.benefit === premiumName(c) || firstYear) {
+      const key = [p.id, firstYear ? "first year" : "premium", c.product, c.premium, (c.premiumSource ?? c.source).documentId, (c.premiumSource ?? c.source).excerpt].join("|");
       if (premiums.has(key)) continue;
       premiums.add(key);
     }
-    add(r);
+    if (firstYear) firstYears.push(r); else add(r);
   }
+  for (const r of firstYears) add(r);
   return rows;
 }
 
@@ -102,6 +106,9 @@ function coverRows(c: PersonCover, person: string): TableRow[] {
   }
   if (c.premium != null)
     out.push(row(premiumName(c), { kind: "printed", amount: c.premium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.premiumSource ?? c.source));
+  // The first policy year's premium its page prints (release-set A6), named as that page names it.
+  if (c.premium != null && c.firstYearPremium != null && c.firstYearSource)
+    out.push(row(`${c.firstYearLabel || "First Year Premium"}${c.premiumFrequency ? `, ${c.premiumFrequency}` : ""} (first policy year only)`, { kind: "printed", amount: c.firstYearPremium, currency: c.premiumCurrency === undefined ? c.currency : c.premiumCurrency, unit: "lump_sum" }, c.firstYearSource));
   return out;
 }
 
@@ -171,8 +178,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   for (const raw of (json as { statements: Record<string, unknown>[] }).statements) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
-    const row = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
-    if (!row) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
+    if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -180,8 +188,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
     }
     // The same row named twice is given once (Critic R91-3).
-    if (given.has(row.id)) continue;
-    given.add(row.id);
+    if (given.has(row.id) || given.has(named.id)) continue;
+    given.add(row.id); given.add(named.id);
     // The same benefit of the same cover printed in another of the person's documents ("Neck, Skull or Spine (Full Break)"
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
@@ -191,10 +199,18 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
     const group = companions.length ? (typeof raw.alternativeGroup === "string" && raw.alternativeGroup.trim() ? raw.alternativeGroup : `same benefit ${row.id}`) : raw.alternativeGroup;
-    for (const r of [row, ...companions]) {
+    // A premium whose page prints a different first-year premium is given with that first-year premium (release-set A6):
+    // one after the other, never alternatives and never a total.
+    const firstYear = /first policy year\)$/.test(row.benefit) ? rows.filter((o) => !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+      && o.source.documentId === row.source.documentId && /\(first policy year only\)$/.test(o.benefit)) : [];
+    // The named row's own conditions that the row given in its place does not print go with it, each as a point quoting
+    // the named row's document (Critic R131-2).
+    for (const c of carried) statements.push({ kind: "fact", text: `${names(named)} also depends on this: ${c}`, person: baseName(named.person), document: documentId(named.docIndex),
+      quote: c, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+    for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: group, ...(r === row ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
@@ -206,6 +222,33 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
   return { json: { ...(json as object), statements }, report };
+}
+
+/** The row to give for the one the model named: itself, unless the checks would refuse its amount (a percentage printed in
+ * prose, wrapped over two lines, release-set H1) and the same benefit of the same cover is printed with the same figure in
+ * another of the person's documents (a table row) that they accept. The other row is then given in its place, with its own
+ * conditions, and the named row's conditions that its page does not print are carried as points of their own. Never a
+ * different figure: that is a companion, given with it. */
+function checkedRow(row: ChatRow, raw: Record<string, unknown>, rows: ChatRow[], household: Household, labels: Map<string, string>, names: (row: ChatRow) => string, given: Set<string>): { row: ChatRow; carried: string[] } {
+  const twins = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit) && sameFigure(o.figure, row.figure));
+  const named = { row, carried: [] as string[] };
+  if (!twins.length) return named;
+  const passes = (r: ChatRow, conditions: unknown) => {
+    const st = statementFromRow(r, { ...raw, conditions, alternativeGroup: null }, labels, names);
+    if (!st) return false;
+    const parsed = readModelAnswer({ bottomLine: "-", nextSteps: [], question: null, statements: [st] });
+    return !!parsed && (verifyAnswer(household, parsed, [], new Set([String(st.text)])).answer.statements ?? []).some((x) => x.amount && x.text === st.text);
+  };
+  if (passes(row, raw.conditions)) return named;
+  for (const o of twins) {
+    // The named row's conditions the twin's page does not print are carried with it; one that states money cannot be said
+    // as a point, so that twin is not used (Critic R131-2).
+    const carried = row.conditions.filter((c) => { const f = locateQuote(household, c, o.docIndex); return !(f && f.docIndex === o.docIndex && f.page === o.source.page); });
+    if (carried.some((c) => statesMoney(c))) continue;
+    if (passes(o, o.conditions.map((t) => ({ text: t, quote: t })))) return { row: o, carried };
+  }
+  return named;
 }
 
 /** A benefit's name without its row letter, case or punctuation, split into its section ("Simple Fracture ...") and the
@@ -253,7 +296,17 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
     // capped one is given as its printed cap, with no such line, so its label says what the cap limits.
     : f.kind === "worked_out" && f.capped && row.percent != null ? `${row.percent}% of ${row.percentOf === "sum_insured" ? "the sum insured" : "the figure its table prints"}, up to this limit` : null;
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}.`;
+  // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
+  const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+}
+
+/** What a printed figure is counted per, as its quote prints it right after the figure: "S$5,000 per child (up to 2
+ * children)" gives "per child (up to 2 children)". Null when nothing follows. */
+function perUnit(excerpt: string, amount: number): string | null {
+  for (const m of excerpt.matchAll(/(?:S\$|US\$|SGD|\$)?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:each\s+)?(per\s+(?:child|children|person|insured(?:\s+person)?|life|member|dependant|family|claim|visit|trip|event|accident|incident|injury|bone|fracture|policy\s+year|year|disability|confinement|admission)\b(?:\s*\((?:up\s+to|maximum|max\.?|subject\s+to)[^)]{1,40}\))?(?:,?\s*subject\s+to\s+a\s+maximum\s+of\s+\w+\s+\w+)?)/gi))
+    if (Math.abs(Number(m[1].replace(/,/g, "")) - amount) < 0.005) return m[2].replace(/\s+/g, " ").trim();
+  return null;
 }
 
 /** A word before a number that makes it an identifier, not money: "Plan 300", "Policy No. 3037850", "Certificate 000123". */
@@ -327,4 +380,69 @@ function statementFromRow(row: ChatRow, raw: Record<string, unknown>, labels: Ma
   const own = row.baseSource && row.baseSource.page === row.source.page && row.baseSource.documentId === row.source.documentId;
   return { ...base, percentOf: { percent: row.percent, baseAmount: money(row.base, f.currency),
     baseDocument: own || row.baseDocIndex == null ? null : documentId(row.baseDocIndex), baseQuote: own || !row.baseSource ? null : row.baseSource.excerpt } };
+}
+
+/** A sentence of the model's own words that shuts a person out of a cover by ownership ("they belong to Desmond, not
+ * Charmaine", "only Desmond has it", "Desmond's alone") while the answer's cards, or that person's own table rows for the
+ * same benefit, show they have it (live run 22 Oct, C5). Such a sentence is a wrong-person statement even without an
+ * amount, so it is left out. A sentence that names a kind of cover the person has no row for ("Charmaine is not covered by
+ * the travel policy") is kept. */
+export const PERSON_OVERRULED = "a sentence said a person does not have a cover their own rows show";
+const NOT_COVER_WORD = new Set(["benefit"]);
+export function dropPeopleShutOut<T extends { kind: string; text: string; fullText?: string; amount?: unknown; personName?: string | null }>(
+  answer: { summary: string; bottomLine?: string | null; statements?: T[] }, rows: ChatRow[], household: Household, labels: readonly string[]): string[] {
+  const people = household.members.map((m) => baseName(m.name));
+  const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+  // The words that name each person and no one else ("desmond", "chuen", "charmaine").
+  const own = new Map(people.map((p) => [p, words(p).filter((w) => !people.some((o) => o !== p && words(o).includes(w)))]));
+  const alt = (p: string) => own.get(p)!.length ? `(?:${own.get(p)!.join("|")})` : null;
+  const statements = answer.statements ?? [];
+  const cards = statements.filter((s) => s.amount);
+  // The rows behind the cards: the row whose server label a card reads.
+  const labelled = new Set(labels);
+  const carded = rows.filter((r) => cards.some((c) => c.text === rowLabel(r, coverLabels(rows), benefitNames(rows)) && labelled.has(c.text)));
+  const rowText = (r: ChatRow) => [r.product, r.cover, r.plan, r.benefit].join(" ").toLowerCase();
+  // Y is shut out of a cover the answer itself shows is Y's: a card of Y's, or Y's own row for a carded benefit, of the
+  // kind the sentence names. A card of Y's for another cover says nothing about it ("Only Wei Ming has the Term Life
+  // policy" beside her accident card, while her term life is a group policy, TE #104 S4).
+  // The product and cover names' own words ("savemore", "shield"), so a sentence naming a policy is held to that policy.
+  const GENERIC = new Set(["group", "scheme", "plan", "cover", "policy", "benefit", "benefits", "insurance", "with"]);
+  const productWords = new Set(rows.flatMap((r) => `${r.product} ${r.cover}`.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 4 && !GENERIC.has(w)));
+  const has = (p: string, sentence: string) => {
+    const kinds = [...sentence.toLowerCase().matchAll(new RegExp(COVER_KIND.source, "gi"))].map((m) => m[0]).filter((w) => !NOT_COVER_WORD.has(w))
+      .concat(sentence.toLowerCase().split(/[^a-z]+/).filter((w) => productWords.has(w)));
+    const named = (r: ChatRow) => kinds.every((k) => rowText(r).includes(k));
+    if (carded.some((r) => baseName(r.person) === p && named(r))) return true;
+    if (!kinds.length && cards.some((c) => c.personName && baseName(c.personName) === p)) return true;
+    return carded.some((r) => baseName(r.person) !== p && rows.some((o) => baseName(o.person) === p && named(o) && fullCover(o) === fullCover(r) && sameBenefit(o.benefit, r.benefit)));
+  };
+  // Only ownership or exclusivity is read ("belongs to Desmond, not Charmaine", "Desmond's alone", "only Desmond has it"). A
+  // sentence that gives a reason or a condition ("Tan does not get the ambulance benefit, because no ambulance was used") is
+  // never left out (Critic R131-1).
+  const REASON = /\b(?:because|unless|if|until|since|without|provided|as\s+long\s+as|only\s+when|so\s+long\s+as|due\s+to)\b/i;
+  const OWNED = /\b(?:belong\w*|held\s+by|holds?|owns?|owned)\b|\w's(?:,|\s+(?:alone|only|cover|policy|policies)\b)/i;
+  const shutOut = (sentence: string): boolean => !REASON.test(sentence) && people.some((y) => {
+    const Y = alt(y);
+    if (!Y) return false;
+    const notY = OWNED.test(sentence) && new RegExp(String.raw`\b(?:not|but\s+not|rather\s+than|instead\s+of)\s+(?:to\s+|by\s+)?${Y}\b`, "i").test(sentence);
+    const others = people.filter((x) => x !== y && alt(x) && new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:[a-z]+\s+){0,3}?${alt(x)}(?:\s+[a-z]+){0,3}?(?:'s)?\s+(?:has|have|holds?|owns?|is\s+covered|are\s+covered)\b|\b${alt(x)}'s\s+alone\b|\b${alt(x)}\s+alone\s+(?:has|holds?|owns?|is\s+covered)\b|\bbelongs?\s+only\s+to\s+${alt(x)}\b|\bonly\s+(?:belongs?|held)\s+(?:to|by)\s+${alt(x)}\b`, "i").test(sentence));
+    const shut = notY || (others.length > 0 && !new RegExp(String.raw`\b${Y}\b`, "i").test(sentence));
+    return shut && has(y, sentence);
+  });
+  const left: string[] = [];
+  const keep = (text: string) => sentences(text).filter((x) => { const out = shutOut(x); if (out) left.push(x); return !out; }).join(" ");
+  const bottom = keep(answer.bottomLine ?? answer.summary);
+  for (const s of [...statements]) {
+    if (s.amount || labelled.has(s.text)) continue;
+    const text = keep(s.text);
+    if (text === s.text) continue;
+    if (!text) statements.splice(statements.indexOf(s), 1);
+    else { s.text = text; s.fullText = text; }
+  }
+  if (left.length) {
+    const b = bottom || (cards.length ? "Here is what your documents show for each person." : "Here is what your documents say.");
+    answer.summary = b;
+    if (answer.bottomLine != null) answer.bottomLine = b;
+  }
+  return left;
 }
