@@ -320,7 +320,7 @@ async function integration() {
     assert.ok(!(await texts("All eight of your files were read, so none could not be read.")).includes(NOTHING_SHOWN));
     for (const b of ["Here is each adult's list.", "The documents are listed below.", "Each person's documents:", "Here's what each of you has.", "Your documents are as follows.", "These are the benefits."]) assert.deepEqual(await texts(b), [NOTHING_SHOWN], b);
     // "Following" and "below" in their plain sense introduce nothing (TE N4).
-    for (const b of ["Nothing is paid following a stroke in the first year.", "An injury below the knee is covered."]) assert.ok(!(await texts(b)).includes(NOTHING_SHOWN), b);
+    for (const b of ["Nothing is paid following a stroke in the first year.", "An injury below the knee is covered.", "These are not covered by his plan.", "Your claim is below the limit."]) assert.ok(!(await texts(b)).includes(NOTHING_SHOWN), b);
   });
   await atest("in the app's chat turn, the table rides with the documents and the row's amount is what is saved", async () => {
     const t = await turn(hip, true);
@@ -1210,6 +1210,9 @@ test("a sentence that sets the daily cards' one day rule against itself is left 
   const more = { summary: "x", statements: [st("One page says after 10 days, the other from the 11th day, for up to 30 days."), st("He was admitted on 11th October and it pays after the 10th day.")] };
   assert.equal(dropAgreeingDayRules(more, report).length, 1);
   assert.deepEqual(more.statements.map((x) => x.text), ["He was admitted on 11th October and it pays after the 10th day."]);
+  // "From day 11 to day 60" is 50 days, not the cards' 30: kept (TE D11).
+  const longer = { summary: "x", statements: [st("One says after the 10th day for up to 30 days; the other says from day 11 to day 60.")] };
+  assert.deepEqual(dropAgreeingDayRules(longer, report), []);
   const two = { ...report, days: { a: [{ fromDay: 11, maxDays: 30, alone: true }], b: [{ fromDay: 8, maxDays: 30, alone: true }] } };
   const kept = { summary: "x", statements: [st("One says after the 10th day, the other from the 11th day.")] };
   assert.deepEqual(dropAgreeingDayRules(kept, two), []);

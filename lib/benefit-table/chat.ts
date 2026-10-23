@@ -283,7 +283,8 @@ function asksFor(question: string, row: ChatRow): boolean {
   // The benefit's own name, never its cover's: "what does my personal accident cover pay" asks about no one benefit (TE A3).
   if (!question.trim()) return false;
   const q = plainWords(question), whole = plainWords(benefitName(row.benefit)), head = nameHead(row);
-  return (whole.trim().length > 2 && q.includes(whole)) || (!!head && q.includes(head));
+  // At least two words: "hip" alone names no one benefit.
+  return (whole.trim().split(" ").length >= 2 && q.includes(whole)) || (!!head && q.includes(head));
 }
 const plainWords = (x: string) => ` ${x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
 /** A benefit's name before the event it is paid on, without a list letter or a closing "benefit": "mobility aid" of "H.
@@ -496,10 +497,12 @@ function dayRulesIn(sentence: string): { starts: number[]; maxes: number[] } {
   // "After the 10th day" and "after 10 days" are day 11 (TE D8).
   for (const m of sentence.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day|(\d+)\s+(?:consecutive\s+|continuous\s+)?days)\b/gi)) starts.push(Number(m[1] ?? m[2]) + 1);
   // An ordinal counts only with "day" after it, or a range ending in one: "on 11th October" is a date (TE D9).
-  for (const m of sentence.matchAll(/\b(?:from|on)\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)(?=\s+day\b|\s+(?:to|until|through|-)\s+(?:the\s+)?\d+(?:st|nd|rd|th)?\s+day\b))(?:\s+day)?(?:\s+(?:to|until|through|-)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+day)?/gi)) {
+  for (const m of sentence.matchAll(/\b(?:from|on)\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)(?=\s+day\b|\s+(?:to|until|through|-)\s+(?:the\s+)?\d+(?:st|nd|rd|th)?\s+day\b))(?:\s+day)?(?:\s+(?:to|until|through|-)\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)?\s+day))?/gi)) {
     const start = Number(m[1] ?? m[2]);
     starts.push(start);
-    if (m[3]) maxes.push(Number(m[3]) - start + 1);
+    // "From day 11 to day 60" ends on day 60 (TE D11).
+    const end = m[3] ?? m[4];
+    if (end) maxes.push(Number(end) - start + 1);
   }
   for (const m of sentence.matchAll(/\b(?:up\s+to|at\s+most|max(?:imum)?(?:\s+of)?:?|for)\s+(?:(?:a\s+)?(?:maximum|total)\s+of\s+)?(?:[a-z]+\s+)?\(?(\d+)\)?\s+(?:continuous\s+|consecutive\s+)?days?\b/gi)) maxes.push(Number(m[1]));
   return { starts, maxes };

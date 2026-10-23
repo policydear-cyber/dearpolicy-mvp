@@ -90,8 +90,9 @@ export function periodsNote(household: Household, now: Date): string {
 }
 
 /** A bottom line that introduces points below it ("here is each adult's list", "the amounts are below:"). */
-// Only words that point at what comes next: "below" as a place in the answer, not "below the knee" (TE N3, N4).
-const INTRODUCES = /:\s*$|\bas\s+follows\b|\b(?:are|is|shown|listed|given|set\s+out)\s+below\b|\bbelow\s*[.:]?\s*$|(?:^|[.!?]\s+)(?:here(?:'s|’s|\s+is|\s+are)|these\s+are)\b/i;
+// Only words that point at what comes next: "below" ending its sentence, not "below the knee" or "below the limit" (TE N3,
+// N4, N5).
+const INTRODUCES = /:\s*$|\bas\s+follows\b|\bbelow\s*(?:[.:]|$)|(?:^|[.!?]\s+)(?:here(?:'s|’s|\s+is|\s+are)|these\s+are\s+(?!not\b))/i;
 
 /** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). The latest
  * mention counts: the message, then earlier turns newest first (TE S4). */
