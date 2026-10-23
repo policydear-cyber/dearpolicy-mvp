@@ -756,13 +756,21 @@ test("a point that says it shows an amount is given that row's amount; with no a
   assert.deepEqual(r.texts, [said]);
   r = run("Here.", [{ text: said, person: "Tan Mei Ling", document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
   assert.deepEqual(r.amounts, [["Tan Mei Ling", "Up to S$500"]]);
+  // A point that says the amount is not paid, does not apply or is someone else's is never given it; its pointing words go
+  // (Critic R134-1).
+  for (const [x, kept] of [["No ambulance was used, so this amount is not payable.", ["No ambulance was used."]], ["This amount does not apply, because the policy ended before the accident.", []],
+    ["That limit is for Tan Mei Ling's policy only.", []]] as const) {
+    r = run("Not covered.", [{ text: x, document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
+    assert.deepEqual(r.amounts, [], x);
+    assert.deepEqual(r.texts, kept, x);
+  }
   // A quote that is no row's line, or names another document: no amount, and with none in the answer the pointing words go.
   for (const x of [{ document: "D2", quote: "Compensation (% of S$5,000)" }, { document: "D1", quote: "Ambulance Cost Up to S$500 per incident" }]) {
     r = run("It is not shown as covered, and the amounts below only apply if the terms are met.", [{ text: said, ...x }]);
     assert.deepEqual(r.amounts, [], JSON.stringify(x));
     assert.equal(r.bottom, "It is not shown as covered.");
     assert.deepEqual(r.texts, ["If it was an emergency, the ambulance benefit applies."]);
-    assert.equal(r.left.length, 2);
+    assert.equal(r.left.length, 1);
   }
   // With an amount in the answer, nothing is cut; "these sums insured" points at nothing.
   r = run("The amounts below are separate.", [{ kind: "amount", row: idOf("Lim Ah Kow", "Hip"), text: "Hip." }, { text: "The certificate showing these sums insured is dated 01/01/2026.", document: "D1", quote: "As of 01/01/2026" }]);

@@ -11,7 +11,7 @@ import { figureText } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
@@ -275,15 +275,24 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     const di = typeof raw.document === "string" ? Number(/^D(\d+)$/i.exec(raw.document.trim())?.[1] ?? NaN) - 1 : NaN;
     const quote = typeof raw.quote === "string" ? norm(raw.quote) : "";
-    const hits = person && Number.isFinite(di) && quote.length >= 8 ? rows.filter((r) => baseName(r.person) === person && r.docIndex === di
+    // Only a point that says the amount is shown, about the person it is for and no one else, with no word that it is not
+    // paid, does not apply or is someone else's ("this amount is not payable", "that limit is for Tan's policy only",
+    // Critic R134-1). Any other point loses its pointing words.
+    const shows = POSITIVE_POINTER.test(text) && !NOT_PAID.test(text) && membersNamedIn(household, text).every((m) => m === person);
+    const hits = shows && person && Number.isFinite(di) && quote.length >= 8 ? rows.filter((r) => baseName(r.person) === person && r.docIndex === di
       && (norm(r.source.excerpt) === quote || (norm(r.source.excerpt).includes(quote) && norm(benefitName(r.benefit)).length && quote.includes(norm(benefitName(r.benefit)))))) : [];
     if (hits.length === 1) {
       out.push({ ...raw, conditions: [] });
       out.push({ ...raw, kind: "amount", row: hits[0].id, amount: null, percentOf: null, alternativeGroup: null, perDay: null, ofBill: null });
-    } else out.push(raw);
+      continue;
+    }
+    const kept = withoutPointers(text);
+    if (kept) out.push({ ...raw, text: kept });
   }
   return out;
 }
+const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
  * and points. A server label is never changed. */
