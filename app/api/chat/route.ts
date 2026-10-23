@@ -11,6 +11,7 @@ import { askContextualDearPolicy as askDearPolicy } from "@/lib/chat/workflow";
 import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
+import { overSpendCap, SPEND_LIMIT_TEXT } from "@/lib/ai/ledger";
 
 const NO_FAMILY_MESSAGE="Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
@@ -43,6 +44,9 @@ export async function POST(request:NextRequest){
       const member=await query<{id:string}>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});
     }else if(body.scope!=="family")return NextResponse.json({error:"Tell DearPolicy who this concerns, or start in automatic family context."},{status:400});
+    // Past the household's monthly hard stop every answer would fail in the background: say so now, in words a household
+    // can act on (live run 23 Oct: "Something went wrong").
+    if(await overSpendCap(accountId))return NextResponse.json({error:SPEND_LIMIT_TEXT,code:"spend_limit"},{status:429});
     const args={...body,accountId};
     if(body.asynchronous)return NextResponse.json(await enqueueChat(args),{status:202});
     return NextResponse.json(await askDearPolicy(args));

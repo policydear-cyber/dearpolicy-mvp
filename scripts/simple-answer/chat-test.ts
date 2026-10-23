@@ -1048,6 +1048,18 @@ async function main() {
     assert.equal(again.turns[0].text, run.turns[0].text);
   });
 
+  await check("the household's spend limit is said in plain words, before the question is queued (live run 23 Oct)", async () => {
+    const { SPEND_LIMIT_TEXT, SpendCapReached } = await import("../../lib/ai/ledger");
+    const { classifyError } = await import("../../lib/telemetry/errors");
+    const { customerMessage } = await import("../../components/customer-text");
+    assert.equal(customerMessage(SPEND_LIMIT_TEXT, "fallback"), SPEND_LIMIT_TEXT);
+    const c = classifyError(new SpendCapReached("This household has reached its model-spend limit for the month ($14.97)."));
+    assert.equal(c.safeMessage, SPEND_LIMIT_TEXT);
+    assert.equal(c.httpStatus, 429);
+    const route = readFileSync("app/api/chat/route.ts", "utf8");
+    assert.ok(route.indexOf("overSpendCap(accountId)") > 0 && route.indexOf("overSpendCap(accountId)") < route.indexOf("enqueueChat(args)"));
+    assert.match(route, /status:429/);
+  });
   await check("ledger usage counts 5-minute cache writes at 1.25x the input price", () => {
     assert.deepEqual(ledgerUsage({ input: 10, cacheWrite: 100, cacheRead: 1000, output: 5 }), { input: 1135, output: 5, cached: 1000 });
   });

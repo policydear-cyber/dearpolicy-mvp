@@ -84,12 +84,19 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
   if(summary.unpricedCalls)summary.warnings.push(summary.unpricedCalls+" call"+(summary.unpricedCalls===1?"":"s")+" used a model with no price on file, so the cost shown is low.");
   return summary;
 }
+/** What the household reads when the hard stop is reached: no figures, no system words (live run 23 Oct: the chat showed
+ * "Something went wrong" instead). */
+export const SPEND_LIMIT_TEXT="Your household has reached this month’s limit for answers and document reading. It resets at the start of next month.";
 /** Thrown before a hosted call when the household has passed its hard stop. */
 export class SpendCapReached extends Error{constructor(message:string){super(message);this.name="SpendCapReached";}}
-export async function assertUnderSpendCap(accountId:string){
+/** Whether the household has passed its hard stop this month. */
+export async function overSpendCap(accountId:string){
   const plan=planLimits();
-  if(!(plan.hardStopUsd>0))return;
+  if(!(plan.hardStopUsd>0))return false;
   const spent=await query<{cost:string}>(`SELECT coalesce(sum(cost_usd),0)::text AS cost FROM model_usage WHERE account_id=$1 AND at>=date_trunc('month',now())`,[accountId]).catch(()=>({rows:[{cost:"0"}]}));
-  if(Number(spent.rows[0]?.cost??0)>=plan.hardStopUsd)
-    throw new SpendCapReached("This household has reached its model-spend limit for the month ($"+plan.hardStopUsd.toFixed(2)+"). Questions from documents already read still work; reading new documents and model-assisted answers resume next month or on an upgraded plan.");
+  return Number(spent.rows[0]?.cost??0)>=plan.hardStopUsd;
+}
+export async function assertUnderSpendCap(accountId:string){
+  if(await overSpendCap(accountId))
+    throw new SpendCapReached("This household has reached its model-spend limit for the month ($"+planLimits().hardStopUsd.toFixed(2)+"). Questions from documents already read still work; reading new documents and model-assisted answers resume next month or on an upgraded plan.");
 }

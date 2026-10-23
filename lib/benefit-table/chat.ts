@@ -167,11 +167,12 @@ export function noteNarrowedPages<T extends { id: string; kind: string; text: st
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),
-    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
+    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
+    r.maxDays != null ? `for at most ${r.maxDays} days` : null, r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -200,7 +201,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
-    const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
+    const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined);
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
@@ -274,10 +275,26 @@ const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\
 const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string, _n: string, pl: string) => `${w} benefit${pl ? "s" : ""}`);
 /** A sentence without the clauses that point at an amount; null when its first clause does. A clause that only says the
  * amount is shown goes; one that says something of "this amount" keeps it, said of the benefit. */
+const clauses = (sentence: string) => sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
+/** A condition about the amounts shown ("the amounts below do not apply if the injury was self-inflicted") is a condition
+ * of the benefit: kept, said of the benefit (TE #108 D8). */
+const CONDITION_OF_AMOUNT = (sentence: string) => clauses(sentence).some((c) => AMOUNT_POINTER.test(c) && /\b(?:not|no|never|cannot|exclu\w*)\b|n['’]t\b/i.test(c)
+  // A condition, or a denial that says what it is about ("does not apply to pre-existing conditions", "is not paid in
+  // addition to the death benefit"); never one that only says the amounts shown don't apply.
+  && (CONDITIONAL.test(c) || !DENIES_END.test(c)));
+const ofBenefit = (sentence: string) => {
+  // "The Advance Payment amount below" is "The Advance Payment benefit", not "... this benefit" (Critic R149-2).
+  const said = sentence.replace(new RegExp(AMOUNT_POINTER.source, "gi"), (m) => {
+    const many = /\b(?:amounts|figures|sums|limits|cards|these|those)\b/i.test(m);
+    return /^(?:the|this|that|these|those)\b/i.test(m) ? (many ? "these benefits" : "this benefit") : many ? "benefits" : "benefit";
+  });
+  return said.charAt(0).toUpperCase() + said.slice(1);
+};
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
+  if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
   if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
-  const parts = sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
+  const parts = clauses(sentence);
   if (AMOUNT_POINTER.test(parts[0])) return null;
   const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
   return /[.!?]$/.test(kept) ? kept : `${kept}.`;
@@ -330,29 +347,41 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
 const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
+/** Words that say an amount does not apply or is not paid. */
+const DENIES_AMOUNT = /\b(?:don['’]t|do\s+not|does\s+not|doesn['’]t|won['’]t|will\s+not|would\s+not|wouldn['’]t|cannot|can['’]t)\s+(?:apply|be\s+paid|pay|count)\b|\bnot\s+(?:payable|paid|applicable)\b/i;
+const DENIES_END = new RegExp(`(?:${DENIES_AMOUNT.source})(?:\\s+(?:here|to\\s+(?:it|this|them|this\\s+event)|for\\s+(?:it|this|that|them)))?\\s*[.!?]?\\s*$`, "i");
+const CONDITIONAL = /\b(?:if|unless|until|within|before|after|during|while|when|where|provided|except|only|for\s+(?:a|an|any)|in\s+the\s+first)\b/i;
 const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b|\bnot\s+(?:a|the)\s+total\b/i;
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
  * and points. A server label is never changed. */
 export function dropAmountPointers<T extends { text: string; fullText?: string; amount?: unknown }>(answer: { summary: string; bottomLine?: string | null; statements?: T[] }, labels: readonly string[]): string[] {
   const statements = answer.statements ?? [];
-  if (statements.some((s) => s.amount)) return [];
+  const shown = statements.some((s) => s.amount);
   const left: string[] = [];
   // With no amount shown, "the two documents print different figures, so the insurer decides which applies" is about
   // nothing either (unseen set U16).
-  const point = (x: string) => (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x));
+  // With amounts shown, only words that say the amounts shown do not apply go ("so the amounts below for it don't apply",
+  // unseen set U8): they were about a card the server did not show, and every card shown is one the answer gives.
+  // A denial with a condition ("the amount below is not payable for an illness diagnosed in the first 90 days") is a
+  // condition, and stays.
+  // Only a denial that ends its clause: "is not paid in addition to the death benefit" is a coordination rule, and stays
+  // (Critic R147-2).
+  const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_END.test(c) && !CONDITIONAL.test(c));
+  const point = (x: string) => (!shown ? (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x)) : denies(x) ? withoutPointer(x) : x);
+  const flagged = (x: string) => (!shown ? AMOUNT_POINTER.test(x) || DIFFERENT_FIGURES.test(x) : denies(x));
   const cut = (text: string) => {
     const kept = sentences(text).map(point).filter((x): x is string => !!x).join(" ").trim();
     if (kept !== text.trim()) left.push(...sentences(text).filter((x) => point(x) !== x));
     return kept;
   };
   const bottom = answer.bottomLine ?? answer.summary;
-  if (bottom && (AMOUNT_POINTER.test(bottom) || DIFFERENT_FIGURES.test(bottom))) {
+  if (bottom && flagged(bottom)) {
     const b = cut(bottom) || "Here is what your documents say.";
     answer.summary = b;
     if (answer.bottomLine != null) answer.bottomLine = b;
   }
   for (const s of [...statements]) {
-    if (labels.includes(s.text) || !(AMOUNT_POINTER.test(s.text) || DIFFERENT_FIGURES.test(s.text))) continue;
+    if (labels.includes(s.text) || !flagged(s.text)) continue;
     const text = cut(s.text);
     if (!text) statements.splice(statements.indexOf(s), 1);
     else { s.text = text; s.fullText = text; }

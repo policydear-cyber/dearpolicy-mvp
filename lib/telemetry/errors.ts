@@ -71,7 +71,7 @@ const CLASSIFICATIONS: Record<string, ErrorClassification> = {
   ChatConflict: { category: "validation", safeMessage: "This changed underneath the request -- please retry.", httpStatus: 409 },
   PolicyNotClearedForProcessingError: { category: "validation", safeMessage: "This document is still being checked.", httpStatus: 409 },
 
-  SpendCapReached: { category: "model_provider", safeMessage: "This operation is temporarily unavailable.", httpStatus: 503 },
+  SpendCapReached: { category: "model_provider", safeMessage: "Your household has reached this month’s limit for answers and document reading. It resets at the start of next month.", httpStatus: 429 },
   TruncatedModelOutput: { category: "model_provider", safeMessage: "The response was incomplete. Please retry.", httpStatus: 502 },
   ClaimEvidenceMatchError: { category: "extraction", safeMessage: "This evidence could not be matched.", httpStatus: 422 },
   MedicalBillEvidenceError: { category: "extraction", safeMessage: "This evidence could not be processed.", httpStatus: 422 },

@@ -171,5 +171,7 @@ t("same-event smaller benefits are given, and no sentence says a cover is one pe
   assert.match(SIMPLE_SYSTEM_PROMPT, /Never write that a cover or amount is one person's and not another's/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /A point that mentions an amount gives it/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /gets an amount statement only when the event is on that list/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /"from the 11th day" and "after the 10th day"/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /only when their figures, days or conditions differ/);
 });
 console.log(`style: ${passed} passed, 0 failed`);

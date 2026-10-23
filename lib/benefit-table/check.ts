@@ -53,6 +53,26 @@ export function numbersIn(text: string): number[] {
   }
   return out;
 }
+/** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
+ * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it
+ * states more than one, or only a limit ("not payable after the 30th day"). */
+export function startDay(text: string): number | null | undefined {
+  const days = new Set<number>();
+  // "Not payable after the 30th day" is a limit, not a start: a day after a not/no/never in its own clause (up to a comma) never counts,
+  // and a quote with only such a limit states no first paid day, whatever was read (TE #108).
+  let limit = false;
+  const negated = (at: number) => {
+    const no = /\b(?:not|no|never|cannot)\b|n['’]t\b/i.test(text.slice(0, at).split(/[.,;:\n]/).pop() ?? "");
+    limit ||= no;
+    return no;
+  };
+  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
+  // "After" counts only for a day of the stay ("after the 10th day", "after 10 days in hospital"), never a waiting period
+  // ("payable after 30 days of continuous cover", Critic R149-1). "Beyond the 30th day" is as often a limit as a start,
+  // so it never counts (TE #108 B6).
+  for (const m of text.matchAll(/\bafter\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]) + 1);
+  return days.size === 0 ? (limit ? null : undefined) : days.size === 1 ? [...days][0] : null;
+}
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
 const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
@@ -340,7 +360,12 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
-    const fromDay = day(b.fromDay), maxDays = day(b.maxDays);
+    // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
+    // The first paid day the quote states, parsed once as a number, is the row's: "after the 10th day" is day 11, "from day
+    // 1" is day 1, whatever the reading said (live run 23 Oct, B3; TE #108 B2, B4). A quote that states two is none; one
+    // that states none keeps the reading's day when it is printed.
+    const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
+    const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions });

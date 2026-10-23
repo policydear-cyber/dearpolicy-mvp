@@ -2,7 +2,7 @@
  * household data and no model: each case hands checkReading the JSON a model might write.
  *   npm run benefit-table:test */
 import assert from "node:assert/strict";
-import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+import { checkReading, startDay, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable, figureText, qualifierOf, sectionKeyOf, coverKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { mergeReadings, pagesToReread } from "@/lib/benefit-table/completeness";
 import { LINKING_SCHEMA, READING_SCHEMA } from "@/lib/benefit-table/reading";
@@ -86,9 +86,39 @@ test("day counts printed in the quote are kept", () => {
   const row = termsReading.benefits.find((b) => b.pays === "per_day")!;
   assert.equal(row.fromDay, 11); assert.equal(row.maxDays, 30);
 });
-test("a day count not in the quote is not kept", () => {
+test("a day count not in the quote is not kept: the quote's own first paid day is (TE #108 B2)", () => {
   const r = checkReading(terms, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 8, maxDays: 30, page: 3, quote: "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days" })]));
-  assert.equal(r.benefits[0].fromDay, null);
+  assert.equal(r.benefits[0].fromDay, 11);
+  const most = checkReading(terms, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 11, maxDays: 40, page: 3, quote: "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days" })]));
+  assert.equal(most.benefits[0].maxDays, null);
+});
+test("a first paid day printed as the day before it is kept: \"after the 10th day\" is day 11 (live run B3)", () => {
+  const read = (fromDay: number, quote: string) => checkReading(terms, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay, maxDays: 30, page: 3, quote })])).benefits[0]?.fromDay;
+  const T = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nA Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously.\nA Benefit of $30 per day after 10 days in hospital, at most 30 days." }) };
+  const readT = (fromDay: number, quote: string) => checkReading(T, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay, maxDays: 30, page: 3, quote })])).benefits[0]?.fromDay;
+  assert.equal(readT(11, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), 11);
+  assert.equal(readT(11, "A Benefit of $30 per day after 10 days in hospital, at most 30 days."), 11);
+  // Whatever day the reading gave, the quote's own day is kept.
+  assert.equal(readT(12, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), 11);
+  assert.equal(read(11, "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days"), 11);
+  // The quote's own day wins over the reading's: "after the 10th day" read as 10 is day 11 (TE #108 B2); a printed "from
+  // day 1" is day 1, not a later "exceeding 10 days" (TE #108 B4).
+  assert.equal(readT(10, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), 11);
+  // A waiting period is not the first paid day (Critic R149-1).
+  const T5 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nHospital Cash Benefit S$50 per day, payable after 30 days of continuous cover. Max: 30 days" }) };
+  assert.equal(checkReading(T5, doc("scheme_terms", [], [benefit({ benefit: "Hospital Cash Benefit", pays: "per_day", value: 50, fromDay: null, maxDays: 30, page: 3, quote: "Hospital Cash Benefit S$50 per day, payable after 30 days of continuous cover. Max: 30 days" })])).benefits[0]?.fromDay, null);
+  // "Beyond the Nth day" is often a limit, so it never gives a first paid day (TE #108 B6).
+  const T6 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nHospital Cash S$100 per day. Not payable for any stay beyond the 30th day." }) };
+  assert.equal(checkReading(T6, doc("scheme_terms", [], [benefit({ benefit: "Hospital Cash", pays: "per_day", value: 100, fromDay: null, maxDays: null, page: 3, quote: "Hospital Cash S$100 per day. Not payable for any stay beyond the 30th day." })])).benefits[0]?.fromDay, null);
+  // A negated "after" or "from" is a limit, not a start, whatever was read (TE #108).
+  for (const [i, quote] of ["Hospital Cash S$100 per day. Not payable after the 30th day of any stay.", "Hospital Cash S$100 per day. No benefit is paid from day 31."].entries()) {
+    const T7 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\n" + quote }) };
+    assert.equal(checkReading(T7, doc("scheme_terms", [], [benefit({ benefit: "Hospital Cash", pays: "per_day", value: 100, fromDay: i === 0 ? 31 : null, maxDays: null, page: 3, quote })])).benefits[0]?.fromDay, null);
+  }
+  // A negation in an earlier clause leaves the first paid day as printed.
+  assert.equal(startDay("No benefit is payable for the first 10 days, payable from the 11th day."), 11);
+  const T4 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nDaily Hospital Cash Benefit S$30 per day from day 1; no claim is paid for stays exceeding 10 days abroad." }) };
+  assert.equal(checkReading(T4, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 11, maxDays: null, page: 3, quote: "Daily Hospital Cash Benefit S$30 per day from day 1; no claim is paid for stays exceeding 10 days abroad." })])).benefits[0]?.fromDay, 1);
 });
 test("nothing is read from a document the app could not read", () => {
   const r = checkReading({ ...cert, readable: false }, doc("personal_proof", [cover("Lim Wei Jie", "Group Personal Accident", 200000, "Lim Wei Jie S$200,000 As of 01/01/2024")], []));

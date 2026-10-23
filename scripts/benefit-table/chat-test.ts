@@ -90,6 +90,9 @@ test("the table block numbers every row and states the figure the Coverage page 
   assert.match(block, /R\d+ \| Lim Ah Kow \| .*Hip \| S\$450,000, worked out: 75% of S\$600,000/);
   assert.match(block, /Tan Mei Ling .*Hip \| S\$150,000/);
   assert.match(block, /Hospital cash \| for child \| S\$50 a day/);
+  // Day counts are on the row, so two documents' rows for the same daily benefit can be seen to agree (live run B3).
+  const days = renderTable([{ ...rows[0], figure: { kind: "printed", amount: 30, currency: "SGD", unit: "per_day", period: null }, fromDay: 11, maxDays: 30 } as ChatRow]);
+  assert.match(days, /S\$30 a day \| from day 11 \| for at most 30 days/);
   assert.equal(renderTable([]), "");
 });
 test("the answer schema asks for each statement's row", () => {
@@ -130,6 +133,15 @@ test("an amount with no row, a made-up row, or another person's row is dropped",
   assert.deepEqual(r.dropped.map((d) => d.text), ["no row", "made-up row", "another person's row"]);
   assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
 });
+test("an amount binds to a card only by the row id it names, never by its quote or figure (coordinator, TE #108 Q8)", () => {
+  for (const quote of ["Ambulance Cost Up to S$500 per incident", "Ambulance claims\tS$500"]) {
+    const r = answer([{ person: "Lim Ah Kow", amount: "S$500", quote, document: "D2", text: "x" }]);
+    assert.equal(r.amounts.length, 0, quote);
+    assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+  }
+  assert.match(renderTable(rows), /always with its id, also when you read the figure in another document/);
+});
+
 test("money in the model's own sentence never removes what the amount is for (R90-1)", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Hospital cash"), person: "Lim Ah Kow", text: "Hospital cash pays S$999 a day, so S$9,990 for ten days." }]);
   assert.equal(r.amounts.length, 1);
@@ -400,10 +412,15 @@ test("a stay the household described is worked out from a labelled daily row, wi
   assert.deepEqual(long.amounts, ["S$30", "S$900"]);
 });
 test("the stay is refused when the table read other most days, or none, for that row", () => {
-  for (const o of [{ ...CASH_ROW, maxDays: 40 }, { ...CASH_ROW, maxDays: null }, { ...CASH_ROW, fromDay: 30 }]) {
+  for (const o of [{ ...CASH_ROW, maxDays: 40 }, { ...CASH_ROW, maxDays: null }]) {
     const r = answer2(o, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
     assert.deepEqual(r.amounts, ["S$30"], JSON.stringify(o));
   }
+  // A first paid day the quote states is the row's, whatever the reading said ("from the 11th day", read as 30): the
+  // stay is worked out from day 11 (TE #108 B2).
+  const misread = answer2({ ...CASH_ROW, fromDay: 30 }, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
+  assert.equal(misread.rows.find((x) => /Hospital Cash/.test(x.benefit))!.fromDay, 11);
+  assert.deepEqual(misread.amounts, ["S$30", "S$900"]);
 });
 test("a stay statement is never kept without its labelled daily row", () => {
   const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30, alone: true }] } };
@@ -855,6 +872,39 @@ test("a sentence that leans on one left out goes with it; with no amount shown, 
   dropAmountPointers(a, []);
   assert.deepEqual(a.statements.map((x) => x.text), ["Ask the doctor about an X-ray."]);
   assert.equal(a.bottomLine, "Here is what your documents say.");
+});
+test("with amounts shown, words that say the amounts shown do not apply go; other pointers stay (unseen U8)", () => {
+  const b = "Living Care Plus pays only for its 10 early critical illnesses, and a heart attack is not one of them, so the amounts below for it don't apply.";
+  const a = { summary: b, bottomLine: b, statements: [{ text: "Up to S$350,000", amount: { text: "S$350,000" } },
+    { text: "The amount below is not payable for an illness diagnosed in the first 90 days.", amount: null }, { text: "The amounts below only apply after the waiting period.", amount: null }] };
+  const left = dropAmountPointers(a, ["Up to S$350,000"]);
+  assert.equal(a.bottomLine, "Living Care Plus pays only for its 10 early critical illnesses, and a heart attack is not one of them.");
+  assert.equal(a.summary, a.bottomLine);
+  assert.deepEqual(a.statements.map((x) => x.text), ["Up to S$350,000", "The amount below is not payable for an illness diagnosed in the first 90 days.", "The amounts below only apply after the waiting period."]);
+  assert.ok(left.includes(b));
+  // A point beside a card that states a condition of it stays, said of the benefit (TE #108 D8).
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [
+    { kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: idOf("Lim Ah Kow", "Hip"), eventFit: "any_event" },
+    { kind: "fact", text: "The amounts below do not apply if the injury was self-inflicted.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null },
+    { kind: "fact", text: "The amount below doesn't apply to pre-existing conditions.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] };
+  const texts = ((amountsFromRows(raw, rows, HOUSE).json as { statements: { text: string }[] }).statements).map((x) => x.text);
+  assert.ok(texts.includes("These benefits do not apply if the injury was self-inflicted."), JSON.stringify(texts));
+  assert.ok(texts.includes("This benefit doesn't apply to pre-existing conditions."), JSON.stringify(texts));
+  const cannot = ((amountsFromRows({ ...raw, statements: [raw.statements[0], { ...raw.statements[1], text: "The amount below cannot be paid unless a doctor certifies the fracture." }] }, rows, HOUSE).json as { statements: { text: string }[] }).statements).map((x) => x.text);
+  assert.ok(cannot.includes("This benefit cannot be paid unless a doctor certifies the fracture."), JSON.stringify(cannot));
+  const shown = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", eventFit: "any_event" },
+    { kind: "fact", person: "Lim Ah Kow", document: "D2", quote: "Written notice of a claim must be given within 30 days.", text: "The amounts below are not paid unless written notice is given within 30 days." }]).statements.map((x) => x.text);
+  assert.ok(shown.includes("These benefits are not paid unless written notice is given within 30 days."), JSON.stringify(shown));
+  // With no card shown, a pointer inside a name becomes the benefit's name (Critic R149-2).
+  const none = { summary: "s", bottomLine: "s", statements: [{ text: "The Advance Payment amount below is not paid in addition to the death benefit.", amount: null }] };
+  dropAmountPointers(none, []);
+  assert.deepEqual(none.statements.map((x) => x.text), ["The Advance Payment benefit is not paid in addition to the death benefit."]);
+  // A coordination rule about the amount shown stays (Critic R147-2).
+  for (const t of ["The Advance Payment amount below is not paid in addition to the death benefit.", "The amount below is not payable on top of the Advance Payment already paid."]) {
+    const c = { summary: "s", bottomLine: "s", statements: [{ text: "Up to S$350,000", amount: { text: "S$350,000" } }, { text: t, amount: null }] };
+    dropAmountPointers(c, ["Up to S$350,000"]);
+    assert.deepEqual(c.statements.map((x) => x.text), ["Up to S$350,000", t]);
+  }
 });
 
 test("a short document no row comes from is sent whole, unless it could not be read; payee rules are sent (release-set E1, E2, H10)", () => {
