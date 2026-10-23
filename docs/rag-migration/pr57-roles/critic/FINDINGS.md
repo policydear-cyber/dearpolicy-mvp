@@ -5899,3 +5899,11 @@ Free tests on 877dcbd: chat 82/82, headline 13/13, table 106/106.
 - datesSaidNote: slash dates now need a 4-digit year or a lead word. Probed: "24/7", "3/4 of the bill" give no note; "on 3/4", "on 29/9/2026", "since 1/10/2026" are read right. "on 3/4/26" (2-digit year) gives no note, which is a miss, not a wrong date.
 - The two low notes left as is are accepted (both only withhold).
 - Free tests on 4ea465b: chat 82/82, headline 13/13, table 106/106.
+
+## R164 — PR #111 re-check (4ea465b..a3e0eba)
+
+**Verdict: READY.** Free tests on a3e0eba: chat 82/82, headline 13/13, table 106/106.
+
+- T5 (chat.ts:352-370): a skipped twin's conditions become fact points quoting the skipped row's own document; money-stating conditions are dropped, and near-repeats (80% of words) of a shown condition are skipped. No amount can come from this path. It only runs once the kept twin was given (same person, cover, qualifier, figure).
+- C5 (chat.ts:684-686): a frequency in the copy must equal the row's. Low: synonyms ("annual" vs "yearly", "half-yearly" vs "semi-annual") and a copy with a frequency on a row without one are now rejected. That only withholds.
+- M4 (chat.ts:484): stems waiv*/return*/refund* are excluded; plain premium rows still exempt.
