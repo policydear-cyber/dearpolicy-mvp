@@ -5602,3 +5602,12 @@ Please add the first two rows as tests. The full patch for R147-1 and R147-2 is 
 
 ### Tests (run locally, free)
 - At 5e84b6a: chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
+
+## R148: PR #108 re-review at 58cf8cc (diff 5e84b6a..58cf8cc)
+
+**Verdict: READY.**
+
+- **R147-1 and R147-2 are fixed exactly as patched.** The figure path in `rowOfQuote` now needs a quote with exactly one number and no `%` or multiplier word. `dropAmountPointers` uses `DENIES_END`. `numbersIn` is now imported from `./check`, alongside `CAP_WORDS`.
+- **The five probes are now tests.**
+- **Free tests at 58cf8cc:** chat-test 66/66, headline-test 13/13, benefit-table test 106/106.
+- **The R147 low notes stand, with no change needed:** an excess quote can still give the real row's card, and the `firstDay` edge case remains.
