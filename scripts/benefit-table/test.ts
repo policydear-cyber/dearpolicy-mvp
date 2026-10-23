@@ -90,6 +90,16 @@ test("a day count not in the quote is not kept", () => {
   const r = checkReading(terms, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 8, maxDays: 30, page: 3, quote: "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days" })]));
   assert.equal(r.benefits[0].fromDay, null);
 });
+test("a first paid day printed as the day before it is kept: \"after the 10th day\" is day 11 (live run B3)", () => {
+  const read = (fromDay: number, quote: string) => checkReading(terms, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay, maxDays: 30, page: 3, quote })])).benefits[0]?.fromDay;
+  const T = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nA Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously.\nA Benefit of $30 per day after 10 days in hospital, at most 30 days." }) };
+  const readT = (fromDay: number, quote: string) => checkReading(T, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay, maxDays: 30, page: 3, quote })])).benefits[0]?.fromDay;
+  assert.equal(readT(11, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), 11);
+  assert.equal(readT(11, "A Benefit of $30 per day after 10 days in hospital, at most 30 days."), 11);
+  // Any other day, or "after" not about days: not kept.
+  assert.equal(readT(12, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), null);
+  assert.equal(read(11, "Daily Hospital Cash Benefit S$30 per day from the 11th day onwards. Max: 30 days"), 11);
+});
 test("nothing is read from a document the app could not read", () => {
   const r = checkReading({ ...cert, readable: false }, doc("personal_proof", [cover("Lim Wei Jie", "Group Personal Accident", 200000, "Lim Wei Jie S$200,000 As of 01/01/2024")], []));
   assert.equal(r.covers.length, 0);

@@ -53,6 +53,8 @@ export function numbersIn(text: string): number[] {
   }
   return out;
 }
+/** The quote prints the first paid day as the day before it: "after the 10th day", "after 10 days", "beyond the 10th day". */
+const dayBefore = (text: string, n: number) => new RegExp(`\\b(?:after|beyond|exceeding|more\\s+than)\\s+(?:the\\s+(?:first\\s+)?)?${n}(?:st|nd|rd|th)?\\s+(?:consecutive\\s+)?days?\\b`, "i").test(text);
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
 const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
@@ -340,7 +342,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     }
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
-    const fromDay = day(b.fromDay), maxDays = day(b.maxDays);
+    // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
+    const firstDay = (v: unknown) => { const n = int(v); return n != null && n > 1 && dayBefore(source.excerpt, n - 1) ? n : day(v); };
+    const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions, page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions });

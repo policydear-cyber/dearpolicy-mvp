@@ -167,7 +167,8 @@ export function noteNarrowedPages<T extends { id: string; kind: string; text: st
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),
-    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
+    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
+    r.maxDays != null ? `for at most ${r.maxDays} days` : null, r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
@@ -200,7 +201,10 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
-    const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
+    // An amount without its row id (or with one the table does not have) is that row when its quote is the row's own
+    // printed line, for that person in that document, and no other row's (live run 23 Oct, A6: the trip premium came
+    // without its row and was dropped).
+    const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined) ?? rowOfQuote(raw, rows, household);
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
@@ -274,10 +278,11 @@ const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\
 const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string, _n: string, pl: string) => `${w} benefit${pl ? "s" : ""}`);
 /** A sentence without the clauses that point at an amount; null when its first clause does. A clause that only says the
  * amount is shown goes; one that says something of "this amount" keeps it, said of the benefit. */
+const clauses = (sentence: string) => sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
   if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
-  const parts = sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
+  const parts = clauses(sentence);
   if (AMOUNT_POINTER.test(parts[0])) return null;
   const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
   return /[.!?]$/.test(kept) ? kept : `${kept}.`;
@@ -302,6 +307,22 @@ function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
  * different premium for the first policy year)"). */
 const PERIOD_ROW = /first policy year(?: only)?\)$/;
+const normQuote = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+/** The one row whose printed line the statement quotes: the same person and document, the quote being the row's line (or
+ * inside it, or holding it) and naming the row's benefit. No row, or more than one, gives undefined. */
+function rowOfQuote(raw: Record<string, unknown>, rows: ChatRow[], household: Household): ChatRow | undefined {
+  const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
+  const di = typeof raw.document === "string" ? Number(/^D(\d+)$/i.exec(raw.document.trim())?.[1] ?? NaN) - 1 : NaN;
+  const quote = typeof raw.quote === "string" ? normQuote(raw.quote) : "";
+  if (!person || !Number.isFinite(di) || quote.length < 8) return undefined;
+  const hits = rows.filter((r) => {
+    if (baseName(r.person) !== person || r.docIndex !== di) return false;
+    const line = normQuote(r.source.excerpt), name = normQuote(benefitName(r.benefit));
+    return line === quote || (!!name && quote.includes(name) && (line.includes(quote) || quote.includes(line)));
+  });
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
   const out: Record<string, unknown>[] = [];
@@ -330,29 +351,38 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
 const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
+/** Words that say an amount does not apply or is not paid. */
+const DENIES_AMOUNT = /\b(?:don['’]t|do\s+not|does\s+not|doesn['’]t|won['’]t|will\s+not|would\s+not|wouldn['’]t|cannot|can['’]t)\s+(?:apply|be\s+paid|pay|count)\b|\bnot\s+(?:payable|paid|applicable)\b/i;
+const CONDITIONAL = /\b(?:if|unless|until|within|before|after|during|while|when|where|provided|except|only|for\s+(?:a|an|any)|in\s+the\s+first)\b/i;
 const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b|\bnot\s+(?:a|the)\s+total\b/i;
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
  * and points. A server label is never changed. */
 export function dropAmountPointers<T extends { text: string; fullText?: string; amount?: unknown }>(answer: { summary: string; bottomLine?: string | null; statements?: T[] }, labels: readonly string[]): string[] {
   const statements = answer.statements ?? [];
-  if (statements.some((s) => s.amount)) return [];
+  const shown = statements.some((s) => s.amount);
   const left: string[] = [];
   // With no amount shown, "the two documents print different figures, so the insurer decides which applies" is about
   // nothing either (unseen set U16).
-  const point = (x: string) => (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x));
+  // With amounts shown, only words that say the amounts shown do not apply go ("so the amounts below for it don't apply",
+  // unseen set U8): they were about a card the server did not show, and every card shown is one the answer gives.
+  // A denial with a condition ("the amount below is not payable for an illness diagnosed in the first 90 days") is a
+  // condition, and stays.
+  const denies = (x: string) => clauses(x).some((c) => AMOUNT_POINTER.test(c) && DENIES_AMOUNT.test(c) && !CONDITIONAL.test(c));
+  const point = (x: string) => (!shown ? (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x)) : denies(x) ? withoutPointer(x) : x);
+  const flagged = (x: string) => (!shown ? AMOUNT_POINTER.test(x) || DIFFERENT_FIGURES.test(x) : denies(x));
   const cut = (text: string) => {
     const kept = sentences(text).map(point).filter((x): x is string => !!x).join(" ").trim();
     if (kept !== text.trim()) left.push(...sentences(text).filter((x) => point(x) !== x));
     return kept;
   };
   const bottom = answer.bottomLine ?? answer.summary;
-  if (bottom && (AMOUNT_POINTER.test(bottom) || DIFFERENT_FIGURES.test(bottom))) {
+  if (bottom && flagged(bottom)) {
     const b = cut(bottom) || "Here is what your documents say.";
     answer.summary = b;
     if (answer.bottomLine != null) answer.bottomLine = b;
   }
   for (const s of [...statements]) {
-    if (labels.includes(s.text) || !(AMOUNT_POINTER.test(s.text) || DIFFERENT_FIGURES.test(s.text))) continue;
+    if (labels.includes(s.text) || !flagged(s.text)) continue;
     const text = cut(s.text);
     if (!text) statements.splice(statements.indexOf(s), 1);
     else { s.text = text; s.fullText = text; }
