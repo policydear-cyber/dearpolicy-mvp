@@ -21,7 +21,7 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   lesserOf?: boolean };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string }[]; labels: string[];
+export type RowReport = { dropped: { why: string; text: string; notFit?: boolean }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
   days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]> };
 
@@ -171,7 +171,7 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every "amount" statement, set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -186,12 +186,28 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const statements: unknown[] = [];
   const given = new Set<string>();
   const away = new Map<string, Record<string, unknown>>();
-  for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
+  const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
+    .filter((x): x is string => typeof x === "string").join(" ");
+  // A row ruled out anywhere in the answer, with its twins in the person's other documents, is never shown: not when
+  // named again with another flag, pointed at, or brought back as a companion (TE #107 E7, E8b, E8c).
+  // Built after pointers become cards, so a ruled-out pointer counts too (TE #107 E8d).
+  const pointed = pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household);
+  const ruledOut = new Set<string>();
+  for (const x of pointed) {
+    const r = x && x.eventFit === "not_on_list" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined;
+    if (r) for (const o of rows) if (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit))) ruledOut.add(o.id);
+  }
+  for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
+    // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
+    // the event not on that list, is never shown (live run 23 Oct, H2). Decided per card, never read from the prose.
+    // The answer says why only when its own words name the cover or benefit; otherwise the household hears an amount was
+    // left out (Critic R143-2).
+    if (raw.eventFit === "not_on_list" || ruledOut.has(row.id) || ruledOut.has(named.id)) { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row, rows) }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -205,7 +221,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
-    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
       && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
@@ -235,7 +251,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     for (const r of [row, ...companions, ...firstYear]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
-      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
+      // Premiums for different policy years are paid one after the other, never alternatives (live run 23 Oct, A6).
+      const st = statementFromRow(r, { ...raw, alternativeGroup: firstYear.includes(r) || PERIOD_ROW.test(r.benefit) ? null : group, ...(r === named ? {} : { conditions: r.conditions.map((t) => ({ text: t, quote: t })) }) }, labels, names);
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
@@ -272,6 +289,19 @@ export const withoutPointers = (text: string) => sentences(text ?? "").map(witho
  * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
  * one (dropAmountPointers). */
+/** Whether words name a row's cover ("Living Care Plus" for "GROUP LIVING CARE PLUS(POLICY NO. 1)") or its benefit. */
+function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
+  const plain = (x: string) => ` ${x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const coverOf = (r: ChatRow) => plain(noNumbers(r.cover).replace(/^group\s+/i, ""));
+  const cover = coverOf(row), benefit = plain(benefitName(row.benefit));
+  // A longer cover name is not this one: "Living Care Plus" does not name Living Care (TE #107 L4).
+  let t = plain(text);
+  for (const o of new Set(rows.map(coverOf))) if (o !== cover && o.includes(cover)) t = t.split(o).join(" ");
+  return (cover.trim().length > 2 && t.includes(cover)) || (benefit.trim().length > 2 && t.includes(benefit));
+}
+/** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
+ * different premium for the first policy year)"). */
+const PERIOD_ROW = /first policy year(?: only)?\)$/;
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
   const out: Record<string, unknown>[] = [];
@@ -300,21 +330,29 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
 const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
+const DIFFERENT_FIGURES = /\b(?:print|prints|printed|show|shows|give|gives|list|lists|state|states)\s+(?:different|differing)\b[^.]*\b(?:figures?|amounts?|sums?)\b|\bnot\s+(?:a|the)\s+total\b/i;
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
  * and points. A server label is never changed. */
 export function dropAmountPointers<T extends { text: string; fullText?: string; amount?: unknown }>(answer: { summary: string; bottomLine?: string | null; statements?: T[] }, labels: readonly string[]): string[] {
   const statements = answer.statements ?? [];
   if (statements.some((s) => s.amount)) return [];
   const left: string[] = [];
-  const cut = (text: string) => { const kept = withoutPointers(text); if (kept !== text.trim()) left.push(...sentences(text).filter((x) => withoutPointer(x) !== x)); return kept; };
+  // With no amount shown, "the two documents print different figures, so the insurer decides which applies" is about
+  // nothing either (unseen set U16).
+  const point = (x: string) => (DIFFERENT_FIGURES.test(x) ? null : withoutPointer(x));
+  const cut = (text: string) => {
+    const kept = sentences(text).map(point).filter((x): x is string => !!x).join(" ").trim();
+    if (kept !== text.trim()) left.push(...sentences(text).filter((x) => point(x) !== x));
+    return kept;
+  };
   const bottom = answer.bottomLine ?? answer.summary;
-  if (bottom && AMOUNT_POINTER.test(bottom)) {
+  if (bottom && (AMOUNT_POINTER.test(bottom) || DIFFERENT_FIGURES.test(bottom))) {
     const b = cut(bottom) || "Here is what your documents say.";
     answer.summary = b;
     if (answer.bottomLine != null) answer.bottomLine = b;
   }
   for (const s of [...statements]) {
-    if (labels.includes(s.text) || !AMOUNT_POINTER.test(s.text)) continue;
+    if (labels.includes(s.text) || !(AMOUNT_POINTER.test(s.text) || DIFFERENT_FIGURES.test(s.text))) continue;
     const text = cut(s.text);
     if (!text) statements.splice(statements.indexOf(s), 1);
     else { s.text = text; s.fullText = text; }
@@ -476,7 +514,8 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
 /** Applied last: an amount the row step dropped or refused never reached verifyAnswer, so its "left out an amount" note
  * is added here (in place of the weaker "left out a point"), and the household always hears that an amount was left out. */
 export function noteLeftOutAmounts<T extends { id: string; kind: string; text: string }>(statements: T[], report: RowReport, make: (id: string, text: string) => T): T[] {
-  if (!report.dropped.length || statements.some((s) => s.id === "left-out-amount")) return statements;
+  // An amount the answer itself says does not fit the event is not one the documents fail to print: no note for it.
+  if (!report.dropped.some((d) => !d.notFit) || statements.some((s) => s.id === "left-out-amount")) return statements;
   return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
 }
 

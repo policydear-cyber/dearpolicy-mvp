@@ -497,6 +497,13 @@ test("a first-year premium printed once on the premium's page is its own row, gi
   const shown = keepLabelledAmounts(a.statements ?? [], fromRows.report).kept.filter((x) => x.amount);
   assert.deepEqual(shown.map((x) => x.amount!.text), ["S$470.85", "S$376.68"]);
   assert.ok(shown.every((x) => !x.group));
+  // Each named by the model in one alternative group: still one after the other, and no "insurer decides which applies"
+  // note (live run 23 Oct, A6).
+  const both = { ...raw, statements: rs.filter((r) => /Premium/.test(r.benefit)).map((r) => ({ ...raw.statements[0], row: r.id, alternativeGroup: "premiums" })) };
+  const fromBoth = amountsFromRows(both, rs, H);
+  const b2 = verifyAnswer(H, readModelAnswer(fromBoth.json)!, ["how much do we pay"], new Set(fromBoth.report.labels)).answer;
+  assert.deepEqual((b2.statements ?? []).filter((x) => x.amount).map((x) => [x.amount!.text, x.group]), [["S$470.85", null], ["S$376.68", null]]);
+  assert.deepEqual((b2.statements ?? []).filter((x) => /insurer decides/.test(x.text)), []);
 });
 test("a figure printed per child (or per incident) says so on its card, never as a family total (release-set H10)", () => {
   const amb = rows.find((r) => r.benefit === "Ambulance Cost")!;
@@ -781,6 +788,75 @@ test("a point that says it shows an amount is given that row's amount; with no a
   assert.deepEqual(r.texts, ["The certificate showing these sums insured is dated 01/01/2026."]);
 });
 
+test("a card whose event is not on its cover's list is never shown, decided per card and never from the prose (live run 23 Oct, H2; unseen U4)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const listCover = (id: string, cover: string, benefit: string): ChatRow => ({ ...amb, id, cover, benefit, coverKey: coverKeyOf({ product: amb.product, cover, plan: null }) });
+  const lc = listCover("R901", "GROUP LIVING CARE(POLICY NO. 1)", "Coverage against 37 critical illnesses"), lcp = listCover("R902", "GROUP LIVING CARE PLUS(POLICY NO. 1)", "Coverage against 10 early critical illnesses");
+  const all = [...rows, lc, lcp];
+  const run = (cards: [string, unknown][], facts: string[] = [], bottomLine = "q") => {
+    const st = (x: Record<string, unknown>) => ({ kind: "fact", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null, ...x });
+    const fromRows = amountsFromRows({ bottomLine, nextSteps: [], question: null, statements: [...facts.map((text) => st({ kind: "uncertainty", text })), ...cards.map(([row, eventFit]) => st({ kind: "amount", row, text: "Cover.", eventFit }))] }, all, HOUSE);
+    const { answer: a } = verifyAnswer(HOUSE, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels));
+    const kept = keepLabelledAmounts(a.statements ?? [], fromRows.report).kept;
+    return { cards: kept.filter((x) => x.amount).map((x) => x.text.replace(/:.*$/, "")), notes: noteLeftOutAmounts(kept as never[], fromRows.report, (id, text) => ({ id, kind: "uncertainty", text }) as never).filter((x: { text: string }) => x.text === LEFT_OUT_AMOUNT).length };
+  };
+  const LC = "Coverage against 37 critical illnesses (GROUP LIVING CARE)", LCP = "Coverage against 10 early critical illnesses (GROUP LIVING CARE PLUS)";
+  // The model says, card by card, whether the event is on the row's list: "not_on_list" is never shown, with no
+  // "left out an amount" note (the answer's own fact says why).
+  let r = run([[lc.id, "on_list"], [lcp.id, "not_on_list"]], ["A heart attack is not on the Living Care Plus list."]);
+  assert.deepEqual(r.cards, [LC]);
+  assert.equal(r.notes, 0);
+  assert.deepEqual(run([[lc.id, "not_on_list"], [lcp.id, "not_on_list"]]).cards, []);
+  // Every other value, or none (an older answer), is shown as before.
+  for (const fit of ["on_list", "any_event", "no_event", null, undefined, "maybe"]) assert.deepEqual(run([[lc.id, fit], [lcp.id, fit]]).cards, [LC, LCP], String(fit));
+  // The prose never decides: wording that rules a cover out, or keeps it in, changes no card (TE #107 N1, N8, K1, K6).
+  for (const text of ["A heart attack is not on the Living Care Plus list.", "A fracture doesn't appear on the Living Care list.", "A heart attack is on the Living Care list. It is not on the Living Care Plus list."])
+    assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "on_list"]], [text]).cards, [LC, LCP], text);
+  // Not named anywhere in the answer's own words, the household hears an amount was left out (Critic R143-2).
+  assert.equal(run([[lc.id, "on_list"], [lcp.id, "not_on_list"]]).notes, 1);
+  // A card made from a pointing point keeps its flag: not_on_list gives none (Critic R143-1).
+  const pointed = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident",
+    amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "not_on_list" }] }, all, HOUSE);
+  assert.deepEqual(pointed.report.labels, []);
+  // Ruled out once, a row stays out: named again with another flag, or its twin named as any_event (TE #107 E7, E8c).
+  assert.deepEqual(run([[lcp.id, "not_on_list"], [lcp.id, "on_list"]]).cards, []);
+  assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "not_on_list"]], ["Not on the Living Care Plus list."]).cards, [LC]);
+  // Living Care ruled out with only "Living Care Plus" named: the household hears an amount was left out (TE #107 L4).
+  assert.equal(run([[lc.id, "not_on_list"], [lcp.id, "on_list"]], ["A heart attack is on the Living Care Plus list."]).notes, 1);
+  // A pointer at a ruled-out row gives no card (TE #107 E8b).
+  const pointedOut = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
+    { kind: "amount", text: "Cover.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: amb.id, eventFit: "not_on_list" },
+    { kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null }] }, all, HOUSE);
+  assert.deepEqual(pointedOut.report.labels, []);
+  // A ruled-out pointer keeps the row out even when another statement names it (TE #107 E8d).
+  const pointerOut = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
+    { kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "not_on_list" },
+    { kind: "amount", text: "Cover.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: amb.id, eventFit: "any_event" }] }, rows, HOUSE);
+  assert.deepEqual(pointerOut.report.labels, []);
+  // A "not_on_list" card takes the same benefit's companion from another document with it.
+  const hip = idOf("Lim Ah Kow", "Hip");
+  assert.deepEqual(run([[hip, "not_on_list"]]).cards, []);
+  // The schema asks for the decision on every statement.
+  const items = (TABLE_ANSWER_SCHEMA.properties.statements as { items: { required: string[] } }).items;
+  assert.ok(items.required.includes("eventFit"));
+});
+test("a sentence that leans on one left out goes with it; with no amount shown, no sentence says the figures differ (unseen U3, U16)", () => {
+  const run = (text: string) => verifyAnswer(HOUSE, readModelAnswer({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "uncertainty", text, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }] })!, ["q"]);
+  let r = run("The ambulance limit is S$500 per incident. That limit applies per trip. Call the insurer first.");
+  assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["Call the insurer first."]);
+  assert.ok(r.report.sentencesLeftOut.includes("That limit applies per trip."));
+  // A sentence that states a condition stays, even leaning on one left out (Critic R140-2).
+  r = run("The ambulance limit is S$500 per incident. It is paid only if the ambulance takes him to a hospital within 24 hours of the accident.");
+  assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["It is paid only if the ambulance takes him to a hospital within 24 hours of the accident."]);
+  r = run("The ambulance limit is S$500 per incident. Ambulance cover applies per trip.");
+  assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["Ambulance cover applies per trip."]);
+  const a = { summary: "The two documents print different figures, so the insurer decides which applies.", bottomLine: "The two documents print different figures, so the insurer decides which applies.",
+    statements: [{ text: "The two documents print different figures for the same shoulder fracture benefit, so the insurer decides which applies.", amount: null }, { text: "Ask the doctor about an X-ray.", amount: null }] };
+  dropAmountPointers(a, []);
+  assert.deepEqual(a.statements.map((x) => x.text), ["Ask the doctor about an X-ray."]);
+  assert.equal(a.bottomLine, "Here is what your documents say.");
+});
+
 test("a short document no row comes from is sent whole, unless it could not be read; payee rules are sent (release-set E1, E2, H10)", () => {
   const RECEIPT = "aaaaaaaa-0000-0000-0000-000000000008", LONG = "aaaaaaaa-0000-0000-0000-000000000009", FAILED = "aaaaaaaa-0000-0000-0000-00000000000a";
   const H: Household = { ...HOUSE, documents: [...HOUSE.documents,
@@ -859,6 +935,12 @@ test("what prose says about the library is held to the library's own record (liv
   assert.equal(run("Mei Ling has four documents linked to her.").bottom, "Tan Mei Ling has 2 documents linked in DearPolicy.");
   assert.equal(run("Mei Ling has two documents linked to her.").bottom, "Mei Ling has two documents linked to her.");
   assert.equal(run("You have 5 documents uploaded.").bottom, "Your library has 3 documents.");
+  // A count of the documents linked to the people it names is held to the record (live run 23 Oct, E1).
+  assert.equal(run("Two are linked to both Lim and Mei Ling, and the rest to Lim only.").bottom, "Two are linked to both Lim and Mei Ling, and the rest to Lim only.");
+  assert.equal(run("One is linked to both Lim and Mei Ling, and the rest to Lim only.").bottom, "Of your 3 documents, 2 are linked to Lim Ah Kow and Tan Mei Ling, and 1 to Lim Ah Kow only.");
+  assert.equal(run("3 of them are linked to Lim only.").bottom, "Of your 3 documents, 2 are linked to Lim Ah Kow and Tan Mei Ling, and 1 to Lim Ah Kow only.");
+  assert.equal(run("1 is linked only to Lim.").bottom, "1 is linked only to Lim.");
+  assert.equal(run("Three documents are linked to Lim.").bottom, "Three documents are linked to Lim.");
   // A count of some kind of document is not the library count (Critic R131-4).
   assert.equal(run("Mei Ling has two travel documents.").bottom, "Mei Ling has two travel documents.");
   // A count of documents that print or show something is not a library count.

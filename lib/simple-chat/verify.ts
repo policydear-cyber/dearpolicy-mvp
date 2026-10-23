@@ -803,7 +803,16 @@ export function statesMoney(sentence: string): boolean {
 const JOIN = "\u2060";
 export const sentences = (text: string) => sentencesOf((text ?? "").replace(/\b(No|Nos|no|nos|p|pp|Cl|cl|Ref|ref|approx|e\.g|i\.e|vs)\.\s+(?=[A-Z0-9])/g, `$1.${JOIN}`)).map((x) => x.replace(new RegExp(JOIN, "g"), " "));
 function withoutMoney(text: string, dropped: string[], keep: (s: string) => string = (s) => s): string {
-  return sentences(text ?? "").filter((s) => { const money = statesMoney(keep(s)); if (money) dropped.push(s); return !money; }).join(" ").trim();
+  return withoutOrphans(sentences(text ?? ""), (s) => statesMoney(keep(s)), dropped);
+}
+/** A sentence that leans on the one before it ("That period has passed.", "It pays only if ...") goes with it when that
+ * one is left out, so no sentence is left pointing at nothing (unseen set U3). */
+const STATES_CONDITION = /\b(?:only\s+if|if|unless|provided|within|subject\s+to|must|after|before|until|waiting|exclu\w*|not\s+(?:paid|payable|covered))\b/i;
+const LEANS_ON_PREVIOUS = /^(?:it|its|this|that|they|their|these|those|such)\b/i;
+function withoutOrphans(all: string[], leaveOut: (s: string) => boolean, dropped: string[]): string {
+  let last = false;
+  // A sentence that states a condition ("It is paid only if ...") is kept: what it asks for still holds (Critic R140-2).
+  return all.filter((s) => { const out = leaveOut(s) || (last && LEANS_ON_PREVIOUS.test(s.trim()) && !STATES_CONDITION.test(s)); if (out) dropped.push(s); last = out; return !out; }).join(" ").trim();
 }
 /** A file name is never money ("output_2026.pdf", release-set E1, E2). */
 const FILE_NAME = /[^\s$,()“”"']+\.(?:pdf|png|jpe?g|heic|webp|gif|tiff?|docx?|xlsx?)\b/gi;
@@ -1037,7 +1046,7 @@ const readConditions = (v: unknown): ModelStatement["conditions"] => (Array.isAr
 const asks = (sentence: string) => /\?["”’)\]]*\s*$/.test(sentence.trim());
 /** Text without the sentences that ask something; those are reported. Questions go only in "question" (one at most). */
 function withoutQuestions(text: string, dropped: string[]): string {
-  return sentences(text ?? "").filter((x) => { const q = asks(x); if (q) dropped.push(x); return !q; }).join(" ").trim();
+  return withoutOrphans(sentences(text ?? ""), asks, dropped);
 }
 /** The model's JSON as a ModelAnswer, or null when it is not one. */
 export function readModelAnswer(json: unknown): ModelAnswer | null {
@@ -1151,6 +1160,16 @@ function docNames(d: HouseholdDocument): string[] {
 /** "The insurer decides which premium applies", "Singlife decides if they differ", "the one to rely on": said of premiums, never
  * of a printed rule such as a premium waiver ("waived if the insurer determines you are disabled", Critic R131-3). */
 const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?)\s+(?:which|what)\b|\b(?:decides?|will\s+decide|determines?)\s+(?:if|whether)\s+(?:they|the\s+\w+(?:\s+\w+)?)\s+(?:differ|appl(?:y|ies))\b|\bwhich\s+(?:premium|figure|amount|one)\s+applies\b|\bto\s+rely\s+on\b/i.test(x);
+/** "Two are linked to both Desmond and Charmaine", "3 of them are linked to Desmond only": a count of the documents linked
+ * to the people it names (live run 23 Oct, E1). */
+const LINKED_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:(?:of\s+(?:them|these|those)|(?:uploaded\s+)?(?:documents?|files?))\s+)?(?:are|is|were|was)\s+linked\s+(only\s+)?to\s+(?:both\s+)?([^.;,]*)`, "i");
+/** Who the documents are linked to, counted from the library's record, in the server's words. */
+function linkCounts(live: HouseholdDocument[]): string {
+  const groups = new Map<string, number>();
+  for (const d of live) { const k = d.linkedPeople.map(baseName).sort().join(" and ") || "no one"; groups.set(k, (groups.get(k) ?? 0) + 1); }
+  const parts = [...groups].sort((a, b) => b[1] - a[1]).map(([k, n], i) => `${n}${i ? "" : ` ${n === 1 ? "is" : "are"} linked`} to ${k}${k.includes(" and ") || k === "no one" ? "" : " only"}`);
+  return `Of your ${live.length} document${live.length === 1 ? "" : "s"}, ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}` : parts[0]}.`;
+}
 function libraryClaimsRead(household: Household, left: string[]): (text: string, statement?: boolean) => string {
   const live = household.documents.filter((d) => !d.supersededAt);
   return (text: string, statement = false) => {
@@ -1160,6 +1179,14 @@ function libraryClaimsRead(household: Household, left: string[]): (text: string,
     return sentences(text).flatMap((x) => {
     if (PREMIUM_DECIDES(x)) { left.push(x); return []; }
     const named = membersNamedIn(household, x);
+    const linkedCount = LINKED_COUNT.exec(x);
+    if (linkedCount) {
+      const whom = membersNamedIn(household, linkedCount[3]);
+      const only = !!linkedCount[2] || /\bonly\b/i.test(linkedCount[3]);
+      const said = COUNT_WORDS.indexOf(linkedCount[1].toLowerCase()) >= 0 ? COUNT_WORDS.indexOf(linkedCount[1].toLowerCase()) : Number(linkedCount[1]);
+      const truth = live.filter((d) => { const to = d.linkedPeople.map(baseName); return whom.every((w) => to.includes(w)) && (!only || to.length === whom.length); }).length;
+      if (whom.length && said !== truth) { left.push(x); return [linkCounts(live)]; }
+    }
     const count = DOC_COUNT.exec(x);
     if (count && /\b(?:has|have|had|linked|uploaded|in\s+(?:your|the)\s+library|there\s+(?:are|is))\b/i.test(x) && !/\b(?:print|prints|printed|show|shows|say|says|list|lists|give|gives|differ|different)\b/i.test(x) && named.length <= 1) {
       const said = COUNT_WORDS.indexOf(count[1].toLowerCase()) >= 0 ? COUNT_WORDS.indexOf(count[1].toLowerCase()) : Number(count[1]);
