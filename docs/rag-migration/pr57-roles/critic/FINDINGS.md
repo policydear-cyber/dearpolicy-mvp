@@ -5742,3 +5742,13 @@ new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s+(?:waiting|period|ago|since|notic
 - **`libraryList`** is the library's own record (linked people, superseded documents left out). It only replaces a point that cites no document, in a question about documents.
 - **`NOTHING_SHOWN`:** correct.
 - **`spouseMeant`**, low, note only. It counts a title before at least 2 words of a member's name, so "Mrs Tan Yi Chuen" (a wife printed under her husband's name) would count for the husband. That would point "my wife" at Desmond if Charmaine is never printed with Mrs/Ms. It is rare in insurance documents. A stricter version would also require the other spouse to be printed with the opposite title.
+
+## R154: PR #109 re-review at 3aea7bc (diff f82ba06..3aea7bc)
+
+**Verdict: READY.**
+
+- **R153-1 fixed.** The backstop fires only when the row's own document has a page that prints "waiting period" and names the cover. My Hip probes are now shown in all four forms (on_list with waiting null, a missing key, any_event, and applies "no"). Keeping `asOf` as the stand-in date is acceptable now: the page-and-cover check is what limits the backstop, and live readings carry no startDate.
+- **R153-2 fixed.** A rate counts only when a cap word comes just before it, and a line naming ICU, an excess, a companion or an allowance gives no rate. The four rows are now tests, and S016 still gives 200.
+- **R153-3 fixed.** A bare day count followed by waiting, period, ago, since, notice, of cover/the policy, or to claim/notify/tell/inform is not counted.
+- **Low note fixed.** A member also printed with the other kind of title settles nothing.
+- **Free tests at 3aea7bc:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
