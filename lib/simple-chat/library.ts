@@ -129,7 +129,7 @@ export const PAGES_NOTE = "Only the pages the benefit table's rows come from, an
 const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
 /** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
  * the documents print with that kind of title ("Mr Tan Yi Chuen, Desmond") while the other is never printed with it. A
- * title counts only before at least two words of that member's own name. Never read from a name itself. Null otherwise
+ * title counts only before all of that member's own name words. Never read from a name itself. Null otherwise
  * (stress run 23 Oct, S048: "my husband" was asked about as "Desmond's or Charmaine's?"). */
 export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
   const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
@@ -147,7 +147,8 @@ export function spouseMeant(household: Household, said: string[]): { word: strin
         const name = x[2].split(/[\s,]+/).filter(Boolean);
         const n = name.findIndex((w) => !own.has(w.toLowerCase()));
         const kept = n < 0 ? name.length : n;
-        if (kept >= 2) out.push({ title: x[1], printed: `${x[1]} ${name.slice(0, kept).join(" ")}` });
+        // Every word of the member's own name, so a relative who shares two of them ("Mr Lim Hui Jun") never counts (TE S3).
+        if (kept >= 2 && [...own].every((w) => name.slice(0, kept).some((k) => k.toLowerCase() === w))) out.push({ title: x[1], printed: `${x[1]} ${name.slice(0, kept).join(" ")}` });
       }
     return out;
   };

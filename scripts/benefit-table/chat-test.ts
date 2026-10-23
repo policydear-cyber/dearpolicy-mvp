@@ -1128,6 +1128,7 @@ test("a limit whose own line prints one daily rate gives that rate as a row of i
     .filter((r) => r.benefit === "Daily hospital cash while overseas" && r.figure.kind === "printed" && r.figure.unit === "per_day").map((r) => r.figure.kind === "printed" ? r.figure.amount : null);
   assert.deepEqual(rateOf("Maximum S$300 per day"), [300]);
   for (const excerpt of ["S$200 per day or S$400 per day in intensive care", "S$8,000 per day", "Up to S$8,000",
+    "Hospital Cash: Up to S$8,000; companion bed S$50 per day", "Capped at S$200 per day from the 11th day", "Up to S$200 per day after day 10",
     "ICU: capped at S$300 per day", "An excess of S$100 per day applies", "Companion: up to S$100 per day", "Daily allowance up to S$50 per day", "Pays S$200 per day"]) {
     const other = chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE);
     assert.equal(other.filter((r) => r.benefit === "Daily hospital cash while overseas").length, 1, excerpt);
@@ -1152,6 +1153,10 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.equal(spouseMeant(titled("Dear Mr Lim,"), ["my husband"]), null);
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["my wife"]), null);
   assert.equal(spouseMeant(titled("Mr Lim Ah Kow and Mr Tan Mei Ling"), ["my husband"]), null);
+  // A relative who shares two of the member's name words is not the member (TE S3).
+  assert.equal(spouseMeant(titled("Nominee: Mr Lim Ah Tan (brother)"), ["my husband"]), null);
+  // The caller passes the message, then earlier turns newest first: the latest mention decides (TE S4).
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["how much a day?", "and my husband was in hospital", "what does my wife have?"])?.word, "my husband");
   // A member also printed as "Mrs" is never taken as the husband (Critic R153, low).
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Lim Ah Kow,"), ["my husband"]), null);
   assert.equal(spouseMeant(HOUSE, ["my husband"]), null);

@@ -71,7 +71,8 @@ function chatFor(context: ChatContext): string {
   return p ? `(This chat is about ${p.display_name}${p.relationship ? `, ${p.relationship}` : ""}.) ` : "";
 }
 
-/** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). */
+/** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). The latest
+ * mention counts: the message, then earlier turns newest first (TE S4). */
 function spouseNote(household: Household, said: string[]): string {
   const meant = spouseMeant(household, said);
   return meant ? `("${meant.word}" is ${meant.member}: the documents print "${meant.printed}".) ` : "";
@@ -99,7 +100,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
     // exclusion, are sent with it (about half the cost per question).
-    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text)]) + message });
+    reply = await model.call({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + chatFor(context) + spouseNote(household, [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()]) + message });
   } finally {
     if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(reply ? ledgerUsage(reply.usage) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - started, ok: !!reply });
   }

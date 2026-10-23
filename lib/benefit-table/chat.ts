@@ -82,6 +82,8 @@ function dailyRateOf(excerpt: string, limit: number): number | null {
   // A daily figure that is something else (an ICU rate, an excess, a companion's or an allowance's) is never the limit's
   // own rate, so a line that names one gives none (Critic R153-2).
   if (/\b(?:ICU|intensive|excess|deductible|co-?pay\w*|companion|allowance)\b/i.test(excerpt)) return null;
+  // A line with its own day rule ("from the 11th day") would lose it on a row of its own (TE R6).
+  if (/\b(?:from|after|beyond|starting|commencing)\b[^.\n]{0,25}\bday\b|\bday\s+\d/i.test(excerpt)) return null;
   const rates = new Set(moneyFiguresIn(excerpt).filter((f) => {
     const at = excerpt.indexOf(f.raw ?? "");
     // Only a rate that caps what is paid: "Capped at S$200 per day", "maximum S$300 per day".

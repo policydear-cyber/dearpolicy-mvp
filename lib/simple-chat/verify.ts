@@ -647,9 +647,15 @@ function stayDaysWritten(asked: string[], days: number): boolean {
   const res = [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"), new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi")];
   // Once the conversation is about a hospital stay, a later "and if it was 50 days?" or "3 days so far" gives its length
   // (stress run 23 Oct, S050, S088).
-  if (asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))) res.push(new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s*(?:'s\s+)?(?:waiting|period|ago|since|notice|of\s+(?:cover|the\s+policy)|to\s+(?:claim|notify|tell|inform)))`, "gi"));
-  return asked.some((q) => res.some((re) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days)));
+  // A turn that names a day rule ("claim within 30 days", "a 90 days waiting period") gives no bare count (TE T2).
+  const bare = asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))
+    ? new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s*(?:'s\s+)?(?:waiting|period|ago|since|notice|of\s+(?:cover|the\s+policy)|to\s+(?:claim|notify|tell|inform)))`, "gi") : null;
+  const ruleTurn = /\b(?:within|claim\w*|notif\w*|waiting|period|deadline|submit\w*)\b/i;
+  const said = (q: string, re: RegExp) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days);
+  return asked.some((q) => res.some((re) => said(q, re)) || (bare != null && !ruleTurn.test(q) && said(q, bare)));
 }
+/** "An 8-day", "an 11-day", "an 18-day", otherwise "A 12-day" (TE T4). */
+const aDay = (n: number) => `${n === 11 || n === 18 || String(n).startsWith("8") ? "An" : "A"} ${n}`;
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   const stay = st.perDay?.stayDays;
@@ -1419,7 +1425,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     // A stay that ends before the daily benefit starts is paid nothing: the daily rate is not shown as a card for it, only
     // said with the day it starts (stress run 23 Oct, S088).
     if (c.stay && c.stay.payable === 0 && c.amount) {
-      const said = `${text.replace(/[.\s]+$/, "")}. A ${c.stay.stay}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
+      const said = `${text.replace(/[.\s]+$/, "")}. ${aDay(c.stay.stay)}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
       statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions, asOf: null, source, group: null });
       return;
     }
@@ -1434,7 +1440,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       const st = c.stay;
       const said = st.payable > 0
         ? `For a ${st.stay}-day stay, this works out to ${st.payable} day${st.payable === 1 ? "" : "s"} of the daily benefit.`
-        : `A ${st.stay}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
+        : `${aDay(st.stay)}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
       statements.push({
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
