@@ -810,6 +810,11 @@ test("a card for a cover or benefit the answer says the event is not on is never
   // "but" opens another clause; it never saves the cover the first one rules out (Critic R141-1).
   assert.deepEqual(run("q", [{ text: "Heart attack is not on the Living Care Plus list, but Living Care pays its sum insured." }]).cards, [LC]);
   assert.deepEqual(run("q", [{ text: "A heart attack is not one of the 10 early illnesses on the Living Care Plus list, but Living Care covers it." }]).cards, [LC]);
+  // A pronoun is read back, never forward into a "but" clause about another cover (Critic R142-1).
+  assert.deepEqual(run("q", [{ text: "Living Care Plus only pays for 10 early illnesses, so a heart attack may not fall under it, but Living Care covers it." }]).cards, [LC]);
+  assert.deepEqual(run("q", [{ text: "Living Care Plus covers 10 early illnesses. It is not on its list, but Living Care pays." }]).cards, [LC]);
+  // A "but" that keeps the door open for the same cover keeps its card (Critic R142-2).
+  assert.deepEqual(run("q", [{ text: "Heart attack is not on the Living Care Plus list, but it may still be covered if it is diagnosed at an early stage." }]).cards, [LC, LCP]);
   // Neither list names it: both go, whether said in a point or in the bottom line.
   assert.deepEqual(run("q", [{ text: "Diabetes is not named among the 37 illnesses Living Care covers or the 10 early illnesses Living Care Plus covers." }]).cards, []);
   assert.deepEqual(run("Not shown to be covered: diabetes is not on the Living Care or the Living Care Plus list.", []).cards, []);

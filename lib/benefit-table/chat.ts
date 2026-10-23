@@ -307,10 +307,16 @@ function saidNotToFit(json: Record<string, unknown>, household: Household): NotF
       if (!m) return;
       const at = m.index;
       const parts = x.split(/([,;:]|\b(?:and|but|so|while|because|whereas)\b)/i);
-      let pos = 0, clause = x;
+      let pos = 0, clause = "";
       for (const part of parts) { if (at >= pos && at < pos + part.length) { clause = part; break; } pos += part.length; }
+      if (!clause) { clause = x; pos = 0; }
       if (/\bif\b/i.test(clause) || STILL_OPEN.test(clause)) return;
-      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${x}` : x;
+      // "..., but it may still be covered if ..." keeps the door open for the same cover (Critic R142-2).
+      const after = x.slice(pos + clause.length).match(/^[\s,;]*but\b([^,;:]*)/i)?.[1] ?? "";
+      if (/^\s*(?:it|this|that|they|the\s+insurer)\b/i.test(after) && (/\bif\b/i.test(after) || STILL_OPEN.test(after))) return;
+      // A pronoun is read back, never forward: "..., but Living Care covers it" is not what it rules out (Critic R142-1).
+      const upTo = x.slice(0, pos + clause.length);
+      const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${upTo}` : upTo;
       out.push({ text: BY_PRONOUN.test(clause) ? context : clause, person });
     });
   };
