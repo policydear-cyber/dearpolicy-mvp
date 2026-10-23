@@ -969,7 +969,8 @@ export function conditionApplies(household: Household, found: Found, quote: stri
     const mark = FOOTNOTE.exec(lineOf(page.text, where.offset))?.[1];
     if (!mark) { if (subBenefitOf(doc, where.page, where.offset, covers) === hereSub) return true; continue; }
     // The row is the statement's line, with the mark printed after its first character (a row label such as "Ambulance Cost*").
-    if (lineOf(page.text, found.offset).trimStart().slice(1).includes(mark)) return true;
+    // The same mark, not a longer one: "*" is never the "**" row's (TE #105 W3).
+    if ([...lineOf(page.text, found.offset).trimStart().slice(1).matchAll(/[*#^†‡§]+/g)].some((m) => m[0] === mark)) return true;
   }
   if (onThisPage.length) return false;
   const footnote = (f: Found) => { const d = household.documents[f.docIndex]; return FOOTNOTE.test(lineOf(d.pages.find((p) => p.page === f.page)!.text, f.offset)); };

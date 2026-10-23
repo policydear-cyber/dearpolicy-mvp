@@ -756,10 +756,11 @@ test("a point that says it shows an amount is given that row's amount; with no a
   assert.deepEqual(r.texts, [said]);
   r = run("Here.", [{ text: said, person: "Tan Mei Ling", document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
   assert.deepEqual(r.amounts, [["Tan Mei Ling", "Up to S$500"]]);
-  // A point that says the amount is not paid, does not apply or is someone else's is never given it; its pointing words go
-  // (Critic R134-1).
-  for (const [x, kept] of [["No ambulance was used, so this amount is not payable.", ["No ambulance was used."]], ["This amount does not apply, because the policy ended before the accident.", []],
-    ["That limit is for Tan Mei Ling's policy only.", []]] as const) {
+  // A point that says the amount is not paid, does not apply or is someone else's is never given it; what it says of "this
+  // amount" is kept, said of the benefit (Critic R134-1, TE #105 Y13).
+  for (const [x, kept] of [["No ambulance was used, so this amount is not payable.", ["No ambulance was used, so this benefit is not payable."]],
+    ["This amount does not apply, because the policy ended before the accident.", ["This benefit does not apply, because the policy ended before the accident."]],
+    ["That limit is for Tan Mei Ling's policy only.", ["That benefit is for Tan Mei Ling's policy only."]], ["The policy has ended. The scheme terms show this amount.", ["The policy has ended."]]] as const) {
     r = run("Not covered.", [{ text: x, document: "D2", quote: "Ambulance Cost Up to S$500 per incident" }]);
     assert.deepEqual(r.amounts, [], x);
     assert.deepEqual(r.texts, kept, x);

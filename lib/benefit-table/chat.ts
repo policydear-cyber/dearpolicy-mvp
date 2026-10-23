@@ -250,10 +250,16 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
 }
 
 /** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"). */
-export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown|here)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
-/** A sentence without the clauses that point at an amount; null when its first clause does. */
+export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+/** "this amount" in a sentence that says something of it ("This amount is not paid if the injury was self-inflicted"): the
+ * benefit is meant, and the sentence is kept saying so (TE #105 Y13). */
+const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\s+(?:insured|assured)\b)/gi;
+const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string, _n: string, pl: string) => `${w} benefit${pl ? "s" : ""}`);
+/** A sentence without the clauses that point at an amount; null when its first clause does. A clause that only says the
+ * amount is shown goes; one that says something of "this amount" keeps it, said of the benefit. */
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
+  if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
   const parts = sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
   if (AMOUNT_POINTER.test(parts[0])) return null;
   const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
@@ -291,7 +297,7 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
   }
   return out;
 }
-const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown)\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
 /** With no amount in the answer, what points at one ("the amounts below only apply if ...") is left out of its bottom line
