@@ -818,6 +818,16 @@ test("a card whose event is not on its cover's list is never shown, decided per 
   const pointed = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident",
     amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "not_on_list" }] }, all, HOUSE);
   assert.deepEqual(pointed.report.labels, []);
+  // Ruled out once, a row stays out: named again with another flag, or its twin named as any_event (TE #107 E7, E8c).
+  assert.deepEqual(run([[lcp.id, "not_on_list"], [lcp.id, "on_list"]]).cards, []);
+  assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "not_on_list"]], ["Not on the Living Care Plus list."]).cards, [LC]);
+  // Living Care ruled out with only "Living Care Plus" named: the household hears an amount was left out (TE #107 L4).
+  assert.equal(run([[lc.id, "not_on_list"], [lcp.id, "on_list"]], ["A heart attack is on the Living Care Plus list."]).notes, 1);
+  // A pointer at a ruled-out row gives no card (TE #107 E8b).
+  const pointedOut = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
+    { kind: "amount", text: "Cover.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: amb.id, eventFit: "not_on_list" },
+    { kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null }] }, all, HOUSE);
+  assert.deepEqual(pointedOut.report.labels, []);
   // A "not_on_list" card takes the same benefit's companion from another document with it.
   const hip = idOf("Lim Ah Kow", "Hip");
   assert.deepEqual(run([[hip, "not_on_list"]]).cards, []);

@@ -188,6 +188,13 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
     .filter((x): x is string => typeof x === "string").join(" ");
+  // A row ruled out anywhere in the answer, with its twins in the person's other documents, is never shown: not when
+  // named again with another flag, pointed at, or brought back as a companion (TE #107 E7, E8b, E8c).
+  const ruledOut = new Set<string>();
+  for (const x of (json as { statements: Record<string, unknown>[] }).statements ?? []) {
+    const r = x && x.eventFit === "not_on_list" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined;
+    if (r) for (const o of rows) if (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit))) ruledOut.add(o.id);
+  }
   for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
@@ -198,7 +205,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // the event not on that list, is never shown (live run 23 Oct, H2). Decided per card, never read from the prose.
     // The answer says why only when its own words name the cover or benefit; otherwise the household hears an amount was
     // left out (Critic R143-2).
-    if (raw.eventFit === "not_on_list") { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row) }); continue; }
+    if (raw.eventFit === "not_on_list" || ruledOut.has(row.id) || ruledOut.has(named.id)) { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row, rows) }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -212,7 +219,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
     // alternative that is not a total: an answer that gives one document's figure alone hides the other (release-set B7,
     // H7, H10).
-    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
+    const companions = rows.filter((o) => o.id !== row.id && !given.has(o.id) && !ruledOut.has(o.id) && o.personId === row.personId && o.coverKey === row.coverKey
       && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)
       // The same figure printed again adds nothing.
       && !sameFigure(o.figure, row.figure));
@@ -281,9 +288,13 @@ export const withoutPointers = (text: string) => sentences(text ?? "").map(witho
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
  * one (dropAmountPointers). */
 /** Whether words name a row's cover ("Living Care Plus" for "GROUP LIVING CARE PLUS(POLICY NO. 1)") or its benefit. */
-function namesRow(text: string, row: ChatRow): boolean {
+function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
   const plain = (x: string) => ` ${x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
-  const t = plain(text), cover = plain(noNumbers(row.cover).replace(/^group\s+/i, "")), benefit = plain(benefitName(row.benefit));
+  const coverOf = (r: ChatRow) => plain(noNumbers(r.cover).replace(/^group\s+/i, ""));
+  const cover = coverOf(row), benefit = plain(benefitName(row.benefit));
+  // A longer cover name is not this one: "Living Care Plus" does not name Living Care (TE #107 L4).
+  let t = plain(text);
+  for (const o of new Set(rows.map(coverOf))) if (o !== cover && o.includes(cover)) t = t.split(o).join(" ");
   return (cover.trim().length > 2 && t.includes(cover)) || (benefit.trim().length > 2 && t.includes(benefit));
 }
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
