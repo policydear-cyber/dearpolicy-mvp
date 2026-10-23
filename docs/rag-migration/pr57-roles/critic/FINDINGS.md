@@ -5366,3 +5366,54 @@ Both sentences go: the first because it states money, the second as an "orphan".
 - benefit-table chat-test: 63/63
 - headline-test: 13/13
 - benefit-table test: 105/105
+
+## R141: PR #107 re-review at db703c8 (diff 6aca18b..db703c8)
+
+**Verdict: NOT READY, one fix.** R140-1 and R140-2 are fixed. But the sentence-wide "but" door now lets the H2 failure type through again, with the most natural wording. That fault is partly mine: R140 fix item 3 listed "but" as a door word. That was too broad.
+
+### R141-1 (high, blocking): a sentence-wide "but" keeps the Living Care Plus S$300,000 card for a heart attack
+`lib/benefit-table/chat.ts` `saidNotToFit`: `if (!m || STILL_OPEN.test(x)) return;` checks door words against the **whole sentence**, and `STILL_OPEN` includes `but`. So any contrast with another cover keeps the refused cover's card.
+
+| Model text (R901 Living Care + R902 Living Care Plus named) | db703c8 | right |
+|---|---|---|
+| "A heart attack is not one of the 10 early illnesses on the Living Care Plus list, but Living Care covers it." (bottom line) | LC **and LCP** | LC only |
+| "Heart attack is not on the Living Care Plus list, but Living Care pays its sum insured." | LC **and LCP** | LC only |
+| "Stroke is not on the Living Care Plus list, but it is on the Living Care list." | LC **and LCP** | LC only |
+| "Heart attack is not on the Living Care Plus list; Living Care pays it." | LC | LC |
+
+The answer says the cover does not fit, yet shows its S$300,000 card. That is a wrong claimable amount, the worst bug. (At 6aca18b these sentences dropped **both** cards, so neither commit is right yet.)
+
+**Fix (tested in a scratch copy):** check door words only inside the not-fit **clause**, and leave "but" out of the list:
+```ts
+const STILL_OPEN_CLAUSE = /\b(?:still|unless|until|pending|yet)\b/i;
+// in saidNotToFit: drop the sentence-wide STILL_OPEN test, then
+if (/\bif\b/i.test(clause) || STILL_OPEN_CLAUSE.test(clause)) return;
+```
+"but" is not a clause splitter, so "not on the list but could still be covered if …" stays one clause and is still kept (it has "still" and "if").
+
+With this patch:
+- chat-test passes 63/63, headline-test 13/13 and table 105/105.
+- All five R140 cases keep their cards, and so does the B7 spine card.
+- The H2, diabetes and "not one of its 10 early illnesses" cases still refuse.
+- All four rows in the table above give LC only.
+
+Please add the first two rows as tests.
+
+### R140-1: fixed
+`NOT_FIT` now uses list wording only. The row is matched in the not-fit clause, and the sentence is read whole only when the clause uses a pronoun. Probes (`r141/scripts/benefit-table/probe.ts`) keep these cards:
+- the "could still be paid" ambulance card;
+- the "unless" card;
+- the two X-ray-pending cards;
+- the "if it turns out to be a broken hip" card;
+- the "knee is not on its list" ankle card;
+- the B7 spine card.
+
+"Living Care Plus will not pay, because a heart attack is not one of its 10 early illnesses" refuses LCP and keeps LC, which is correct.
+
+### R140-2: fixed
+"It is paid only if the ambulance takes her to a hospital within 24 hours of the accident." is now kept after its money sentence is dropped.
+
+Low, note only: `STATES_CONDITION` also matches "not covered", "after" and "before". So a sentence like "It is not covered." can stay after the sentence it points to is dropped. It reads oddly but shows no amount. No change needed this round.
+
+### Tests (run locally, free)
+- At db703c8: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
