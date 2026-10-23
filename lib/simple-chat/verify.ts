@@ -807,10 +807,12 @@ function withoutMoney(text: string, dropped: string[], keep: (s: string) => stri
 }
 /** A sentence that leans on the one before it ("That period has passed.", "It pays only if ...") goes with it when that
  * one is left out, so no sentence is left pointing at nothing (unseen set U3). */
+const STATES_CONDITION = /\b(?:only\s+if|if|unless|provided|within|subject\s+to|must|after|before|until|waiting|exclu\w*|not\s+(?:paid|payable|covered))\b/i;
 const LEANS_ON_PREVIOUS = /^(?:it|its|this|that|they|their|these|those|such)\b/i;
 function withoutOrphans(all: string[], leaveOut: (s: string) => boolean, dropped: string[]): string {
   let last = false;
-  return all.filter((s) => { const out = leaveOut(s) || (last && LEANS_ON_PREVIOUS.test(s.trim())); if (out) dropped.push(s); last = out; return !out; }).join(" ").trim();
+  // A sentence that states a condition ("It is paid only if ...") is kept: what it asks for still holds (Critic R140-2).
+  return all.filter((s) => { const out = leaveOut(s) || (last && LEANS_ON_PREVIOUS.test(s.trim()) && !STATES_CONDITION.test(s)); if (out) dropped.push(s); last = out; return !out; }).join(" ").trim();
 }
 /** A file name is never money ("output_2026.pdf", release-set E1, E2). */
 const FILE_NAME = /[^\s$,()“”"']+\.(?:pdf|png|jpe?g|heic|webp|gif|tiff?|docx?|xlsx?)\b/gi;

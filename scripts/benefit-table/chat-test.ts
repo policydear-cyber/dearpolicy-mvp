@@ -805,6 +805,8 @@ test("a card for a cover or benefit the answer says the event is not on is never
   let r = run("Living Care pays for a heart attack.", [{ text: "Living Care Plus covers early critical illnesses. It pays only if the diagnosis meets that definition, so a heart attack may not fall under it." }]);
   assert.deepEqual(r.cards, [LC]);
   assert.equal(r.notes, 0);
+  // A relative clause names the cover the sentence is about (paid H2 wording).
+  assert.deepEqual(run("q", [{ text: "Living Care Plus covers early critical illnesses such as mild coronary artery disease, which a heart attack would not necessarily meet." }]).cards, [LC]);
   // Neither list names it: both go, whether said in a point or in the bottom line.
   assert.deepEqual(run("q", [{ text: "Diabetes is not named among the 37 illnesses Living Care covers or the 10 early illnesses Living Care Plus covers." }]).cards, []);
   assert.deepEqual(run("Not shown to be covered: diabetes is not on the Living Care or the Living Care Plus list.", []).cards, []);
@@ -817,7 +819,15 @@ test("a card for a cover or benefit the answer says the event is not on is never
   // A cover with many benefits: only the benefit the sentence names goes ("the ankle row is for a fracture"), never the
   // cover's other cards; a sentence naming only the cover takes none of them.
   const hip = idOf("Lim Ah Kow", "Hip"), ankle = idOf("Lim Ah Kow", "Ankle");
-  assert.deepEqual(run("q", [{ text: "The ankle row is for a fracture, so a sprain is not shown to be paid." }], [hip, ankle], rows).cards.map((c) => c.replace(/ \(.*$/, "")), ["Hip"]);
+  assert.deepEqual(run("q", [{ text: "The ankle row is for a fracture, so a sprain is not on the ankle benefit's list." }], [hip, ankle], rows).cards.map((c) => c.replace(/ \(.*$/, "")), ["Hip"]);
+  // What the pages leave out ("not shown to be covered"), a door left open (still, unless, pending, yet, but, if), or a row
+  // named outside the clause that says it does not fit: every card stays (Critic R140-1).
+  const amb2 = idOf("Lim Ah Kow", "Ambulance Cost");
+  for (const text of ["A sprain is not shown to be covered by the fracture benefits, but the ambulance cost could still be paid if an ambulance was needed.",
+    "The ambulance cost is not shown to be covered unless an ambulance took him to hospital.", "The ankle benefit is not shown to be payable yet because the X-ray result is pending.",
+    "A back strain isn't one of the listed results; if it turns out to be a broken ankle, the scheme terms show the ankle amount.",
+    "A sprain is not on the fracture list, and the ambulance cost is paid for any emergency."])
+    assert.equal(run("q", [{ text }], [hip, ankle, amb2], rows).cards.length, 3, text);
   assert.deepEqual(run("A back strain isn't one of the listed results of the Group Personal Accident cover.", [], [hip, ankle], rows).cards.length, 2);
 });
 test("a sentence that leans on one left out goes with it; with no amount shown, no sentence says the figures differ (unseen U3, U16)", () => {
@@ -825,6 +835,9 @@ test("a sentence that leans on one left out goes with it; with no amount shown, 
   let r = run("The ambulance limit is S$500 per incident. That limit applies per trip. Call the insurer first.");
   assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["Call the insurer first."]);
   assert.ok(r.report.sentencesLeftOut.includes("That limit applies per trip."));
+  // A sentence that states a condition stays, even leaning on one left out (Critic R140-2).
+  r = run("The ambulance limit is S$500 per incident. It is paid only if the ambulance takes him to a hospital within 24 hours of the accident.");
+  assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["It is paid only if the ambulance takes him to a hospital within 24 hours of the accident."]);
   r = run("The ambulance limit is S$500 per incident. Ambulance cover applies per trip.");
   assert.deepEqual((r.answer.statements ?? []).map((x) => x.text), ["Ambulance cover applies per trip."]);
   const a = { summary: "The two documents print different figures, so the insurer decides which applies.", bottomLine: "The two documents print different figures, so the insurer decides which applies.",
