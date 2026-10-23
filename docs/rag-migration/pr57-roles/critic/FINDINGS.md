@@ -5653,3 +5653,11 @@ With no card shown, "The Advance Payment amount below is not paid in addition to
 - **R149-1 and R149-2 are in, exactly as patched.** Each has a new test: a waiting-period quote gives fromDay null, and the no-card Advance Payment sentence now reads "The Advance Payment benefit …".
 - **Free tests at 21d1f3f:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
 - **The R149 low note stands, with no change needed:** "backdated to the first day" still gives day 4.
+
+## R151: PR #108 at 46f5a10 (diff 21d1f3f..46f5a10, Test Engineer B6 and D8)
+
+**Verdict: READY still holds.**
+
+- **B6:** `startDay` no longer counts "beyond". That only narrows it: a quote that loses its day keeps the reading's printed day, or none, and the stay card still parses on its own.
+- **D8:** "cannot" was missing from the negation list in `CONDITION_OF_AMOUNT`, because `n't` does not match "cannot". Adding it is correct.
+- **Free tests at 46f5a10:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
