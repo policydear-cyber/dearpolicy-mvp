@@ -5847,3 +5847,12 @@ Two rows with **identical** benefit names (for example "Hospital cash" on two co
 - **R156-1 is fixed, exactly as patched.** An undated event is no longer taken as today. Its card says when the period ended. The prompt now asks for today's date for an event happening now. There is a test for an event dated today that falls outside the period.
 - **R157-1 is still open.** `copiedName` still accepts one name inside the other when the shorter name has at least 2 words (chat.ts:635). So a slip between "Hospital Cash" and "ICU Hospital Cash" still shows the other row's amount. Apply the R157 `core()` patch and add the ICU/Hospital Cash pair as tests.
 - **Free tests at 9a03b85:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R159: PR #110 at 4ddcd71 (diff 9a03b85..4ddcd71)
+
+**Verdict: READY.**
+
+- **R156-1 is fixed** (in 9a03b85, confirmed in R158).
+- **R157-1 is fixed, exactly as patched.** `copiedName` now needs the two names to be equal once generic words are taken out. A slip between ICU Hospital Cash and Hospital Cash is dropped in both directions. The exact name and "Hospital Cash Benefit" are still shown. All four cases are tests.
+- **Free tests at 4ddcd71:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+- **Low note from R157 stands, with no change needed:** a slip between rows with identical names on different covers still passes.
