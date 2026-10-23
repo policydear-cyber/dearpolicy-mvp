@@ -729,8 +729,11 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
   if (!nameWords(copied).length) return false;
   // A copy that is another of the person's cover names is that cover, never this row ("Critical Illness" is the CRITICAL
   // ILLNESS policy, not the EARLY CRITICAL ILLNESS row, TE #112 B4).
-  const coverName = (c: string) => nameWords(c.replace(/\([^()]*\)/g, " ")).sort().join(" ");
-  const saidName = nameWords(copied).sort().join(" ");
+  // Words that name a policy, not a cover ("Critical Illness Policy", TE #112 B4b), are left out on both sides.
+  const asCover = (t: string) => [...new Set(nameWords(t).filter((w) => !/^(?:policy|policies|insurance|rider|no|\d+)$/.test(w)))].sort().join(" ");
+  const coverName = (c: string) => asCover(c.replace(/\([^()]*\)/g, " "));
+  const saidName = asCover(copied);
+  if (!saidName) return false;
   if (coverName(row.cover) !== saidName && rows.some((o) => o.personId === row.personId && o.cover !== row.cover && coverName(o.cover) === saidName)) return false;
   const [all, half] = fit(row);
   if (all < 1 || half < 0.5) return false;

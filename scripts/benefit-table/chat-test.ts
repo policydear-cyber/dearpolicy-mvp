@@ -1330,7 +1330,7 @@ test("a benefit with a note of its own stays a rival to the plain one when match
   // A copy naming another of the person's covers is that cover, never this row (TE #112 B4).
   const ci = { ...at("R967", "Coverage against 37 critical illnesses", 5000, "doc-a"), cover: "CRITICAL ILLNESS(POLICY NO. 7)" };
   const eci = { ...at("R968", "Early Critical Illness", 5000, "doc-a"), cover: "EARLY CRITICAL ILLNESS(POLICY NO. 8)" };
-  assert.ok(!shown([ci, eci], eci, "Critical Illness"));
+  for (const n of ["Critical Illness", "Critical Illness Policy", "Critical Illness (Policy No. 7)", "Critical Illness Insurance"]) assert.ok(!shown([ci, eci], eci, n), n);
   assert.ok(shown([ci, eci], eci, "Early Critical Illness"));
   // The row's own longer line still binds (A6).
   const prem = at("R966", "Instalment Premium, Monthly", 470.85, "doc-a", "Instalment Premium : 470.85 Currency");
