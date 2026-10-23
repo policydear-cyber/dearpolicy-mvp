@@ -828,6 +828,11 @@ test("a card whose event is not on its cover's list is never shown, decided per 
     { kind: "amount", text: "Cover.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: amb.id, eventFit: "not_on_list" },
     { kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null }] }, all, HOUSE);
   assert.deepEqual(pointedOut.report.labels, []);
+  // A ruled-out pointer keeps the row out even when another statement names it (TE #107 E8d).
+  const pointerOut = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [
+    { kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "not_on_list" },
+    { kind: "amount", text: "Cover.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: amb.id, eventFit: "any_event" }] }, rows, HOUSE);
+  assert.deepEqual(pointerOut.report.labels, []);
   // A "not_on_list" card takes the same benefit's companion from another document with it.
   const hip = idOf("Lim Ah Kow", "Hip");
   assert.deepEqual(run([[hip, "not_on_list"]]).cards, []);

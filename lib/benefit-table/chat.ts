@@ -190,12 +190,14 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     .filter((x): x is string => typeof x === "string").join(" ");
   // A row ruled out anywhere in the answer, with its twins in the person's other documents, is never shown: not when
   // named again with another flag, pointed at, or brought back as a companion (TE #107 E7, E8b, E8c).
+  // Built after pointers become cards, so a ruled-out pointer counts too (TE #107 E8d).
+  const pointed = pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household);
   const ruledOut = new Set<string>();
-  for (const x of (json as { statements: Record<string, unknown>[] }).statements ?? []) {
+  for (const x of pointed) {
     const r = x && x.eventFit === "not_on_list" && typeof x.row === "string" ? byId.get(x.row.trim().toUpperCase()) : undefined;
     if (r) for (const o of rows) if (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit))) ruledOut.add(o.id);
   }
-  for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
+  for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined;
