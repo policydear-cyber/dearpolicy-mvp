@@ -283,7 +283,11 @@ const CONDITION_OF_AMOUNT = (sentence: string) => clauses(sentence).some((c) => 
   // addition to the death benefit"); never one that only says the amounts shown don't apply.
   && (CONDITIONAL.test(c) || !DENIES_END.test(c)));
 const ofBenefit = (sentence: string) => {
-  const said = sentence.replace(new RegExp(AMOUNT_POINTER.source, "gi"), (m) => (/\b(?:amounts|figures|sums|limits|cards|these|those)\b/i.test(m) ? "these benefits" : "this benefit"));
+  // "The Advance Payment amount below" is "The Advance Payment benefit", not "... this benefit" (Critic R149-2).
+  const said = sentence.replace(new RegExp(AMOUNT_POINTER.source, "gi"), (m) => {
+    const many = /\b(?:amounts|figures|sums|limits|cards|these|those)\b/i.test(m);
+    return /^(?:the|this|that|these|those)\b/i.test(m) ? (many ? "these benefits" : "this benefit") : many ? "benefits" : "benefit";
+  });
   return said.charAt(0).toUpperCase() + said.slice(1);
 };
 function withoutPointer(sentence: string): string | null {

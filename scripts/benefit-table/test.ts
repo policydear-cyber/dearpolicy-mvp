@@ -104,6 +104,9 @@ test("a first paid day printed as the day before it is kept: \"after the 10th da
   // The quote's own day wins over the reading's: "after the 10th day" read as 10 is day 11 (TE #108 B2); a printed "from
   // day 1" is day 1, not a later "exceeding 10 days" (TE #108 B4).
   assert.equal(readT(10, "A Benefit of $30 per day shall be payable after the 10th day of Hospital stay, up to a maximum of thirty (30) days continuously."), 11);
+  // A waiting period is not the first paid day (Critic R149-1).
+  const T5 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nHospital Cash Benefit S$50 per day, payable after 30 days of continuous cover. Max: 30 days" }) };
+  assert.equal(checkReading(T5, doc("scheme_terms", [], [benefit({ benefit: "Hospital Cash Benefit", pays: "per_day", value: 50, fromDay: null, maxDays: 30, page: 3, quote: "Hospital Cash Benefit S$50 per day, payable after 30 days of continuous cover. Max: 30 days" })])).benefits[0]?.fromDay, null);
   const T4 = { ...terms, pages: terms.pages.map((p) => p.page !== 3 ? p : { ...p, text: p.text + "\nDaily Hospital Cash Benefit S$30 per day from day 1; no claim is paid for stays exceeding 10 days abroad." }) };
   assert.equal(checkReading(T4, doc("scheme_terms", [], [benefit({ benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 11, maxDays: null, page: 3, quote: "Daily Hospital Cash Benefit S$30 per day from day 1; no claim is paid for stays exceeding 10 days abroad." })])).benefits[0]?.fromDay, 1);
 });

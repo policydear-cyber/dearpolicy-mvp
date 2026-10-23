@@ -59,7 +59,9 @@ export function numbersIn(text: string): number[] {
 export function startDay(text: string): number | null | undefined {
   const days = new Set<number>();
   for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) days.add(Number(m[1] ?? m[2]));
-  for (const m of text.matchAll(/\b(?:after|beyond)\s+(?:the\s+)?(?:first\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)) days.add(Number(m[1]) + 1);
+  // "After" counts only for a day of the stay ("after the 10th day", "after 10 days in hospital"), never a waiting period
+  // ("payable after 30 days of continuous cover", Critic R149-1).
+  for (const m of text.matchAll(/\b(?:after|beyond)\s+(?:the\s+)?(?:first\s+)?(?:(\d+)(?:st|nd|rd|th)\s+day\b|(\d+)\s+(?:consecutive\s+)?days?\s+(?:of\s+(?:hospital\w*|confinement|stay|admission)|in\s+(?:the\s+)?hospital)\b)/gi)) days.add(Number(m[1] ?? m[2]) + 1);
   return days.size === 0 ? undefined : days.size === 1 ? [...days][0] : null;
 }
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);

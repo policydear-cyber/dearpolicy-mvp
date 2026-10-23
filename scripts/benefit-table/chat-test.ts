@@ -893,6 +893,10 @@ test("with amounts shown, words that say the amounts shown do not apply go; othe
   const shown = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", eventFit: "any_event" },
     { kind: "fact", person: "Lim Ah Kow", document: "D2", quote: "Written notice of a claim must be given within 30 days.", text: "The amounts below are not paid unless written notice is given within 30 days." }]).statements.map((x) => x.text);
   assert.ok(shown.includes("These benefits are not paid unless written notice is given within 30 days."), JSON.stringify(shown));
+  // With no card shown, a pointer inside a name becomes the benefit's name (Critic R149-2).
+  const none = { summary: "s", bottomLine: "s", statements: [{ text: "The Advance Payment amount below is not paid in addition to the death benefit.", amount: null }] };
+  dropAmountPointers(none, []);
+  assert.deepEqual(none.statements.map((x) => x.text), ["The Advance Payment benefit is not paid in addition to the death benefit."]);
   // A coordination rule about the amount shown stays (Critic R147-2).
   for (const t of ["The Advance Payment amount below is not paid in addition to the death benefit.", "The amount below is not payable on top of the Advance Payment already paid."]) {
     const c = { summary: "s", bottomLine: "s", statements: [{ text: "Up to S$350,000", amount: { text: "S$350,000" } }, { text: t, amount: null }] };
