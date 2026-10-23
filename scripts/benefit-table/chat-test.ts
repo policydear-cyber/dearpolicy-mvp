@@ -5,11 +5,11 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, printedDay, coverLabels, citedPages, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, chatRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
-import { runSimpleChat } from "@/lib/simple-chat/hook";
+import { periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
 import type { ChatContext } from "@/lib/chat/workflow";
 
@@ -97,6 +97,11 @@ test("the table block numbers every row and states the figure the Coverage page 
 });
 test("the answer schema asks for each statement's row", () => {
   assert.ok((TABLE_ANSWER_SCHEMA.properties.statements.items.required as readonly string[]).includes("row"));
+  // The API refuses a schema with more than 16 nullable or union parameters (round 9: "period" made 20, every call failed).
+  const unions = (x: unknown): number => !x || typeof x !== "object" ? 0
+    : (Array.isArray(x) ? x.reduce((n: number, y) => n + unions(y), 0)
+      : (Array.isArray((x as { type?: unknown }).type) || "anyOf" in (x as object) ? 1 : 0) + Object.values(x as object).reduce((n: number, y) => n + unions(y), 0));
+  assert.ok(unions(TABLE_ANSWER_SCHEMA) <= 16, `${unions(TABLE_ANSWER_SCHEMA)} union parameters`);
 });
 test("a printed row's amount reaches the household, checked against the page", () => {
   const r = answer([{ row: idOf("Lim Ah Kow", "Ambulance Cost"), person: "Lim Ah Kow", text: "Ambulance cost is paid up to a limit." }]);
@@ -308,6 +313,13 @@ async function integration() {
   const hip = (call: SimpleModelCall) => ({ bottomLine: "A hip fracture is covered; see the amount below.", nextSteps: [], question: null, statements: [
     { kind: "amount", text: "A hip fracture pays a share of the sum insured.", person: "Lim Ah Kow", document: null, quote: null, amount: "S$999,999", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null,
       row: /R(\d+) \| Lim Ah Kow \| [^\n]*\| Hip \|/.exec(call.library)?.[0].split(" ")[0] ?? null }] });
+  await atest("a bottom line that answers on its own is never followed by the 'none shown' line; one that introduces points is (live run 23 Oct, E2; stress S070)", async () => {
+    const unquoted = (bottomLine: string) => () => ({ bottomLine, nextSteps: [], question: null, statements: [
+      { kind: "fact", text: "The scheme has a hotline.", person: null, document: "D1", quote: "a sentence printed nowhere", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: null, waiting: null, period: null }] });
+    const texts = async (b: string) => ((await turn(unquoted(b), true)).saved.answer.statements ?? []).map((x) => x.text);
+    assert.ok(!(await texts("All eight of your files were read, so none could not be read.")).includes(NOTHING_SHOWN));
+    for (const b of ["Here is each adult's list.", "The documents are listed below.", "Each person's documents:"]) assert.deepEqual(await texts(b), [NOTHING_SHOWN], b);
+  });
   await atest("in the app's chat turn, the table rides with the documents and the row's amount is what is saved", async () => {
     const t = await turn(hip, true);
     assert.equal(t.call.withRows, true);
@@ -1103,6 +1115,73 @@ test("a card inside a waiting period is never shown: the model gives the period 
   const both = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [old.id, twin.id].map((row, i) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row, eventFit: "on_list", waiting: i ? null : { applies: "yes", days: 90, from: "20/10/2026" } })) }, [...rows, old, { ...twin, source: { ...twin.source, documentId: "other" } }], HOUSE, new Date("2026-10-23T02:00:00Z"));
   assert.equal(both.report.labels.length, 0);
+});
+
+test("a benefit the question asks about by name is never hidden as not described (live run 23 Oct, H7)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const aid: ChatRow = { ...amb, id: "R960", benefit: "Mobility aid upon Accidental Total & Permanent Disablement" };
+  const shown = (question: string, row = aid) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit: "not_described", waiting: null, period: null }] }, [...rows, aid], HOUSE, new Date("2026-10-23T02:00:00Z"), question).report.labels.length;
+  assert.equal(shown("what is the mobility aid benefit"), 1);
+  assert.equal(shown("what does the ambulance cost benefit pay", amb), 1);
+  // Not asked about by name: hidden as before (S088: an ambulance nobody mentioned).
+  assert.equal(shown("she had an accident at work, 3 days so far"), 0);
+  assert.equal(shown("she had an accident at work, 3 days so far", amb), 0);
+  // One word of the name is not the name ("aid" alone).
+  assert.equal(shown("what aid can i get"), 0);
+});
+
+test("a card for an event outside its cover's printed period is never shown; with no event it says the period ended (live run 23 Oct, S048, S008)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const trip: ChatRow = { ...amb, id: "R961", cover: "Single Trip", benefit: "Daily hospital cash while overseas", coverKey: coverKeyOf({ product: amb.product, cover: "Single Trip", plan: null }) };
+  const run = (eventFit: string, period: unknown) => {
+    const r = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+      percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: trip.id, eventFit, waiting: null, period }] }, [...rows, trip], HOUSE, new Date("2026-10-23T02:00:00Z"));
+    return { labels: r.report.labels, why: r.report.dropped.map((d) => d.why) };
+  };
+  const p = (eventOn: string | null) => ({ from: "29/09/2026", to: "04/10/2026", eventOn });
+  // An event with no date said is today's: after the trip ended, no card.
+  assert.deepEqual(run("any_event", p(null)), { labels: [], why: ["its cover period ended on 04/10/2026"] });
+  // On a date inside the trip: shown. Before it: not.
+  assert.equal(run("any_event", p("29/09/2026")).labels.length, 1);
+  assert.deepEqual(run("any_event", p("20/09/2026")).why, ["its cover period starts on 29/09/2026"]);
+  // No period printed, or one that cannot be dated: shown as before.
+  assert.equal(run("any_event", null).labels.length, 1);
+  assert.equal(run("any_event", { from: null, to: null, eventOn: null }).labels.length, 1);
+  // With no event, the card is shown and says the period ended.
+  const lookup = run("no_event", p(null)).labels;
+  assert.equal(lookup.length, 1);
+  assert.match(lookup[0], / Its cover period ended on 04\/10\/2026\.$/);
+  assert.doesNotMatch(run("no_event", { from: "01/10/2026", to: "01/12/2026", eventOn: null }).labels[0], /ended/);
+});
+
+test("a sentence that sets the daily cards' one day rule against itself is left out (live run 23 Oct, H4)", () => {
+  const report = { dropped: [], labels: ["Daily cash: paid per day, from day 11 of the stay, for at most 30 days."], days: { "Daily cash: paid per day, from day 11 of the stay, for at most 30 days.": [{ fromDay: 11, maxDays: 30, alone: true }] } };
+  const st = (text: string) => ({ text, fullText: text, amount: null as unknown });
+  const answer = { summary: "S$900 for 45 days.", bottomLine: "S$900 for 45 days.", statements: [
+    st("The pages print two day-counts that differ slightly: one says it pays after the 10th day for up to 30 days, the other says from the 11th to the 40th day. The insurer decides which applies."),
+    st("It is paid from the 11th day. It is not paid for self-inflicted injuries."),
+    st("The scheme pays after the 7th day, the other from the 11th day."),
+    st("The benefit can only be claimed once. One page says after the 10th day for at most thirty (30) days, the other from day 11.") ] };
+  const left = dropAgreeingDayRules(answer, report);
+  assert.equal(left.length, 2);
+  assert.deepEqual(answer.statements.map((x) => x.text), ["It is paid from the 11th day. It is not paid for self-inflicted injuries.", "The scheme pays after the 7th day, the other from the 11th day.", "The benefit can only be claimed once."]);
+  // Cards read with different rules: nothing is left out.
+  const two = { ...report, days: { a: [{ fromDay: 11, maxDays: 30, alone: true }], b: [{ fromDay: 8, maxDays: 30, alone: true }] } };
+  const kept = { summary: "x", statements: [st("One says after the 10th day, the other from the 11th day.")] };
+  assert.deepEqual(dropAgreeingDayRules(kept, two), []);
+});
+
+test("each printed date range is said with whether it has ended, is running or has not started (live run 23 Oct, S048)", () => {
+  const withPages = (text: string): Household => ({ ...HOUSE, documents: [...HOUSE.documents, doc("aaaaaaaa-0000-0000-0000-0000000000e2", "Trip.pdf", [{ page: 1, text }])] });
+  const now = new Date("2026-10-23T03:00:00Z");
+  assert.match(periodsNote(withPages("Period of Insurance: 29/09/2026 to 04/10/2026"), now), /29\/09\/2026 to 04\/10\/2026: ended before today/);
+  assert.match(periodsNote(withPages("Cover 01/10/2026 - 01/12/2026"), now), /running today/);
+  assert.match(periodsNote(withPages("Trip 01/12/2026 to 05/12/2026"), now), /not started yet/);
+  // Singapore's date: 23 Oct begins at 16:00 UTC on 22 Oct, so a trip ending 22 Oct has ended.
+  assert.match(periodsNote(withPages("Trip 01/10/2026 to 22/10/2026"), new Date("2026-10-22T16:30:00Z")), /ended before today/);
+  // Not a range: nothing said.
+  for (const t of ["Issued 01/10/2026", "05/10/2026 to 01/10/2026", "31/02/2026 to 01/03/2026"]) assert.ok(!/\bTrip prints/.test(periodsNote(withPages(t), now)), t);
 });
 
 test("a printed date is read day first, and only as a real date", () => {

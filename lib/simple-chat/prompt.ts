@@ -138,10 +138,14 @@ export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; ne
 export const TABLE_ANSWER_SCHEMA = (() => {
   const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
   return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
-    items: { ...st, required: [...st.required, "row", "eventFit", "waiting"], properties: { ...st.properties, row: nullable("string"),
+    items: { ...st, required: [...st.required, "row", "eventFit", "waiting", "period"], properties: { ...st.properties, row: nullable("string"),
       // Whether the event asked about is one the row pays for: decided for each card, enforced by lib/benefit-table/chat.ts.
       eventFit: { anyOf: [{ type: "null" }, { type: "string", enum: ["on_list", "not_on_list", "any_event", "not_described", "no_event"] }] },
       // The waiting period that could apply to the event, as printed: the server compares its dates with today.
       waiting: { anyOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["applies", "days", "from"],
-        properties: { applies: { type: "string", enum: ["yes", "unsure", "no"] }, days: nullable("integer"), from: nullable("string") } }] } } } } } };
+        properties: { applies: { type: "string", enum: ["yes", "unsure", "no"] }, days: nullable("integer"), from: nullable("string") } }] },
+      // The cover's printed period and the event's date: the server compares them with today (a trip that has ended).
+      // Plain strings, "" when not printed or not said: the API allows at most 16 nullable or union parameters in a schema.
+      period: { type: "object", additionalProperties: false, required: ["from", "to", "eventOn"],
+        properties: { from: { type: "string" }, to: { type: "string" }, eventOn: { type: "string" } } } } } } } };
 })();
