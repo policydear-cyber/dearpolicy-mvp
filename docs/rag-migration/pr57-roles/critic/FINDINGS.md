@@ -5752,3 +5752,14 @@ new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s+(?:waiting|period|ago|since|notic
 - **R153-3 fixed.** A bare day count followed by waiting, period, ago, since, notice, of cover/the policy, or to claim/notify/tell/inform is not counted.
 - **Low note fixed.** A member also printed with the other kind of title settles nothing.
 - **Free tests at 3aea7bc:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+## R155: PR #109 at c2621b6 (diff 3aea7bc..c2621b6, Test Engineer findings)
+
+**Verdict: READY still holds.** Every change narrows a path or fixes wording.
+
+- **`dailyRateOf`:** a line with its own day rule (from/after/beyond/starting/commencing … day, or "day N") gives no derived row. That only narrows it. "Capped at S$200 per day" (S016) still derives.
+- **`stayDaysWritten`:** a turn that names a day rule (within, claim, notify, waiting, period, deadline, submit) gives no bare count. That only narrows it.
+- **`spouseMeant`:** a title now needs every one of the member's own name words, and the latest "my husband" or "my wife" decides, because history is newest first.
+  - Low, note only: if a document prints only part of a member's name (for example "Mr Tan Yi Chuen" for a member recorded as "Tan Yi Chuen, Desmond"), the spouse note is no longer given and the model asks whose cover is meant. That is the safe direction. It is worth checking against DC's real documents for S048.
+- **`aDay`:** gives "An 8-day", "an 11-day" and "an 18-day", and "A" otherwise. Correct for the stay lengths the checks allow (up to 366).
+- **Free tests at c2621b6:** chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
