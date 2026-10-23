@@ -807,6 +807,9 @@ test("a card for a cover or benefit the answer says the event is not on is never
   assert.equal(r.notes, 0);
   // A relative clause names the cover the sentence is about (paid H2 wording).
   assert.deepEqual(run("q", [{ text: "Living Care Plus covers early critical illnesses such as mild coronary artery disease, which a heart attack would not necessarily meet." }]).cards, [LC]);
+  // "but" opens another clause; it never saves the cover the first one rules out (Critic R141-1).
+  assert.deepEqual(run("q", [{ text: "Heart attack is not on the Living Care Plus list, but Living Care pays its sum insured." }]).cards, [LC]);
+  assert.deepEqual(run("q", [{ text: "A heart attack is not one of the 10 early illnesses on the Living Care Plus list, but Living Care covers it." }]).cards, [LC]);
   // Neither list names it: both go, whether said in a point or in the bottom line.
   assert.deepEqual(run("q", [{ text: "Diabetes is not named among the 37 illnesses Living Care covers or the 10 early illnesses Living Care Plus covers." }]).cards, []);
   assert.deepEqual(run("Not shown to be covered: diabetes is not on the Living Care or the Living Care Plus list.", []).cards, []);

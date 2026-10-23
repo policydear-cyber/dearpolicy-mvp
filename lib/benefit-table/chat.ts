@@ -285,9 +285,10 @@ const PERIOD_ROW = /first policy year(?: only)?\)$/;
  * not named among it, may not fall under it. Never "not shown to be covered", which says what the pages leave out, not
  * what a list excludes (Critic R140-1), nor an exclusion or a waiting period ("falls outside the waiting period"). */
 const NOT_FIT = /\b(?:is|are|was)\s+not\s+(?:on|among|one\s+of|named\s+(?:on|in|among)|listed)\b|\b(?:isn't|aren't|wasn't)\s+(?:on|among|one\s+of|named\s+(?:on|in|among)|listed)\b|\bnot\s+(?:on|in)\s+(?:its|their|the|either|any|that|this)\s+(?:\w+\s+)?list\b|\bnot\s+named\s+among\b|\bmay\s+not\s+(?:fall|come)\s+(?:under|within)\b|\bwould\s+not\s+necessarily\s+meet\b/i;
-/** A sentence that keeps a door open ("but the ambulance cost could still be paid", "unless", "until", "pending", "not
- * yet") never refuses a card, and nor does a clause with "if" (Critic R140-1). */
-const STILL_OPEN = /\b(?:still|unless|until|pending|yet|but)\b/i;
+/** A not-fit clause that keeps a door open ("unless", "until", "pending", "not yet", "still") or says "if" never refuses
+ * a card (Critic R140-1). Only the clause: "not on the Living Care Plus list, but Living Care pays" still refuses Living
+ * Care Plus (Critic R141-1). */
+const STILL_OPEN = /\b(?:still|unless|until|pending|yet)\b/i;
 /** A sentence that leans on the one before it for what it is about ("It pays only if ...", "This cover ..."). */
 const LEANS_BACK = /^(?:it|its|this|that|they|their|these|those|such)\b/i;
 /** A clause that names its cover only by a pronoun ("may not fall under it", "not on either list"). */
@@ -303,12 +304,12 @@ function saidNotToFit(json: Record<string, unknown>, household: Household): NotF
     const all = sentences(text);
     all.forEach((x, i) => {
       const m = NOT_FIT.exec(x);
-      if (!m || STILL_OPEN.test(x)) return;
+      if (!m) return;
       const at = m.index;
-      const parts = x.split(/([,;:]|\b(?:and|so|while|because|whereas)\b)/i);
+      const parts = x.split(/([,;:]|\b(?:and|but|so|while|because|whereas)\b)/i);
       let pos = 0, clause = x;
       for (const part of parts) { if (at >= pos && at < pos + part.length) { clause = part; break; } pos += part.length; }
-      if (/\bif\b/i.test(clause)) return;
+      if (/\bif\b/i.test(clause) || STILL_OPEN.test(clause)) return;
       const context = LEANS_BACK.test(x.trim()) && i ? `${all[i - 1]} ${x}` : x;
       out.push({ text: BY_PRONOUN.test(clause) ? context : clause, person });
     });
