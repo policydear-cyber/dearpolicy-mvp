@@ -890,6 +890,8 @@ test("with amounts shown, words that say the amounts shown do not apply go; othe
   const texts = ((amountsFromRows(raw, rows, HOUSE).json as { statements: { text: string }[] }).statements).map((x) => x.text);
   assert.ok(texts.includes("These benefits do not apply if the injury was self-inflicted."), JSON.stringify(texts));
   assert.ok(texts.includes("This benefit doesn't apply to pre-existing conditions."), JSON.stringify(texts));
+  const cannot = ((amountsFromRows({ ...raw, statements: [raw.statements[0], { ...raw.statements[1], text: "The amount below cannot be paid unless a doctor certifies the fracture." }] }, rows, HOUSE).json as { statements: { text: string }[] }).statements).map((x) => x.text);
+  assert.ok(cannot.includes("This benefit cannot be paid unless a doctor certifies the fracture."), JSON.stringify(cannot));
   const shown = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", eventFit: "any_event" },
     { kind: "fact", person: "Lim Ah Kow", document: "D2", quote: "Written notice of a claim must be given within 30 days.", text: "The amounts below are not paid unless written notice is given within 30 days." }]).statements.map((x) => x.text);
   assert.ok(shown.includes("These benefits are not paid unless written notice is given within 30 days."), JSON.stringify(shown));

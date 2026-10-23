@@ -278,7 +278,7 @@ const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string
 const clauses = (sentence: string) => sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
 /** A condition about the amounts shown ("the amounts below do not apply if the injury was self-inflicted") is a condition
  * of the benefit: kept, said of the benefit (TE #108 D8). */
-const CONDITION_OF_AMOUNT = (sentence: string) => clauses(sentence).some((c) => AMOUNT_POINTER.test(c) && /\b(?:not|no|never|exclu\w*)\b|n['’]t\b/i.test(c)
+const CONDITION_OF_AMOUNT = (sentence: string) => clauses(sentence).some((c) => AMOUNT_POINTER.test(c) && /\b(?:not|no|never|cannot|exclu\w*)\b|n['’]t\b/i.test(c)
   // A condition, or a denial that says what it is about ("does not apply to pre-existing conditions", "is not paid in
   // addition to the death benefit"); never one that only says the amounts shown don't apply.
   && (CONDITIONAL.test(c) || !DENIES_END.test(c)));
