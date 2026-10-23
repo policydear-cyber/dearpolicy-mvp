@@ -125,7 +125,7 @@ test("the model's own quote and document are ignored: the row's page is used", (
 });
 test("an amount with no row, a made-up row, or another person's row is dropped", () => {
   const r = answer([
-    { person: "Lim Ah Kow", amount: "S$500", quote: "S$500 per incident", document: "D2", text: "no row" },
+    { person: "Lim Ah Kow", amount: "S$500", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "no row" },
     { row: "R999", person: "Lim Ah Kow", text: "made-up row" },
     { row: idOf("Tan Mei Ling", "Hip"), person: "Lim Ah Kow", text: "another person's row" },
   ]);
@@ -133,37 +133,13 @@ test("an amount with no row, a made-up row, or another person's row is dropped",
   assert.deepEqual(r.dropped.map((d) => d.text), ["no row", "made-up row", "another person's row"]);
   assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
 });
-test("an amount sent without its row is that row when it quotes the row's own line, for that person, in that document (live A6)", () => {
-  const ambulance = idOf("Lim Ah Kow", "Ambulance Cost");
-  for (const row of [null, "R999"]) {
-    const r = answer([{ row, person: "Lim Ah Kow", amount: "S$9", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "the trip's cost" }]);
-    assert.deepEqual(r.amounts.map((a) => a.amount), ["Up to S$500"], String(row));
-    assert.equal(r.dropped.length, 0);
-    assert.ok(!r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
+test("an amount binds to a card only by the row id it names, never by its quote or figure (coordinator, TE #108 Q8)", () => {
+  for (const quote of ["Ambulance Cost Up to S$500 per incident", "Ambulance claims\tS$500"]) {
+    const r = answer([{ person: "Lim Ah Kow", amount: "S$500", quote, document: "D2", text: "x" }]);
+    assert.equal(r.amounts.length, 0, quote);
+    assert.ok(r.statements.some((s) => s.text === LEFT_OUT_AMOUNT));
   }
-  assert.ok(ambulance);
-  // Nobody in the household, a quote that is only a figure, or a line two rows share: still dropped.
-  for (const o of [{ person: "Someone Else" }, { quote: "Up to S$500" }]) {
-    const r = answer([{ person: "Lim Ah Kow", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "x", ...o }]);
-    assert.equal(r.amounts.length, 0, JSON.stringify(o));
-  }
-  const twin = { ...rows.find((x) => x.id === ambulance)!, id: "R998", benefit: "Ambulance Cost" };
-  assert.equal(answer([{ person: "Lim Ah Kow", quote: "Ambulance Cost Up to S$500 per incident", document: "D2", text: "x" }], [...rows, twin]).amounts.length, 0);
-});
-test("an amount sent without its row, quoting the same figure printed in another document, is the one row of that person printing that figure for what it names (live A6, the tax invoice)", () => {
-  const ambulance = rows.find((x) => x.id === idOf("Lim Ah Kow", "Ambulance Cost"))!;
-  assert.equal(ambulance.figure.kind, "printed");
-  const give = (quote: string, rs = rows) => answer([{ person: "Lim Ah Kow", quote, document: "D1", text: "x" }], rs).amounts.map((a) => a.amount);
-  assert.deepEqual(give("Ambulance claims\tS$500"), ["Up to S$500"]);
-  // A quote that names something else, prints no figure or two, or a figure two of the person's rows print: dropped.
-  assert.deepEqual(give("Total premium\tS$500"), []);
-  assert.deepEqual(give("Ambulance claims"), []);
-  assert.deepEqual(give("Ambulance claims S$500 and S$600"), []);
-  assert.deepEqual(give("Ambulance claims\tS$500", [...rows, { ...ambulance, id: "R997", benefit: "Ambulance transfer", source: { ...ambulance.source, excerpt: "Ambulance transfer S$500" } }]), []);
-  // A figure worked from the row's figure is not the row's amount (Critic R147-1).
-  assert.deepEqual(give("Overseas ambulance evacuation: 50% of the Ambulance Cost limit of S$500"), []);
-  assert.deepEqual(give("Ambulance for ICU: 200% of S$500"), []);
-  assert.deepEqual(give("Ambulance cost doubled (2 x S$500)"), []);
+  assert.match(renderTable(rows), /always with its id, also when you read the figure in another document/);
 });
 
 test("money in the model's own sentence never removes what the amount is for (R90-1)", () => {
@@ -436,10 +412,15 @@ test("a stay the household described is worked out from a labelled daily row, wi
   assert.deepEqual(long.amounts, ["S$30", "S$900"]);
 });
 test("the stay is refused when the table read other most days, or none, for that row", () => {
-  for (const o of [{ ...CASH_ROW, maxDays: 40 }, { ...CASH_ROW, maxDays: null }, { ...CASH_ROW, fromDay: 30 }]) {
+  for (const o of [{ ...CASH_ROW, maxDays: 40 }, { ...CASH_ROW, maxDays: null }]) {
     const r = answer2(o, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
     assert.deepEqual(r.amounts, ["S$30"], JSON.stringify(o));
   }
+  // A first paid day the quote states is the row's, whatever the reading said ("from the 11th day", read as 30): the
+  // stay is worked out from day 11 (TE #108 B2).
+  const misread = answer2({ ...CASH_ROW, fromDay: 30 }, [{ row: rowNamed(/Hospital Cash/), perDay: { stayDays: 45 }, text: "Hospital cash." }], ["in hospital 45 days"]);
+  assert.equal(misread.rows.find((x) => /Hospital Cash/.test(x.benefit))!.fromDay, 11);
+  assert.deepEqual(misread.amounts, ["S$30", "S$900"]);
 });
 test("a stay statement is never kept without its labelled daily row", () => {
   const report = { dropped: [], labels: [], days: { "Cash (X).": [{ fromDay: 11, maxDays: 30, alone: true }] } };
@@ -901,6 +882,17 @@ test("with amounts shown, words that say the amounts shown do not apply go; othe
   assert.equal(a.summary, a.bottomLine);
   assert.deepEqual(a.statements.map((x) => x.text), ["Up to S$350,000", "The amount below is not payable for an illness diagnosed in the first 90 days.", "The amounts below only apply after the waiting period."]);
   assert.ok(left.includes(b));
+  // A point beside a card that states a condition of it stays, said of the benefit (TE #108 D8).
+  const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [
+    { kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: idOf("Lim Ah Kow", "Hip"), eventFit: "any_event" },
+    { kind: "fact", text: "The amounts below do not apply if the injury was self-inflicted.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null },
+    { kind: "fact", text: "The amount below doesn't apply to pre-existing conditions.", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] };
+  const texts = ((amountsFromRows(raw, rows, HOUSE).json as { statements: { text: string }[] }).statements).map((x) => x.text);
+  assert.ok(texts.includes("These benefits do not apply if the injury was self-inflicted."), JSON.stringify(texts));
+  assert.ok(texts.includes("This benefit doesn't apply to pre-existing conditions."), JSON.stringify(texts));
+  const shown = answer([{ row: idOf("Lim Ah Kow", "Hip"), person: "Lim Ah Kow", eventFit: "any_event" },
+    { kind: "fact", person: "Lim Ah Kow", document: "D2", quote: "Written notice of a claim must be given within 30 days.", text: "The amounts below are not paid unless written notice is given within 30 days." }]).statements.map((x) => x.text);
+  assert.ok(shown.includes("These benefits are not paid unless written notice is given within 30 days."), JSON.stringify(shown));
   // A coordination rule about the amount shown stays (Critic R147-2).
   for (const t of ["The Advance Payment amount below is not paid in addition to the death benefit.", "The amount below is not payable on top of the Advance Payment already paid."]) {
     const c = { summary: "s", bottomLine: "s", statements: [{ text: "Up to S$350,000", amount: { text: "S$350,000" } }, { text: t, amount: null }] };

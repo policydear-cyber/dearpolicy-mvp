@@ -12,7 +12,7 @@ import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
-import { CAP_WORDS, numbersIn } from "./check";
+import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
@@ -172,7 +172,7 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -201,10 +201,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   for (const raw of pointed) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
-    // An amount without its row id (or with one the table does not have) is that row when its quote is the row's own
-    // printed line, for that person in that document, and no other row's (live run 23 Oct, A6: the trip premium came
-    // without its row and was dropped).
-    const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined) ?? rowOfQuote(raw, rows, household);
+    const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined);
     if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
@@ -279,8 +276,19 @@ const asBenefit = (sentence: string) => sentence.replace(DEICTIC, (_m, w: string
 /** A sentence without the clauses that point at an amount; null when its first clause does. A clause that only says the
  * amount is shown goes; one that says something of "this amount" keeps it, said of the benefit. */
 const clauses = (sentence: string) => sentence.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
+/** A condition about the amounts shown ("the amounts below do not apply if the injury was self-inflicted") is a condition
+ * of the benefit: kept, said of the benefit (TE #108 D8). */
+const CONDITION_OF_AMOUNT = (sentence: string) => clauses(sentence).some((c) => AMOUNT_POINTER.test(c) && /\b(?:not|no|never|exclu\w*)\b|n['’]t\b/i.test(c)
+  // A condition, or a denial that says what it is about ("does not apply to pre-existing conditions", "is not paid in
+  // addition to the death benefit"); never one that only says the amounts shown don't apply.
+  && (CONDITIONAL.test(c) || !DENIES_END.test(c)));
+const ofBenefit = (sentence: string) => {
+  const said = sentence.replace(new RegExp(AMOUNT_POINTER.source, "gi"), (m) => (/\b(?:amounts|figures|sums|limits|cards|these|those)\b/i.test(m) ? "these benefits" : "this benefit"));
+  return said.charAt(0).toUpperCase() + said.slice(1);
+};
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
+  if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
   if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
   const parts = clauses(sentence);
   if (AMOUNT_POINTER.test(parts[0])) return null;
@@ -307,34 +315,6 @@ function namesRow(text: string, row: ChatRow, rows: ChatRow[]): boolean {
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
  * different premium for the first policy year)"). */
 const PERIOD_ROW = /first policy year(?: only)?\)$/;
-const normQuote = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
-/** The one row whose printed line the statement quotes: the same person and document, the quote being the row's line (or
- * inside it, or holding it) and naming the row's benefit. No row, or more than one, gives undefined. */
-function rowOfQuote(raw: Record<string, unknown>, rows: ChatRow[], household: Household): ChatRow | undefined {
-  const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
-  const di = typeof raw.document === "string" ? Number(/^D(\d+)$/i.exec(raw.document.trim())?.[1] ?? NaN) - 1 : NaN;
-  const quote = typeof raw.quote === "string" ? normQuote(raw.quote) : "";
-  if (!person || !Number.isFinite(di) || quote.length < 8) return undefined;
-  const hits = rows.filter((r) => {
-    if (baseName(r.person) !== person || r.docIndex !== di) return false;
-    const line = normQuote(r.source.excerpt), name = normQuote(benefitName(r.benefit));
-    return line === quote || (!!name && quote.includes(name) && (line.includes(quote) || quote.includes(line)));
-  });
-  if (hits.length) return hits.length === 1 ? hits[0] : undefined;
-  // The same figure printed in another of the person's documents ("Total premium S$73.17" on the tax invoice, the row's
-  // "Premium paid : S$73.17" on the policy summary, live run 23 Oct, A6): the quote prints one figure, exactly one of the
-  // person's rows prints that figure, and the quote names what that row is for.
-  // Only a quote that prints that one figure and nothing worked from it: "50% of the limit of S$500" or "2 x S$50 per
-  // day" is not the row's amount (Critic R147-1).
-  const figures = moneyFiguresIn(String(raw.quote));
-  if (figures.length !== 1 || numbersIn(String(raw.quote)).length !== 1 || /%|\b(?:x|times|twice|double[ds]?|half|triple[ds]?|percent)\b/i.test(String(raw.quote))) return undefined;
-  const words = (t: string) => normQuote(t).split(" ").filter((w) => w.length > 3 && !FILLER.has(w));
-  const said = new Set(words(String(raw.quote)));
-  const same = rows.filter((r) => baseName(r.person) === person && r.figure.kind === "printed" && Math.abs(r.figure.amount - figures[0].value) < 0.005);
-  return same.length === 1 && words(benefitName(same[0].benefit)).some((w) => said.has(w)) ? same[0] : undefined;
-}
-const FILLER = new Set(["benefit", "benefits", "amount", "total", "sum", "insured", "assured", "plan", "cover", "coverage", "policy", "payable", "paid", "limit", "each", "per", "with", "from", "this", "that", "group"]);
-
 function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household: Household): Record<string, unknown>[] {
   const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
   const out: Record<string, unknown>[] = [];

@@ -53,8 +53,15 @@ export function numbersIn(text: string): number[] {
   }
   return out;
 }
-/** The quote prints the first paid day as the day before it: "after the 10th day", "after 10 days", "beyond the 10th day". */
-const dayBefore = (text: string, n: number) => new RegExp(`\\b(?:after|beyond|exceeding|more\\s+than)\\s+(?:the\\s+(?:first\\s+)?)?${n}(?:st|nd|rd|th)?\\s+(?:consecutive\\s+)?days?\\b`, "i").test(text);
+/** The first paid day a quote states, always next to the word "day": "from the 11th day", "from day 11", "from 11th to
+ * 40th day" are day 11, "after the 10th day", "after 10 days" are day 11. undefined when it states none; null when it
+ * states more than one. */
+export function startDay(text: string): number | null | undefined {
+  const days = new Set<number>();
+  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) days.add(Number(m[1] ?? m[2]));
+  for (const m of text.matchAll(/\b(?:after|beyond)\s+(?:the\s+)?(?:first\s+)?(\d+)(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)) days.add(Number(m[1]) + 1);
+  return days.size === 0 ? undefined : days.size === 1 ? [...days][0] : null;
+}
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
 const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
@@ -343,7 +350,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printsNumber(source.excerpt, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
-    const firstDay = (v: unknown) => { const n = int(v); return n != null && n > 1 && dayBefore(source.excerpt, n - 1) ? n : day(v); };
+    // The first paid day the quote states, parsed once as a number, is the row's: "after the 10th day" is day 11, "from day
+    // 1" is day 1, whatever the reading said (live run 23 Oct, B3; TE #108 B2, B4). A quote that states two is none; one
+    // that states none keeps the reading's day when it is printed.
+    const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
