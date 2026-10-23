@@ -171,7 +171,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     fromRows.report.dropped.push(...refused.map((st) => ({ why: "the amount lost its label to the checks", text: st.text })));
     // A sentence that shuts a person out of a cover their own cards or rows show is left out (live run 22 Oct, C5).
     report.sentencesLeftOut.push(...dropPeopleShutOut(answer, rows!, household, fromRows.report.labels));
-    report.sentencesLeftOut.push(...dropAmountPointers(answer, fromRows.report.labels));
+    report.sentencesLeftOut.push(...dropAmountPointers(answer, fromRows.report.labels, fromRows.report.dropped.some((d) => !d.notFit)));
     report.sentencesLeftOut.push(...dropAgreeingDayRules(answer, fromRows.report));
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     answer.statements = noteNarrowedPages(answer.statements, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
