@@ -821,7 +821,7 @@ test("a sentence that shuts a person out of a cover their own cards or rows show
   r = shutOut("This is Lim's alone. The hip benefit pays a share of the sum insured.", [hips[0]]);
   assert.deepEqual(r.left, ["This is Lim's alone."]);
   assert.match(String(r.bottom), /hip benefit/);
-  for (const s of ["Only Lim Ah Kow has this accident cover.", "This accident cover belongs only to Lim.", "The accident cover is Lim's, not Mei Ling's.", "It is held by Lim, not Tan Mei Ling."]) {
+  for (const s of ["Only Lim Ah Kow has this accident cover.", "This accident cover belongs only to Lim.", "That benefit is for Lim's policy only.", "The accident cover is Lim's, not Mei Ling's.", "It is held by Lim, not Tan Mei Ling."]) {
     r = shutOut("Here it is.", [hips[0], fact(s)]);
     assert.deepEqual(r.left, [s], s);
   }
