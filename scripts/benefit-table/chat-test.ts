@@ -1261,7 +1261,7 @@ test("a premium is never hidden by a waiting period or the cover's dates (live r
   assert.equal(run(prem).labels.length, 1);
   // A benefit paid on the event still is, also one that names premiums (Critic R162-1).
   assert.equal(run({ ...amb, id: "R975", benefit: "Death Benefit" }).labels.length, 0);
-  for (const b of ["Waiver of Premium", "Premium Waiver Benefit", "Return of Premiums", "Refund of Premium"]) {
+  for (const b of ["Waiver of Premium", "Premium Waiver Benefit", "Return of Premiums", "Refund of Premium", "Refunded Premiums upon Death", "Premiums refunded on death", "Waived Premiums on TPD"]) {
     const w: ChatRow = { ...amb, id: "R976", benefit: b };
     const held = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
       percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: w.id, rowBenefit: b, eventFit: "any_event", waiting: { applies: "yes", days: 90, from: "19/10/2026" },
