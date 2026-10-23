@@ -5321,3 +5321,48 @@ My probe results are unchanged:
 
 ### Tests
 - benefit-table chat-test: 61/61
+
+## Round 140: PR #107 at 6aca18b (round 6, diff vs main 3364af3)
+
+**Verdict: NOT READY. One blocker (R140-1) and one medium finding (R140-2).** Both remove information the documents support. Neither shows a wrong amount.
+
+### R140-1 (blocker): rule 1 drops cards the answer says may still pay
+`NOT_FIT` includes "not shown to be covered/paid/payable". That is the phrase for missing information, which is not an exclusion. `saysNotFit` drops a row whenever the not-fit *sentence* uses any of the row's distinctive words anywhere in it. That covers the "could still pay" clause and the "if it turns out" clause too.
+
+Probe: `scratchpad/r140/scripts/benefit-table/probe.ts`, using the test's own `run` helper.
+
+| Bottom line or point | Card |
+|---|---|
+| "A ligament tear is not shown to be covered by the fracture benefits, but **the ambulance cost could still be paid** if an ambulance was needed." | **Ambulance dropped** |
+| "The ambulance cost is not shown to be covered **unless** an ambulance took her to hospital." | **dropped** |
+| "The ankle benefit is not shown to be payable **yet because the X-ray result is pending**." | **dropped** |
+| B7 wording: "Not shown to be covered as a claim for a back strain; **if it turns out to be a full break of the spine**, the Product Summary shows this amount." (Neck, Skull or Spine row) | **dropped**. This undoes R134/R135, where this card was agreed as correct. |
+| "…the hip benefit is not shown to be payable…" | kept, but only because "hip" has fewer than 4 letters |
+
+Each dropped card is a documented benefit hidden by the answer's own hedge. The prompt itself asks for these "could still pay" facts after a "Not shown to be covered" bottom line.
+
+**Fix:**
+1. Take the "not shown to be covered/paid/payable" phrases out of `NOT_FIT`. Keep only list-membership wording: "not on/among/one of its list", "not named among", "may not fall under", "would not necessarily meet".
+2. Match the row's words only inside the same **clause** as the not-fit phrase, not anywhere in the sentence.
+3. Never drop when that clause or sentence carries a positive or conditional for the row: could/may/would still, if, unless, until, pending, yet, but.
+
+The H2 test ("Living Care Plus … so a heart attack may not fall under it") and the diabetes and list tests still pass under all three.
+
+### R140-2 (medium, fix in this round): `withoutOrphans` drops a real condition sentence with its money sentence
+Probe: `probe2.ts`, uncertainty text "The ambulance limit is S$500 per incident. It is paid only if the ambulance takes her to a hospital within 24 hours of the accident."
+
+Both sentences go: the first because it states money, the second as an "orphan". The second is a printed condition. It is lost unless the model also put it on the card.
+
+**Fix:** never drop as an orphan a sentence that carries a condition word (only if, unless, provided, within, subject to, must, after, before, until, waiting, exclu…). Alternatively, keep it and replace the leading pronoun with the benefit's name.
+
+### Checked and holding
+- **Rule 2:** `PERIOD_ROW` rows are never put in an alternative group. Only the grouping changes; the amounts do not.
+- **Rule 3:** `LINKED_COUNT` checks "N are linked to X (and Y) (only)" against the library record. If it is wrong, it replaces the sentence with the server's own breakdown. This is prose only.
+- **Rule 4b:** with no amount shown, "different figures / not a total" sentences are dropped. Nothing they refer to is shown, so this is correct.
+- **No left-out-amount note** for a not-fit refusal: correct, once R140-1 narrows what counts as not-fit.
+- **Rule 1 does miss** "X is not covered by <cover>" (plain "not covered"). That is the same behaviour as before this PR, so not a regression.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 63/63
+- headline-test: 13/13
+- benefit-table test: 105/105
