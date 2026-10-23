@@ -5907,3 +5907,19 @@ Free tests on 877dcbd: chat 82/82, headline 13/13, table 106/106.
 - T5 (chat.ts:352-370): a skipped twin's conditions become fact points quoting the skipped row's own document; money-stating conditions are dropped, and near-repeats (80% of words) of a shown condition are skipped. No amount can come from this path. It only runs once the kept twin was given (same person, cover, qualifier, figure).
 - C5 (chat.ts:684-686): a frequency in the copy must equal the row's. Low: synonyms ("annual" vs "yearly", "half-yearly" vs "semi-annual") and a copy with a frequency on a row without one are now rejected. That only withholds.
 - M4 (chat.ts:484): stems waiv*/return*/refund* are excluded; plain premium rows still exempt.
+
+## R165 — PR #112 (round 11, head 3f2547b) vs main af79682
+
+Free tests on 3f2547b: chat 86/86, headline 13/13, table 106/106.
+
+**Verdict: NOT READY. Two wrong-row binds (R165-1, R165-2), both reproduced and fixed in a tested patch.**
+
+- **R165-1 (high) one-sided note in `sameBenefit` (chat.ts ~747) opens the copiedName guard.** `others` in copiedName (chat.ts ~701) excludes every sameBenefit row of the same cover and qualifier, *in any document*. With the new rule, "Accidental Death" and "Accidental Death (Public Transport)" are now the same benefit, so a copy "Accidental Death" on the Public Transport row's id passes (the short path strips the note, and the plain row is no longer a rival). Probe on 3f2547b: same document → binds (true); main → false. Same for "Hospital Cash" on the "Hospital Cash (ICU)" row, and across documents. The card then shows the doubled or ICU amount for the plain benefit asked about.
+  Fix: the rival exclusion keeps the old strict meaning, and only for another document, as its comment says:
+  `&& o.source.documentId !== row.source.documentId && nameParts(o.benefit).core === nameParts(row.benefit).core && sameBenefit(...)`.
+- **R165-2 (medium) `quotesRow` accepts a quote that merely contains a short excerpt (chat.ts ~752).** `q.includes(e)` with a bare-amount excerpt ("S$50,000", a table cell) means a long quote about another benefit ("Comatose ... up to S$50,000") binds a Natural Catastrophe row's id when the Comatose row's excerpt is a different line. Probe: true.
+  Fix: the longer-quote direction holds only when the excerpt prints one of the row's own name words. The A6 premium quote still binds.
+- Patch (both): scratchpad r165-fix.diff. With it: chat 86/86, headline 13/13, table 106/106; all four probes false; A6-style quote true.
+- Low: the one-sided note still pairs AD and AD (Public Transport) as cross-document twins (companions, ruledOut). Companions show their own labels and amounts, and dedupe needs the same figure, so this shows an extra card or withholds; it never puts a wrong amount on a label.
+- Low: withoutPointer's ", listed below" cut can leave a stray comma ("The amounts, apply only if ..."). Cosmetic.
+- Holds: the fit fallback (ties and better rivals reject; "Hospital Cash" vs "ICU Hospital Cash" rejects), the condition merge (same row only, money conditions dropped, quote from the row's own document), the dropped-list filter, and amountLeftOut.
