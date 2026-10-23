@@ -5866,3 +5866,12 @@ Two rows with **identical** benefit names (for example "Hospital cash" on two co
 - **N3/N4, `INTRODUCES`:** now matches only wording that points forward. `NOTHING_SHOWN` appears less often, and that line has no money in it.
 - **D8/D9, `dayRulesIn`:** it now reads "after 10 days", and a date such as "on 11th October" no longer counts as a day. It only feeds `dropAgreeingDayRules`, which still requires every start and most-days figure to match the cards' one rule.
 - **Free tests at f6855ca:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
+
+## R161: PR #110 at d223ff2 (diff f6855ca..d223ff2, Test Engineer D11, N5)
+
+**Verdict: READY still holds.** All three changes narrow a check.
+
+- **D11:** "from day 11 to day 60" is read as a range ending on day 60. This only feeds `dropAgreeingDayRules`, which still needs an exact match with the cards' one rule.
+- **N5:** `INTRODUCES` matches "below" only at the end of a sentence, and "these are" only when "not" does not follow.
+- **`asksFor`:** needs a whole name of at least two words, so "hip" alone no longer counts.
+- **Free tests at d223ff2:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
