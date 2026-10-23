@@ -9,7 +9,7 @@ import { type ChatRow, amountsFromRows, chatRows, printedDay, coverLabels, cited
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
-import { periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
+import { datesSaidNote, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
 import type { ChatContext } from "@/lib/chat/workflow";
 
@@ -1228,6 +1228,72 @@ test("each printed date range is said with whether it has ended, is running or h
   assert.match(periodsNote(withPages("Trip 01/10/2026 to 22/10/2026"), new Date("2026-10-22T16:30:00Z")), /ended before today/);
   // Not a range: nothing said.
   for (const t of ["Issued 01/10/2026", "05/10/2026 to 01/10/2026", "31/02/2026 to 01/03/2026"]) assert.ok(!/\bTrip prints/.test(periodsNote(withPages(t), now)), t);
+});
+
+test("a copy without the server's note or a premium's frequency is the row's, when no other row has that short name (live run 23 Oct, A6, A2)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const later: ChatRow = { ...amb, id: "R970", benefit: "Instalment Premium, Monthly (the page prints a different premium for the first policy year)" };
+  const first: ChatRow = { ...amb, id: "R971", benefit: "First Year Instalment Premium, Monthly (first policy year only)" };
+  const full: ChatRow = { ...amb, id: "R972", benefit: "Neck, Skull or Spine (Full Break)" }, part: ChatRow = { ...amb, id: "R973", benefit: "Neck, Skull or Spine (Partial Break)" };
+  const all = [...rows, later, first, full, part];
+  const shown = (row: ChatRow, rowBenefit: string) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "no_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, all, HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.length;
+  for (const n of ["Instalment Premium, Monthly", "Instalment Premium", "Instalment Premium, Monthly (the page prints a different premium for the first policy year)"]) assert.ok(shown(later, n) >= 1, n);
+  for (const n of ["First Year Instalment Premium, Monthly", "First Year Instalment Premium"]) assert.ok(shown(first, n) >= 1, n);
+  // Still never another row's name, and a copy never adds a note.
+  assert.equal(shown(later, "First Year Instalment Premium, Monthly"), 0);
+  assert.equal(shown(first, "Instalment Premium, Monthly"), 0);
+  assert.equal(shown(later, "Instalment Premium (first year)"), 0);
+  // Two rows that differ only in the note: the short name is neither's.
+  assert.equal(shown(full, "Neck, Skull or Spine"), 0);
+  assert.equal(shown(full, "Neck, Skull or Spine (Full Break)"), 1);
+});
+
+test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const prem: ChatRow = { ...amb, id: "R974", benefit: "Instalment Premium, Monthly" };
+  const run = (row: ChatRow) => amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
+    percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit: row.benefit, eventFit: "any_event", waiting: { applies: "yes", days: 90, from: "19/10/2026" },
+    period: { from: "19/10/2026", to: "19/10/2036", eventOn: "01/10/2026" } }] }, [...rows, prem, { ...amb, id: "R975", benefit: "Death Benefit" }], HOUSE, new Date("2026-10-23T02:00:00Z")).report;
+  assert.equal(run(prem).labels.length, 1);
+  // A benefit paid on the event still is.
+  assert.equal(run({ ...amb, id: "R975", benefit: "Death Benefit" }).labels.length, 0);
+});
+
+test("the same benefit with the same figure from another document is shown once, list numbers aside (live run 23 Oct, B5)", () => {
+  const base = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const fig = { kind: "printed", amount: 600000, currency: "SGD", unit: "lump_sum", period: null } as ChatRow["figure"];
+  const bs: ChatRow = { ...base, id: "R980", benefit: "2. Permanent Total Loss of (a) Sight in at least one eye", figure: fig, source: { ...base.source, documentId: "doc-bs" } };
+  const ps: ChatRow = { ...base, id: "R981", benefit: "Permanent Total Loss of Sight in at least one eye", figure: fig, source: { ...base.source, documentId: "doc-ps" } };
+  const other: ChatRow = { ...base, id: "R982", benefit: "Permanent Total Loss of Sight in at least one eye", figure: { ...fig, amount: 300000 } as ChatRow["figure"], source: { ...base.source, documentId: "doc-ps" } };
+  const card = (row: ChatRow) => ({ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null,
+    row: row.id, rowBenefit: row.benefit, eventFit: "on_list", waiting: null, period: { from: "", to: "", eventOn: "" } });
+  const given = (rs: ChatRow[], named: ChatRow[]) => (amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: named.map(card) }, [...rows, ...rs], HOUSE, new Date("2026-10-23T02:00:00Z")).json as { statements: { kind: string; row?: string }[] }).statements.length;
+  assert.equal(given([bs, ps], [bs, ps]), 1);
+  assert.equal(given([bs, ps], [ps, bs]), 1);
+  // A different figure for the same benefit is still given with it.
+  assert.equal(given([bs, other], [bs, other]), 2);
+});
+
+test("'the amount is below' with no card goes; 'below the limit' is not a pointer (live run 23 Oct, S087)", () => {
+  const a = { summary: "s", bottomLine: "Her daily hospital cash only pays past 10 days. The amount is below.", statements: [{ text: "How many days has she been in hospital?", amount: null }] };
+  dropAmountPointers(a, []);
+  assert.equal(a.bottomLine, "Her daily hospital cash only pays past 10 days.");
+  const b = { summary: "s", bottomLine: "The bill amount is below the S$5,000 limit, so it is paid in full.", statements: [] as { text: string; amount: null }[] };
+  dropAmountPointers(b, []);
+  assert.equal(b.bottomLine, "The bill amount is below the S$5,000 limit, so it is paid in full.");
+});
+
+test("the days a message names are given as dates with how far they are from today (live run 23 Oct, S060)", () => {
+  const now = new Date("2026-10-23T05:00:00Z");
+  assert.match(datesSaidNote("baggage arrived 10 hours late in tokyo on 29 september", now), /"29 september" is 29\/09\/2026, 24 days before today/);
+  assert.match(datesSaidNote("admitted on Oct 20th", now), /20\/10\/2026, 3 days before today/);
+  assert.match(datesSaidNote("fell on 3/10", now), /03\/10\/2026, 20 days before today/);
+  // A day still to come this year may be last year's: both are said.
+  assert.match(datesSaidNote("flying on 5 december", now), /05\/12\/2026, 43 days after today, or 05\/12\/2025, 322 days before today/);
+  // Singapore's date.
+  assert.match(datesSaidNote("on 23 october", new Date("2026-10-22T16:30:00Z")), /is 23\/10\/2026, today/);
+  for (const t of ["it may 3 times", "in march", "no date", "31 february"]) assert.equal(datesSaidNote(t, now), "", t);
 });
 
 test("a printed date is read day first, and only as a real date", () => {
