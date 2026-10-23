@@ -152,7 +152,9 @@ export function spouseMeant(household: Household, said: string[]): { word: strin
     return out;
   };
   const want = asked === "husband" ? MALE_TITLE : FEMALE_TITLE;
-  const fits = couple.map((m) => ({ m, hits: titles(m).filter((t) => want.test(t.title)) }));
+  const other = asked === "husband" ? FEMALE_TITLE : MALE_TITLE;
+  // A member also printed with the other kind of title ("Mrs Tan Yi Chuen", a wife under her husband's name) settles nothing.
+  const fits = couple.map((m) => ({ m, all: titles(m) })).map(({ m, all }) => ({ m, hits: all.some((t) => other.test(t.title)) ? [] : all.filter((t) => want.test(t.title)) }));
   const yes = fits.filter((f) => f.hits.length);
   return yes.length === 1 ? { word: `my ${asked}`, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
 }

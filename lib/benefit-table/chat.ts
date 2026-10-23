@@ -76,12 +76,17 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
   return rows;
 }
 
-/** The one daily rate a limit's own line prints ("Capped at S$200 per day", "S$100 a day"), when it is not the limit itself;
- * null when it prints none, or more than one. */
+/** The one daily rate a limit's own line caps it at ("Capped at S$200 per day", "maximum S$300 per day"), when it is not the
+ * limit itself; null when it prints none, or more than one. */
 function dailyRateOf(excerpt: string, limit: number): number | null {
+  // A daily figure that is something else (an ICU rate, an excess, a companion's or an allowance's) is never the limit's
+  // own rate, so a line that names one gives none (Critic R153-2).
+  if (/\b(?:ICU|intensive|excess|deductible|co-?pay\w*|companion|allowance)\b/i.test(excerpt)) return null;
   const rates = new Set(moneyFiguresIn(excerpt).filter((f) => {
     const at = excerpt.indexOf(f.raw ?? "");
-    return at >= 0 && /^\s*(?:per|a|each|every)\s+day\b/i.test(excerpt.slice(at + (f.raw ?? "").length));
+    // Only a rate that caps what is paid: "Capped at S$200 per day", "maximum S$300 per day".
+    return at >= 0 && /^\s*(?:per|a|each|every)\s+day\b/i.test(excerpt.slice(at + (f.raw ?? "").length))
+      && /\b(?:capped\s+at|up\s+to|maximum(?:\s+of)?|max\.?|limited\s+to|not\s+exceeding)\s*:?\s*$/i.test(excerpt.slice(Math.max(0, at - 30), at));
   }).map((f) => f.value));
   const [rate] = [...rates];
   return rates.size === 1 && Math.abs(rate - limit) > 0.005 && rate < limit ? rate : null;
@@ -227,7 +232,7 @@ const LONGEST_WAIT_DAYS = 365;
  * A period that applies or may apply, and has not ended today (or cannot be dated), hides the card: an amount inside a
  * waiting period is never shown as payable (stress run 23 Oct, S023). A list cover (critical illnesses, listed injuries)
  * whose cover started within a year, for an event, with no waiting period said, is hidden too: it was not checked. */
-function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number): string | null {
+function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number, household: Household): string | null {
   // Only for an event: a cover listed with no event asked about ("what is Desmond covered for") is not a payment.
   if (raw.eventFit !== "on_list" && raw.eventFit !== "any_event") return null;
   const w = raw.waiting as { applies?: unknown; days?: unknown; from?: unknown } | null | undefined;
@@ -238,8 +243,14 @@ function insideWaiting(raw: Record<string, unknown>, row: ChatRow, today: number
     if (days != null && from != null) return today < from + days ? `the event falls inside its ${days}-day waiting period` : null;
     return "a waiting period applies that could not be dated";
   }
+  // Only where the row's own document prints a waiting period on a page that names the row's cover: a fracture scale on a
+  // certificate printed this year prints none, and is not hidden for it (Critic R153-1). The live readings carry no start
+  // date, so the cover line's own date (a schedule's issue date) stands in for it.
   const since = printedDay(row.coverSince);
-  if (raw.eventFit === "on_list" && since != null && today - since < LONGEST_WAIT_DAYS) return "its cover started less than a year ago and no waiting period was checked";
+  if (raw.eventFit !== "on_list" || since == null || today - since >= LONGEST_WAIT_DAYS) return null;
+  const cover = noNumbers(row.cover).replace(/^group\s+/i, "").toLowerCase();
+  const prints = cover.length > 2 && (household.documents[row.docIndex]?.pages.some((p) => /\bwaiting\s+period/i.test(p.text) && p.text.toLowerCase().includes(cover)) ?? false);
+  return prints ? "its cover started less than a year ago and no waiting period was checked" : null;
   return null;
 }
 
@@ -266,7 +277,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // A cover still inside a waiting period for the event is ruled out with its twins, like one the event is not listed for.
     // So is one that pays only on something the household has not described (an ambulance, a hospital stay; stress run
     // 23 Oct, S088).
-    const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list` : x.eventFit === "not_described" ? `${names(r)} pays only on something not described` : insideWaiting(x, r, today);
+    const why = !r ? null : x.eventFit === "not_on_list" ? `the event is not on ${names(r)}'s list` : x.eventFit === "not_described" ? `${names(r)} pays only on something not described` : insideWaiting(x, r, today, household);
     if (r && why) for (const o of rows) if (!ruledOut.has(o.id) && (o.id === r.id || (o.personId === r.personId && o.coverKey === r.coverKey && o.qualifier === r.qualifier && sameBenefit(o.benefit, r.benefit)))) ruledOut.set(o.id, why);
   }
   for (const raw of pointed) {

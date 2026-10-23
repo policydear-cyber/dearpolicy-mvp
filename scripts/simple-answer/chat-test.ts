@@ -655,6 +655,9 @@ async function main() {
     // Once the conversation is about a stay, a later bare day count gives its length (S050).
     assert.deepEqual(cards(daily(50), ["and if it was 50 days?", "he was hospitalised with pneumonia"]), [["S$900", "For a 50-day stay, this works out to 30 days of the daily benefit."]]);
     assert.deepEqual(cards(daily(50), ["and if it was 50 days?", "what does his policy cover"]), []);
+    // A bare day count that names a waiting period or a notice time is not a stay (Critic R153-3).
+    assert.deepEqual(cards(daily(50), ["is there a 50 days waiting period?", "he was hospitalised with pneumonia"]), []);
+    assert.deepEqual(cards(daily(50), ["he has 50 days to claim?", "he was hospitalised with pneumonia"]), []);
     assert.deepEqual(cards(daily(12), ["he was in hospital 21 days"]), []);
     assert.deepEqual(cards(daily(12), []), []);
     assert.deepEqual(cards(daily(12, "Hospital cash\tS$100 per day, maximum 30 days", "S$100"), ["12 days"]), []);

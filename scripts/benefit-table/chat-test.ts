@@ -1069,9 +1069,11 @@ test("a card inside a waiting period is never shown: the model gives the period 
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const ci = (id: string, coverSince: string | null, docIndex = amb.docIndex): ChatRow => ({ ...amb, id, cover: "CRITICAL ILLNESS PLAN", benefit: "Critical Illness Benefit", docIndex,
     coverKey: coverKeyOf({ product: amb.product, cover: "CRITICAL ILLNESS PLAN", plan: null }), coverSince });
-  const shown = (row: ChatRow, waiting: unknown, eventFit: unknown = "on_list", now = new Date("2026-10-23T02:00:00Z"), extra: ChatRow[] = []) => {
+  // The backstop only acts where the row's own document prints a waiting period next to the cover's name (Critic R153-1).
+  const PRINTS = { ...HOUSE, documents: HOUSE.documents.map((d, i) => i === amb.docIndex ? { ...d, pages: [...d.pages, { ...d.pages[0], text: "Critical Illness Plan\nWaiting Period: 90 days from the issue date" }] } : d) };
+  const shown = (row: ChatRow, waiting: unknown, eventFit: unknown = "on_list", now = new Date("2026-10-23T02:00:00Z"), house = PRINTS) => {
     const fromRows = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null,
-      percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit, waiting }] }, [...rows, row, ...extra], HOUSE, now);
+      percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, eventFit, waiting }] }, [...rows, row], house, now);
     return { labels: fromRows.report.labels.length, why: fromRows.report.dropped.map((d) => d.why) };
   };
   const old = ci("R950", "01/01/2020"), fresh = ci("R951", "20/10/2026");
@@ -1090,6 +1092,8 @@ test("a card inside a waiting period is never shown: the model gives the period 
   // No period said: a list cover that started within a year is hidden (not checked); an older one, or any other card, is not.
   assert.equal(shown(fresh, null).labels, 0);
   assert.equal(shown(old, null).labels, 1);
+  // A cover whose document prints no waiting period with its name (a group accident plan) is not held back for a year.
+  assert.equal(shown(fresh, null, "on_list", undefined, HOUSE).labels, 1);
   assert.equal(shown(fresh, null, "any_event").labels, 1);
   assert.equal(shown(fresh, null, "no_event").labels, 1);
   // With no event asked about, a waiting period hides nothing ("what is he covered for").
@@ -1119,7 +1123,12 @@ test("a limit whose own line prints one daily rate gives that rate as a row of i
   assert.equal(withRate.at(-1)!.benefit, "Daily hospital cash while overseas");
   assert.deepEqual(withRate.slice(0, rows.length).map((r) => r.id), rows.map((r) => r.id));
   // Two rates, or only the limit itself, give none.
-  for (const excerpt of ["S$200 per day or S$400 per day in intensive care", "S$8,000 per day", "Up to S$8,000"]) {
+  // Only a rate the line prints as a limit counts; ICU, excess, companion and allowance figures never do (Critic R153-2).
+  const rateOf = (excerpt: string) => chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE)
+    .filter((r) => r.benefit === "Daily hospital cash while overseas" && r.figure.kind === "printed" && r.figure.unit === "per_day").map((r) => r.figure.kind === "printed" ? r.figure.amount : null);
+  assert.deepEqual(rateOf("Maximum S$300 per day"), [300]);
+  for (const excerpt of ["S$200 per day or S$400 per day in intensive care", "S$8,000 per day", "Up to S$8,000",
+    "ICU: capped at S$300 per day", "An excess of S$100 per day applies", "Companion: up to S$100 per day", "Daily allowance up to S$50 per day", "Pays S$200 per day"]) {
     const other = chatRows({ ...t, people: t.people.map((p) => p === person ? { ...p, rows: [...p.rows, { ...capped, source: { ...capped.source, excerpt } }] } : p) }, HOUSE);
     assert.equal(other.filter((r) => r.benefit === "Daily hospital cash while overseas").length, 1, excerpt);
   }
@@ -1143,6 +1152,8 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.equal(spouseMeant(titled("Dear Mr Lim,"), ["my husband"]), null);
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["my wife"]), null);
   assert.equal(spouseMeant(titled("Mr Lim Ah Kow and Mr Tan Mei Ling"), ["my husband"]), null);
+  // A member also printed as "Mrs" is never taken as the husband (Critic R153, low).
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Lim Ah Kow,"), ["my husband"]), null);
   assert.equal(spouseMeant(HOUSE, ["my husband"]), null);
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["his cover"]), null);
   // Only for a household set up as one couple (self and spouse).

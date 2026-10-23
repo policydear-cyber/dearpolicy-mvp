@@ -647,7 +647,7 @@ function stayDaysWritten(asked: string[], days: number): boolean {
   const res = [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"), new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi")];
   // Once the conversation is about a hospital stay, a later "and if it was 50 days?" or "3 days so far" gives its length
   // (stress run 23 Oct, S050, S088).
-  if (asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))) res.push(new RegExp(String.raw`\b${n}[\s-]*days?\b`, "gi"));
+  if (asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))) res.push(new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s*(?:'s\s+)?(?:waiting|period|ago|since|notice|of\s+(?:cover|the\s+policy)|to\s+(?:claim|notify|tell|inform)))`, "gi"));
   return asked.some((q) => res.some((re) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days)));
 }
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
