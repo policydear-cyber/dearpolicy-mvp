@@ -367,7 +367,17 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
           return y.text === said || (y.text === card && Array.isArray(y.conditions) && (y.conditions as { text?: unknown }[]).some((k) => same(k?.text))); })) continue;
         // The same row's card already shown (given with another card's benefit) takes it as its own condition; a card from
         // another document cannot quote this one's page, so there it is a point.
+        // One its page does not print but the same benefit's row in another document does goes as a point quoting that
+        // document, as it would on the card given alone (TE #112 M1b).
         const shown = kept.id === row.id ? statements.find((x) => (x as { text?: unknown }).text === card) as { conditions?: unknown } | undefined : undefined;
+        const elsewhere = shown ? awayConditions(kept, [{ text: t, quote }], rows, household)[0] : undefined;
+        if (elsewhere) {
+          const text = `${names(kept)} also depends on this: ${t}`, key = `${text}|${elsewhere.at.docIndex}`;
+          if (away.has(key)) continue;
+          const st: Record<string, unknown> = { kind: "fact", text, person: baseName(kept.person), document: documentId(elsewhere.at.docIndex),
+            quote, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
+          away.set(key, st); statements.push(st); continue;
+        }
         if (shown && Array.isArray(shown.conditions)) { shown.conditions.push({ text: t, quote }); continue; }
         statements.push({ kind: "fact", text: said, person: baseName(row.person), document: documentId(row.docIndex), quote, amount: null, percentOf: null,
           conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
@@ -717,6 +727,11 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
     return [said.filter((w) => pool.has(w)).length / said.length, [...ownSet].filter((w) => said.includes(w)).length / ownSet.size];
   };
   if (!nameWords(copied).length) return false;
+  // A copy that is another of the person's cover names is that cover, never this row ("Critical Illness" is the CRITICAL
+  // ILLNESS policy, not the EARLY CRITICAL ILLNESS row, TE #112 B4).
+  const coverName = (c: string) => nameWords(c.replace(/\([^()]*\)/g, " ")).sort().join(" ");
+  const saidName = nameWords(copied).sort().join(" ");
+  if (coverName(row.cover) !== saidName && rows.some((o) => o.personId === row.personId && o.cover !== row.cover && coverName(o.cover) === saidName)) return false;
   const [all, half] = fit(row);
   if (all < 1 || half < 0.5) return false;
   return others.every((o) => { const [x, y] = fit(o); return x < all || (x === all && y < half); });
@@ -757,6 +772,8 @@ function sameBenefit(a: string, b: string): boolean {
   // different notes ("(Full Break)", "(Partial Break)") are different benefits.
   const note = /\([^()]*\)\s*$/;
   const bare = (t: string) => nameParts(t.replace(/(?:\s*\([^()]*\))+\s*$/, "")).core;
+  // The server's own first-year note is not a document's: the first-year premium is not the later one (TE #112 N4).
+  if (PERIOD_NOTE.test(a) || PERIOD_NOTE.test(b)) return false;
   return note.test(a) !== note.test(b) && bare(a) === bare(b);
 }
 
