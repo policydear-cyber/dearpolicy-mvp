@@ -5291,3 +5291,19 @@ Whom a claim is paid to is a printed rule; the H10 payee pages are sent for exac
 
 ### Tests (run locally, free)
 - benefit-table chat-test: 61/61
+
+## Round 138: PR #105 at 9b1e0f6 (delta from 6a46183)
+
+**Verdict: READY.** R137-1 is fixed. The pattern is now limited to cover words (`X's [word] cover/policy/plan/benefit only`).
+
+I re-ran the shut-out probe:
+- "It is paid to Tan Mei Ling's estate only" is kept.
+- "Can claim this only once" is kept.
+- The 5 sentences that give a reason or condition are kept.
+- The 4 ownership claims are dropped.
+- The chat-test case "That benefit is for Lim's policy only" is still dropped.
+
+### Tests (run locally, free)
+- benefit-table chat-test: 61/61
+- headline-test: 13/13
+- benefit-table test: 105/105
