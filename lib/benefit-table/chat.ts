@@ -171,7 +171,7 @@ export function renderTable(rows: ChatRow[]): string {
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
-For every "amount" statement, set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list; "no_event" when the question names no event. Set "row" to the id of the row it gives and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here; an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -186,6 +186,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const statements: unknown[] = [];
   const given = new Set<string>();
   const away = new Map<string, Record<string, unknown>>();
+  const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
+    .filter((x): x is string => typeof x === "string").join(" ");
   for (const raw of pointedRows((json as { statements: Record<string, unknown>[] }).statements, rows, household)) {
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
@@ -194,7 +196,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
     // the event not on that list, is never shown (live run 23 Oct, H2). Decided per card, never read from the prose.
-    if (raw.eventFit === "not_on_list") { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: true }); continue; }
+    // The answer says why only when its own words name the cover or benefit; otherwise the household hears an amount was
+    // left out (Critic R143-2).
+    if (raw.eventFit === "not_on_list") { report.dropped.push({ why: `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row) }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
@@ -276,6 +280,12 @@ export const withoutPointers = (text: string) => sentences(text ?? "").map(witho
  * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
  * one (dropAmountPointers). */
+/** Whether words name a row's cover ("Living Care Plus" for "GROUP LIVING CARE PLUS(POLICY NO. 1)") or its benefit. */
+function namesRow(text: string, row: ChatRow): boolean {
+  const plain = (x: string) => ` ${x.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const t = plain(text), cover = plain(noNumbers(row.cover).replace(/^group\s+/i, "")), benefit = plain(benefitName(row.benefit));
+  return (cover.trim().length > 2 && t.includes(cover)) || (benefit.trim().length > 2 && t.includes(benefit));
+}
 /** A row for one policy year's premium, or for the premium after it ("(first policy year only)", "(the page prints a
  * different premium for the first policy year)"). */
 const PERIOD_ROW = /first policy year(?: only)?\)$/;

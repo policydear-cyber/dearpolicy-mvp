@@ -812,6 +812,12 @@ test("a card whose event is not on its cover's list is never shown, decided per 
   // The prose never decides: wording that rules a cover out, or keeps it in, changes no card (TE #107 N1, N8, K1, K6).
   for (const text of ["A heart attack is not on the Living Care Plus list.", "A fracture doesn't appear on the Living Care list.", "A heart attack is on the Living Care list. It is not on the Living Care Plus list."])
     assert.deepEqual(run([[lc.id, "on_list"], [lcp.id, "on_list"]], [text]).cards, [LC, LCP], text);
+  // Not named anywhere in the answer's own words, the household hears an amount was left out (Critic R143-2).
+  assert.equal(run([[lc.id, "on_list"], [lcp.id, "not_on_list"]]).notes, 1);
+  // A card made from a pointing point keeps its flag: not_on_list gives none (Critic R143-1).
+  const pointed = amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [{ kind: "fact", text: "The scheme terms show this amount.", person: "Lim Ah Kow", document: "D2", quote: "Ambulance Cost Up to S$500 per incident",
+    amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null, eventFit: "not_on_list" }] }, all, HOUSE);
+  assert.deepEqual(pointed.report.labels, []);
   // A "not_on_list" card takes the same benefit's companion from another document with it.
   const hip = idOf("Lim Ah Kow", "Hip");
   assert.deepEqual(run([[hip, "not_on_list"]]).cards, []);
