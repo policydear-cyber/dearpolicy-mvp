@@ -5677,3 +5677,68 @@ With no card shown, "The Advance Payment amount below is not paid in addition to
 
 - **Low, note only.** A negation in the same clause that is not about the day also blanks the day. "There is no waiting period and payment starts from the 11th day" gives null, and so does "…isn't reduced and is paid from the 4th day". The result is null, which never lengthens a stay card and only drops the row's "from day" text. That is the safe direction.
 - **Free tests at a596032:** chat-test 65/65, headline-test 13/13, benefit-table test 106/106.
+
+## R153: PR #109 round 8 at f82ba06 (on main 1032612)
+
+**Verdict: NOT READY. Two blockers and one medium.** Patches for both blockers are tested in a scratch copy (`r153-fix.diff` in the Critic scratchpad, quoted in the relay). Free tests at f82ba06 pass: chat-test 71/71, headline-test 13/13, benefit-table test 106/106.
+
+### R153-1 (high, blocking): the waiting-period backstop hides fracture cards for a whole year
+`chatRows` sets `coverSince = c.startDate ?? c.asOf`. `insideWaiting` then hides any `on_list` card whose cover started less than 365 days ago when `waiting` is null. But null is exactly what the prompt asks for when "the cover prints no waiting period".
+
+An accident certificate printed "As of 01/01/2026" is a print date, and a group renewal start is not a first entry. Probe on the test household (Lim Ah Kow, GPA certificate "As of 01/01/2026", today 23/10/2026):
+
+| Card | waiting | Result |
+|---|---|---|
+| Hip (listed injury), `on_list` | null | **hidden**: "its cover started less than a year ago and no waiting period was checked" |
+| Hip, `on_list` | key missing (old recording) | **hidden** |
+| Hip, `any_event` | null | shown |
+
+On DC's GPA, this hides the wrist, hip and ankle fracture cards until next January. That hides documented benefits in the core accident questions.
+
+**Fix (tested):** take the backstop only when a page of the row's own document prints "waiting period" **and names the row's cover**:
+```ts
+const cover = noNumbers(row.cover).replace(/^group\s+/i, "").toLowerCase();
+const prints = household.documents[row.docIndex]?.pages.some((p) => /\bwaiting\s+period/i.test(p.text) && p.text.toLowerCase().includes(cover)) ?? false;
+if (raw.eventFit === "on_list" && prints && since != null && today - since < LONGEST_WAIT_DAYS) return "…";
+```
+`insideWaiting` also needs `household` passed in.
+
+With this, all three Hip probes show the card. One test needs its fixture changed: `shown(fresh, null)` in the S023 test uses a "CRITICAL ILLNESS PLAN" row whose document never prints that name next to "Waiting Period". Give it a page that does, or use the "LIVING CARE" cover. I would also drop `?? c.asOf` from `since`, because a print date is not a start date.
+
+### R153-2 (high, blocking): `dailyRateOf` makes per-day cards from rates that belong to something else
+The derived row takes **any** single "S$X per/a day" on a limit's line that is below the limit. Probes (the function copied verbatim):
+
+| A limit row's own line | Derived daily card |
+|---|---|
+| "Hospital Room & Board S$8,000 per policy year; ICU S$200 per day" | **S$200 per day for Room & Board** (the rate is ICU only) |
+| "Medical expenses up to S$5,000, subject to an excess of S$100 per day" | **S$100 per day** (that is an excess, not a benefit) |
+| "Overseas medical up to S$200,000; hospital allowance S$100 a day" | **S$100 per day for overseas medical** |
+| "Up to S$1,000 per trip, S$50 per day for a travel companion" | **S$50 per day** |
+
+Each is a wrong claimable amount under the limit row's name.
+
+**Fix (tested):** count a rate only when a cap word comes right before it (capped at, up to, maximum (of), max, limited to, not exceeding). Return null when the line names ICU, intensive, excess, deductible, co-pay, companion or allowance.
+
+With this:
+- The S016 test ("Capped at S$200 per day") still derives S$200.
+- "maximum S$300 per day" and "up to S$300 per day, up to S$8,000 per year" still derive S$300.
+- All four rows above derive nothing.
+
+Please add the four rows as tests.
+
+### R153-3 (medium, fix this round): a bare day count is taken from any turn once any turn mentions a stay
+`stayDaysWritten` now accepts any "N days" in **any** user turn when any turn has stay words. For example: "I was hospitalised. Does the 30 days waiting period matter?" If the model sets `perDay.stayDays` 30, the stay card is worked out for a 30-day stay the household never described.
+
+**Suggested guard:** do not count a bare count followed by waiting, period, ago, since, notice, of cover, to claim or to notify. For example:
+```ts
+new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s+(?:waiting|period|ago|since|notice|of\s+cover|to\s+(?:claim|notify)))`, "gi")
+```
+
+### Checked and holding
+- **`not_described`** rules out the row and its twins like `not_on_list`. The left-out note uses the same `namesRow` rule.
+- **Waiting with dates:** `applies` "no" is shown. yes/unsure with a period still running is hidden, and so is one with no usable date. The date is Singapore's. `printedDay` reads day first and only real dates.
+- **The daily label** (`rowLabel`) now says the start day and the most days. These come from `startDay`, with the R149 to R152 guards.
+- **A stay too short** gives a fact with no money in it, never a S$0 card.
+- **`libraryList`** is the library's own record (linked people, superseded documents left out). It only replaces a point that cites no document, in a question about documents.
+- **`NOTHING_SHOWN`:** correct.
+- **`spouseMeant`**, low, note only. It counts a title before at least 2 words of a member's name, so "Mrs Tan Yi Chuen" (a wife printed under her husband's name) would count for the husband. That would point "my wife" at Desmond if Charmaine is never printed with Mrs/Ms. It is rare in insurance documents. A stricter version would also require the other spouse to be printed with the opposite title.
