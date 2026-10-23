@@ -5469,3 +5469,32 @@ With it:
 
 ### Tests (run locally, free)
 - At d8f0181: chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+## R143: PR #107 at 3ba746b (new rule 1: per-card eventFit)
+
+**Verdict: no blocker. The design is right. Two small fixes are recommended this round.** R140 to R142 are superseded. Moving the list decision out of prose matching and onto a per-card flag removes the whole class of wording bugs from R140 to R142.
+
+### What I checked
+- **The drop is placed correctly.** `amountsFromRows` drops a `not_on_list` card after `checkedRow`, so a twin swap cannot dodge it. The drop also comes before companions are built, so the other document's twin of that row is never added.
+- **The schema** (`TABLE_ANSWER_SCHEMA`) requires `eventFit` on every statement. The value can be null or one of 4 enum values. This is fine for the Anthropic `json_schema` format in `model.ts`.
+- **The prompt line** sits in `renderTable`, next to the rows it governs. It also tells the model to say in a fact that the event is not on the list.
+- **The free tests at 3ba746b pass:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
+
+### On "should a missing or unknown flag fail open?" — yes, keep it failing open
+- **Live answers always carry the key**, because the schema requires it. Only null can still occur.
+- **Failing closed on null** would hide every card for a row that is not a list cover whenever the model leaves the flag empty. That hides documented benefits, which is a failure under the project rules.
+- **Failing open is also the floor before #107.** It is no worse than main, and old recordings replay unchanged.
+- **Suggestion (no fix needed):** record in `report` when a card comes with a null `eventFit`, so the next paid sweep can count how often it happens.
+
+### R143-1 (medium, fix this round): a card made from a pointer bypasses the gate
+`pointedRows` turns a fact such as "the Product Summary shows this amount" into an amount card, copying the fact's fields. The prompt asks for `eventFit` only "for every amount statement", so a fact will usually carry `eventFit: null`. A Living Care Plus card made this way would then pass for a heart attack, which is the H2 shape by another route.
+
+**Fix:** change the prompt line to "for every statement that gives a row's amount **or points at one** ('this amount')". `pointedRows` already copies the fact's `eventFit` onto the card, so no code change is needed. Please add one test: a pointer fact carrying `not_on_list` gives no card.
+
+### R143-2 (medium, fix this round): a wrong `not_on_list` hides a cover without a trace
+The server trusts the flag and adds no left-out note (`noteLeftOutAmounts` skips `notFit` drops). If the model sets `not_on_list` on a row that is not a list cover, or on the wrong row, that benefit disappears, and nothing tells the user the cover exists.
+
+**Fix:** skip the left-out note for a `notFit` drop only when the kept answer text (the bottom line or a statement) names that cover. Otherwise let the usual left-out-amount line show. In the right case (H2, where the fact says Living Care Plus does not list a heart attack), nothing changes. In the wrong case, the user at least sees that an amount was left out.
+
+### Known limit (not a regression)
+U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The gate depends on the model's call, and a missed `not_on_list` fails open, as on main. This is a prompt or unseen-set matter for the next sweep, not a server fix.
