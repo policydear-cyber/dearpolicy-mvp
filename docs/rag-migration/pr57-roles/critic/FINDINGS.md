@@ -5521,3 +5521,12 @@ U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The
 ### Low, note only
 - **Conflicting flags hide the row for the whole answer.** In a two-event question ("heart attack or stroke"), suppose the model gives Living Care Plus `not_on_list` for one event and `on_list` for the other. Its card is then hidden for both events. That errs toward withholding, which meets the project bar, and the answer text still says what it covers. No change needed now. Worth one item in the next unseen sweep.
 - **A pointer fact with `not_on_list` but `row: null` is not collected up front.** The card made from it is still dropped by its own flag, so only that row's twins could come back, as a companion of another card for the same benefit. That needs the model to contradict itself. No change needed.
+
+## R146: PR #107 at b4bffaa (diff 46cd590..b4bffaa, Test Engineer E8d)
+
+**Verdict: READY still holds.**
+
+- **`pointedRows` now runs once**, and `ruledOut` is built from its output. A pointer card marked `not_on_list` now rules out its row and that row's twins. This closes my R145 note 2.
+- **The loop is unchanged.** It iterates over the same `pointed` array. `pointedRows` builds a new array without changing its input, so reading it twice is safe.
+- **`said` is still built from the original statements.** That is still right: a pointer fact's own text stays in `said`.
+- **Free tests at b4bffaa:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
