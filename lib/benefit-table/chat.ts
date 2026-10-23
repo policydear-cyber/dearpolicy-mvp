@@ -349,7 +349,25 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     }
     // The same row named twice is given once (Critic R91-3). So is the same benefit with the same figure printed in
     // another of the person's documents, already given: it adds nothing (live run 23 Oct, B5: S$600,000 shown twice).
-    if (given.has(row.id) || given.has(named.id) || rows.some((o) => given.has(o.id) && twinOf(o, row) && sameFigure(o.figure, row.figure))) continue;
+    if (given.has(row.id) || given.has(named.id)) continue;
+    const kept = rows.find((o) => given.has(o.id) && twinOf(o, row) && sameFigure(o.figure, row.figure));
+    if (kept) {
+      // The skipped card's own conditions are not lost: each is a point quoting the skipped row's document, as a carried
+      // condition is (TE #111 T5: "Death must occur within 365 days of the accident" printed only with the second card).
+      for (const c of Array.isArray(raw.conditions) ? raw.conditions as { text?: unknown; quote?: unknown }[] : []) {
+        const t = typeof c?.text === "string" ? c.text.trim() : "", quote = typeof c?.quote === "string" ? c.quote.trim() : "";
+        const said = `${names(kept)} also depends on this: ${t}`;
+        // One the answer already gives in other words ("... within 365 days." and "... within 365 days of the accident.") is
+        // not said twice: most of its words are in a condition already given.
+        const words = (x: unknown) => new Set(typeof x === "string" ? x.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3) : []);
+        const same = (x: unknown) => { const a = words(t), b = words(x); return a.size > 0 && [...a].filter((w) => b.has(w)).length >= 0.8 * a.size; };
+        if (!t || !quote || statesMoney(t) || statements.some((x) => { const y = x as { text?: unknown; conditions?: unknown };
+          return y.text === said || (Array.isArray(y.conditions) && (y.conditions as { text?: unknown }[]).some((k) => same(k?.text))); })) continue;
+        statements.push({ kind: "fact", text: said, person: baseName(row.person), document: documentId(row.docIndex), quote, amount: null, percentOf: null,
+          conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+      }
+      continue;
+    }
     given.add(row.id); given.add(named.id);
     // The same benefit of the same cover printed in another of the person's documents ("Neck, Skull or Spine (Full Break)"
     // at 100% of S$5,000 in the product summary, and at 100% of S$600,000 in the benefit summary) is given with it, as an
@@ -663,6 +681,9 @@ function copiedName(copied: string, row: ChatRow, rows: ChatRow[] = []): boolean
   const short = (t: string, notes: RegExp) => core(plain(t.replace(notes, "").replace(LIST_MARKS, " ")));
   const s = short(copied, FREQUENCY);
   if (!s || s !== short(row.benefit, TRAILING_NOTES)) return false;
+  // A frequency may be left out, never changed: "Premium, Annual" is not the monthly row (TE #111 C5).
+  const freq = (t: string) => FREQUENCY.exec(t.replace(/(?:\s*\([^()]*\))+\s*$/, ""))?.[0].toLowerCase().replace(/[^a-z]/g, "").replace(/ly$/, "") ?? null;
+  if (freq(copied) && freq(copied) !== freq(row.benefit)) return false;
   return !rows.some((o) => o.id !== row.id && o.personId === row.personId && short(o.benefit, TRAILING_NOTES) === s
     && !(o.coverKey === row.coverKey && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit)));
 }

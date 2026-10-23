@@ -1244,6 +1244,9 @@ test("a copy without the server's note or a premium's frequency is the row's, wh
   assert.equal(shown(later, "First Year Instalment Premium, Monthly"), 0);
   assert.equal(shown(first, "Instalment Premium, Monthly"), 0);
   assert.equal(shown(later, "Instalment Premium (first year)"), 0);
+  // A frequency may be left out, never changed (TE #111 C5).
+  assert.equal(shown(later, "Instalment Premium, Annual"), 0);
+  assert.ok(shown(later, "Instalment Premium, monthly") >= 1);
   // Two rows that differ only in the note: the short name is neither's.
   assert.equal(shown(full, "Neck, Skull or Spine"), 0);
   assert.equal(shown(full, "Neck, Skull or Spine (Full Break)"), 1);
@@ -1280,6 +1283,11 @@ test("the same benefit with the same figure from another document is shown once,
   assert.equal(given([bs, ps], [ps, bs]), 1);
   // A different figure for the same benefit is still given with it.
   assert.equal(given([bs, other], [bs, other]), 2);
+  // The skipped card's own condition is kept, as a point quoting its document (TE #111 T5).
+  const cond = { text: "Death must occur within 365 days of the accident.", quote: "within 365 days of the accident" };
+  const out = (amountsFromRows({ bottomLine: "q", nextSteps: [], question: null, statements: [card(bs), { ...card(ps), conditions: [cond] }] }, [...rows, bs, ps], HOUSE, new Date("2026-10-23T02:00:00Z")).json as { statements: { kind: string; text: string; quote?: string }[] }).statements;
+  assert.equal(out.filter((x) => x.kind === "amount").length, 1);
+  assert.ok(out.some((x) => x.kind === "fact" && /also depends on this: Death must occur within 365 days/.test(x.text) && x.quote === cond.quote), JSON.stringify(out));
 });
 
 test("'the amount is below' with no card goes; 'below the limit' is not a pointer (live run 23 Oct, S087)", () => {
