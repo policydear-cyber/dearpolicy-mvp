@@ -5839,3 +5839,11 @@ Two rows with **identical** benefit names (for example "Hospital cash" on two co
 - A recording with no field (undefined) is not checked, so replays are unchanged.
 - The check runs before `checkedRow`, so it judges the row the model named.
 - `rowBenefit` is a plain string, so the 16-union limit holds.
+
+## R158: PR #110 at 9a03b85 (diff e29365d..9a03b85)
+
+**Verdict: NOT READY, one fix left.**
+
+- **R156-1 is fixed, exactly as patched.** An undated event is no longer taken as today. Its card says when the period ended. The prompt now asks for today's date for an event happening now. There is a test for an event dated today that falls outside the period.
+- **R157-1 is still open.** `copiedName` still accepts one name inside the other when the shorter name has at least 2 words (chat.ts:635). So a slip between "Hospital Cash" and "ICU Hospital Cash" still shows the other row's amount. Apply the R157 `core()` patch and add the ICU/Hospital Cash pair as tests.
+- **Free tests at 9a03b85:** chat-test 77/77, headline-test 13/13, benefit-table test 106/106.
