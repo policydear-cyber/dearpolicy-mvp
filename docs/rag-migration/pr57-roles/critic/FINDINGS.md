@@ -5498,3 +5498,14 @@ The server trusts the flag and adds no left-out note (`noteLeftOutAmounts` skips
 
 ### Known limit (not a regression)
 U16: the model marks the shoulder fracture rows `on_list` for a dislocation. The gate depends on the model's call, and a missed `not_on_list` fails open, as on main. This is a prompt or unseen-set matter for the next sweep, not a server fix.
+
+## R144: PR #107 re-review at 4e4b43e (diff 3ba746b..4e4b43e)
+
+**Verdict: READY.** R143-1 and R143-2 are fixed. No new blocker.
+
+- **R143-1 fixed.** The prompt now asks for `eventFit` on every statement that gives a row's amount or points at one. `pointedRows` copies the flag onto the card it makes. The new test, a pointer fact marked `not_on_list`, gives no card.
+- **R143-2 fixed.** A `not_on_list` drop is marked `notFit`, and so skips the left-out note, only when `namesRow(said, row)` is true. `said` is the bottom line plus the text of non-amount statements, so a dropped card's own text is excluded.
+  - `noNumbers` strips "(POLICY NO. 1)" and the code strips the leading "GROUP", so "Living Care Plus" matches the printed cover name.
+  - There is a test for the unnamed case, which gets the note.
+- **Low, note only.** `namesRow` matches substrings, so "Living Care" is found inside "Living Care Plus". Suppose the model wrongly flagged Living Care `not_on_list` while its text named only Living Care Plus. Living Care would then be hidden with no note. This needs a wrong flag and an unlucky overlap of names. Not worth more code now. If it ever matters, match on whole names (for example, not followed by " plus").
+- **Free tests at 4e4b43e:** chat-test 63/63, headline-test 13/13, benefit-table test 105/105.
