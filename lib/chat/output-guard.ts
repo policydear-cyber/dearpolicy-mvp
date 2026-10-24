@@ -157,8 +157,11 @@ function guardInPlace(answer: ChatAnswer) {
     const leaks = (t: string) => LEAKS.some((re) => re.test(outsideQuotes(t, names)));
     const gone = new Set(cards.statements.filter((st) => st.amount && [...(st.conditions ?? []), st.basis ?? ""].some((c) => typeof c === "string" && leaks(c))));
     const goneIds = [...gone].map((st) => st.id).filter((id): id is string => !!id);
+    // A note that names a dropped amount ("S$1,250, up to S$500 and S$250 ... are not a total") goes with it.
+    const goneAmounts = [...gone].map((st) => (st.amount as { text?: unknown }).text).filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.replace(/^up to\s+/i, ""));
     cards.statements = cards.statements.flatMap((st) => {
       if (gone.has(st) || goneIds.some((g) => st.id?.startsWith(`${g}-`))) return [];
+      if (!st.amount && goneAmounts.some((t) => st.text.includes(t))) return [];
       if (st.amount) return [st];
       const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
       const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;

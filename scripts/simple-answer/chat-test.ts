@@ -299,7 +299,10 @@ async function main() {
       const at = amt.statements!.findIndex((x) => x.amount);
       const id = amt.statements![at].id;
       amt.statements![at] = { ...amt.statements![at], conditions: [c] };
-      const others = amt.statements!.filter((x) => x.id !== id && !x.id.startsWith(`${id}-`)).map((x) => x.id);
+      const amountText = (amt.statements![at].amount as { text: string }).text.replace(/^up to\s+/i, "");
+      // Its worked-out cards and any note naming its amount go with it; every other card stays.
+      const others = amt.statements!.filter((x) => x.id !== id && !x.id.startsWith(`${id}-`) && (x.amount || !x.text.includes(amountText))).map((x) => x.id);
+      assert.ok(amt.statements!.some((x) => !x.amount && x.text.includes(amountText)), "the fixture has a note naming the amount");
       guardChatAnswer(amt);
       assert.deepEqual(amt.statements!.map((x) => x.id), others, c);
     }
