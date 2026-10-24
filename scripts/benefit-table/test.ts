@@ -507,14 +507,13 @@ test("caps: a percentage under its cap is worked out as usual, and says the limi
 // Overnight run 23 Oct (N016, N083): a cap the reading did not give, but the row's own words print as its one money figure
 // right after a cap word, is the row's cap. Never the uncapped figure.
 test("caps: words that say capped with no cap read give the one cap the row prints, never the uncapped figure", () => {
-  for (const [o, cap] of [
-    [{ benefit: "Advance Payment Benefit", section: "GROUP TERM LIFE", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" }, 400000],
-    [{ benefit: "Burns", section: "GROUP PERSONAL ACCIDENT", value: 10, page: 6, quote: "Burns 10% of Sum Insured, maximum $5,000" }, 5000],
-  ] as const) {
-    const r = capRead(o);
-    const row = capRows(r)[0];
-    assert.equal(row.figure.kind === "worked_out" && row.figure.amount, cap, figureText(row.figure));
-  }
+  const r = capRead({ benefit: "Advance Payment Benefit", section: "GROUP TERM LIFE", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)" });
+  const row = capRows(r)[0];
+  assert.equal(row.figure.kind === "worked_out" && row.figure.amount, 400000, figureText(row.figure));
+  // Another limit near the row ("Another benefit up to S$1,000" a few lines below) may be this row's too: no amount (TE pr113 A8).
+  const burns = capRead({ benefit: "Burns", section: "GROUP PERSONAL ACCIDENT", value: 10, page: 6, quote: "Burns 10% of Sum Insured, maximum $5,000" });
+  assert.equal(burns.benefits[0].capUnread, true);
+  assert.equal(capRows(burns)[0].figure.kind, "none", figureText(capRows(burns)[0].figure));
 });
 test("caps: a cap whose words are not next to the row, not on its page, or not the claimed figure is refused, and no amount is shown", () => {
   const base = { section: "GROUP PERSONAL ACCIDENT", benefit: "Comatose State Lump Sum Benefit", value: 15, page: 6, quote: "Comatose State Lump Sum Benefit 15% of Sum Insured or up to S$50,000, whichever is lesser" };

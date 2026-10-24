@@ -80,7 +80,9 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
 }
 
 /** A plan table's cell: a money figure, or words printed in place of one. */
-const PLAN_CELL = /^(?:(?:S\$|US\$|SGD\s?|\$)\s?\d[\d,]*(?:\.\d+)?|not\s+covered|not\s+applicable|covered|unlimited)$/i;
+// A footnote mark after a figure ("S$2,000*") is the cell's own (TE pr113 P7).
+const PLAN_CELL = /^(?:(?:S\$|US\$|SGD\s?|\$)\s?\d[\d,]*(?:\.\d+)?|not\s+covered|not\s+applicable|covered|unlimited)[*^†#]*$/i;
+const OPTIONAL = /\b(?:optional|add-?ons?|riders?)\b/i;
 const SUB_LIMIT = /^(?:sub-?\s?limit|overall\s+limit)\b/i;
 /** Rows a plan table prints that the reading left out, for each person's plan: a line that prints exactly one cell per plan
  * column under the table's own heading line ("Premium\tBusiness\tFirst"), named by the line just above it (with the words
@@ -119,8 +121,11 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
           while (end < lines.length && !heading(lines[end])) end++;
           const block = plain(lines.slice(i + 1, end).join(" "));
           const anchored = theirs.some((o) => o.column === template.column && o.source.page === page.page && plain(o.source.excerpt.split("\n")[0]).length > 0 && block.includes(plain(o.source.excerpt.split("\n")[0])));
-          cols = !anchored || /\b(?:optional|add-?ons?|riders?)\b/i.test(lines[i - 1] ?? "") ? null : c; parent = null; continue;
+          cols = !anchored || OPTIONAL.test(lines[i - 1] ?? "") ? null : c; parent = null; continue;
         }
+        // Another table's heading that does not name the plan ("Single Trip\tAnnual Trip"), or an "Optional covers (pay extra)"
+        // line, ends the plan's table (TE pr113 P4, P6).
+        if (cols && ((c.length >= 2 && !valuesOf(lines[i]) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x))) || (c.length === 1 && OPTIONAL.test(lines[i])))) { cols = null; parent = null; continue; }
         if (!cols || used.has(i)) continue;
         const cells = valuesOf(lines[i]);
         if (!cells) {
@@ -132,26 +137,31 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         const inline = cells.length > cols.length ? cells[0] : null;
         // A sub-limit named on its own line ("Overall limit^\tS$300\tS$800") never takes the line above as its name.
         const above = labelLine(lines[i - 1]) && !used.has(i - 1) && !(inline && SUB_LIMIT.test(inline)) ? i - 1 : null;
-        const below = above == null && !inline && valuesOf(lines[i - 1]) && labelLine(lines[i + 1]) && !SUB_LIMIT.test(lines[i + 1]) && !valuesOf(lines[i + 2]) ? i + 1 : null;
+        // A label below with figures of its own on the next line is theirs (TE pr113 P7).
+        const below = above == null && !inline && valuesOf(lines[i - 1]) && labelLine(lines[i + 1]) && !SUB_LIMIT.test(lines[i + 1]) && !/\d/.test(lines[i + 2] ?? "") ? i + 1 : null;
         const own = [above != null ? lines[above] : below != null ? lines[below] : null, inline].filter((x): x is string => !!x).join(": ");
         if (above != null) used.add(above);
         if (below != null) used.add(below);
         used.add(i);
         if (!own) { parent = null; continue; }
+        // "Personal accident" over "Adult\tS$50,000\tS$100,000" is for adults only (TE pr113 P8).
+        if (inline && /^(?:adults?|child(?:ren)?|juveniles?|seniors?|overall)\b/i.test(inline) && !SUB_LIMIT.test(inline)) { parent = null; continue; }
         const sub = SUB_LIMIT.test(own);
         if (!sub) parent = own;
         if (sub && (!parent || /family/i.test(own))) continue;
         const name = sub ? `${parent}: ${own}` : own;
         if (/^(?:adult|child|children|overall)\b/i.test(own) && !sub) { parent = null; continue; }
-        const money = /^(?:S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)$/i.exec(cell);
-        const notCovered = /^not\s+(?:covered|applicable)$/i.test(cell);
+        const money = /^(S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)[*^†#]*$/i.exec(cell);
+        const notCovered = /^not\s+(?:covered|applicable)[*^†#]*$/i.test(cell);
+        // The cell's own currency: "US$10,000" is US$ whatever the row it is read beside (TE pr113 P3).
+        const currency = !money ? null : /^us\$/i.test(money[1]) ? "USD" : /^(?:s\$|sgd)/i.test(money[1]) ? "SGD" : template.figure.currency;
         if (!money && !notCovered) continue;
         // A name another row from this page already has (as its name or in its line) is that row's.
         const keys = [own, above != null ? lines[above] : null, below != null ? lines[below] : null].filter((x): x is string => !!x).map(plain);
         if (theirs.some((o) => o.source.page === page.page && keys.some((key) => plain(o.benefit).includes(key) || plain(o.source.excerpt).includes(key)))) continue;
         const excerpt = [above, i, below].filter((x): x is number => x != null).sort((x, y) => x - y).map((k) => lines[k]).join("\n");
         out.push({ ...template, benefit: name, pays: money ? "up_to" : "not_covered", conditions: [], fromDay: null, maxDays: null, qualifier: null,
-          figure: money ? { kind: "printed", amount: Number(money[1].replace(/,/g, "")), currency: template.figure.currency, unit: "up_to", period: null } : { kind: "none", why: "printed as not covered" },
+          figure: money ? { kind: "printed", amount: Number(money[2].replace(/,/g, "")), currency, unit: "up_to", period: null } : { kind: "none", why: "printed as not covered" },
           source: { ...template.source, page: page.page, excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
       }
     }

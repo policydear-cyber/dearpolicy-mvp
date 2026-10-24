@@ -118,6 +118,11 @@ function capInRow(row: string): number | null {
   // (Critic R169-1).
   if (/\b(?:child(?:ren)?|juveniles?|minors?|adults?|age[ds]?|years?\s+old|spouses?|dependants?|elderly|above|below|over|under)\b/.test(text)) return null;
   const before = text.slice(Math.max(0, found[0].index! - 70), found[0].index!);
+  const after = text.slice(found[0].index! + found[0][0].length, found[0].index! + found[0][0].length + 30);
+  // An excess ("subject to an excess not exceeding S$100") is not a cap, and a cap for each day or item ("up to S$200 per
+  // day") is not the row's whole amount (TE pr113 A2, A11).
+  if (/\b(?:excess|deductible|co-?pay\w*|co-?insurance)\b/.test(before)) return null;
+  if (/^\s*(?:(?:per|a|an|each|every|\/)\s*(?:day|week|month|year|night|hour|visit|session|item|article|tooth|treatment)\b|daily\b)/.test(after)) return null;
   return /(?:\bup\s+to|\bmax(?:imum)?(?:\s+amount)?(?:\s+of)?|\bcapped\s+at|\bnot\s+(?:to\s+)?exceed(?:ing)?|\blimited\s+to)\b[^%\d]{0,60}$/.test(before) ? [...values][0] : null;
 }
 const otherMoneyThan = (row: string, cap: number) => [...flat(row).matchAll(MONEY_IN)].some((m) => Number(m[1].replace(/,/g, "")) !== cap);
@@ -366,7 +371,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         capUnread = true;
       } else if (tied) {
         cap = claimed; capSource = s;
-      } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!)
+      } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!) && !NEAR_CAP.test(near)
         && !(/\bwhichever\b/i.test(`${row}\n${near}`) && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![capInRow(row), value].includes(Number(m[0].replace(/,/g, "")))))) {
         // No cap read, but the row's own words print exactly one money figure right after a cap word ("100% Sum Insured (up
         // to S$400,000)", "subject to a maximum amount of S$25,000"): that is its cap (overnight run 23 Oct, N016, N083).

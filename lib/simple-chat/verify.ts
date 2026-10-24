@@ -645,8 +645,11 @@ const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitt
 // "Stayed in hospital there 4 days", "hospital cash ... for 25 days" (overnight run 23 Oct, N258, N145): a few words may
 // stand between the stay and its length.
 // "Admitted 10 days after the accident", "hospitalised 3 days ago" say when, not how long (Critic R169-4).
-const NOT_LENGTH = String.raw`(?!\s+(?:ago|after|before|later|earlier|prior|since|from|into)\b)`;
-const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?!for\b|about\b|around\b)[a-z]+){0,3}?(?:\s+(?:for|about|around))?\s+${n}\s*days?\b${NOT_LENGTH}`, "gi"),
+// "Hospitalised for 12 days after the fall" is a length: "for" says so (TE pr113 S10). "Admitted within 30 days of the trip"
+// is not: the few words between never hold a word that says when (TE pr113 S5).
+const NOT_LENGTH = String.raw`(?!\s+(?:ago|after|before|later|earlier|prior|since|from|into|of)\b)`;
+const FILLER = String.raw`(?:\s+(?!(?:for|about|around|within|after|before|by|until|of|ago|since)\b)[a-z]+){0,3}?`;
+const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b${FILLER}(?:\s+(?:for|about|around)\s+${n}\s*days?\b(?!\s+ago\b)|\s+${n}\s*days?\b${NOT_LENGTH})`, "gi"),
   new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi"),
   new RegExp(String.raw`\bhospital\s+cash\b[^.?!]{0,40}?\bfor\s+(?:a\s+)?${n}[\s-]*days?\b`, "gi")];
 /** The one length of stay the household's latest message describing a stay gives, or null: what a daily card is worked out
@@ -654,8 +657,11 @@ const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\
 export function stayDaysSaid(asked: string[]): number | null {
   const n = String.raw`(\d{1,3}|${Object.keys(NUMBER_WORDS).join("|")})`;
   for (const q of asked) {
-    const found = new Set(stayPatterns(n).flatMap((re) => [...q.matchAll(re)].map((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]))));
-    if (found.size) return found.size === 1 ? [...found][0] : null;
+    const value = (m: RegExpMatchArray) => { const v = m[1] ?? m[2]; return /^\d+$/.test(v) ? Number(v) : NUMBER_WORDS[v.toLowerCase()]; };
+    const found = new Set(stayPatterns(n).flatMap((re) => [...q.matchAll(re)].map(value)));
+    // "In ICU for 3 days and then in the general ward for 7 days": another "for N days" makes the length unclear (TE pr113 S3).
+    const other = [...q.matchAll(new RegExp(String.raw`\b(?:for|about|around)\s+${n}\s*days?\b(?!\s+ago\b)`, "gi"))].map(value);
+    if (found.size) return found.size === 1 && other.every((v) => found.has(v)) ? [...found][0] : null;
   }
   return null;
 }
@@ -668,7 +674,7 @@ function stayDaysWritten(asked: string[], days: number): boolean {
   const bare = asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))
     ? new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s*(?:'s\s+)?(?:waiting|period|ago|since|notice|of\s+(?:cover|the\s+policy)|to\s+(?:claim|notify|tell|inform)))`, "gi") : null;
   const ruleTurn = /\b(?:within|claim\w*|notif\w*|waiting|period|deadline|submit\w*)\b/i;
-  const said = (q: string, re: RegExp) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days);
+  const said = (q: string, re: RegExp) => [...q.matchAll(re)].some((m) => { const v = m[1] ?? m[2]; return (/^\d+$/.test(v) ? Number(v) : NUMBER_WORDS[v.toLowerCase()]) === days; });
   return asked.some((q) => res.some((re) => said(q, re)) || (bare != null && !ruleTurn.test(q) && said(q, bare)));
 }
 /** "An 8-day", "an 11-day", "an 18-day", otherwise "A 12-day" (TE T4). */

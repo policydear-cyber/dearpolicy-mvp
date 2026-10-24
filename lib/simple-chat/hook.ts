@@ -103,7 +103,12 @@ export function claimWindows(household: Household): number[] {
     const text = p.text.replace(/\s+/g, " ");
     for (const m of text.matchAll(/\b(?:within|no\s+later\s+than)\s+(?:[a-z-]+\s+){0,5}\(?(\d{1,3})\)?\s+days?\s+(?:of|from|after)\b/gi)) {
       const n = Number(m[1]), before = text.slice(Math.max(0, m.index! - 90), m.index!);
-      if (n >= 7 && n <= 365 && /\b(?:claims?|notice|notify|inform\s+us|tell\s+us)\b/i.test(before) && !/\b(?:assault|authority|reported\s+to|premium|grace)\b/i.test(before)) found.add(n);
+      // Not a waiting period ("no claim is payable for an illness that starts within 30 days of the cover start date") or a
+      // free look ("if no claim has been made, you may cancel within 14 days") (TE pr113 W2, W3).
+      const after = text.slice(m.index! + m[0].length, m.index! + m[0].length + 40);
+      if (n >= 7 && n <= 365 && /\b(?:claims?|notice|notify|inform\s+us|tell\s+us)\b/i.test(before)
+        && !/\b(?:assault|authority|reported\s+to|premium|grace|payable|waiting|cancel\w*|refund\w*|free[\s-]look|cooling|starts?|commenc\w*)\b/i.test(before)
+        && !/^\s*(?:the\s+)?(?:cover|policy|commencement|start|receiv\w*|issue)\b/i.test(after)) found.add(n);
     }
   }
   return [...found].sort((a, b) => a - b).slice(0, 4);
@@ -135,7 +140,6 @@ export function datesSaidNote(message: string, now: Date, windows: number[] = []
   // Days said by how long ago they were: "yesterday", "the day before yesterday", "3 days ago", "last night".
   for (const m of message.matchAll(/\b(?:the\s+)?day\s+before\s+yesterday\b|\byesterday\b|\blast\s+night\b|\b(\d{1,2}|a|one|two|three|four|five|six|seven|ten)\s+days?\s+ago\b/gi)) {
     const ago = /before\s+yesterday/i.test(m[0]) ? 2 : /yesterday|last\s+night/i.test(m[0]) ? 1 : /^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_DAYS[m[1].toLowerCase()];
-    if (/yesterday/i.test(m[0]) && !/before/i.test(m[0]) && /day\s+before\s+yesterday/i.test(message)) continue;
     addDay(m[0], today - ago);
   }
   const of = (word: string) => MONTHS.indexOf(word.slice(0, 3).toLowerCase()) + 1;
@@ -169,6 +173,7 @@ const DEADLINE_WORDS = /\b(?:claims?|deadline|window|notice|notify|time\s+limit|
 const OTHER_PERIOD = /\b(?:waiting|free[-\s]?look|cooling|survival|grace|policy\s+(?:period|year)|trip|cover(?:age)?\s+period)\b/i;
 const DEADLINE_SAID = /\b(?:by|within|before|until|ends?|deadline|last\s+day|claim|notice)\b/i;
 const CLAIM_SAID = /\b(?:claims?|notice|notify|deadline|last\s+day)\b/i;
+const WHOSE_NOT = /^(?:the|your|their|his|her|its|this|that|any|each|every|one|day|days|month|months|claim|notice|and|but|for|of|to|own|whose)$/;
 const SLASH_DATE = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g;
 /** A clause saying a claim's deadline has passed, or a claim would be late, when the answer itself gives that deadline as
  * still open: a last day on or after today in a sentence about a deadline, or a date and a number of days in the clause's
@@ -180,7 +185,13 @@ export function dropLateClaims(answer: { summary: string; bottomLine?: string | 
   const dayOf = (m: RegExpMatchArray) => printedDay(`${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[3]}`);
   const all = [answer.bottomLine ?? answer.summary, ...(answer.statements ?? []).map((s) => s.text), ...answer.nextSteps].filter(Boolean).join(" ");
   // Only a date given as a claim's last day: "your cover runs until 31/12/2026" opens no claim window (Critic R169-5).
-  const openSaid = sentencesOf(all).some((x) => DEADLINE_SAID.test(x) && CLAIM_SAID.test(x) && !OTHER_PERIOD.test(x) && !LATE.test(x) && [...x.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && d >= today; }));
+  const opens = sentencesOf(all).filter((x) => DEADLINE_SAID.test(x) && CLAIM_SAID.test(x) && !OTHER_PERIOD.test(x) && !LATE.test(x) && [...x.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && d >= today; }));
+  // "The baggage claim deadline has already passed" is not answered by "submit the medical claim by 30/10/2026": a clause
+  // that names whose claim it is needs an open date for that one (TE pr113 D4).
+  const openSaid = (c: string) => {
+    const whose = c.match(/\b([a-z]{3,})\s+(?:claims?|deadline|window|notice)\b/i)?.[1].toLowerCase();
+    return whose && !WHOSE_NOT.test(whose) ? opens.some((x) => new RegExp(String.raw`\b${whose}\b`, "i").test(x)) : opens.length > 0;
+  };
   const openIn = (sentence: string) => {
     const windows = [...sentence.matchAll(/\b(\d{1,3})[\s-]*days?\b/gi)].map((m) => Number(m[1]));
     return [...sentence.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && windows.some((w) => d + w >= today); });
@@ -189,11 +200,11 @@ export function dropLateClaims(answer: { summary: string; bottomLine?: string | 
   const left: string[] = [];
   const cut = (text: string) => sentencesOf(text).map((x) => {
     const parts = x.split(/(?:,|;)\s+(?=(?:and|but|so|while|although|though)\b)|;\s+/);
-    if (!parts.some((c) => late(c, x)) || !(openSaid || openIn(x))) return x;
+    if (!parts.some((c) => late(c, x) && (openSaid(c) || openIn(x)))) return x;
     left.push(x);
     const kept: string[] = [];
     for (let i = 0; i < parts.length; i++) {
-      if (late(parts[i], x)) { while (i + 1 < parts.length && /^so\b/i.test(parts[i + 1])) i++; continue; }
+      if (late(parts[i], x) && (openSaid(parts[i]) || openIn(x))) { while (i + 1 < parts.length && /^so\b/i.test(parts[i + 1])) i++; continue; }
       kept.push(parts[i]);
     }
     if (!kept.length || /^(?:and|but|so|while|although|though)\b/i.test(kept[0]) && kept.length === 1) return null;
