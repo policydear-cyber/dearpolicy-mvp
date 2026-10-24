@@ -1422,6 +1422,11 @@ test("a plan table's per-block cells wrapped over two lines are a row for the pe
   assert.deepEqual(made([...TABLE.slice(0, 4), TABLE[4], "Delay while overseas\tsix-hour delay\tthree-hour delay"]), []);
   assert.deepEqual(made([...TABLE.slice(0, 3), "S$100\tS$200\tS$300", TABLE[4], TABLE[5]]), []);
   assert.deepEqual(made(["Premium\tBusiness\tFirst", "Trip diversion", "S$500\tS$1,000\tS$1,500", "Baggage delay", "S$150", "S$150\tS$150", "for the first", "Delay while overseas\tfor every\tfor every", "six-hour delay", "six-hour delay\tsix-hour delay", "only"]), []);
+  // A limit on the line after the two wrapped lines belongs to the cells: no row without it (Critic R186-2). A bare "$"
+  // names no currency (R186-1).
+  for (const next of ["up to S$1,000\tup to S$500\tup to S$800", "max S$500 per trip", "S$500\tS$800\tS$1,000", "per trip"])
+    assert.deepEqual(made([...TABLE.slice(0, 6), next]), [], next);
+  assert.equal(made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure.kind === "printed" && (made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure as { currency: string | null }).currency, null);
   // A period the reading names keeps its wording.
   assert.match(rowLabel({ ...business[0], figure: { kind: "printed", amount: 500, currency: "SGD", unit: "per_period", period: "month" } }), /: paid per month\.$/);
 });

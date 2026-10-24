@@ -1,7 +1,7 @@
 /** Coverage's summary of one cover: which few rows lead its card, the short text of each amount, and the full list grouped
  * by section. Pure, and used in the browser, so it takes only the fields the page receives. Nothing here changes an
  * amount: it chooses which rows to show first and how to word them, never a figure. */
-import type { Figure, TableRow } from "./assemble";
+import { periodWords, type Figure, type TableRow } from "./assemble";
 
 export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> &
   Partial<Pick<TableRow, "percent" | "base">>;
@@ -30,7 +30,7 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
   // the chat and on the page.
   if (f.kind === "worked_out") return { text: f.capped ? `Up to ${m(f)}` : m(f),
     note: r.percent != null && r.base != null ? `${r.percent}% of ${money(r.base, f.currency)}${f.capped ? ", capped at the most it pays" : ""}` : f.how };
-  const t = f.unit === "up_to" ? `Up to ${m(f)}` : f.unit === "per_day" ? `${m(f)} a day` : f.unit === "per_period" ? `${m(f)} a ${(f.period ?? "period").replace("_", " ")}` : m(f);
+  const t = f.unit === "up_to" ? `Up to ${m(f)}` : f.unit === "per_day" ? `${m(f)} a day` : f.unit === "per_period" ? `${m(f)} ${periodWords(f.period)}` : m(f);
   return { text: t, note: null };
 }
 
