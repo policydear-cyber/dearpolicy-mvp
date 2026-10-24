@@ -283,6 +283,17 @@ async function main() {
     const step = verifyAnswer(house, { bottomLine: "The schedule is the file named output_2026.pdf.", statements: [], nextSteps: ["Open output_2026.pdf on the Documents page."], question: null }).answer;
     guardChatAnswer(step);
     assert.deepEqual(step.nextSteps, ["Open output_2026.pdf on the Documents page."]);
+    // The cards' points are guarded too: a point naming a table goes, a condition naming one goes, an amount's label stays
+    // (Critic R194). A refused answer stored before the bottom line was guarded reopens with the fallback alone.
+    const pts = verifyAnswer(house, c2).answer;
+    const before = pts.statements!.map((x) => x.text);
+    pts.statements!.push({ id: "leak", kind: "fact", text: "The figures come from the policy_benefits table.", fullText: "The figures come from the policy_benefits table.", conditions: [], amount: null });
+    pts.statements![0] = { ...pts.statements![0], conditions: [...pts.statements![0].conditions, "As stored in policy_benefits."] };
+    guardChatAnswer(pts);
+    assert.deepEqual(pts.statements!.map((x) => x.text), before);
+    assert.ok(!JSON.stringify(pts.statements).includes("policy_benefits"));
+    const old = sanitizeStoredAnswer({ ...JSON.parse(JSON.stringify(other)), bottomLine: "The schedule is the file named secret_backup_2026.pdf." }) as { bottomLine?: string; summary: string };
+    assert.equal(old.bottomLine, old.summary);
   });
 
   await check("the saved answer survives the output guard and reopening, and is drawn as cards", () => {

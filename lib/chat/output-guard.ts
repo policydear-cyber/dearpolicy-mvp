@@ -118,7 +118,8 @@ export function protectableNames(answer: ChatAnswer): string[] {
 /** Guards an answer in place and returns it. */
 export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
   if (!answer || typeof answer !== "object") return answer;
-  const visible = (a: ChatAnswer) => JSON.stringify([a.summary, a.details, a.nextSteps, (a.questions ?? []).map((q) => [q.text, q.why]), (a.claimItems ?? []).map((i) => [i.reason, i.conditions])]);
+  const visible = (a: ChatAnswer) => JSON.stringify([a.summary, a.details, a.nextSteps, (a.questions ?? []).map((q) => [q.text, q.why]), (a.claimItems ?? []).map((i) => [i.reason, i.conditions]),
+    (a as { bottomLine?: unknown }).bottomLine ?? null, ((a as { statements?: { text: string; basis?: unknown; conditions?: unknown }[] }).statements ?? []).map((x) => [x.text, x.basis, x.conditions])]);
   const before = visible(answer);
   guardInPlace(answer);
   const after = visible(answer);
@@ -147,6 +148,18 @@ function guardInPlace(answer: ChatAnswer) {
   // when the guard leaves nothing, so a name the guard took out is never shown beside the fallback (TE P121-2).
   const held = answer as ChatAnswer & { bottomLine?: string | null };
   if (typeof held.bottomLine === "string") held.bottomLine = summary && summary.trim() ? guardText(held.bottomLine, names) || answer.summary : answer.summary;
+  // The cards' own words: a point's conditions and basis, and the text of a point with no amount, are guarded too (Critic
+  // R194). A point the guard leaves with no words is dropped. An amount's text is the server's own label, which the label
+  // checks already matched, so it is left as it is.
+  const cards = answer as ChatAnswer & { statements?: { text: string; fullText?: string; amount?: unknown; basis?: string | null; conditions?: string[] }[] };
+  if (Array.isArray(cards.statements)) cards.statements = cards.statements.flatMap((st) => {
+    const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
+    const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;
+    if (st.amount) return [{ ...st, conditions, basis }];
+    const text = guardText(st.text, names);
+    if (!text || !text.trim()) return [];
+    return [{ ...st, text, fullText: text === st.text ? st.fullText : text, conditions, basis }];
+  });
   // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
