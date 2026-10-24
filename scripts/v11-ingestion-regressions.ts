@@ -155,7 +155,7 @@ async function partA() {
     // At upload: only suspect text pages are read again; a page is kept only when the image reading confirms it, and
     // otherwise, or when the image could not be read, only its lines with no amount are kept as its text.
     const scrambled = "PruLink Enhanced Protector\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\n100,000.00\n50,000.00\n25,000.00";
-    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
+    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean; uncheckedWhy?: string }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
     assert.deepEqual(suspectPages(pages), [2, 4]);
     const image = { 2: "PruLink Enhanced Protector\nBasic Plan Sum Assured 100,000.00\nCrisis Cover Benefit 50,000.00\nEarly Crisis Cover 25,000.00", 4: "Sum Assured 50,000.00 50,000.00" } as Record<number, string>;
     const asked: number[][] = [];
@@ -165,6 +165,15 @@ async function partA() {
     assert.equal(checked[1].text, uncheckedText(scrambled));
     assert.doesNotMatch(checked[1].text, /\d/);
     assert.equal(checked[3].text, pages[3].text, "a confirmed page keeps the document's own words");
+    // Why a page failed is kept beside it for the processing history, not in its text (Critic plan step 3).
+    assert.equal(checked[1].uncheckedWhy, "figure line with no label");
+    assert.equal(checked[3].uncheckedWhy, undefined);
+    assert.doesNotMatch(checked[1].text, /label beside/);
+    assert.equal((await crossCheckPages(pages, [4], async () => null))[3].uncheckedWhy, "image reading failed");
+    // The reason quotes nothing from the page: no label, no figure (TE P115-1).
+    const swapped = await crossCheckPages<{ pageNumber: number; text: string; uncheckedWhy?: string }>([{ pageNumber: 1, text: "Insured Tan Ah Kow\t100,000.00\nPremium\t181.44" }], [1],
+      async () => [{ pageNumber: 1, text: "Insured Tan Ah Kow 181.44\nPremium 100,000.00", extractionMethod: "ocr" }]);
+    assert.equal(swapped[0].uncheckedWhy, "pairing differs");
     for (const read of [async () => null, async () => { throw new Error("down"); }, async () => [{ pageNumber: 4, text: image[4], extractionMethod: "ocr", unreadable: true }], async () => [{ pageNumber: 4, text: image[4], extractionMethod: "native" }]])
       assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
     assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");
@@ -195,6 +204,24 @@ async function partA() {
     assert.deepEqual(numbersIn("181.44181.44"), []);
     assert.deepEqual(numbersIn("13,500.00100,000.00"), []);
     assert.deepEqual(numbersIn("Premium 181.44181.44 and 50,000"), [50000]);
+  });
+  await t("E1: the page image reader's reply is read even with a raw TAB or line break in a page, or a sentence before it (Prudential readings, 24 Oct)", async () => {
+    const { parseTranscription, acceptTranscribedPages } = await import("@/lib/documents/ocr-hosted");
+    const pagesOf = (reply: string) => acceptTranscribedPages([3, 4], (parseTranscription(reply) as { pages?: unknown } | null)?.pages).map((p) => [p.pageNumber, p.text]);
+    const want = [[3, "Benefit\tSum Assured\nDeath\t100,000.00"], [4, "Premium\t181.44"]];
+    const valid = JSON.stringify({ pages: [{ pageNumber: 3, text: want[0][1] }, { pageNumber: 4, text: want[1][1] }] });
+    assert.deepEqual(pagesOf(valid), want, "valid JSON is unchanged");
+    // The reader printed the TAB and the line break themselves inside the strings.
+    const raw = '{"pages":[{"pageNumber":3,"text":"Benefit\tSum Assured\nDeath\t100,000.00"},{"pageNumber":4,"text":"Premium\t181.44"}]}';
+    assert.throws(() => JSON.parse(raw));
+    assert.deepEqual(pagesOf(raw), want);
+    assert.deepEqual(pagesOf(raw.replace("\t", "\r\n\t")).map(([n]) => n), [3, 4]);
+    assert.deepEqual(pagesOf(raw.replace("Premium", "\fPremium"))[1], [4, "\fPremium\t181.44"], "a form feed too");
+    assert.deepEqual(pagesOf("Here is the transcription:\n```json\n" + valid + "\n```\nLet me know if you need more."), want);
+    // A quote escaped inside the text stays a quote; a raw TAB outside a string is left to JSON.
+    assert.deepEqual(pagesOf('{"pages":[{"pageNumber":3,\t"text":"He said \\"yes\\"\there"}]}'), [[3, 'He said "yes"\there']]);
+    // A reply that is not a transcription gives nothing.
+    for (const broken of ["", "I cannot read this page.", '{"pages":[{"pageNumber":3,"text":"cut off', "{not json}"]) assert.equal(parseTranscription(broken), null, broken);
   });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");

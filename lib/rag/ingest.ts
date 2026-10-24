@@ -494,6 +494,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
           return null;
         }));
+      // Why each page failed goes to the server-only processing history, never into the page text (Critic plan step 3).
+      for (const p of pages.filter((x) => numbers.includes(x.pageNumber) && x.unchecked && x.uncheckedWhy)) {
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_DISAGREED", error: `page ${p.pageNumber}: ${p.uncheckedWhy}` }).catch(() => undefined);
+      }
     };
     await crossCheck(ocrSourceBytes && sniffed.format === "pdf" ? suspectPages(pages) : []);
 
