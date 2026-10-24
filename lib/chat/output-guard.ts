@@ -143,7 +143,12 @@ function guardInPlace(answer: ChatAnswer) {
   const summary = once(guardText(answer.summary ?? "", names));
   answer.summary = summary && summary.trim() ? summary : (answer.questions?.length ? "I need one more detail first." : GUARD_FALLBACK_SUMMARY);
   answer.details = (answer.details ?? []).map((d) => once(guardText(d, names))).filter((d): d is string => !!d);
-  answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d)).filter((d): d is string => !!d);
+  // The simple chat's cards draw the bottom line from its own field: it is guarded like the summary, and stands in for it
+  // when the guard leaves nothing, so a name the guard took out is never shown beside the fallback (TE P121-2).
+  const held = answer as ChatAnswer & { bottomLine?: string | null };
+  if (typeof held.bottomLine === "string") held.bottomLine = summary && summary.trim() ? guardText(held.bottomLine, names) || answer.summary : answer.summary;
+  // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
+  answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
     q.text = guardText(q.text) ?? scrub(q.text);
     if (q.why) q.why = guardText(q.why) ?? "";
