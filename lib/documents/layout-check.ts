@@ -34,7 +34,10 @@ export function scrambleSigns(text: string): string[] {
     // A table's own column header over its rows ("Age  Male  Female" over "35  120.50  110.20") is not scrambled, and
     // a contents list's page numbers are not amounts (TE U-F2).
     const cells = (line: string) => line.split("\t").length;
-    const header = labels > 0 && cells(lines[i + labels - 1]) >= 2 && values > 0 && cells(lines[i + labels]) === cells(lines[i + labels - 1]);
+    // Only a header whose rows carry their own key in the first cell ("35" for an age) pairs each row; rows of amounts
+    // alone under "Sum Assured  Premium" still leave the plan labels above unpaired (TE UC-2).
+    const rows = lines.slice(i + labels, i + labels + values);
+    const header = labels > 0 && cells(lines[i + labels - 1]) >= 2 && values > 0 && rows.every((r) => cells(r) === cells(lines[i + labels - 1]) && !AMOUNT.test(r.split("\t")[0]));
     if (labels >= 3 && values >= 3 && amounts >= 2 && !header) { signs.push("labels came out before their values"); break; }
     i += Math.max(0, labels - 1);
   }
@@ -66,7 +69,14 @@ export function readingsAgree(textReading: string, imageReading: string): { agre
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
   if (!b.length) return { agree: false, why: "the image reading prints no figures" };
   if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures" };
-  const text = figureLines(textReading), image = figureLines(imageReading);
+  // A page number or a date on a line of its own pairs nothing; its figures are still counted above (TE UC-3). Any other
+  // label-less line is refused below.
+  // One lone number is the page number; several are values whose labels are elsewhere, and stay to be refused.
+  const alone = (t: string) => {
+    const lines = t.split("\n"), numbers = lines.filter((l) => LONE_NUMBER.test(l)).length;
+    return lines.filter((l) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l))).join("\n");
+  };
+  const text = figureLines(alone(textReading)), image = figureLines(alone(imageReading));
   for (const l of text) {
     if (!labelOf(l)) return { agree: false, why: `the text reading prints ${figuresOf(l).join(", ")} with no label beside it` };
     if (!image.some((o) => sameLine(l, o))) return { agree: false, why: `the image reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order` };
@@ -79,12 +89,17 @@ export function readingsAgree(textReading: string, imageReading: string): { agre
  * that print no amount (the policy's name, number and status), so the policy is not missing from answers (Critic R175-c).
  * Storing it in place of the page text keeps every reader of the page, search included, off its amounts (TE U-F5). */
 export const UNCHECKED_PAGE = "[This page could not be checked against the page image, so no amount on it is used. Say its amounts are not shown.]";
-const AMOUNT_LINE = /\d[\d,]*\.\d{2}|\$\s?\d|\b(?:SGD|USD)\s?\d|\d{1,3}(?:,\d{3})+|\d\s*%/;
 // Only lines with no figure at all, or a number or date by its own label ("Policy Number: 63639755"): a bare "Sum Assured
 // 13500" on a page whose pairing is not checked is still an amount (Critic R176-2).
-const NUMBER_LABEL = /\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\b|\b(?:date|dated|commencement|expiry|issued?)\b/i;
+// The labelled number or date is taken out first, and the line kept only when no other figure is left on it, so "Policy
+// number TE-1 Annual limit 150000" is dropped (TE UC-1).
+const DATE = String.raw`(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})`;
+const LABELLED = new RegExp(String.raw`\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\s*[:#-]?\s*[A-Za-z0-9][A-Za-z0-9/-]*`
+  + String.raw`|\b(?:date(?:\s+of\s+[a-z]+)?|dated|(?:commencement|expiry|issue|start|end)(?:\s+date)?|issued(?:\s+on)?)\s*[:-]?\s*` + DATE, "gi");
+const LONE_NUMBER = /^\s*(?:page\s+)?\d{1,3}(?:\s+of\s+\d{1,3})?\s*$/i;
+const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`);
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
-  : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && (!/\d/.test(l) || (NUMBER_LABEL.test(l) && !AMOUNT_LINE.test(l))))].join("\n");
+  : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 
 type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean };
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
