@@ -120,9 +120,8 @@ export default function BenefitsPage(){
 
   return <div className="page schedule-page">
     <header className="page-header compact"><div>
-      <div className="eyebrow">BENEFITS</div>
-      <h1>What your policies pay.</h1>
-      <p className="lead">Organised by policy: each benefit as the document states it, with the page it comes from, and the exclusions and limits that apply. Where a document does not make an amount clear, this page says so instead of guessing.</p>
+      <h1>Benefits</h1>
+      <p className="lead">What each policy pays, as the document states it, with the page it comes from. Where a document does not make an amount clear, this page says so instead of guessing.</p>
       <p className="muted">Want to see what one person is covered for across all their plans? <Link className="text-link" href="/ledger">See Coverage, by person →</Link></p>
     </div></header>
 
@@ -150,11 +149,11 @@ export default function BenefitsPage(){
       :!visible.length?<div className="empty-card">No benefit matches that search.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
-          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{product}</h2></div>
-            <small>{rows[0].owners.length?rows[0].owners.join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
+          <div className="section-heading"><div><h2>{product}</h2><p className="schedule-insurer">{[rows[0].insurer,rows[0].owners.length?`For ${rows[0].owners.join(", ")}`:null].filter(Boolean).join(" · ")}</p></div>
+            {!rows[0].owners.length&&<small><Link className="text-link" href="/">Whose policy is this? →</Link></small>}</div>
           <ul className="benefit-list">
             {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
-              <div className="benefit-head"><strong>{benefit.benefitName}</strong>{benefit.owners.length>0&&<small>{benefit.owners.join(", ")}</small>}</div>
+              <div className="benefit-head"><strong>{benefit.benefitName}</strong>{benefit.owners.length>0&&benefit.owners.join(" · ")!==rows[0].owners.join(" · ")&&<small>{benefit.owners.join(", ")}</small>}</div>
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
                 {line.established&&benefit.formulaKind==="sum_insured"&&benefit.calculatedAgainst?.filter(c=>c.amount).map((c,i)=><small key={i} className="pays-basis">{c.owner}: {c.amount}{c.plan?` (${c.plan})`:""}</small>)}
