@@ -74,13 +74,13 @@ export default function DashboardPage(){
  </div>;
 }
 
-/** The portfolio before anything is uploaded: what to do first, in order. */
 // Found covers get a card each; everything not found is one short list of links, so
 // the page does not repeat the same "not found" paragraph eleven times.
 function CoverageCards({coverages,memberId}:{coverages:Coverage[];memberId:string}){const href=(c:Coverage)=>`/coverage?member=${encodeURIComponent(memberId)}&category=${encodeURIComponent(c.category)}`;const found=coverages.filter(c=>c.status==="covered");const missing=coverages.filter(c=>c.status!=="covered");return <>
   {found.length>0&&<div className="coverage-grid">{found.map(c=><Link href={href(c)} className="coverage-card covered" key={c.category}><div className="coverage-name">{c.category}</div><strong className="coverage-status"><span className="evidence-dot covered" aria-hidden="true"></span>Covered</strong>{c.amount!=null&&<span className="coverage-amount">{money(c.amount,c.currency)}</span>}{c.displayAmount&&<span className="coverage-amount">{c.displayAmount}</span>}<small>{c.policyNames.length?c.policyNames.slice(0,2).join(" · "):"From your uploaded documents"}{c.derived?" · benefit shown in the plan’s policy wording":""}</small></Link>)}</div>}
   {missing.length>0&&<div className="coverage-missing"><h3>{found.length?"Not found":"No cover found yet"}</h3><ul>{missing.map(c=><li key={c.category}><Link href={href(c)}>{c.category}</Link></li>)}</ul><p>Not in the personal policies you uploaded. A policy you have not uploaded may still include it.</p></div>}
 </>;}
+/** The portfolio before anything is uploaded: what to do first, in order. */
 function EmptyPortfolio({hasFamily}:{hasFamily:boolean}){
  return <section className="section empty-portfolio" data-testid="empty-portfolio">
   <div className="section-heading"><div><h2>Your portfolio is empty for now.</h2></div></div>
