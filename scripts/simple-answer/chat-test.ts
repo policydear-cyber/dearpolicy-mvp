@@ -278,6 +278,11 @@ async function main() {
     assert.equal(other.libraryNames, undefined);
     guardChatAnswer(other);
     assert.doesNotMatch(other.summary, /secret_backup/);
+    // The cards' own bottom line is guarded too, and a next step may name the household's file (TE P121-1/2).
+    assert.doesNotMatch(String((other as { bottomLine?: string }).bottomLine), /secret_backup/);
+    const step = verifyAnswer(house, { bottomLine: "The schedule is the file named output_2026.pdf.", statements: [], nextSteps: ["Open output_2026.pdf on the Documents page."], question: null }).answer;
+    guardChatAnswer(step);
+    assert.deepEqual(step.nextSteps, ["Open output_2026.pdf on the Documents page."]);
   });
 
   await check("the saved answer survives the output guard and reopening, and is drawn as cards", () => {
