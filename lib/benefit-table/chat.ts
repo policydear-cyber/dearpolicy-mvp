@@ -69,11 +69,83 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     const rate = r.figure.kind === "printed" && r.figure.unit === "up_to" ? dailyRateOf(r.source.excerpt, r.figure.amount) : null;
     if (rate != null && r.figure.kind === "printed") add({ ...r, figure: { kind: "printed", amount: rate, currency: r.figure.currency, unit: "per_day" }, fromDay: null, maxDays: null });
   }
+  // Plan-table lines the reading left out ("Sub-limit for laptop / tablet (in total)", overnight run 23 Oct, N112, N113,
+  // N133, N263), in the plan column the person's other rows from that table are read in. Added last, after every other row.
+  for (const r of planTableRows(rows, household)) add(r);
   const since = new Map(table.people.flatMap((p) => p.covers.map((c) => [`${p.id}|${c.coverKey}`, c.startDate ?? c.asOf ?? null] as const)));
   for (const r of rows) r.coverSince = since.get(`${r.personId}|${r.coverKey}`) ?? null;
   for (const r of rows) if (r.figure.kind === "printed" && r.figure.unit === "up_to" && [r, ...siblings(r, rows)].some((o) => sameFigure(o.figure, r.figure) && lesserOf(o.source.excerpt)))
     r.lesserOf = true;
   return rows;
+}
+
+/** A plan table's cell: a money figure, or words printed in place of one. */
+const PLAN_CELL = /^(?:(?:S\$|US\$|SGD\s?|\$)\s?\d[\d,]*(?:\.\d+)?|not\s+covered|not\s+applicable|covered|unlimited)$/i;
+const SUB_LIMIT = /^(?:sub-?\s?limit|overall\s+limit)\b/i;
+/** Rows a plan table prints that the reading left out, for each person's plan: a line that prints exactly one cell per plan
+ * column under the table's own heading line ("Premium\tBusiness\tFirst"), named by the line just above it (with the words
+ * before its cells), or, when the line above is another row's cells, the line just below it. A sub-limit is named with the
+ * benefit whose cells come just before it, and only then. A line with fewer cells (merged across plans), a qualifier
+ * ("Adult below 70 years of age"), a family-plan limit, or a name another row from that page already has gives none:
+ * a row left out is a missing card, never a wrong one. */
+export function planTableRows(rows: ChatRow[], household: Household): TableRow[] {
+  const out: TableRow[] = [];
+  const plain = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const seen = new Set<string>();
+  for (const template of rows) {
+    if (!template.column || !template.plan || template.figure.kind !== "printed") continue;
+    const group = `${template.personId}|${template.source.documentId}|${template.coverKey}`;
+    if (seen.has(group)) continue;
+    seen.add(group);
+    const doc = household.documents[template.docIndex];
+    const theirs = rows.filter((o) => o.personId === template.personId && o.source.documentId === template.source.documentId);
+    for (const page of doc?.pages ?? []) {
+      const lines = page.text.split("\n").map((l) => l.trim());
+      const cellsOf = (l: string | undefined) => (l ?? "").split("\t").map((c) => c.trim()).filter(Boolean);
+      let cols: string[] | null = null, parent: string | null = null;
+      const valuesOf = (l: string | undefined) => { const c = cellsOf(l); return cols && c.length >= cols.length && c.length <= cols.length + 1 && c.slice(-cols.length).every((x) => PLAN_CELL.test(x)) ? c : null; };
+      const labelLine = (l: string | undefined) => !!l && !l.includes("\t") && /^[A-Z]/.test(l) && !/\d/.test(l) && !valuesOf(l) && !/^(?:maximum benefit limit|unless otherwise|note\b)/i.test(l);
+      const used = new Set<number>();
+      for (let i = 0; i < lines.length; i++) {
+        const c = cellsOf(lines[i]);
+        // An optional cover's table ("Optional covers" over its heading) is for a cover the person may not hold: never read.
+        if (c.length >= 2 && c.includes(template.column) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x))) { cols = /\b(?:optional|add-?ons?|riders?)\b/i.test(lines[i - 1] ?? "") ? null : c; parent = null; continue; }
+        if (!cols || used.has(i)) continue;
+        const cells = valuesOf(lines[i]);
+        if (!cells) {
+          // Anything but a sub-limit's name ends the benefit a sub-limit could belong to, except the line describing it.
+          if (!(labelLine(lines[i]) && SUB_LIMIT.test(lines[i])) && !(i > 0 && valuesOf(lines[i - 1]) && used.has(i - 1) === false && !labelLine(lines[i]))) parent = null;
+          continue;
+        }
+        const cell = cells[cells.length - cols.length + cols.indexOf(template.column)];
+        const inline = cells.length > cols.length ? cells[0] : null;
+        // A sub-limit named on its own line ("Overall limit^\tS$300\tS$800") never takes the line above as its name.
+        const above = labelLine(lines[i - 1]) && !used.has(i - 1) && !(inline && SUB_LIMIT.test(inline)) ? i - 1 : null;
+        const below = above == null && !inline && valuesOf(lines[i - 1]) && labelLine(lines[i + 1]) && !SUB_LIMIT.test(lines[i + 1]) && !valuesOf(lines[i + 2]) ? i + 1 : null;
+        const own = [above != null ? lines[above] : below != null ? lines[below] : null, inline].filter((x): x is string => !!x).join(": ");
+        if (above != null) used.add(above);
+        if (below != null) used.add(below);
+        used.add(i);
+        if (!own) { parent = null; continue; }
+        const sub = SUB_LIMIT.test(own);
+        if (!sub) parent = own;
+        if (sub && (!parent || /family/i.test(own))) continue;
+        const name = sub ? `${parent}: ${own}` : own;
+        if (/^(?:adult|child|children|overall)\b/i.test(own) && !sub) { parent = null; continue; }
+        const money = /^(?:S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)$/i.exec(cell);
+        const notCovered = /^not\s+(?:covered|applicable)$/i.test(cell);
+        if (!money && !notCovered) continue;
+        // A name another row from this page already has (as its name or in its line) is that row's.
+        const keys = [own, above != null ? lines[above] : null, below != null ? lines[below] : null].filter((x): x is string => !!x).map(plain);
+        if (theirs.some((o) => o.source.page === page.page && keys.some((key) => plain(o.benefit).includes(key) || plain(o.source.excerpt).includes(key)))) continue;
+        const excerpt = [above, i, below].filter((x): x is number => x != null).sort((x, y) => x - y).map((k) => lines[k]).join("\n");
+        out.push({ ...template, benefit: name, pays: money ? "up_to" : "not_covered", conditions: [], fromDay: null, maxDays: null, qualifier: null,
+          figure: money ? { kind: "printed", amount: Number(money[1].replace(/,/g, "")), currency: template.figure.currency, unit: "up_to", period: null } : { kind: "none", why: "printed as not covered" },
+          source: { ...template.source, page: page.page, excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
+      }
+    }
+  }
+  return out;
 }
 
 /** The one daily rate a limit's own line caps it at ("Capped at S$200 per day", "maximum S$300 per day"), when it is not the
