@@ -11,47 +11,47 @@
    ========================================================================== */
 :root {
   color-scheme: light;
-  --bg: #f9f5e4;              /* brand off-white, from the logo file */
-  --bg-2: #f3edd9;            /* sidebar / recessed panels */
+  --bg: #f3f5f7;              /* page ground: a cool, quiet grey */
+  --bg-2: #f3f5f7;            /* sidebar sits on the ground, split by a 1px edge */
   --surface: #ffffff;         /* cards, rows, inputs */
-  --surface-2: #fbf8ee;       /* quiet in-card blocks */
-  --ink: #2a1a14;
-  --ink-2: #5c4a42;
-  --muted: #6e5e56;           /* 5.6:1 on --bg */
-  --line: #e6dec8;
-  --line-strong: #d3c7aa;
-  --input-line: #93845f;      /* 3.4:1 on --bg */
+  --surface-2: #f7f8fa;       /* quiet in-card blocks */
+  --ink: #1b1d1f;
+  --ink-2: #3a3d40;
+  --muted: #5c6064;           /* 6.0:1 on --surface, 5.5:1 on --bg */
+  --line: #e6e6e6;
+  --line-strong: #d6d9dd;
+  --input-line: #8c9196;      /* 3.2:1 on --surface */
 
-  --brand: #884939;
-  --brand-ink: #884939;       /* brand as text, 6.3:1 on --bg */
-  --brand-tint: #f1e3dc;
-  --brand-tint-2: #e8d3c9;
+  --brand: #1b1d1f;           /* fills that mark "this one": your message, the chosen filter */
+  --brand-ink: #1d5fd6;       /* links and things you can open, 5.3:1 on --surface */
+  --brand-tint: #e8f2fd;
+  --brand-tint-2: #c9e0fa;
 
-  --accent: #d4975c;
-  --accent-hover: #c8894b;
-  --accent-active: #b97c40;
-  --accent-ink: #2a1a14;      /* text on an --accent fill, 6.7:1 */
-  --money: #7f4f18;           /* accent as text, 6.3:1 on --bg */
-  --accent-tint: #f8e9d6;
+  --accent: #1b1d1f;          /* the one primary action is near-black */
+  --accent-hover: #33373b;
+  --accent-active: #000000;
+  --accent-ink: #ffffff;
+  --money: #1b1d1f;           /* amounts are set in ink */
+  --accent-tint: #eef1f4;
 
-  --good: #2f7a4f;
-  --good-text: #276b44;
-  --good-tint: #e4f1e8;
-  --good-line: #b9d8c4;
+  --good: #2f7a45;
+  --good-text: #276b3c;
+  --good-tint: #e6f6ea;
+  --good-line: #b7dcc2;
 
-  --warn: #b98a1c;
-  --warn-text: #7a5600;
-  --warn-tint: #fff3cf;
-  --warn-line: #e8cf7a;
+  --warn: #b45309;
+  --warn-text: #92400e;
+  --warn-tint: #fff7e6;
+  --warn-line: #f2d39b;
 
-  --critical: #a3342a;
-  --critical-tint: #fbe7e4;
-  --critical-line: #ebc3bd;
+  --critical: #c41c29;
+  --critical-tint: #ffedea;
+  --critical-line: #f4c2bd;
 
-  --shadow-float: 0 4px 12px rgba(42, 26, 20, .10), 0 1px 2px rgba(42, 26, 20, .06);
-  --focus: 0 0 0 3px rgba(136, 73, 57, .32);
+  --shadow-float: 0 4px 12px rgba(17, 24, 39, .08), 0 1px 2px rgba(17, 24, 39, .06);
+  --focus: 0 0 0 3px rgba(29, 95, 214, .35);
 
-  --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+  --r-sm: 8px; --r-md: 10px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
   --t-hover: 120ms; --t-state: 240ms; --t-move: 340ms; --ease: cubic-bezier(.2, .7, .2, 1);
   --nav-h: 60px;
@@ -59,16 +59,17 @@
 }
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #1c1512; --bg-2: #181210; --surface: #26201b; --surface-2: #2c2520;
-    --ink: #f3ecdc; --ink-2: #c9bbae; --muted: #a89a8e;
-    --line: #3a2f29; --line-strong: #4b3d35; --input-line: #8c7a6c;
-    --brand-ink: #d3998a; --brand-tint: #3a2620; --brand-tint-2: #4a3129;
-    --money: #e3a866; --accent-tint: #3d2c1c;
-    --good: #7fc49a; --good-text: #8fd0a8; --good-tint: #1f2f26; --good-line: #33503f;
-    --warn: #e8b85a; --warn-text: #ecc46e; --warn-tint: #332b18; --warn-line: #5a4a24;
-    --critical: #f08b7d; --critical-tint: #3a211e; --critical-line: #5c332d;
+    --bg: #141618; --bg-2: #141618; --surface: #1c1f22; --surface-2: #22262a;
+    --ink: #eceef0; --ink-2: #c3c7cc; --muted: #9aa0a6;
+    --line: #2c3035; --line-strong: #3a3f45; --input-line: #6b7178;
+    --brand: #2f6fe0; --brand-ink: #7fb0ff; --brand-tint: #1b2a40; --brand-tint-2: #24395a;
+    --accent: #eceef0; --accent-hover: #d6d9dd; --accent-active: #ffffff; --accent-ink: #141618;
+    --money: #eceef0; --accent-tint: #24282c;
+    --good: #7fc49a; --good-text: #8fd0a8; --good-tint: #1a2b21; --good-line: #2f4d3a;
+    --warn: #e8b85a; --warn-text: #ecc46e; --warn-tint: #2e2616; --warn-line: #574622;
+    --critical: #f08b7d; --critical-tint: #33201e; --critical-line: #5c332d;
     --shadow-float: 0 4px 14px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-    --focus: 0 0 0 3px rgba(211, 153, 138, .45);
+    --focus: 0 0 0 3px rgba(127, 176, 255, .45);
 }
 :root[data-theme="dark"] .brand-logo, :root[data-theme="dark"] .big-mark { background: #f9f5e4; padding: 6px 10px; border-radius: var(--r-sm); }
 
@@ -104,9 +105,10 @@ table { font-variant-numeric: tabular-nums; }
 .brand-mark, .brand-name, .brand-sub { display: none; }
 .nav { display: grid; gap: 2px; }
 .nav-item { min-height: 44px; padding: 10px 12px; border-radius: var(--r-md); color: var(--ink-2); display: flex; gap: 12px; align-items: center; font-size: var(--fs-md); font-weight: 500; transition: background var(--t-hover) var(--ease), color var(--t-hover) var(--ease); }
-.nav-item:hover { background: var(--brand-tint); color: var(--ink); }
-.nav-item.active { background: var(--surface); color: var(--brand-ink); font-weight: 650; border: 1px solid var(--line); }
-.nav-icon { width: 22px; height: 22px; display: grid; place-items: center; color: var(--brand-ink); flex: none; }
+.nav-item:hover { background: var(--accent-tint); color: var(--ink); }
+.nav-item.active { background: var(--surface); color: var(--ink); font-weight: 650; border: 1px solid var(--line); }
+.nav-icon { width: 22px; height: 22px; display: grid; place-items: center; color: var(--muted); flex: none; }
+@media (min-width: 901px) { .nav-item.active .nav-icon { color: var(--ink); } }
 .nav-icon svg { width: 20px; height: 20px; }
 .sidebar-footer { margin-top: auto; padding: 16px 8px 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; display: grid; gap: 10px; }
 .sidebar-footer p { margin: 0; }
@@ -706,7 +708,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .nav::-webkit-scrollbar { display: none; }
   .nav-item { flex: 1 0 72px; min-height: var(--nav-h); padding: 8px 4px; border-radius: 0; border: 0; display: grid; justify-items: center; align-content: center; gap: 3px; font-size: var(--fs-xs); line-height: 1.1; color: var(--muted); scroll-snap-align: center; text-align: center; }
   .nav-item:hover { background: transparent; }
-  .nav-item.active { background: transparent; border: 0; color: var(--brand-ink); box-shadow: inset 0 3px 0 var(--brand); }
+  .nav-item.active { background: transparent; border: 0; color: var(--ink); box-shadow: inset 0 3px 0 var(--brand); }
   .nav-icon { color: inherit; }
   .main-content { padding-bottom: 8px; }
   .page { padding: 24px 16px 40px; }
@@ -991,11 +993,11 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .nav-ask .nav-icon { width: 34px; height: 26px; border-radius: 13px; background: var(--brand); color: #fff; }
   .nav-ask .nav-icon svg { width: 18px; height: 18px; }
   .nav-ask { color: var(--ink); font-weight: 650; }
-  .nav-more-backdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(20, 12, 8, .28); }
+  .nav-more-backdrop { display: block; position: fixed; inset: 0; z-index: 48; background: rgba(17, 24, 39, .28); }
   .nav-more-sheet { display: grid; position: fixed; z-index: 49; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 8px); padding: 8px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 14px); box-shadow: var(--shadow-float); }
   .nav-more-link { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 12px; border-radius: var(--r-md); color: var(--ink); font-size: var(--fs-md); font-weight: 500; }
-  .nav-more-link.active { background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; }
-  .nav-more-link .nav-icon { color: var(--brand-ink); }
+  .nav-more-link.active { background: var(--accent-tint); color: var(--ink); font-weight: 650; }
+  .nav-more-link .nav-icon { color: var(--muted); }
 }
 @media (max-width: 900px) and (prefers-reduced-motion: no-preference) {
   .nav-more-sheet { animation: dp-sheet-in .16s var(--ease, ease-out); }
