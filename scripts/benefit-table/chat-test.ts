@@ -1426,6 +1426,9 @@ test("a plan table's per-block cells wrapped over two lines are a row for the pe
   // names no currency (R186-1).
   for (const next of ["up to S$1,000\tup to S$500\tup to S$800", "max S$500 per trip", "S$500\tS$800\tS$1,000", "per trip"])
     assert.deepEqual(made([...TABLE.slice(0, 6), next]), [], next);
+  // Blank lines before it do not end the block, and a total or one figure per plan in one cell is part of it (TE P120-1/2).
+  assert.deepEqual(made([...TABLE.slice(0, 6), "", "up to S$1,000\tup to S$500\tup to S$800"]), []);
+  assert.deepEqual(made([...TABLE.slice(0, 6), "Total payable S$300 / S$600 / S$900"]), []);
   assert.equal(made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure.kind === "printed" && (made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure as { currency: string | null }).currency, null);
   // A period the reading names keeps its wording.
   assert.match(rowLabel({ ...business[0], figure: { kind: "printed", amount: 500, currency: "SGD", unit: "per_period", period: "month" } }), /: paid per month\.$/);

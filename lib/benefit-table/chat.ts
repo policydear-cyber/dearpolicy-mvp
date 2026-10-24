@@ -128,7 +128,7 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         // line, ends the plan's table (TE pr113 P4, P6).
         if (cols && ((c.length >= 2 && !valuesOf(lines[i]) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x))) || (c.length === 1 && OPTIONAL.test(lines[i])))) { cols = null; parent = null; continue; }
         if (!cols || used.has(i)) continue;
-        const block = perBlock(lines[i - 1], cellsOf(lines[i]), cellsOf(lines[i + 1]), lines[i + 2], cols.length, labelLine(lines[i - 1]) && !used.has(i - 1));
+        const block = perBlock(lines[i - 1], cellsOf(lines[i]), cellsOf(lines[i + 1]), lines.slice(i + 2).find((l) => l.trim()), cols.length, labelLine(lines[i - 1]) && !used.has(i - 1));
         if (block) {
           used.add(i - 1).add(i).add(i + 1);
           parent = null;
@@ -207,11 +207,12 @@ const BLOCK_LENGTH = /^(?:[a-z]+|\d+)[- ]hours?(?:\s+(?:of\s+)?delay)?$/i;
  * printed as it is. */
 function perBlock(above: string | undefined, figures: string[], lengths: string[], next: string | undefined, columns: number, named: boolean): { name: string; label: string; cells: RegExpExecArray[]; periods: string[] } | null {
   if (!named || !above || figures.length !== columns || lengths.length !== columns + 1) return null;
-  // A third line that goes on with the cells ("up to S$1,000\tup to S$500\t...", a lowercase wrap, a limit) is part of
-  // them: a row without it would drop its limit (Critic R186-2).
+  // A third line that goes on with the cells ("up to S$1,000\tup to S$500\t...", a lowercase wrap, a limit or total, one
+  // figure per plan even in one cell) is part of them: a row without it would drop its limit (Critic R186-2). Blank lines
+  // between do not end the block (TE P120-1, P120-2).
   const after = (next ?? "").trim();
-  if (after && (/^[a-z]/.test(after) || /^(?:up\s+to|max(?:imum)?|subject|capped|limit|overall|per\s+(?:trip|journey|period))\b/i.test(after)
-    || after.split("\t").map((c) => c.trim()).filter(Boolean).filter((c) => /(?:S\$|US\$|SGD|\$)\s?\d/.test(c)).length >= columns)) return null;
+  if (after && (/^[a-z]/.test(after) || /^(?:up\s+to|max(?:imum)?|subject|capped|limit|overall|total|aggregate|per\s+(?:trip|journey|period))\b/i.test(after)
+    || (after.match(/(?:S\$|US\$|SGD|\$)\s?\d/g) ?? []).length >= columns)) return null;
   const cells = figures.map((c) => BLOCK_FIGURE.exec(c));
   if (cells.some((c) => !c)) return null;
   const [label, ...periods] = lengths;
