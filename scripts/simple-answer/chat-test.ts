@@ -263,11 +263,15 @@ async function main() {
   await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
     const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change charmaine's name to Charmaine Ong", "rename"],
       ["who else can see my documents", "who-sees"], ["is my data safe", "safe"], ["how much has my household used this month", "usage"], ["what does it cost to use dearpolicy", "cost"],
-      ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"]];
+      ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"], ["update my wife's name", "rename"], ["plan usage", "usage"],
+      ["how many questions have I used this month", "usage"]];
     for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
     // Questions about cover, a claim or the insurer stay with the model, however they are worded.
     for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
-      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy"])
+      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy",
+      // Critic R185-1.
+      "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan is used up for physio",
+      "do I pay anything to use it at a panel clinic", "who can access the policy documents if I die", "change my name on the policy", "update my son's name on the rider"])
       assert.equal(appHelp(q), null, q);
     const model = stub(c2);
     const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];

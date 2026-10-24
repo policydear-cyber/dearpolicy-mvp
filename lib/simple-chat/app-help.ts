@@ -2,11 +2,12 @@
  * "delete my account", "who can see my documents"). The documents never say these things, so the model answered "the
  * documents don't say" or pointed to the insurer (overnight run 23 Oct, N286, N288, N289, N296-N299). Each answer says
  * only what the app's own pages show (app/household, app/family, app/usage); nothing about prices, storage or security
- * that no page states. A question that also asks about cover is left to the model. */
+ * that no page states: who else handles documents, or how they are secured, is said to be unstated (Critic R185-2). A
+ * question that also asks about cover is left to the model. */
 import type { ModelAnswer } from "./prompt";
 
-// Words that make it a question about cover, a claim or the insurer, never about the app.
-const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|singlife|aia|prudential|manulife|fwd|great eastern|income|aviva|tokio)\b/i;
+// Words that make it a question about cover, a claim, a treatment or the insurer, never about the app (Critic R185-1).
+const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|singlife|aia|prudential|manulife|fwd|great eastern|income|aviva|tokio|policy|policies|rider|riders|insured|assured|pays?|paid|reimburs\w*|outpatient|inpatient|dental|physio\w*|clinic|panel|doctor|specialist|scan|mri|x-?ray|surgery|operation|ward(?:ed)?|treatment|therapy|accident|illness|cancer|critical|disability|tpd|death|die|dies|died|medisave|shield|deductible|co-?insurance|left|remaining|balance|estate|agent)\b/i;
 const APP = String.raw`(?:dear\s*policy|this\s+(?:app|website|site|service)|the\s+app|you\s+guys)`;
 
 type Help = { id: string; test: RegExp; answer: Omit<ModelAnswer, "statements" | "question"> };
@@ -43,24 +44,16 @@ const HELPS: Help[] = [
     id: "who-sees",
     test: /\bwho\b[^?.!]*\b(?:see|view|access|read|look\s+at)\b[^?.!]*\b(?:documents?|policies|files?|data|info(?:rmation)?|uploads?)\b/i,
     answer: {
-      bottomLine: "In DearPolicy, your household's documents are shown to the members of your household. They are listed under Household > Members.",
-      nextSteps: ["The household's owner can remove a member or revoke an invitation on the Household page."],
+      bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
+      nextSteps: ["Check Household > Members to see who is in your household."],
     },
   },
   {
     id: "safe",
     test: new RegExp(String.raw`\b(?:is|are)\s+(?:my|our|the)\s+(?:data|documents?|info(?:rmation)?|files?|details)\s+(?:safe|secure|private|protected)\b|\b(?:is|are)\s+${APP}\s+(?:safe|secure|private)\b`, "i"),
     answer: {
-      bottomLine: "Your household's documents are shown in DearPolicy to the members of your household, listed under Household > Members. The owner decides who is in the household and can delete it, with everything it holds, at any time.",
+      bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
       nextSteps: ["Check Household > Members to see who has access.", "To remove everything, the owner can use Delete this household on the Household page."],
-    },
-  },
-  {
-    id: "usage",
-    test: /\bplan\s+usage\b|\bhow\s+much\s+(?:of\s+(?:my|our|the)\s+plan|(?:has|have)\s+(?:my|our|the)\s+household\s+used|(?:have|did)\s+(?:i|we)\s+used?\s+(?:this|the)\s+(?:app|month))\b|\b(?:my|our)\s+usage\b/i,
-    answer: {
-      bottomLine: "How much of your plan your household has used this month, in questions asked and documents read, is on the Plan usage page.",
-      nextSteps: ["Open Household, then Plan usage."],
     },
   },
   {
@@ -68,6 +61,14 @@ const HELPS: Help[] = [
     test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+${APP}\s+free\b`, "i"),
     answer: {
       bottomLine: "The app doesn't show a price. Your household's plan, and how much of it you have used this month, are on the Plan usage page.",
+      nextSteps: ["Open Household, then Plan usage."],
+    },
+  },
+  {
+    id: "usage",
+    test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used|use|left)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b`, "i"),
+    answer: {
+      bottomLine: "How much of your plan your household has used this month, in questions asked and documents read, is on the Plan usage page.",
       nextSteps: ["Open Household, then Plan usage."],
     },
   },
