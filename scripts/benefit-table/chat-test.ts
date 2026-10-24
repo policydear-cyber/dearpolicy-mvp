@@ -1653,10 +1653,14 @@ test("\"my husband\" is settled only by a title the documents print before that 
     "husband of my colleague died", "husband mother warded", "husband-and-wife plan", "my husband's mum got stroke",
     // TE P117-1: a spouse's relative, or someone else's spouse.
     "husband's mum got stroke", "hubby mum warded", "husband brother kena dengue", "wife sister got accident", "wifey's grandma", "husband of my sister kena accident",
-    "my friends wife warded", "sister in law husband", "my sis-in-law's husband", "the husband in the policy", "my wife's dad fell", "husband's son warded"])
+    "my friends wife warded", "sister in law husband", "my sis-in-law's husband", "the husband in the policy", "my wife's dad fell", "husband's son warded",
+    // Critic R190-2/3: after a possessive, anyone but the spouse; and the word after is not read past.
+    "my husband's niece warded", "my husband's uncle", "my husband's maid fell", "my husband's children", "my husband's friend's car", "my husband's goddaughter",
+    "my wife's nephew", "my wife's aunt", "my wife's helper", "my wife's kids", "my wife's brother-in-law", "my wife's stepdaughter", "my husband's first wife"])
     assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
   // The spouse's own possessive is about the spouse (TE P117-2).
-  for (const t of ["my husband's policy", "my wife's claim got rejected", "my hubby's hospital bill", "husband's cover for cancer"])
+  for (const t of ["my husband's policy", "my wife's claim got rejected", "my hubby's hospital bill", "husband's cover for cancer", "my wife's hospital plan", "husband's claim how",
+    "hubby's AIA", "is this my husband's?", "my wife's Prudential plan", "my husband kena fracture"])
     assert.ok(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Tan Mei Ling,"), [t]), t);
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");

@@ -140,7 +140,11 @@ export function renderLibrary(household: Household, pagesSent?: Set<string>): st
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 
 // A possessive is the spouse's own ("my husband's policy") unless the next word makes it someone else (TE P117-2).
-const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(?:['’]s)?(?![\w'’-])(?:\s+([\w'’-]+))?/gi;
+// The next word is looked at, not taken, so "my husband's first wife" is not read past (Critic R190-3).
+const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(['’]s)?(?![\w'’-])(?=(?:\s+([\w'’-]+))?)/gi;
+// After a possessive, only the spouse's own cover counts: an allow-list, since relatives and helpers are never a complete
+// list (Critic R190-2).
+const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|aia|pru\w*|manulife|ge|great|income|singlife|fwd|aviva|tokio|hsbc|own|bill|bills)$/i;
 // Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
 // before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a
 // list of other people's words is never complete (Critic R184-1).
@@ -155,7 +159,7 @@ function spouseSaid(text: string): { kind: "husband" | "wife"; word: string } | 
   if (/\b(?:husband|wife)\s*(?:and|or|&|\/|-and-)\s*(?:husband|wife)\b/i.test(text)) return null;
   for (const x of text.matchAll(SPOUSE_WORD)) {
     if (x[1] && !MINE_BEFORE.test(x[1])) continue;
-    if (x[3] && NOT_THEM_AFTER.test(x[3])) continue;
+    if (x[3] ? x[4] && !HIS_OR_HERS.test(x[4]) : x[4] && NOT_THEM_AFTER.test(x[4])) continue;
     const word = x[2].toLowerCase();
     return { kind: /^h/.test(word) ? "husband" : "wife", word: x[1]?.toLowerCase() === "my" ? `my ${word}` : word };
   }
