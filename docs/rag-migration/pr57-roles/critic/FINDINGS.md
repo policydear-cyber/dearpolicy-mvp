@@ -6127,3 +6127,20 @@ The probe ran against the extracted acceptTranscribedPages.
 
 - A wrong mapping can only end as an unchecked page, because the upload check compares it with the text reading.
 - Low (optional): OCR_PAGES_ABSENT logs `returned` as the raw value of pageNumber/page_number/page. If a reader put text in `page`, that text would be stored. Use `Number(...)`, falling back to its typeof, to keep only a number.
+
+## R184 — PR #117 bare "husband"/"wife" (head 9928ad5)
+
+**Verdict: NOT READY. The deny-list resolves other people's spouses to the user's own (a wrong-person answer).**
+
+- **R184-1 (high) library.ts spouseSaid / NOT_MINE:** each phrase below resolves to the household's spouse.
+
+  | Kind | Phrases |
+  |---|---|
+  | Another relative's or someone else's spouse | "my sis husband got cancer", "my bro wife pregnant", "my sister-in-law husband" (the hyphen splits the word), "kakak husband kena accident", "jie jie husband", "my client wife", "my bf wife", "my gf husband" |
+  | About someone else entirely | "husband of my colleague died", "husband mother warded", "my husband's mum got stroke" (that last one was already the case on main), "husband-and-wife plan" |
+
+- **Fix (tested; file /mnt/project-files/critic/spouse-said-r184.ts):** an allow-list instead of a deny-list.
+  - Resolve only when the word opens the message or a clause, or follows my/me/if/when/and/but/so/cos/because/then/lah/ah/eh/wah/hi/pls.
+  - Never when it is followed by "'s", a hyphen, "of", or a family or other-person noun (mother/mum/dad/brother/sis/side/family/parents/boss/friend/colleague/cousin/ex).
+  - Words before it may contain hyphens, so "sister-in-law husband" is caught.
+  - Every phrase above gives null. "husband kena fracture leg", "hubby got cancer", "my wife kena dengue", "if wife hospitalised can claim", "husband and I both covered?", "Husband warded at SGH" and "my hubby, he fell" still resolve.
