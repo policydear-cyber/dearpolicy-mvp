@@ -1554,6 +1554,12 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     // The prose carries no figures; the live monetary boundary (lib/chat/monetary-boundary.ts) holds it to that on save and reopen.
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: [],
   };
+  // The household's own file names the answer says ("5e58ea7d-….pdf", "output_202609281146053.pdf"), from the library record:
+  // the output guard keeps them, so a bottom line naming one is never replaced by "Sorry, I couldn't put that answer
+  // together" (overnight run 23 Oct, N186, N187).
+  const said = [bottomLine, ...nextSteps, ...statements.map((x) => x.text)].join("\n");
+  const names = household.documents.map((d) => d.name).filter((n) => n && said.includes(n));
+  if (names.length) answer.libraryNames = [...new Set(names)];
   return { answer, report };
 }
 

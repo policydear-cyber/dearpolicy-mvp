@@ -268,6 +268,18 @@ async function main() {
     assert.match(result.answer.summary, /couldn’t put together an answer/);
   });
 
+  await check("a bottom line naming one of the household's files survives the output guard; a file name the library lacks does not (overnight run 23 Oct, N186, N187)", () => {
+    const house: Household = { ...HOUSE, documents: [...HOUSE.documents, { ...HOUSE.documents[1], policyId: "aaaaaaaa-0000-0000-0000-000000000009", name: "output_2026.pdf" }] };
+    const { answer } = verifyAnswer(house, { bottomLine: "The schedule is the file named output_2026.pdf, linked to Ah Kow.", statements: [], nextSteps: [], question: null });
+    assert.deepEqual(answer.libraryNames, ["output_2026.pdf"]);
+    guardChatAnswer(answer);
+    assert.equal(answer.summary, "The schedule is the file named output_2026.pdf, linked to Ah Kow.");
+    const other = verifyAnswer(house, { bottomLine: "The schedule is the file named secret_backup_2026.pdf.", statements: [], nextSteps: [], question: null }).answer;
+    assert.equal(other.libraryNames, undefined);
+    guardChatAnswer(other);
+    assert.doesNotMatch(other.summary, /secret_backup/);
+  });
+
   await check("the saved answer survives the output guard and reopening, and is drawn as cards", () => {
     const { answer } = verifyAnswer(HOUSE, c2);
     enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
