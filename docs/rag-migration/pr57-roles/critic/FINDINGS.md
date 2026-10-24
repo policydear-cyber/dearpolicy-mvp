@@ -6018,3 +6018,27 @@ Probes ran with tsx against 5ef852d. I could not run v11-ingestion here (DB stac
 - **R176-2 (medium-high) library.ts uncheckedText keeps bare whole numbers.** "Sum Assured 13500" and "Crisis Cover 100000" survive AMOUNT_LINE (probe), so the chat can quote an amount whose pairing was never checked, and verify finds it in the text. Fix (tested): keep only lines with no digit, or a number or date beside its own label (policy/certificate/contract/member/account number; date/commencement/expiry/issue). The probe then keeps "Basic Plan: PruLink Enhanced Protector" and "Policy Number: 63639755" only. Patch: scratchpad r176-fix.diff.
 - Low: numbersIn skips the glued head but then reads the tail as its own number ("181.44181.44" gives [44], so printsNumber(…, 44) is true). Suggest also skipping the match straight after a skipped glued token.
 - Holds: FIGURE widened (the R175 swap probe is refused); the second trigger on unverified coverage pages (capped at 6, extraction recomputed, DB flag updated); rates like 1.375 kept whole; the needs_review and "Read in part" messages.
+
+## R177 — PR #114 upload check re-review (head 2fd0c58)
+
+Probes ran with tsx against 2fd0c58. I could not run v11-ingestion here (DB stack).
+
+**Verdict: NOT READY. One small fix left (R177-1), plus R176-2 still open.**
+
+- **R177-1 (high) lib/rag/ingest.ts:563: `evidencePages` is built before the second cross-check pass (line ~604).** crossCheckPages now swaps an unchecked page's text for uncheckedText in memory, so first-pass pages are safe everywhere: printedText, fullText, the payment split, chunks and evidencePages. A page marked unchecked in the second pass is safe in the DB, the fact check, printedText and chunks, but not in `evidencePages`. That array still holds its full text and feeds `catalogueDocument` (policy_benefits, the Benefits page, line 888) and `annotateCoverageEvidence` (728). The catalogue's quote check reads the same text, so a scrambled pairing on that page can still be stored. This is the case the gate exists for.
+  Fix: move the `const evidencePages = …` line to just after the second-pass block. Nothing between uses it, and only lines 728 and 888 read it.
+- **R176-2 (medium-high) still open: uncheckedText keeps bare whole numbers.** A probe at 2fd0c58 keeps "Sum Assured 13500" and "Crisis Cover 100000" on an unchecked page, now in the DB, search and chat alike. Use the tested patch from R176:
+  ```ts
+  const NUMBER_LABEL = /\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\b|\b(?:date|dated|commencement|expiry|issued?)\b/i;
+  export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
+    : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && (!/\d/.test(l) || (NUMBER_LABEL.test(l) && !AMOUNT_LINE.test(l))))].join("\n");
+  ```
+- Low (observe): readingsAgree is strict about line breaks and OCR spelling. If the image reading puts a label on its own line, the page becomes unchecked. That is safe because it withholds amounts rather than showing wrong ones. Measure how many suspect pages pass on one real document before relying on the "Read in part" rate.
+- Low (carried over): numbersIn reads the tail of a glued pair as its own number.
+- Holds:
+  - The R175 and TE U-F1 swaps are refused: pairs swapped across lines, and "Plan A/B" swapped within a line. Different currency marks still agree.
+  - GLUED skips rates and dates (1.375, 01.10.2026).
+  - The labels-before-values check fires on the Prudential shape.
+  - crossCheckPages is pure. A failed image read makes the page unchecked, and a matching read keeps the page's own words.
+  - uncheckedText is idempotent.
+  - library.ts re-exports the single copy.
