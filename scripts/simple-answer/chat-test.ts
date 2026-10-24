@@ -288,17 +288,21 @@ async function main() {
     const pts = verifyAnswer(house, c2).answer;
     const before = pts.statements!.map((x) => x.text);
     pts.statements!.push({ id: "leak", kind: "fact", text: "The figures come from the policy_benefits table.", fullText: "The figures come from the policy_benefits table.", conditions: [], amount: null });
-    pts.statements![0] = { ...pts.statements![0], conditions: [...pts.statements![0].conditions, "As stored in policy_benefits."] };
+    const plain = pts.statements!.findIndex((x) => !x.amount);
+    pts.statements![plain] = { ...pts.statements![plain], conditions: [...pts.statements![plain].conditions, "As stored in policy_benefits."] };
     guardChatAnswer(pts);
     assert.deepEqual(pts.statements!.map((x) => x.text), before);
     assert.ok(!JSON.stringify(pts.statements).includes("policy_benefits"));
-    // An amount point keeps its qualifier, scrubbed, rather than losing it (Critic R195-1).
-    const amt = verifyAnswer(house, c2).answer;
-    const at = amt.statements!.findIndex((x) => x.amount);
-    amt.statements![at] = { ...amt.statements![at], conditions: ["Paid only after the waiting period; otherwise the benefit becomes null."] };
-    guardChatAnswer(amt);
-    assert.equal(amt.statements![at].conditions.length, 1);
-    assert.match(amt.statements![at].conditions[0], /waiting period/);
+    // An amount is never shown with a qualifier cut or altered: its card goes instead (Critic R195-1, TE P123-1/2).
+    for (const c of ["Paid only after the waiting period; otherwise the benefit becomes null.", "Only if the fracture is from an accident. Not paid for pre_existing conditions."]) {
+      const amt = verifyAnswer(house, c2).answer;
+      const at = amt.statements!.findIndex((x) => x.amount);
+      const id = amt.statements![at].id;
+      amt.statements![at] = { ...amt.statements![at], conditions: [c] };
+      const others = amt.statements!.filter((x) => x.id !== id && !x.id.startsWith(`${id}-`)).map((x) => x.id);
+      guardChatAnswer(amt);
+      assert.deepEqual(amt.statements!.map((x) => x.id), others, c);
+    }
     const old = sanitizeStoredAnswer({ ...JSON.parse(JSON.stringify(other)), bottomLine: "The schedule is the file named secret_backup_2026.pdf." }) as { bottomLine?: string; summary: string };
     assert.equal(old.bottomLine, old.summary);
   });

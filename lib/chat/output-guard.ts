@@ -150,18 +150,23 @@ function guardInPlace(answer: ChatAnswer) {
   if (typeof held.bottomLine === "string") held.bottomLine = summary && summary.trim() ? guardText(held.bottomLine, names) || answer.summary : answer.summary;
   // The cards' own words: a point's conditions and basis, and the text of a point with no amount, are guarded too (Critic
   // R194). A point the guard leaves with no words is dropped. An amount's text is the server's own label, which the label
-  // checks already matched, so it is left as it is.
-  const cards = answer as ChatAnswer & { statements?: { text: string; fullText?: string; amount?: unknown; basis?: string | null; conditions?: string[] }[] };
-  if (Array.isArray(cards.statements)) cards.statements = cards.statements.flatMap((st) => {
-    // An amount never loses a qualifier: its condition or basis is scrubbed rather than dropped (Critic R195-1).
-    const words = (c: string) => (st.amount ? guardText(c, names) || scrub(c) : guardText(c, names));
-    const conditions = (st.conditions ?? []).map(words).filter((c): c is string => !!c && !!c.trim());
-    const basis = typeof st.basis === "string" ? words(st.basis) || null : st.basis;
-    if (st.amount) return [{ ...st, conditions, basis }];
-    const text = guardText(st.text, names);
-    if (!text || !text.trim()) return [];
-    return [{ ...st, text, fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText, conditions, basis }];
-  });
+  // checks already matched, so it is left as it is. An amount is never shown with fewer or altered qualifiers: when its
+  // condition or basis would lose any words, the amount card goes, with the cards worked out from it (TE P123-1/2).
+  const cards = answer as ChatAnswer & { statements?: { id?: string; text: string; fullText?: string; amount?: unknown; basis?: string | null; conditions?: string[] }[] };
+  if (Array.isArray(cards.statements)) {
+    const leaks = (t: string) => LEAKS.some((re) => re.test(outsideQuotes(t, names)));
+    const gone = new Set(cards.statements.filter((st) => st.amount && [...(st.conditions ?? []), st.basis ?? ""].some((c) => typeof c === "string" && leaks(c))));
+    const goneIds = [...gone].map((st) => st.id).filter((id): id is string => !!id);
+    cards.statements = cards.statements.flatMap((st) => {
+      if (gone.has(st) || goneIds.some((g) => st.id?.startsWith(`${g}-`))) return [];
+      if (st.amount) return [st];
+      const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
+      const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;
+      const text = guardText(st.text, names);
+      if (!text || !text.trim()) return [];
+      return [{ ...st, text, fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText, conditions, basis }];
+    });
+  }
   // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
