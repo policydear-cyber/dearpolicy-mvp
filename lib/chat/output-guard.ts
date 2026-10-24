@@ -153,12 +153,14 @@ function guardInPlace(answer: ChatAnswer) {
   // checks already matched, so it is left as it is.
   const cards = answer as ChatAnswer & { statements?: { text: string; fullText?: string; amount?: unknown; basis?: string | null; conditions?: string[] }[] };
   if (Array.isArray(cards.statements)) cards.statements = cards.statements.flatMap((st) => {
-    const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
-    const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;
+    // An amount never loses a qualifier: its condition or basis is scrubbed rather than dropped (Critic R195-1).
+    const words = (c: string) => (st.amount ? guardText(c, names) || scrub(c) : guardText(c, names));
+    const conditions = (st.conditions ?? []).map(words).filter((c): c is string => !!c && !!c.trim());
+    const basis = typeof st.basis === "string" ? words(st.basis) || null : st.basis;
     if (st.amount) return [{ ...st, conditions, basis }];
     const text = guardText(st.text, names);
     if (!text || !text.trim()) return [];
-    return [{ ...st, text, fullText: text === st.text ? st.fullText : text, conditions, basis }];
+    return [{ ...st, text, fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText, conditions, basis }];
   });
   // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);

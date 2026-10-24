@@ -292,6 +292,13 @@ async function main() {
     guardChatAnswer(pts);
     assert.deepEqual(pts.statements!.map((x) => x.text), before);
     assert.ok(!JSON.stringify(pts.statements).includes("policy_benefits"));
+    // An amount point keeps its qualifier, scrubbed, rather than losing it (Critic R195-1).
+    const amt = verifyAnswer(house, c2).answer;
+    const at = amt.statements!.findIndex((x) => x.amount);
+    amt.statements![at] = { ...amt.statements![at], conditions: ["Paid only after the waiting period; otherwise the benefit becomes null."] };
+    guardChatAnswer(amt);
+    assert.equal(amt.statements![at].conditions.length, 1);
+    assert.match(amt.statements![at].conditions[0], /waiting period/);
     const old = sanitizeStoredAnswer({ ...JSON.parse(JSON.stringify(other)), bottomLine: "The schedule is the file named secret_backup_2026.pdf." }) as { bottomLine?: string; summary: string };
     assert.equal(old.bottomLine, old.summary);
   });
