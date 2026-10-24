@@ -93,11 +93,13 @@ export const UNCHECKED_PAGE = "[This page could not be checked against the page 
 // 13500" on a page whose pairing is not checked is still an amount (Critic R176-2).
 // The labelled number or date is taken out first, and the line kept only when no other figure is left on it, so "Policy
 // number TE-1 Annual limit 150000" is dropped (TE UC-1).
-const DATE = String.raw`(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})`;
+// A real month only: "Expiry 30 days 1500" is not a date (Critic R179-1).
+const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
+const DATE = String.raw`(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+${MONTH}\s+\d{4}|${MONTH}\s+\d{1,2},?\s+\d{4})`;
 const LABELLED = new RegExp(String.raw`\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\s*[:#-]?\s*[A-Za-z0-9][A-Za-z0-9/-]*`
   + String.raw`|\b(?:date(?:\s+of\s+[a-z]+)?|dated|(?:commencement|expiry|issue|start|end)(?:\s+date)?|issued(?:\s+on)?)\s*[:-]?\s*` + DATE, "gi");
 const LONE_NUMBER = /^\s*(?:page\s+)?\d{1,3}(?:\s+of\s+\d{1,3})?\s*$/i;
-const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`);
+const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`, "i");
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 

@@ -173,8 +173,8 @@ async function partA() {
     assert.equal(uncheckedText("Basic Plan: PruLink Enhanced Protector\nPolicy Number: 63639755\nSum Assured 13500\nCrisis Cover 100000\nDate of issue: 01/10/2026"),
       [UNCHECKED_PAGE_TEXT, "Basic Plan: PruLink Enhanced Protector", "Policy Number: 63639755", "Date of issue: 01/10/2026"].join("\n"));
     // The labelled number or date comes out first; any other figure on the line drops it (TE UC-1).
-    assert.equal(uncheckedText("Hospital cash 500 per day from the date of admission\nPolicy number TE-1 Annual limit 150000\nIssued 01/03/2025 Deductible 3500\nCommencement Date 1 March 2025"),
-      [UNCHECKED_PAGE_TEXT, "Commencement Date 1 March 2025"].join("\n"));
+    assert.equal(uncheckedText("Hospital cash 500 per day from the date of admission\nPolicy number TE-1 Annual limit 150000\nIssued 01/03/2025 Deductible 3500\nCommencement Date 1 March 2025\nExpiry 30 days 1500\nStart 12 months 2000\nIssued on March 3, 2024"),
+      [UNCHECKED_PAGE_TEXT, "Commencement Date 1 March 2025", "Issued on March 3, 2024"].join("\n"));
     // A header over rows of amounts alone does not pair the plan labels above it (TE UC-2); a header over keyed rows does.
     assert.deepEqual(scrambleSigns("Basic Plan\nCrisis Cover Benefit\nEarly Crisis Cover\nSum Assured\tPremium\n100,000.00\t181.44\n50,000.00\t20.00\n25,000.00\t10.00"), ["labels came out before their values"]);
     // A page number or a date alone on its line pairs nothing and does not stop agreement; several lone numbers still do (TE UC-3).
