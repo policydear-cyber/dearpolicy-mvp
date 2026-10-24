@@ -6355,3 +6355,17 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 ## Round 198: #123 at 6aa2e1d
 
 **READY.** R197-1 (the "left-out-guarded" note) and R197-2 (boundary match, plus `\.\d` so "S$50" doesn't match "S$50.50") are applied, with tests. Reported suites: simple chat 83, benefit-table chat 94, TE pr121 9 and pr123 13, tsc clean. #123 merges after #121.
+
+## Round 199: #124 (c1ac28d), Family "Covered for" from the benefit table
+
+**NOT READY.** The direction is right: a live household's ledger is stale.
+
+- **`people[].id` is the family member id.** `assemble.ts:207` builds people from `family.map((m) => ({ id: m.id, … }))`, and `/api/ledger` keys `kinds` by the same id.
+- **R199-1 (medium, hidden cover):** `/\bpremium/` drops "Waiver of premium" and "Premium waiver on TPD" rows, which are cover. A person whose only rider is a waiver loses it. Skip only a row that IS the premium ("Annual premium", "Premium payable").
+- **R199-2 (medium, false statement):** a person with covers on the table but no countable rows gets an empty list, so the page says "Nothing found in your uploaded documents for them yet" (`app/family/page.tsx:143`). That happens when sections are not linked yet, or the only rows are waivers or values. `people[].covers` is in the same response: count each cover that has no counted row by its cover name.
+- **R199-3 (low-medium):** a failed `/api/benefit-table` request (`!r.ok` or a network error) gives null, which falls through to `/api/ledger`. A live household then sees the stale kinds again, which is the bug this PR fixes. Fall back only on `enabled === false`, and show nothing on an error.
+- **R199-4 (low):** `/travel|trip/` has no word boundaries. Use `\b(?:travel|trip)\b`.
+- Not fixed, noted: a life plan named only by its sum ("Sum Assured" under "Basic plan") shows "Other". I tried the product name as a fallback, and it made "CPF LIFE" annuity rows "Death" (`\blife\b`), which is worse. So keep [benefit, cover] only.
+- **Fix**, tested: /mnt/project-files/critic/cover-kinds-r199.ts. The page change is `kindsOfTable(p.rows ?? [], p.covers ?? [])`, and `if (!table) return;` before the ledger fallback.
+  - The waiver and "Premium waiver on TPD" rows now count (Other and Disability), while "Annual premium" is skipped.
+  - Covers with no rows give their kinds, and annuity stays Other.
