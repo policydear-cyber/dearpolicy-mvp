@@ -7,10 +7,11 @@
 import type { ModelAnswer } from "./prompt";
 
 // Words that make it a question about cover, a claim, a treatment or the insurer, never about the app (Critic R185-1).
-const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|singlife|aia|prudential|manulife|fwd|great eastern|income|aviva|tokio|policy|policies|rider|riders|insured|assured|pays?|paid|reimburs\w*|outpatient|inpatient|dental|physio\w*|clinic|panel|doctor|specialist|scan|mri|x-?ray|surgery|operation|ward(?:ed)?|treatment|therapy|accident|illness|cancer|critical|disability|tpd|death|die|dies|died|medisave|shield|deductible|co-?insurance|left|remaining|balance|estate|agent)\b/i;
+// "Left" is not here: "questions left this month" is the app's own (TE P118-3); "limit left" still has "limit".
+const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|singlife|aia|prudential|manulife|fwd|great eastern|income|aviva|tokio|policy|policies|rider|riders|insured|assured|pays?|paid|reimburs\w*|outpatient|inpatient|dental|physio\w*|clinic|panel|doctor|specialist|scan|mri|x-?ray|surgery|operation|ward(?:ed)?|treatment|therapy|accident|illness|cancer|critical|disability|tpd|death|die|dies|died|medisave|shield|deductible|co-?insurance|remaining|balance|estate|agent|gp|polyclinic|tcm|maternity|visits?|consultations?|medic\w*)\b/i;
 const APP = String.raw`(?:dear\s*policy|this\s+(?:app|website|site|service)|the\s+app|you\s+guys)`;
 
-type Help = { id: string; test: RegExp; answer: Omit<ModelAnswer, "statements" | "question"> };
+type Help = { id: string; test: RegExp; policyWords?: boolean; answer: Omit<ModelAnswer, "statements" | "question"> };
 
 const HELPS: Help[] = [
   {
@@ -23,7 +24,9 @@ const HELPS: Help[] = [
   },
   {
     id: "delete",
-    test: /\b(?:delete|close|remove|erase|deactivate|terminate)\s+(?:my\s+|our\s+|the\s+|this\s+)?(?:account|household|profile|data|everything)\b/i,
+    // Not one thing in it ("remove household member Ah Kow", "remove my profile photo", "remove the data for my son"; TE
+    // P118-2, Critic R188-2).
+    test: new RegExp(String.raw`\b(?:delete|close|remove|erase|deactivate|terminate)\s+(?:my\s+|our\s+|the\s+|this\s+)?(?:${APP}\s+)?(?:account|household|profile|data|everything)\b(?!\s+(?:for|of|on|about|member|members|helper|photo|picture|access|details)\b)`, "i"),
     answer: {
       bottomLine: "The household's owner can permanently delete the household, with every policy, claim, family member and document it owns, under Household > Delete this household. It cannot be undone.",
       nextSteps: [
@@ -34,7 +37,7 @@ const HELPS: Help[] = [
   },
   {
     id: "rename",
-    test: /\b(?:change|rename|update|edit|correct|fix)\b[^?.!]*\bname\b|\bname\b[^?.!]*\b(?:wrong|misspelt|misspelled|typo)\b/i,
+    test: /\b(?:change|rename|update|edit|correct|fix)\b[^?.!]*\bname\b|\brename\s+(?:my|our)\s+(?:son|daughter|child|kid|wife|husband|mum|mom|mother|dad|father)\b|\bname\b[^?.!]*\b(?:wrong|misspelt|misspelled|typo)\b/i,
     answer: {
       bottomLine: "You can change a family member's name on the Family page: choose Edit details for that person, then change Full name or Preferred name. This changes the name in DearPolicy only, not with the insurer.",
       nextSteps: ["To change a name the insurer holds, contact the insurer using the details printed on the policy."],
@@ -42,6 +45,8 @@ const HELPS: Help[] = [
   },
   {
     id: "who-sees",
+    // "Who can see my policies" is about the app (TE P118-3); any other cover word still leaves it to the model.
+    policyWords: true,
     test: /\bwho\b[^?.!]*\b(?:see|view|access|read|look\s+at)\b[^?.!]*\b(?:documents?|policies|files?|data|info(?:rmation)?|uploads?)\b/i,
     answer: {
       bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
@@ -50,7 +55,8 @@ const HELPS: Help[] = [
   },
   {
     id: "safe",
-    test: new RegExp(String.raw`\b(?:is|are)\s+(?:my|our|the)\s+(?:data|documents?|info(?:rmation)?|files?|details)\s+(?:safe|secure|private|protected)\b|\b(?:is|are)\s+${APP}\s+(?:safe|secure|private)\b`, "i"),
+    policyWords: true,
+    test: new RegExp(String.raw`\b(?:is|are)\s+(?:my|our|the)\s+(?:data|documents?|info(?:rmation)?|files?|details)\s+(?:safe|secure|private|protected)\b|\b(?:is|are)\s+${APP}\s+(?:safe|secure|private)\b|\bhow\s+(?:safe|secure|private)\s+is\s+(?:${APP}|my\s+data)\b|\bis\s+it\s+(?:safe|secure)\s+to\s+upload\b`, "i"),
     answer: {
       bottomLine: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that.",
       nextSteps: ["Check Household > Members to see who has access.", "To remove everything, the owner can use Delete this household on the Household page."],
@@ -58,7 +64,7 @@ const HELPS: Help[] = [
   },
   {
     id: "cost",
-    test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+${APP}\s+free\b`, "i"),
+    test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+(?:${APP}|this|it)\s+free\b|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b`, "i"),
     answer: {
       bottomLine: "The app doesn't show a price. Your household's plan, and how much of it you have used this month, are on the Plan usage page.",
       nextSteps: ["Open Household, then Plan usage."],
@@ -66,7 +72,8 @@ const HELPS: Help[] = [
   },
   {
     id: "usage",
-    test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used|use|left)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b`, "i"),
+    // How much was used, never how to use the app ("How do I use DearPolicy?", "can I use this app on my phone"; Critic R188-1).
+    test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b|\bhow\s+(?:much|many)\b[^?.!]*\buse\b[^?.!]*\b(?:this\s+month|questions?|documents?)\b|\b(?:questions?|documents?)\b[^?.!]*\bleft\b`, "i"),
     answer: {
       bottomLine: "How much of your plan your household has used this month, in questions asked and documents read, is on the Plan usage page.",
       nextSteps: ["Open Household, then Plan usage."],
@@ -76,7 +83,7 @@ const HELPS: Help[] = [
 
 /** The fixed answer for a question about DearPolicy itself, or null for anything else. Only the message counts. */
 export function appHelp(message: string): { id: string; answer: ModelAnswer } | null {
-  if (ABOUT_COVER.test(message)) return null;
-  const help = HELPS.find((h) => h.test.test(message));
+  const cover = ABOUT_COVER.test(message), coverBesidesPolicy = ABOUT_COVER.test(message.replace(/\bpolic(?:y|ies)\b/gi, " "));
+  const help = HELPS.find((h) => !(h.policyWords ? coverBesidesPolicy : cover) && h.test.test(message));
   return help ? { id: help.id, answer: { ...help.answer, nextSteps: [...help.answer.nextSteps], statements: [], question: null } } : null;
 }

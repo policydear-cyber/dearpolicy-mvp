@@ -264,14 +264,23 @@ async function main() {
     const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change charmaine's name to Charmaine Ong", "rename"],
       ["who else can see my documents", "who-sees"], ["is my data safe", "safe"], ["how much has my household used this month", "usage"], ["what does it cost to use dearpolicy", "cost"],
       ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"], ["update my wife's name", "rename"], ["plan usage", "usage"],
-      ["how many questions have I used this month", "usage"]];
+      ["how many questions have I used this month", "usage"],
+      // TE P118-3, Critic R188-3.
+      ["how many questions do I have left this month", "usage"], ["How much does DearPolicy cost?", "cost"], ["how much does this app cost per month", "cost"], ["is this free?", "cost"],
+      ["how secure is DearPolicy", "safe"], ["how to delete dearpolicy account", "delete"], ["who can see my policies", "who-sees"], ["delete everything", "delete"],
+      ["how much did I use this month", "usage"], ["how much have I used dearpolicy", "usage"],
+      ["is it safe to upload my policy here", "safe"], ["rename my son", "rename"]];
     for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
     // Questions about cover, a claim or the insurer stay with the model, however they are worded.
     for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
       "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy",
       // Critic R185-1.
       "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan is used up for physio",
-      "do I pay anything to use it at a panel clinic", "who can access the policy documents if I die", "change my name on the policy", "update my son's name on the rider"])
+      "do I pay anything to use it at a panel clinic", "who can access the policy documents if I die", "change my name on the policy", "update my son's name on the rider",
+      // TE P118-1/2, Critic R188-1/2: cover questions, one thing in the household, and how to use the app.
+      "how many GP visits can I use this month", "can I use the polyclinic this month", "can I still use my TCM visits this month", "how much have I used for my maternity this month",
+      "how much does a GP visit cost with you guys", "how do I remove household member Ah Kow", "remove the household helper from my list", "remove my profile photo",
+      "terminate the household member access for my maid", "remove the data for my son", "How do I use DearPolicy?", "can I use this app on my phone", "can I use the app for my parents"])
       assert.equal(appHelp(q), null, q);
     const model = stub(c2);
     const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];
