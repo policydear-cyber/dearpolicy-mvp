@@ -139,17 +139,18 @@ export function renderLibrary(household: Household, pagesSent?: Set<string>): st
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 
-const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)\b(?!['’-])(?:\s+([\w'’]+))?/gi;
+// A possessive is the spouse's own ("my husband's policy") unless the next word makes it someone else (TE P117-2).
+const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(?:['’]s)?(?![\w'’-])(?:\s+([\w'’-]+))?/gi;
 // Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
 // before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a
 // list of other people's words is never complete (Critic R184-1).
 const MINE_BEFORE = /^(?:my|me|mine|if|when|and|but|so|cos|coz|because|then|lah|ah|eh|wah|hi|hello|pls|please)$/i;
 // "husband of my colleague", "husband mother", "husband side": about someone else.
-const NOT_THEM_AFTER = /^(?:of|mother|mum|mom|mummy|mommy|father|dad|daddy|papa|mama|brother|bro|sister|sis|side|family|parents?|boss|friend|colleague|cousin|ex)$/i;
+const NOT_THEM_AFTER = /^(?:of|mother|mum|mom|mummy|mommy|ma|father|dad|daddy|papa|pa|mama|brother|bro|sister|sis|son|daughter|child|kid|grand\w*|side|family|parents?|in-laws?|boss|friend|colleague|cousin|ex)$/i;
 /** The first "husband" or "wife" in a message that means the person's own spouse: "my husband", or the word alone as people
  * type it ("husband kena fracture leg", "hubby got cancer"; overnight run 23 Oct, N224, N226). Never someone else's
- * ("her husband", "my sis husband", "husband of my colleague"), a possessive ("my husband's mum": the question is not
- * about him), or "husband and wife" (a pair, not a person). */
+ * ("her husband", "my sis husband", "husband of my colleague"), a possessive about someone else ("my husband's mum": the
+ * question is not about him), or "husband and wife" (a pair, not a person). */
 function spouseSaid(text: string): { kind: "husband" | "wife"; word: string } | null {
   if (/\b(?:husband|wife)\s*(?:and|or|&|\/|-and-)\s*(?:husband|wife)\b/i.test(text)) return null;
   for (const x of text.matchAll(SPOUSE_WORD)) {

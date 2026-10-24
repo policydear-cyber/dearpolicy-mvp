@@ -1650,8 +1650,14 @@ test("\"my husband\" is settled only by a title the documents print before that 
   for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my bro wife warded", "her hubby", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband",
     // Critic R184-1: other people's spouses, however they are written, and a question about someone else.
     "my sis husband got cancer", "my sister-in-law husband", "kakak husband kena accident", "jie jie husband", "my client wife", "my bf wife", "my gf husband",
-    "husband of my colleague died", "husband mother warded", "husband-and-wife plan", "my husband's mum got stroke"])
+    "husband of my colleague died", "husband mother warded", "husband-and-wife plan", "my husband's mum got stroke",
+    // TE P117-1: a spouse's relative, or someone else's spouse.
+    "husband's mum got stroke", "hubby mum warded", "husband brother kena dengue", "wife sister got accident", "wifey's grandma", "husband of my sister kena accident",
+    "my friends wife warded", "sister in law husband", "my sis-in-law's husband", "the husband in the policy", "my wife's dad fell", "husband's son warded"])
     assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
+  // The spouse's own possessive is about the spouse (TE P117-2).
+  for (const t of ["my husband's policy", "my wife's claim got rejected", "my hubby's hospital bill", "husband's cover for cancer"])
+    assert.ok(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Tan Mei Ling,"), [t]), t);
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
   // Only for a household set up as one couple (self and spouse).
