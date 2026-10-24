@@ -6275,3 +6275,8 @@ Free probes only: the three benefit-table suites on #117 and #120, plus extracte
 - money figures are counted across the whole line.
 
 A block can now only be refused more often, never given a new amount. Suites: 95/0, 13/0, 107/0. The R190 verdicts stand: #122 READY; #118 and #117 NOT READY.
+
+## Round 192: #117 (6b6411a), #118 (6e9dfdd)
+
+- **#117: READY.** The R190-2/3 patch is applied as given, plus "bill|bills" in HIS_OR_HERS ("my hubby's hospital bill"). That is still the spouse's own, and it is fine. Chat suite: 94/0.
+- **#118: READY.** The R190-1 cost test is applied as given. The other help tests are unchanged since R190, so the R190 probe still holds.
