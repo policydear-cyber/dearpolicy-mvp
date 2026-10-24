@@ -6451,3 +6451,9 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
   if (r.pays === "not_covered") continue;
   ```
   With it: ILP gives Other, CI premium-only gives Critical illness, all-not-covered HomeShield still gives nothing; headline 15/0.
+
+## Round 205 (24 Oct): #124 38d1090
+
+**#124 38d1090: READY.** R204-1 applied verbatim, with the ILP and CI-premium-only tests; F15 `home\s?protect(?:ion)?` is right. headline 15/0 on 38d1090.
+
+- Low (not blocking): a home-contents product sold under a name like "Home Protection Plan" would now show as Death (its home rows add no kind). Only the Family label changes, never an amount. Watch for it on real schedules.
