@@ -100,17 +100,27 @@ function printedPart(quote:string,text:string):string|null{
   const span=locatePassage(text,part);
   return span?text.slice(span.start,span.end):part;
 }
-/** A table cell saying the benefit does not apply: a cell of its own (after a tab, two spaces, a colon or a bar, and
- * ending the line or followed by another cell), or "not applicable" / "not covered" ending the line. Only the lines that
- * print the benefit's own name are read (the first line when none does): "Waiting period: Nil" under a row is not that
- * row's cell. A dash is a cell only at the end of the line or before a tab or bar, never a separator before a figure. */
-const NOT_APPLYING_CELL=/(?:^|\t| {2,}|:\s*|\|\s*)(?:not\s+(?:applicable|covered|available|included|insured)|n\.\s?a\.?|n\/a|nil)\s*(?=$|\t| {2,}|\|)|(?:\t| {2,}|:\s*|\|\s*)[-–—]\s*(?=$|\t|\|)/im;
-const NA_CELL=/(?:^|\t| {2,}|:\s*|\|\s*)NA\s*(?=$|\t| {2,}|\|)/m;
+/** A benefit printed as not applying: the cell right after the benefit's own name ("Home Guard  Not Applicable",
+ * "Golf Equipment: N/A", "Hijack Nil", "Pet Care  -"). Any other cell on its line is another label's ("Excess: Nil",
+ * "Waiting period: Nil") or another row's, never this one's (Critic R200-1, TE P125-1). With no line printing the name,
+ * the first line counts only when it prints no figure. A one-space gap counts only when the cell ends the line. */
+const NA_WORDS=String.raw`(?:not\s+(?:applicable|covered|available|included|insured|payable)|excluded|no\s+cover|n\.\s?a\.?|n\/a|na|nil|✗)[*.†#^]*`;
+// A dash is a cell only at the end of the line or before a tab or bar, never a separator before a figure.
+const NA_DASH=String.raw`[-–—][*.†#^]*\s*(?=$|\t|\|)`;
+const NA_SEP=String.raw`(?:\t| {2,}|:\s*|\|\s*)`;
+const NA_END=String.raw`\s*(?=$|\t| {2,}|\|)`;
+const NA_AFTER=new RegExp(String.raw`^(?:${NA_SEP}(?:${NA_WORDS}${NA_END}|${NA_DASH})|\s(?:${NA_WORDS}|[-–—][*.†#^]*)\s*$)`,"i");
+const NA_ANYWHERE=new RegExp(String.raw`${NA_SEP}(?:${NA_WORDS}${NA_END}|${NA_DASH})`,"i");
 export function printedNotApplying(text:string,name?:string|null){
   const lines=text.split("\n").filter(l=>l.trim());
   const words=String(name??"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);
   const own=words.length?lines.filter(l=>words.every(w=>l.toLowerCase().includes(w))):[];
-  return (own.length?own:lines.slice(0,1)).some(l=>NOT_APPLYING_CELL.test(l)||NA_CELL.test(l)||/\bnot\s+(?:applicable|covered)\s*\.?\s*$/i.test(l.trim()));
+  if(own.length)return own.some(l=>{
+    const last=words[words.length-1],at=l.toLowerCase().lastIndexOf(last);
+    return NA_AFTER.test(l.slice(at+last.length).replace(/^[a-z0-9]*/i,""));
+  });
+  const first=lines[0]??"";
+  return !/\d{2,}|\$\s?\d/.test(first)&&NA_ANYWHERE.test(first);
 }
 /** Round 9: what a ledger row says is what its printed quote says -- the
  * figure in the unit it claims, an event its words can name -- and its

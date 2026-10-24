@@ -1557,6 +1557,24 @@ export function runSystemRegressions(){
       "another line's Nil is not the row's cell");
     assert.equal(rowSupported({...stated("Accidental Death","Accidental Death  -  S$100,000"),eventType:"accidental_death" as const,paysKind:"lump_sum" as const,amount:100000},page),true,
       "a dash before a figure is a separator");
+    // Critic R200-1, TE P125-1: another label's "Nil" on the row's own line is not the row's cell.
+    const keep=(benefitName:string,quote:string,o:Record<string,unknown>={})=>assert.equal(rowSupported({...stated(benefitName,quote),...o} as Parameters<typeof rowSupported>[0],quote),true,`${benefitName}: kept (${quote})`);
+    keep("Hospital cash","Hospital cash  S$100 per day  Waiting period: Nil",{eventType:"hospital_daily_cash",paysKind:"per_day",amount:100});
+    keep("Accidental death","Accidental death\tS$100,000\tDeductible: Nil",{eventType:"accidental_death",paysKind:"lump_sum",amount:100000});
+    keep("Outpatient","Outpatient\tS$1,000\tCo-payment: Nil");
+    keep("Emergency dental","Emergency dental  S$500  Excess: Nil  Sub-limit: -");
+    keep("Medical expenses overseas","Medical expenses overseas  S$200,000  -");
+    keep("Terrorism","Terrorism  Covered  Hijack  Nil");
+    keep("Overseas Medical Expenses","Overseas Medical Expenses  S$500,000  Excess: Nil");
+    keep("Fracture","Fracture  S$5,000\nFracture of the thumb is not covered.");
+    keep("Hospital Cash","Hospital Cash  S$200 per day; outpatient treatment not covered");
+    keep("Home Guard","Home Guard\tS$500\tN.A.");
+    keep("Pet care","Pet care - boarding  S$50 per day");
+    // Single-space and other wordings of a benefit that does not apply (TE P125-2).
+    for(const [b,q] of [["Golf Equipment","Golf Equipment N.A."],["Hijack","Hijack Nil"],["Pet Care","Pet Care -"],["Hijack","Hijack  Nil."],["Pet Care","Pet Care  -*"],
+      ["Home Guard","Home Guard  Not Applicable*"],["Loss of income","Loss of income  Not Payable"],["Loss of income","Loss of income  Excluded"],["Loss of income","Loss of income  No cover"],
+      ["Loss of income","Loss of income  ✗"],["Loss of income","Loss of income  NA"],["Golf equipment","Golf equipment: N/A"]])
+      assert.equal(rowSupported(stated(b,q),q),false,`${b}: printed as not applying (${q})`);
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under
