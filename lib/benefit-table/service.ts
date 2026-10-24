@@ -43,7 +43,8 @@ async function documents(db: Db, accountId: string, policyId?: string): Promise<
     WHERE account_id=$1 AND lifecycle_state='active' AND superseded_at IS NULL${policyId ? " AND id=$2" : ""} ORDER BY created_at`, policyId ? [accountId, policyId] : [accountId]);
   if (!docs.length) return [];
   const people = (await family(db, accountId)).map((m) => m.display_name);
-  const pages = await db("SELECT policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) ORDER BY policy_id, page_number",
+  // A page whose table text could not be checked (lib/documents/layout-check.ts) is not searched: no row's quote is found on it.
+  const pages = await db("SELECT policy_id, page_number, text FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND coalesce(to_jsonb(pp)->>'extraction_method', '') <> 'unchecked' ORDER BY policy_id, page_number",
     [accountId, docs.map((d) => String(d.id))]);
   return docs.map((d) => ({
     id: String(d.id), name: String(d.original_filename), status: String(d.processing_status ?? ""), readable: d.processing_status === "ready",

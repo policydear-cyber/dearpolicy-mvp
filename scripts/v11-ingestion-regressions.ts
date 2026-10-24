@@ -82,6 +82,38 @@ async function partA() {
     const prose = renderPageLayout([item("Left column opening words", 48, 790), item("Right column other text", 330, 790), item("left continues here", 48, 772), item("right continues there", 330, 772)], 595);
     assert.equal(prose.text, "Left column opening words\nleft continues here\nRight column other text\nright continues there");
   });
+  await t("E1: a schedule's bare-figure value columns stay beside their labels, and figures printed side by side are never glued (Charmaine's new documents, 24 Oct)", async () => {
+    const { renderPageLayout } = await import("@/lib/documents/layout");
+    const item = (text: string, x: number, y: number, w = text.length * 4.5) => ({ text, x, y, w });
+    // Two figures with no gap between them: "100,000.00" ends exactly where the next starts.
+    const page = renderPageLayout([item("Basic Plan Sum Assured", 48, 700), item("100,000.00", 330, 700, 45), item("100,000.00", 375, 700, 45),
+      item("Crisis Cover Benefit", 48, 682), item("50,000.00", 330, 682, 41), item("50,000.00", 371, 682, 41),
+      item("Premium", 48, 664), item("181.44", 330, 664, 27), item("181.44", 357, 664, 27)], 595);
+    assert.equal(page.text, "Basic Plan Sum Assured\t100,000.00\t100,000.00\nCrisis Cover Benefit\t50,000.00\t50,000.00\nPremium\t181.44\t181.44");
+    // A plain number split into pieces is still one number; a figure followed by words is untouched.
+    assert.equal(renderPageLayout([item("Total", 48, 700), item("1,2", 330, 700, 12), item("34.56", 342, 700, 22)], 595).text.includes("1,234.56"), true);
+  });
+  await t("E1: a page whose table text came out scrambled is checked against its image; its figures are used only when both readings agree (Charmaine's new documents, 24 Oct)", async () => {
+    const { scrambleSigns, readingsAgree, uncheckedPagesNote } = await import("@/lib/documents/layout-check");
+    // The two faults: labels first, then values; figures glued together.
+    const split = "Policy Schedule\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\nPremium\n100,000.00 100,000.00\n50,000.00 50,000.00\n25,000.00\n181.44";
+    assert.deepEqual(scrambleSigns(split), ["labels came out before their values"]);
+    assert.deepEqual(scrambleSigns("Sum Assured\t50,000.0050,000.00"), ["figures printed side by side came out glued together"]);
+    // A clean schedule, prose, and a premium rate table are not suspect.
+    for (const clean of ["Basic Plan Sum Assured\t100,000.00\nPremium\t181.44", "Section 3 Exclusions\nWe will not pay for any claim arising from war.\nThis applies to all plans.",
+      "Age\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00"]) assert.deepEqual(scrambleSigns(clean), [], clean);
+    // The image reading agrees when it prints the same figures and only labels the text reading has.
+    const image = "Policy Schedule\nBasic Plan Sum Assured 100,000.00 100,000.00\nCrisis Cover Benefit 50,000.00 50,000.00\nEarly Crisis Cover 25,000.00\nPremium 181.44";
+    assert.deepEqual(readingsAgree(split, image), { agree: true });
+    assert.deepEqual(readingsAgree("Sum Assured\t50,000.0050,000.00", "Sum Assured 50,000.00 50,000.00"), { agree: true });
+    // A figure read differently, a figure missing, or a label the text reading does not print: not agreed.
+    assert.equal(readingsAgree(split, image.replace("181.44", "181.41")).agree, false);
+    assert.equal(readingsAgree(split, image.replace("Early Crisis Cover 25,000.00\n", "")).agree, false);
+    assert.equal(readingsAgree(split, image.replace("Early Crisis Cover", "Accident Death Cover")).agree, false);
+    assert.equal(readingsAgree(split, "Policy Schedule").agree, false);
+    assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: their table text came out scrambled, and a second reading from the page image did not agree with it, so no amount on them is used.");
+    assert.equal(uncheckedPagesNote([]), null);
+  });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");
     assert.equal(ev.parsePrintedDate("1 January 2025"), "2025-01-01");

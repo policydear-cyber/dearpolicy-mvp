@@ -438,7 +438,7 @@ export default function PoliciesPage() {
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? "Usually ready in under a minute" : [policy.insurer ?? "Insurer not known yet", roleLabel(policy.document_role), policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")].join(" · ")}</span>}
-              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? "Ready" : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
+              {!processing && !quarantineHeld && !scanRejected && <em className={`status ${policy.processing_status}`}>{policy.processing_status === "ready" ? (/^Read in part\b/.test(policy.processing_message ?? "") ? "Read in part" : "Ready") : stageLabel(policy.processing_stage, policy.processing_status)}</em>}</div>
           </div>
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}

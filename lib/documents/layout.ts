@@ -42,7 +42,11 @@ export function lineFrom(items:TextItem[],cellGap=10):PageLine{
   for(const item of ordered){
     const piece=item.text.trim();
     if(!piece){cursor=item.x+item.w;continue;}
-    if(cursor!==null&&item.x-cursor>cellGap){if(current.trim()){cells.push(current.trim());xs.push(start);xe.push(cursor);}current="";}
+    // Two figures printed side by side with no gap ("50,000.00" "50,000.00") are two cells, never one glued number
+    // "50,000.0050,000.00": a complete decimal amount followed by another digit starts a new cell (Charmaine's new
+    // documents, 24 Oct: Prudential schedules).
+    const glued=cursor!==null&&/\d\.\d{2}$/.test(current)&&/^[\d(]/.test(piece);
+    if(cursor!==null&&(item.x-cursor>cellGap||glued)){if(current.trim()){cells.push(current.trim());xs.push(start);xe.push(cursor);}current="";}
     else if(cursor!==null&&item.x-cursor>1.2&&current)current+=" ";
     if(!current)start=item.x;
     current+=piece;cursor=item.x+item.w;
@@ -176,7 +180,11 @@ function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
             // ...or a column of bare figures and dashes ("Qty" 6, 1, -; "Amount (S$)" 4,830.00), each
             // beside a label: an itemised bill or statement whose amounts print no currency of their own.
             ||(shortCells&&within.length>=3&&within.length===rightLines.length&&within.every(beside)
-              &&within.filter(line=>/^(?:[\d][\d,]*(?:\.\d+)?%?|[-–—])$/.test(line.text.trim())).length>=Math.max(2,Math.ceil((within.length-1)*0.75)));
+              &&within.filter(line=>/^(?:[\d][\d,]*(?:\.\d+)?%?|[-–—])$/.test(line.text.trim())).length>=Math.max(2,Math.ceil((within.length-1)*0.75)))
+            // ...or a schedule's value columns of bare figures ("100,000.00 100,000.00" under "Sum Assured" / "Premium"),
+            // each line beside a label: read apart, every label came before every value (Charmaine's new documents, 24 Oct).
+            ||(within.length>=2&&within.length===rightLines.length&&within.every(beside)
+              &&within.filter(line=>/^(?:(?:[\d][\d,]*\.\d{2}|[-–—])(?:\s+|$))+$/.test(line.text.trim())).length>=Math.max(2,Math.ceil(within.length*0.75)));
         if(aligned){out.splice(j,i-j+1,{left:out[j].left,right:out[i].right});i=j+1;merged=true;break;}
       }
     }

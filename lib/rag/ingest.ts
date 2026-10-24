@@ -11,6 +11,7 @@ import { readPolicyFile, savePolicyFile } from "@/lib/storage";
 import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
+import { looksScrambled, readingsAgree, uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
@@ -478,6 +479,28 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       }
     }
 
+    // A page whose table text came out scrambled (labels before values, figures glued together) is read again from its
+    // image, and its figures are used only when the two readings agree (lib/documents/layout-check.ts). A page they do
+    // not agree on stays searchable, but no amount is read from it, and the document says it was read in part
+    // (Charmaine's new documents, 24 Oct: Prudential schedules).
+    const suspect = ocrSourceBytes && sniffed.format === "pdf"
+      ? pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && looksScrambled(p.text)).map((p) => p.pageNumber) : [];
+    if (suspect.length) {
+      await progress(args, "ocr", 26, `Checking ${suspect.length} table page${suspect.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
+      let second: PdfPage[] | null = null;
+      try {
+        second = await completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes as Uint8Array, password: args.pdfPassword,
+          pages: pages.map((p) => (suspect.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers: suspect });
+      } catch (error) {
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
+      }
+      pages = pages.map((p) => {
+        if (!suspect.includes(p.pageNumber)) return p;
+        const image = second?.find((s) => s.pageNumber === p.pageNumber);
+        return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? { ...image, lines: undefined } : { ...p, unchecked: true };
+      });
+    }
+
     // Round 10: a photo the reader could not make out at all is explained as a
     // photo, with how to take it again.
     if (sniffed.format !== "pdf" && sniffed.format !== "docx" && pages.length && pages.every((p) => p.unreadable || !p.text.trim())) {
@@ -518,6 +541,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // rest of the document is used, and the household is told which pages
     // are missing.
     const unreadableNote = unreadablePagesNote(pages.filter((p) => p.unreadable).map((p) => p.pageNumber));
+    const uncheckedNote = uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber));
 
     const ocrCount = pages.filter((page) => page.extractionMethod === "ocr").length;
     await progress(
@@ -537,7 +561,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           : `INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)
              ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text`,
         withMethod
-          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.extractionMethod ?? "native"]
+          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.unchecked ? "unchecked" : page.extractionMethod ?? "native"]
           : [args.accountId, args.policyId, page.pageNumber, page.text],
       );
     }
@@ -575,7 +599,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Round 9: every name, figure, unit, date, person, number and role the
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
-    const extraction = verifiedExtraction(raw, pages, { documentTitle });
+    // A page that could not be checked confirms nothing: its figures, names and dates are not re-found on it.
+    const extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     const noCover = NON_COVER_ROLES.has(extraction.documentRole ?? "");
     // The reading named people, and none of them is printed in the document:
@@ -915,7 +940,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : ["Ready.", unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedNote ?? "Ready.", unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
       await query(
