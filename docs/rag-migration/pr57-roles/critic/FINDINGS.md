@@ -6191,3 +6191,11 @@ The probe ran against the extracted acceptTranscribedPages.
   - a merged cell or a missing plan cell changes the count, so no row is made;
   - the label can't be a block length;
   - block rows are appended after the others, so existing row numbers don't change.
+
+## R187 — PR #121 library file names exempt from the output guard (head 5a44640)
+
+**Verdict: READY.**
+
+- libraryNames is built only from `household.documents[].name`, which is the signed-in household's own library. A name gets in only when the answer's text includes it. The model can't add a name: readModelAnswer doesn't carry the field, and verifyAnswer builds the answer object.
+- protectableNames still filters on the guard side: slashes, key-like values, bare UUIDs, record ids, and names under 3 or over 160 characters.
+- Low (observe): answer-verification.ts:1304 `unnamed` removes library names from a sentence with no whole-word check before reading money figures. Only a file name that is itself part of an amount (for example "000.pdf") could hide a figure. Real names carry an extension, so this is acceptable.
