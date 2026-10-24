@@ -139,14 +139,32 @@ export function renderLibrary(household: Household, pagesSent?: Set<string>): st
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 
+const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’]+)\s+)?(husband|hubby|wifey|wife)\b/gi;
+// Words before "husband"/"wife" that make it someone else's, or no one in particular ("her husband", "my sister's husband",
+// "my friend husband"; "ex-husband" never matches: a hyphen is not a word start).
+const NOT_MINE = /^(?:her|his|their|your|ur|our|a|an|any|every|each|no|ex|late|former|future|new|other|friend|sister|brother|mum|mom|mother|father|dad|daughter|son|cousin|colleague|boss|neighbou?r|aunt|aunty|auntie|uncle|niece|nephew|maid|helper)$|['’]s$/i;
+/** The first "husband" or "wife" in a message that means the person's own spouse: "my husband", or the word alone as people
+ * type it ("husband kena fracture leg", "hubby got cancer"; overnight run 23 Oct, N224, N226). Never someone else's
+ * ("her husband", "my friend's wife"), and never "husband and wife" (a pair, not a person). */
+function spouseSaid(text: string): { kind: "husband" | "wife"; word: string } | null {
+  if (/\b(?:husband|wife)\s+(?:and|or|&|\/)\s+(?:husband|wife)\b/i.test(text)) return null;
+  for (const x of text.matchAll(SPOUSE_WORD)) {
+    if (x[1] && NOT_MINE.test(x[1])) continue;
+    const word = x[2].toLowerCase();
+    return { kind: /^h/.test(word) ? "husband" : "wife", word: x[1]?.toLowerCase() === "my" ? `my ${word}` : word };
+  }
+  return null;
+}
+
 const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
 /** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
  * the documents print with that kind of title ("Mr Tan Yi Chuen, Desmond") while the other is never printed with it. A
  * title counts only before all of that member's own name words. Never read from a name itself. Null otherwise
  * (stress run 23 Oct, S048: "my husband" was asked about as "Desmond's or Charmaine's?"). */
 export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
-  const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
-  if (!asked) return null;
+  const heard = said.map(spouseSaid).find(Boolean);
+  if (!heard) return null;
+  const asked = heard.kind;
   const couple = household.members.filter((m) => m.relationship === "self" || m.relationship === "spouse");
   if (couple.length !== 2 || new Set(couple.map((m) => m.relationship)).size !== 2) return null;
   const base = (n: string) => n.replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -170,5 +188,5 @@ export function spouseMeant(household: Household, said: string[]): { word: strin
   // A member also printed with the other kind of title ("Mrs Tan Yi Chuen", a wife under her husband's name) settles nothing.
   const fits = couple.map((m) => ({ m, all: titles(m) })).map(({ m, all }) => ({ m, hits: all.some((t) => other.test(t.title)) ? [] : all.filter((t) => want.test(t.title)) }));
   const yes = fits.filter((f) => f.hits.length);
-  return yes.length === 1 ? { word: `my ${asked}`, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
+  return yes.length === 1 ? { word: heard.word, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
 }

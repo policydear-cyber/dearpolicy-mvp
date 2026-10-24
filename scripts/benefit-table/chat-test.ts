@@ -1639,6 +1639,17 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Lim Ah Kow,"), ["my husband"]), null);
   assert.equal(spouseMeant(HOUSE, ["my husband"]), null);
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["his cover"]), null);
+  // The word alone, as people type it, and "hubby"/"wifey" (overnight run 23 Oct, N224, N226); the note quotes what was said.
+  assert.deepEqual(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["husband kena fracture leg, claim how much ah"]), { word: "husband", member: "Lim Ah Kow", printed: "Mr Lim Ah Kow" });
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["hubby got cancer what to do"])?.word, "hubby");
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["Husband warded 3 days"])?.member, "Lim Ah Kow");
+  assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["wifey fell down"])?.member, "Tan Mei Ling");
+  assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["my wife's policy"])?.word, "my wife");
+  // Someone else's spouse, a pair, or no one in particular settles nothing.
+  for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband"])
+    assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
+  // A later word that is the person's own still counts after someone else's.
+  assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
   // Only for a household set up as one couple (self and spouse).
   assert.equal(spouseMeant({ ...titled("Life Assured : Mr Lim Ah Kow"), members: HOUSE.members.map((m) => ({ ...m, relationship: "child" })) }, ["my husband"]), null);
 });
