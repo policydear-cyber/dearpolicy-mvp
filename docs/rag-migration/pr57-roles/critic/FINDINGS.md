@@ -6389,3 +6389,16 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
   - These are still dropped: "Home Guard  Not Applicable", "Pet care  -", "Golf equipment: N/A", "Hijack  Nil" (as Hijack), "Loss of income  NA", and "Golf  N.A." with a paraphrased name.
   - "Pet care - boarding  S$50 per day" and "Section 3  Golf  N.A.  S$250" (no name) are kept.
 - Noted (low, a miss and not a false drop): a wrapped "Home Guard" / "Not Applicable" on the next line is still kept. "Home Guard\tNot Applicable\tS$500" (plan columns) is dropped. That withholds rather than guesses the plan, which is consistent with `rowFiguresDependOnPlan`.
+
+## Round 201: #124 at 82ff6ce
+
+**NOT READY, one regex.** R199-1 to R199-4 and TE P124-1 are in. I probed 29 cases: waiver riders, travel, Shield, PA under motor, covers with no rows, CPF LIFE as Other, "Wealth", "Carefree" and "PRUActive" all behave as intended.
+
+- **R201-1 (medium, the same wrong-kind class this PR fixes):** `\bhome(?:shield|guard|protect)?\b` makes HDB **HomeProtect** (mortgage-reducing term: death/TPD on the borrower) show "Home and vehicle", alongside "Death". A mortgage reducing term named "HomeProtect" gives ["Death", "Home and vehicle"].
+- **Fix** (tested): drop "protect" from the property alternation, and put a mortgage line before property:
+  ```ts
+  // A mortgage plan ("HomeProtect", "Mortgage Reducing Term") is death cover on the borrower, not home insurance.
+  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect\b/i, "death"],
+  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
+  ```
+  With it, HomeProtect gives ["Death"], a mortgage reducing term gives ["Death"], and real home and motor covers keep "Home and vehicle".
