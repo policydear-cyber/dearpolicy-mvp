@@ -1644,9 +1644,13 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["hubby got cancer what to do"])?.word, "hubby");
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["Husband warded 3 days"])?.member, "Lim Ah Kow");
   assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["wifey fell down"])?.member, "Tan Mei Ling");
-  assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["my wife's policy"])?.word, "my wife");
+  for (const t of ["my wife kena dengue", "if wife hospitalised can claim", "husband and I both covered?", "Husband warded at SGH, how much?", "my hubby, he fell"])
+    assert.ok(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Tan Mei Ling,"), [t]), t);
   // Someone else's spouse, a pair, or no one in particular settles nothing.
-  for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my bro wife warded", "her hubby", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband"])
+  for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my bro wife warded", "her hubby", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband",
+    // Critic R184-1: other people's spouses, however they are written, and a question about someone else.
+    "my sis husband got cancer", "my sister-in-law husband", "kakak husband kena accident", "jie jie husband", "my client wife", "my bf wife", "my gf husband",
+    "husband of my colleague died", "husband mother warded", "husband-and-wife plan", "my husband's mum got stroke"])
     assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
