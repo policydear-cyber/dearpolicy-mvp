@@ -25,7 +25,7 @@ export default function PlanUsagePage(){
   useEffect(()=>{void fetch("/api/usage",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok||p.error||!p.usage)throw new Error("load");setUsage(p.usage);}).catch(()=>setError(true));},[]);
   const plan=usage?.plan;
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">YOUR PLAN</div><h1>Plan usage this month</h1>
+    <header className="page-header compact"><div><h1>Plan usage</h1>
       <p className="lead">How much of your plan your household has used this month. Answers from documents DearPolicy has already read are always available.</p></div>
       <Link href="/household" className="button secondary">← Household</Link></header>
     {error&&<div className="alert error" role="alert"><strong>Your plan usage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
