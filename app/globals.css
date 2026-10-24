@@ -110,7 +110,9 @@ table { font-variant-numeric: tabular-nums; }
 .nav-icon svg { width: 20px; height: 20px; }
 .sidebar-footer { margin-top: auto; padding: 16px 8px 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; display: grid; gap: 10px; }
 .sidebar-footer p { margin: 0; }
-.privacy-pill { display: inline-flex; justify-self: start; border: 1px solid var(--good-line); background: var(--good-tint); color: var(--good-text); padding: 4px 10px; border-radius: 999px; font-weight: 650; font-size: var(--fs-xs); }
+.sidebar-account { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.privacy-note b { display: block; color: var(--ink-2); font-weight: 600; }
+.privacy-note b::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--good); margin-right: 6px; vertical-align: middle; }
 .main-content { min-width: 0; }
 .page { max-width: 1120px; margin: 0 auto; padding: 44px 40px 72px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 28px; }
@@ -766,7 +768,13 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 
 /* Sign-out sits beside the appearance toggle: in the sidebar footer on wide
    screens and in the top bar on phones (the sidebar footer is hidden there). */
-.mobile-bar-actions { display: flex; align-items: center; gap: 8px; }
+.mobile-bar-actions { display: flex; align-items: center; gap: 4px; }
+/* On a phone the appearance switch is its icon alone (it keeps its spoken
+   name), and Sign out is a quiet text button: the bar is for the logo. */
+.mobile-bar-actions .theme-toggle { border-color: transparent; background: transparent; min-width: 44px; justify-content: center; }
+.mobile-bar-actions .theme-toggle:hover { border-color: var(--line-strong); }
+.mobile-bar-actions .theme-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.mobile-bar-actions .theme-toggle svg { width: 20px; height: 20px; }
 .theme-toggle.sign-out { justify-content: center; }
 
 /* Document details / review panel (prototype ingestion review screen) */
