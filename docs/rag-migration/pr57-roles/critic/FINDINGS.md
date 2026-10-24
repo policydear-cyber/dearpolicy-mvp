@@ -6092,3 +6092,16 @@ The free suites pass: 94/0, 13/0, 107/0. simple-answer chat-test can't run here 
 - **Step 4:** uncheckedPages comes from extraction_method. reading_status "read in part …" is printed whatever pages are sent. libraryFact says "was read in part". unreadable() is unchanged.
 - Low: prompt.ts:24 only explains the case where a document has no reading_status. It could add one line: "read in part" means saying which pages couldn't be checked, and never that the file couldn't be read. The attribute already reads plainly, so this is optional.
 - Low: a page the image reader dropped (PartialTranscription) and a reply that could not be parsed both give "gave no text". Step 2's OCR_REPLY_UNPARSED row will tell them apart.
+
+## R182 — PR #115 step 2: tolerant image-reading parse (head b756874)
+
+Probes ran against the extracted parseTranscription, since ocr-hosted.ts needs @anthropic-ai/sdk, which is missing locally. The free suites pass: 94/0, 13/0, 107/0.
+
+**Verdict: READY.**
+
+- These now parse: a raw TAB or newline in the page text, a sentence plus fences before the JSON, an escaped quote with a TAB, and a "}" inside the text with a trailing sentence. Escaping is lossless.
+- OCR_REPLY_UNPARSED keeps only the page numbers and the reply length. Parsed readings are now cached as usual.
+- Low (optional): other control characters, such as a form feed, still give null. A one-line generalisation escapes any character below U+0020 inside strings:
+  `else if (ch < " ") { out += "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"); continue; }`
+- Low: when the parse fails, the dropped-page retry resends the same pages at temperature 0, so it gets the same reply. That costs one wasted call; it is not a correctness problem.
+- No integration test is needed for the failure row. The unit cases cover the parser, and the row write is one guarded call.
