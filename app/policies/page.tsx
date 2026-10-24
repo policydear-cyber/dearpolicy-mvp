@@ -8,6 +8,7 @@ import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-docu
 import type { ReadingDocument } from "@/components/reading-status";
 import { isToConfirm, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
+import { personColour } from "@/components/person-colour";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -442,7 +443,7 @@ export default function PoliciesPage() {
           </div>
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}
-          {!processing && policy.personal_coverage_confirmed && !!personalLinks.length && <p className="document-for"><b>For</b> {personalLinks.map((p) => p.name).join(", ")}</p>}
+          {!processing && policy.personal_coverage_confirmed && !!personalLinks.length && <p className="document-for"><b>For</b> {personalLinks.map((p, i) => <span key={p.id} className="document-person"><i className="person-swatch person-coloured" style={personColour(p.id, family)} aria-hidden="true" />{p.name}{i < personalLinks.length - 1 ? ", " : ""}</span>)}</p>}
 
 
           {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>

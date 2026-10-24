@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { COVER_KINDS, isToConfirm, kindOfRow, type KindRow } from "@/components/cover-kinds";
+import { personColour } from "@/components/person-colour";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -128,7 +129,7 @@ export default function FamilyPage() {
             <div className="profile-card" key={member.id} data-testid="profile-card">
               {/* At a glance: who, how they are linked to documents, and what they are covered for. */}
               <div className="profile-summary">
-                <div className="avatar profile-avatar">{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
+                <div className="avatar profile-avatar person-coloured" style={personColour(member.id,family)}>{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
                 <div><strong>{baseline[member.id]?.display_name ?? member.display_name}</strong><small>{relationshipLabel(baseline[member.id]?.relationship ?? member.relationship)}{baseline[member.id]?.preferred_name ? ` · goes by ${baseline[member.id]?.preferred_name}` : ""}</small></div>
               </div>
               <div className="profile-glance">
