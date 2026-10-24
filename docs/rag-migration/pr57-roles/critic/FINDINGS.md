@@ -6000,3 +6000,21 @@ Probes ran with tsx against the applied series. v11-ingestion-regressions needs 
 - Low: lineFrom splits "01.01" from "2024" when a date's items touch. That's harmless for amounts.
 - Low: an unchecked page gives the chat a placeholder, so the policy name, number and in-force status printed there are hidden too. That's acceptable as a withhold, but the household may see the policy as missing. Consider keeping lines that hold no figure.
 - Holds: the label:value merge (≥3 colon labels, ≥60% of the left band, ≥80% of values beside them); bare-figure value columns merged only when every line sits beside a label; the text is kept and only confirmed (never replaced); unchecked pages are left out of the table reading (service.ts) and the fact check; needs_review plus the "Read in part" message, including unverified coverages; clean pages make no paid call.
+
+## R176 — PR #114 upload check (head 5ef852d on main 2435418)
+
+Probes ran with tsx against 5ef852d. I could not run v11-ingestion here (DB stack).
+
+**Verdict: NOT READY. Unchecked pages still feed three writers (R176-1), and the chat still sees bare amounts on them (R176-2, patch tested).**
+
+- **R176-1 (high) lib/rag/ingest.ts: only the fact check, the benefit table (service.ts) and the chat library skip unchecked pages.** These still read them:
+  - `evidencePages` (line 570) → `catalogueDocument` (policy_benefits, the Benefits page) and `annotateCoverageEvidence`;
+  - `printedText` (738) → `premiumPrinted` and `printedPremiumTable`, which stores rider premiums read from the scrambled page;
+  - `paymentSplitNote`, `fullText` (634), the `applyMemberTiers` text and `catalogueConditions`;
+  - `chunkPages(pages)` (815) → the search index, with every amount.
+
+  `evidencePages` is also built before the second cross-check pass (613), so pages marked unchecked there are missed even if it is filtered.
+  Fix: after the second pass, set `const usable = pages.filter((p) => !p.unchecked)` and build evidencePages, printedText, the payment split, fullText, the tiers text and the conditions pages from it. Chunk unchecked pages as `uncheckedText(p.text)`. Add a regression test: an unchecked page that prints a rider premium and a benefit amount stores neither.
+- **R176-2 (medium-high) library.ts uncheckedText keeps bare whole numbers.** "Sum Assured 13500" and "Crisis Cover 100000" survive AMOUNT_LINE (probe), so the chat can quote an amount whose pairing was never checked, and verify finds it in the text. Fix (tested): keep only lines with no digit, or a number or date beside its own label (policy/certificate/contract/member/account number; date/commencement/expiry/issue). The probe then keeps "Basic Plan: PruLink Enhanced Protector" and "Policy Number: 63639755" only. Patch: scratchpad r176-fix.diff.
+- Low: numbersIn skips the glued head but then reads the tail as its own number ("181.44181.44" gives [44], so printsNumber(…, 44) is true). Suggest also skipping the match straight after a skipped glued token.
+- Holds: FIGURE widened (the R175 swap probe is refused); the second trigger on unverified coverage pages (capped at 6, extraction recomputed, DB flag updated); rates like 1.375 kept whole; the needs_review and "Read in part" messages.
