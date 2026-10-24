@@ -6173,3 +6173,21 @@ The probe ran against the extracted acceptTranscribedPages.
   - Plan usage is linked from Household.
   - No price is shown (the usage page says so).
 - **#117 at a694384 is still NOT READY.** The added deny-list words (sis, bro, frens, grandma, grandpa) don't close R184-1. "my client wife", "my bf wife", "my gf husband", "kakak husband", "jie jie husband", "my sister-in-law husband", "husband of my colleague", "husband mother warded" and "husband-and-wife plan" still resolve to the household spouse. The allow-list in /mnt/project-files/critic/spouse-said-r184.ts is still the fix.
+
+## R186 — PR #119 file labels (1b50f45) and PR #120 per-block travel delay (67e86e0)
+
+**#119: READY.**
+- labelFor follows the intended precedence: (product || (not a personal name and readable)) ? docLabel : name.
+- Unreadable files keep their bare name, and the file name stays in brackets.
+- Low: docLabel uses documentRole, which is the app's guess (for example, the Manulife schedule filed as an endorsement). The file name in brackets keeps it findable, and prompt.ts already says roles are guesses. No change needed.
+
+**#120: NOT READY.**
+- **R186-1 (medium-high) chat.ts perBlock currency:** BLOCK_FIGURE accepts a bare "$" and then takes `template.figure.currency` from another row. "A bare $ does not establish currency." Fix: `const currency = /^us\$/i.test(sign) ? "USD" : /^(?:s\$|sgd)/i.test(sign) ? "SGD" : null;`. figureText then says "currency not stated".
+- **R186-2 (medium) perBlock drops a limit printed on the next line.** The doc comment says "a third wrapped line gives none", but only lines i-1 to i+1 are checked. With "S$100 for every / six-hour delay" followed by "up to S$1,000\tup to S$500\tup to S$500" (or "maximum …"), the card shows "S$100 for every six-hour delay" without its limit. That strips a qualifier.
+  Fix: pass `lines[i + 2]` and return null when it starts lowercase, or when it starts with (up to|max(imum)?|subject|capped|limit|overall|per (trip|journey|period)), or when it holds `columns` cells of figures.
+- Low: headline.ts:33 still renders per_period as `a ${period}`, giving "S$50 a three-hour delay". Use periodWords there too.
+- Holds:
+  - column k always exists, because the heading must include template.column;
+  - a merged cell or a missing plan cell changes the count, so no row is made;
+  - the label can't be a block length;
+  - block rows are appended after the others, so existing row numbers don't change.
