@@ -73,7 +73,9 @@ const HELPS: Help[] = [
   {
     id: "usage",
     // How much was used, never how to use the app ("How do I use DearPolicy?", "can I use this app on my phone"; Critic R188-1).
-    test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b|\bhow\s+(?:much|many)\b[^?.!]*\buse\b[^?.!]*\b(?:this\s+month|questions?|documents?)\b|\b(?:questions?|documents?)\b[^?.!]*\bleft\b`, "i"),
+    // It names the app's own counts (questions, messages, documents read) or is only "how much ... used this month": a
+    // treatment between ("dialysis sessions", "for my maternity") makes it about cover (TE P118-4).
+    test: new RegExp(String.raw`\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:questions?|messages?|documents?\s+read|${APP})\b|\bhow\s+many\s+(?:questions|messages)\b|\bhow\s+much\s+(?:have|has|did|do)\s+(?:i|we|my\s+household|our\s+household|the\s+household)\s+(?:used|use)\s+this\s+month\b|\b(?:questions?|documents?)\b[^?.!]*\bleft\b`, "i"),
     answer: {
       bottomLine: "How much of your plan your household has used this month, in questions asked and documents read, is on the Plan usage page.",
       nextSteps: ["Open Household, then Plan usage."],

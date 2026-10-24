@@ -269,7 +269,7 @@ async function main() {
       ["how many questions do I have left this month", "usage"], ["How much does DearPolicy cost?", "cost"], ["how much does this app cost per month", "cost"], ["is it free to use", "cost"],
       ["how secure is DearPolicy", "safe"], ["how to delete dearpolicy account", "delete"], ["who can see my policies", "who-sees"], ["delete everything", "delete"],
       ["how much did I use this month", "usage"], ["how much have I used dearpolicy", "usage"],
-      ["is it safe to upload my policy here", "safe"], ["rename my son", "rename"]];
+      ["is it safe to upload my policy here", "safe"], ["rename my son", "rename"], ["how many questions can I ask this month", "usage"]];
     for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
     // Questions about cover, a claim or the insurer stay with the model, however they are worded.
     for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
@@ -282,7 +282,10 @@ async function main() {
       "how much does a GP visit cost with you guys", "how do I remove household member Ah Kow", "remove the household helper from my list", "remove my profile photo",
       "terminate the household member access for my maid", "remove the data for my son", "How do I use DearPolicy?", "can I use this app on my phone", "can I use the app for my parents",
       // Critic R190-1: only the message is read, so "is it free" may be a follow-up about a treatment.
-      "is it free", "is this free?", "is this treatment free"])
+      "is it free", "is this free?", "is this treatment free",
+      // TE P118-4: a treatment's own count.
+      "how many dialysis sessions can I use this month", "how many chiropractor visits can I use this month", "how many acupuncture sessions can I use this month",
+      "how much optical can I use this month", "how many vaccinations can I use this month", "how many chemo sessions can I use this month"])
       assert.equal(appHelp(q), null, q);
     const model = stub(c2);
     const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];
