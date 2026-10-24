@@ -43,7 +43,6 @@ function InviteForm() {
     <div className="page">
       <header className="page-header compact">
         <div>
-          <div className="eyebrow">INVITATION</div>
           <h1>Join a household</h1>
           <p className="lead">Paste the invitation link&apos;s token below, or use the link exactly as it was shared with you.</p>
         </div>

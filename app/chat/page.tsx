@@ -342,7 +342,7 @@ function ChatContent(){
 
   return <div className="page chat-page">
     <header className="chat-header">
-      <div><div className="eyebrow">ASK DEARPOLICY</div><h1>Your policies. Your questions.</h1><p className="lead">Ask anything, in your own words. Answers come only from the documents you uploaded.</p></div>
+      <div><h1>Ask DearPolicy</h1><p className="lead">Ask anything, in your own words. Answers come only from the documents you uploaded.</p></div>
       <div className="chat-head-actions"><div className="auto-context"><strong>Who it’s about</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}

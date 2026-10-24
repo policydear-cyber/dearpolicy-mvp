@@ -194,10 +194,9 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Send the documents for this claim here and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
+      <header className="page-header"><div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Send the documents for this claim here and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
-        <div className="eyebrow">STATUS</div>
         <h2 data-testid="claim-display-label">{claim.display?.label ?? "Open"}</h2>
         {claim.display?.detail && <p>{claim.display.detail}</p>}
         {claim.display?.tone === "info" && <p><a className="text-link" href={`/chat?member=${claim.family_member_id}&claim=${claim.id}`}>Continue answering questions →</a></p>}

@@ -84,8 +84,9 @@ button { cursor: pointer; }
 :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-sm); }
 img { max-width: 100%; display: block; }
 h1, h2, h3, p { margin-top: 0; }
-h1 { font-size: clamp(28px, 3.4vw, var(--fs-3xl)); font-weight: 700; line-height: 1.12; letter-spacing: -.02em; margin-bottom: 10px; max-width: 24ch; }
-h2 { font-size: var(--fs-xl); font-weight: 650; letter-spacing: -.01em; margin-bottom: 0; }
+/* App screens: the title names the page (a noun, 28px); the lead says what it is for. */
+h1 { font-size: var(--fs-2xl); font-weight: 650; line-height: 1.2; letter-spacing: -.015em; margin-bottom: 8px; max-width: 32ch; }
+h2 { font-size: 20px; font-weight: 650; letter-spacing: -.01em; margin-bottom: 0; }
 h3 { font-size: var(--fs-lg); font-weight: 650; margin-bottom: 6px; }
 strong, b { font-weight: 650; }
 small { font-size: var(--fs-xs); }
