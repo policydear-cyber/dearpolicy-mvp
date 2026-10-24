@@ -34,11 +34,14 @@ export type TableKindRow = { benefit: string; pays: string; product: string; cov
 export type TableKindCover = { product: string; cover: string };
 /** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
  * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
- * insurance. A life plan is death cover only when it says so: "CPF LIFE" is an annuity (Critic R199). */
+ * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
 const COVER_NAME_KINDS: [RegExp, string][] = [
   [/\b(?:travel\w*|trip|holiday|journey)\b/i, "travel"],
-  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard|protect)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
+  // A mortgage plan ("HomeProtect", "Mortgage Reducing Term") is death cover on the borrower, not home insurance (Critic R201-1).
+  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect\b/i, "death"],
+  // Before motor and home: a "Public Vehicle Accident Plan" is accident cover (TE F12).
   [/accident|\bpa\b/i, "accident"],
+  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
   [/critical illness|\bci\b|cancer|dread disease|early crisis/i, "ci"],
   [/careshield|eldershield|disab|\btpd\b|long[- ]term care/i, "disability"],
   [/shield|hospital|medical|health|surg/i, "hospital"],
@@ -57,8 +60,9 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   const found = new Set<string>(), counted = new Set<string>();
   const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
   for (const r of rows) {
-    if (r.pays === "not_covered" || r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+    // Its cover is counted first: a cover whose rows are all printed as not covered is no cover (TE P124-2).
     counted.add(`${r.product}\u0000${r.cover}`);
+    if (r.pays === "not_covered" || r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
     const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
     if (cover) found.add(cover);
     if (cover === "travel") continue;

@@ -112,6 +112,12 @@ test("the cover's own name decides the kind, and a home-care benefit is not home
   assert.deepEqual(kindsOfTable([r("Death", "Group Term Life", "amount"), r("Total and permanent disability", "Group Term Life", "amount")],
     [{ product: "Group Term Life", cover: "Group Term Life" }, { product: "Critical Illness II", cover: "Critical Illness II" }]), ["Death", "Disability", "Critical illness"]);
   assert.deepEqual(kindsOfTable([], [{ product: "HomeShield Contents", cover: "HomeShield Contents" }]), ["Home and vehicle"]);
+  // A cover whose rows are all printed as not covered is no cover (TE P124-2); a mortgage plan is death cover (Critic R201-1);
+  // a vehicle accident plan is accident cover (TE F12).
+  assert.deepEqual(kindsOfTable([r("Home contents", "HomeShield", "not_covered")], [{ product: "HomeShield", cover: "HomeShield" }]), []);
+  assert.deepEqual(kindsOfTable([r("Death", "HDB HomeProtect", "amount"), r("Total and permanent disability", "HDB HomeProtect", "amount")]), ["Death", "Disability"]);
+  assert.deepEqual(kindsOfTable([], [{ product: "Mortgage Reducing Term", cover: "Mortgage Reducing Term" }]), ["Death"]);
+  assert.deepEqual(kindsOfTable([r("Accidental death", "Public Vehicle Accident Plan", "amount")]), ["Accidents and injuries"]);
 });
 
 console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
