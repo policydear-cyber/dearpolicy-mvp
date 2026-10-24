@@ -34,7 +34,7 @@ export default function RecordsPage() {
 
   return (
     <div className="page">
-      <header className="page-header compact"><div><div className="eyebrow">PREMIUM RECORDS</div><h1>Know what your family is paying.</h1><p className="lead">Upload renewal notices, premium receipts and annual statements. DearPolicy extracts actual payment amounts and uses the latest record to estimate current monthly and annual insurance cost.</p></div></header>
+      <header className="page-header compact"><div><h1>Payments</h1><p className="lead">Upload renewal notices, premium receipts and annual statements. DearPolicy extracts actual payment amounts and uses the latest record to estimate current monthly and annual insurance cost.</p></div></header>
       <section className="upload-panel">
         <form onSubmit={upload} className="upload-form records-upload">
           <div className="field"><label htmlFor="rec-profile">Profile (optional)</label><select id="rec-profile" value={memberId} onChange={(e)=>setMemberId(e.target.value)}><option value="">Auto-detect from document</option>{family.map((m)=><option value={m.id} key={m.id}>{m.display_name}</option>)}</select></div>
@@ -46,7 +46,7 @@ export default function RecordsPage() {
         <div className="note">Upload a premium notice, renewal notice or receipt as a PDF.</div>
       </section>
       <section className="section">
-        <div className="section-heading"><div><div className="eyebrow">HISTORY</div><h2>Extracted premium records</h2></div></div>
+        <div className="section-heading"><div><h2>Extracted premium records</h2></div></div>
         <div className="payment-list">
           {records.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared / family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
           {!records.length && <div className="empty-card">No premium records yet. Upload the latest receipt or renewal notice from an insurer.</div>}

@@ -108,7 +108,7 @@ export default function FamilyPage() {
 
   return (
     <div className="page">
-      <header className="page-header compact"><div><div className="eyebrow">FAMILY PROFILES</div><h1>Tell DearPolicy who is in your family.</h1><p className="lead">Use full legal names where possible. When a certificate contains several insured people, DearPolicy uses these names to link the same document to everyone it covers.</p></div></header>
+      <header className="page-header compact"><div><h1>Family</h1><p className="lead">Use full legal names where possible. When a certificate contains several insured people, DearPolicy uses these names to link the same document to everyone it covers.</p></div></header>
 
       <section className="profile-add-panel">
         <form onSubmit={add} className="profile-add-grid">
@@ -122,7 +122,7 @@ export default function FamilyPage() {
       </section>
 
       <section className="section">
-        <div className="section-heading"><div><div className="eyebrow">HOUSEHOLD</div><h2>Your profiles</h2></div></div>
+        <div className="section-heading"><div><h2>Your profiles</h2></div></div>
         <div className="profile-list">
           {family.map((member) => (
             <div className="profile-card" key={member.id} data-testid="profile-card">
