@@ -6328,3 +6328,9 @@ The r9-redteam and r6 failures are reported as the same on main 4050804; I did n
   ```
 - **R195-2 (low):** when a no-amount point's `text` is unchanged, `fullText` is kept unguarded, and the fullText of an amount point is never guarded. If the cards show fullText (the expand), guard it on its own: `fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText`. For amount points, fullText is the server label in verify.ts, so it is fine as is.
 - **The `sanitizeStoredAnswer` bottomLine fallback is correct.** It only replaces the bottom line when the stored summary is exactly GUARD_FALLBACK_SUMMARY.
+
+## Round 196: #123 at 08b33de
+
+**READY.** R195-1 and R195-2 are applied as given, and the "becomes null." test bites (guardText alone returns null for it). Reported suites: simple chat 83, benefit-table chat 94, tsc clean.
+
+Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still stays beside the amount, which is the point. The guard should almost never fire on real document wording.
