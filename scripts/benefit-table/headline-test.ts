@@ -119,6 +119,8 @@ test("the cover's own name decides the kind, and a home-care benefit is not home
   assert.deepEqual(kindsOfTable([], [{ product: "Mortgage Reducing Term", cover: "Mortgage Reducing Term" }]), ["Death"]);
   assert.deepEqual(kindsOfTable([r("Death", "HDB Home Protection Scheme", "amount")]), ["Death"]);
   assert.deepEqual(kindsOfTable([r("Death", "HPS", "amount")]), ["Death"]);
+  // A home insurance plan that only calls itself "protection" is still home cover (Critic R205 note).
+  assert.deepEqual(kindsOfTable([r("Contents", "Home Protection Plan")]), ["Home and vehicle"]);
   assert.deepEqual(kindsOfTable([r("Accidental death", "Public Vehicle Accident Plan", "amount")]), ["Accidents and injuries"]);
   // A plan with only a value and its premium is still a plan (Critic R204-1).
   assert.deepEqual(kindsOfTable([r("Fund value", "PRUlink Assurance", "value"), r("Annual premium", "PRUlink Assurance")], [{ product: "PRUlink Assurance", cover: "PRUlink Assurance" }]), ["Other"]);
