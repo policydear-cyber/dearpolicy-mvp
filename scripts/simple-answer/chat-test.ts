@@ -277,7 +277,7 @@ async function main() {
     assert.equal(model.calls.length, 0);
     assert.match(result.answer.summary, /Household > Delete this household\. It cannot be undone\./);
     assert.equal(saved.length, 1);
-    assert.equal(result.answer.statements?.length ?? 0, 0);
+    assert.equal((result.answer as { statements?: unknown[] }).statements?.length ?? 0, 0);
   });
 
   await check("chat turn refuses a library read for another household", async () => {
