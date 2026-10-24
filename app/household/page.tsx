@@ -151,10 +151,9 @@ export default function HouseholdPage() {
   if (!loaded) return <div className="page"><p className="lead">Loading your household…</p></div>;
 
   return (
-    <div className="page">
+    <div className="page settings-page">
       <header className="page-header compact">
         <div>
-          <div className="eyebrow">HOUSEHOLD</div>
           <h1>Household settings</h1>
           <p className="lead">Manage who&apos;s in your household, invite people to join it, and (if you&apos;re the owner) rename or permanently delete it.</p>
         </div>
@@ -165,17 +164,20 @@ export default function HouseholdPage() {
       {householdName !== null && (
         <>
           <section className="section">
-            <div className="section-heading"><div><div className="eyebrow">NAME</div><h2>Household name</h2></div></div>
+            <div className="section-heading"><div><h2>Household name</h2><p>The name everyone in the household sees.</p></div></div>
+            <div className="settings-panel">
             <form onSubmit={saveName} className="profile-add-grid">
               <div className="field"><label htmlFor="hh-name">Name</label><input id="hh-name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={200} required disabled={!isOwner} /></div>
               {isOwner && <button className="button primary" type="submit" disabled={!nameInput.trim() || nameInput.trim() === householdName}>Save name</button>}
             </form>
             {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only the household owner can rename it.</p>}
             {status && <div className="upload-status">{status}</div>}
+            </div>
           </section>
 
           <section className="section">
-            <div className="section-heading"><div><div className="eyebrow">PEOPLE</div><h2>Members</h2></div></div>
+            <div className="section-heading"><div><h2>Members</h2><p>People who can see and use this household&apos;s documents.</p></div></div>
+            <div className="settings-panel">
             <div className="profile-list">
               {members.map((member) => {
                 const isSelf = member.userId === callerUserId;
@@ -209,11 +211,13 @@ export default function HouseholdPage() {
                 );
               })}
             </div>
+            </div>
           </section>
 
           {isOwner && (
             <section className="section">
-              <div className="section-heading"><div><div className="eyebrow">INVITATIONS</div><h2>Invite someone</h2></div></div>
+              <div className="section-heading"><div><h2>Invite someone</h2><p>They get a link to join this household.</p></div></div>
+              <div className="settings-panel">
               <form onSubmit={createInvitation} className="profile-add-grid">
                 <div className="field"><label htmlFor="hh-invite-email">Email</label><input id="hh-invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@example.com" required /></div>
                 <div className="field"><label htmlFor="hh-invite-role">Role</label><select id="hh-invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "owner")}><option value="member">Member</option><option value="owner">Owner</option></select></div>
@@ -247,23 +251,22 @@ export default function HouseholdPage() {
                   ))}
                 </div>
               )}
+              </div>
             </section>
           )}
 
           <section className="section">
-            <div className="section-heading"><div><div className="eyebrow">PLAN</div><h2>Plan usage</h2></div></div>
-            <p className="lead">See how much of this month&apos;s plan your household has used. <Link className="text-link" href="/usage">Plan usage →</Link></p>
+            <div className="section-heading"><div><h2>Plan usage</h2><p>How much of this month&apos;s plan your household has used.</p></div></div>
+            <div className="settings-panel"><p><Link className="text-link" href="/usage">See plan usage →</Link></p></div>
           </section>
 
           {isOwner && <HouseholdExportPanel />}
 
           {isOwner && (
             <section className="section danger-zone">
-              <div className="section-heading"><div><div className="eyebrow">DANGER ZONE</div><h2>Delete this household</h2></div></div>
-              <p className="lead">
-                This permanently deletes every policy, claim, family member, and document this household owns. It cannot be undone.
-                To confirm, type the household&apos;s exact name (<strong>{householdName}</strong>) below.
-              </p>
+              <div className="section-heading"><div><h2>Delete this household</h2><p>This permanently deletes every policy, claim, family member, and document this household owns. It cannot be undone.</p></div></div>
+              <div className="settings-panel">
+              <p>To confirm, type the household&apos;s exact name (<strong>{householdName}</strong>) below.</p>
               <div className="profile-add-grid">
                 <div className="field"><label htmlFor="hh-delete-confirm">Household name</label><input id="hh-delete-confirm" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={householdName ?? ""} /></div>
                 <button className="button secondary" style={{ borderColor: "var(--critical-line)", color: "var(--critical)" }} disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
@@ -276,6 +279,7 @@ export default function HouseholdPage() {
                   Please sign in again to confirm it&apos;s you before continuing. <Link href={`/login?next=${encodeURIComponent("/household")}`}>Sign in again</Link>
                 </div>
               )}
+              </div>
             </section>
           )}
         </>

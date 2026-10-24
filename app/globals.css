@@ -375,6 +375,25 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-warning, .accuracy-warning { font-size: var(--fs-xs); line-height: 1.5; background: var(--warn-tint); color: var(--warn-text); padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--warn-line); }
 .danger-zone { border: 1px solid var(--critical-line); background: var(--critical-tint); border-radius: var(--r-lg); padding: 20px; }
 .danger-zone h2 { color: var(--critical); }
+/* Settings in two columns: what a section is on the left, its controls in a
+   quiet panel on the right, sections split by a full-width rule. On a phone
+   each section stacks: title and description, then the panel. */
+.settings-page > .section { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 16px 48px; margin-top: 0; padding: 32px 0; border-top: 1px solid var(--line); }
+.settings-page > .section > .section-heading { display: block; margin: 0; }
+.settings-page > .section > .section-heading h2 { font-size: var(--fs-md); font-weight: 650; }
+.settings-page > .section > .section-heading p { margin: 6px 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--muted); }
+.settings-panel { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; display: grid; gap: 14px; align-content: start; }
+.settings-panel > p, .settings-panel .lead { margin: 0; font-size: var(--fs-sm); }
+.settings-panel > .button { justify-self: start; }
+.settings-panel .profile-add-grid { margin: 0; grid-template-columns: minmax(0, 1fr) auto; }
+.settings-panel .profile-add-grid:has(select) { grid-template-columns: minmax(0, 1fr) 140px auto; }
+@media (max-width: 620px) { .settings-panel .profile-add-grid, .settings-panel .profile-add-grid:has(select) { grid-template-columns: minmax(0, 1fr); } }
+.settings-panel .profile-card { border: 0; padding: 0; background: transparent; }
+.settings-page > .section.danger-zone { border: 0; border-top: 1px solid var(--line); background: transparent; border-radius: 0; padding: 32px 0; }
+.settings-page > .section.danger-zone .settings-panel { border-color: var(--critical-line); }
+@media (max-width: 900px) {
+  .settings-page > .section { grid-template-columns: minmax(0, 1fr); padding: 24px 0; }
+}
 .accuracy-warning { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
 .accuracy-warning b { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; }
 .accuracy-warning span { font-size: var(--fs-xs); line-height: 1.45; }
