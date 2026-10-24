@@ -6280,3 +6280,16 @@ A block can now only be refused more often, never given a new amount. Suites: 95
 
 - **#117: READY.** The R190-2/3 patch is applied as given, plus "bill|bills" in HIS_OR_HERS ("my hubby's hospital bill"). That is still the spouse's own, and it is fine. Chat suite: 94/0.
 - **#118: READY.** The R190-1 cost test is applied as given. The other help tests are unchanged since R190, so the R190 probe still holds.
+
+## Round 193: #118 at 9e27270 (TE P118-4)
+
+**READY.** I probed 18 phrases:
+- Dialysis and chemo "how many … this month" questions, and "how many times can I use this month", go to the model.
+- The app's own counts still get usage: questions, messages, documents left, plan usage, and "how much have I used dearpolicy".
+- Cost, who-sees and delete are unchanged.
+
+Two low points, no change needed:
+- "usage this month?" now goes to the model. That is safe.
+- "how much have I used this month" with no cover word gets the Plan usage reply, even though a user might mean an outpatient limit. The reply only points to a page and states no amount.
+
+#117 6b6411a was confirmed READY in R192.
