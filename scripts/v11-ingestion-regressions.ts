@@ -212,6 +212,7 @@ async function partA() {
     assert.throws(() => JSON.parse(raw));
     assert.deepEqual(pagesOf(raw), want);
     assert.deepEqual(pagesOf(raw.replace("\t", "\r\n\t")).map(([n]) => n), [3, 4]);
+    assert.deepEqual(pagesOf(raw.replace("Premium", "\fPremium"))[1], [4, "\fPremium\t181.44"], "a form feed too");
     assert.deepEqual(pagesOf("Here is the transcription:\n```json\n" + valid + "\n```\nLet me know if you need more."), want);
     // A quote escaped inside the text stays a quote; a raw TAB outside a string is left to JSON.
     assert.deepEqual(pagesOf('{"pages":[{"pageNumber":3,\t"text":"He said \\"yes\\"\there"}]}'), [[3, 'He said "yes"\there']]);

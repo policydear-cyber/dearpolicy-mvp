@@ -141,9 +141,8 @@ export function parseTranscription(reply: string): unknown | null {
       if (escaped) escaped = false;
       else if (ch === "\\") escaped = true;
       else if (ch === '"') inString = false;
-      else if (ch === "\t") { out += "\\t"; continue; }
-      else if (ch === "\n") { out += "\\n"; continue; }
-      else if (ch === "\r") { out += "\\r"; continue; }
+      // Any raw control character (TAB, line break, form feed) is written as its JSON escape (Critic R182).
+      else if (ch < " ") { out += "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"); continue; }
     } else if (ch === '"') inString = true;
     out += ch;
   }
