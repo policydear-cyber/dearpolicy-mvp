@@ -216,6 +216,10 @@ test("an answer card names the cover shortly; the product is added only when two
   assert.deepEqual([...labels.values()], ["GROUP TERM LIFE", "Death Benefit, Singlife Shield", "Death Benefit, FWD Term", "Travel Care, plan Business",
     "Single Trip, plan Business, Travel insurance summary", "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
 });
+test("a plan or product printed with the cover's own name is not repeated on the card (Charmaine's new documents, AIA)", () => {
+  const labels = coverLabels([{ product: "AIA PRO LIFETIME PROTECTOR - MAX", cover: "PRO LIFETIME PROTECTOR - MAX", plan: "AIA PRO LIFETIME PROTECTOR - MAX" }]);
+  assert.deepEqual([...labels.values()], ["PRO LIFETIME PROTECTOR - MAX"]);
+});
 test("labels picked by different rules never land on the same words (TE #99)", () => {
   const labels = coverLabels([{ product: "Alpha", cover: "Life, Beta", plan: null }, { product: "Beta", cover: "Life", plan: null }, { product: "Gamma", cover: "Life", plan: null }]);
   const values = [...labels.values()];

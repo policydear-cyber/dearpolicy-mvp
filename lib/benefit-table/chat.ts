@@ -214,8 +214,12 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
     for (const c of covers) count.set(name(c), (count.get(name(c)) ?? 0) + 1);
     return (c: C) => count.get(name(c)) === 1;
   };
-  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
-  const withProduct = (c: C) => c.cover !== c.product ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
+  // A plan or product printed with the cover's own name ("PRO LIFETIME PROTECTOR - MAX", plan "AIA PRO LIFETIME PROTECTOR -
+  // MAX") says nothing more: it is not repeated (Charmaine's new documents, 24 Oct, AIA).
+  const plainName = (t: string) => noNumbers(t).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const repeats = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && !!plainName(a) && !!plainName(b) && (plainName(a).includes(plainName(b)) || plainName(b).includes(plainName(a)));
+  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan && !repeats(c.plan, c.cover) && !repeats(c.plan, c.product) ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
+  const withProduct = (c: C) => c.cover !== c.product && !repeats(c.cover, c.product) ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
   const shortUnique = unique(short), productUnique = unique(withProduct);
   // A cover name that says no kind of cover ("Single Trip") keeps its product, so the card still says what it is (Critic R117-1).
   const saysKind = (c: C) => COVER_KIND.test(short(c));
