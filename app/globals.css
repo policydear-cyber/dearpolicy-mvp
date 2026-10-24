@@ -649,6 +649,13 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .schedule-filters { margin-left: auto; }
 .schedule-status { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--good-line); background: var(--good-tint); border-radius: var(--r-md); font-size: var(--fs-sm); line-height: 1.5; color: var(--good-text); }
 .schedule-group .section-heading small { font-size: var(--fs-xs); color: var(--muted); }
+.schedule-table th { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 650; }
+.schedule-table td strong { font-size: var(--fs-sm); }
+.schedule-table td em { color: var(--muted); font-style: normal; }
+.schedule-table tr.needs-review { background: var(--warn-tint); }
+.schedule-table .pays-cell { font-weight: 650; color: var(--money); font-variant-numeric: tabular-nums; }
+.schedule-table .muted-cell { color: var(--warn-text); }
+.schedule-flag { display: inline-block; margin-left: 6px; font-size: var(--fs-xs); font-weight: 650; padding: 3px 8px; border-radius: 999px; background: var(--warn-tint); color: var(--warn-text); white-space: nowrap; }
 .schedule-insurer { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--muted); }
 /* Benefits: each policy is one panel of ruled rows, the benefit on the left
    and what it pays on the right in tabular figures; the source opens under
@@ -669,13 +676,6 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .schedule-group .benefit-item { grid-template-columns: minmax(0, 1fr); }
   .schedule-group .benefit-item > .pays-cell, .schedule-group .benefit-item > .muted-cell, .schedule-group .benefit-item > .pays-basis { grid-column: 1; grid-row: auto; text-align: left; max-width: none; }
 }
-.schedule-table th { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 650; }
-.schedule-table td strong { font-size: var(--fs-sm); }
-.schedule-table td em { color: var(--muted); font-style: normal; }
-.schedule-table tr.needs-review { background: var(--warn-tint); }
-.schedule-table .pays-cell { font-weight: 650; color: var(--money); font-variant-numeric: tabular-nums; }
-.schedule-table .muted-cell { color: var(--warn-text); }
-.schedule-flag { display: inline-block; margin-left: 6px; font-size: var(--fs-xs); font-weight: 650; padding: 3px 8px; border-radius: 999px; background: var(--warn-tint); color: var(--warn-text); white-space: nowrap; }
 .schedule-flag.checked { background: var(--good-tint); color: var(--good-text); }
 .pays-unconfirmed { display: block; margin-top: 3px; font-size: var(--fs-xs); font-weight: 500; color: var(--warn-text); line-height: 1.35; }
 .pays-basis { display: block; margin-top: 3px; font-size: var(--fs-xs); font-weight: 500; color: var(--muted); line-height: 1.35; }
