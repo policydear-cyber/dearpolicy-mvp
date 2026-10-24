@@ -6266,3 +6266,12 @@ Free probes only: the three benefit-table suites on #117 and #120, plus extracte
     const word = x[2].toLowerCase();
     ```
   - Probed with the fix: all 12 relatives above and "my husband's first wife" give null. These still resolve: "my husband's policy", "my wife's hospital plan", "husband's claim how", "hubby's AIA", "is this my husband's?", "my wife's Prudential plan" and "my husband kena fracture".
+
+## Round 191: #120 at af5c2eb (TE P120-1/2)
+
+**READY, re-confirmed.** The change only refuses more often:
+- the "after" line is now the next non-blank line;
+- "total" and "aggregate" join the limit words;
+- money figures are counted across the whole line.
+
+A block can now only be refused more often, never given a new amount. Suites: 95/0, 13/0, 107/0. The R190 verdicts stand: #122 READY; #118 and #117 NOT READY.
