@@ -100,6 +100,18 @@ function printedPart(quote:string,text:string):string|null{
   const span=locatePassage(text,part);
   return span?text.slice(span.start,span.end):part;
 }
+/** A table cell saying the benefit does not apply: a cell of its own (after a tab, two spaces, a colon or a bar, and
+ * ending the line or followed by another cell), or "not applicable" / "not covered" ending the line. Only the lines that
+ * print the benefit's own name are read (the first line when none does): "Waiting period: Nil" under a row is not that
+ * row's cell. A dash is a cell only at the end of the line or before a tab or bar, never a separator before a figure. */
+const NOT_APPLYING_CELL=/(?:^|\t| {2,}|:\s*|\|\s*)(?:not\s+(?:applicable|covered|available|included|insured)|n\.\s?a\.?|n\/a|nil)\s*(?=$|\t| {2,}|\|)|(?:\t| {2,}|:\s*|\|\s*)[-–—]\s*(?=$|\t|\|)/im;
+const NA_CELL=/(?:^|\t| {2,}|:\s*|\|\s*)NA\s*(?=$|\t| {2,}|\|)/m;
+export function printedNotApplying(text:string,name?:string|null){
+  const lines=text.split("\n").filter(l=>l.trim());
+  const words=String(name??"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);
+  const own=words.length?lines.filter(l=>words.every(w=>l.toLowerCase().includes(w))):[];
+  return (own.length?own:lines.slice(0,1)).some(l=>NOT_APPLYING_CELL.test(l)||NA_CELL.test(l)||/\bnot\s+(?:applicable|covered)\s*\.?\s*$/i.test(l.trim()));
+}
 /** Round 9: what a ledger row says is what its printed quote says -- the
  * figure in the unit it claims, an event its words can name -- and its
  * restrictions are printed in the document. */
@@ -109,6 +121,10 @@ export function rowSupported(row:ExtractedRow,pageText:string){
   if(!rowFigureSupported(part,row.paysKind,row.amount??null))return false;
   // One plan column's figure is not the person's figure, and "Not covered" pays nothing.
   if(row.amount!=null&&rowFiguresDependOnPlan(part))return false;
+  // A cell printed as not applying ("Home Guard  Not Applicable", "Golf  N.A.", "Hijack  Nil", "Pet care  -") is no cover,
+  // with or without a figure: stored, it showed as cover on Family (24 Oct journeys: "Home and vehicle" for a travel
+  // policy that prints home cover as not applicable).
+  if(printedNotApplying(part,row.benefitName??row.detail))return false;
   const names=[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)).join(" ");
   // Liability to other people is never the insured person's own death or injury benefit. The row's own name says so
   // in any wording; the printed quote only in the third-party sense, since its "the Company shall not be liable for

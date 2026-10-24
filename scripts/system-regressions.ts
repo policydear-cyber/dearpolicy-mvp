@@ -1544,6 +1544,20 @@ export function runSystemRegressions(){
     const injuryTo="Accidental Death If you become legally liable for accidental death or bodily injury to other people S$500,000";
     assert.equal(rowSupported({...labelled,quote:injuryTo},injuryTo),false,"liable ... to other people is still liability cover");
   });
+  test("A benefit printed as not applying is not a ledger row (24 Oct journeys: Home and vehicle on Family)",()=>{
+    const page="Section 9 Home Guard  Not Applicable\nSection 10 Rental Vehicle Excess  S$500\nGolf Equipment\tN.A.\nHijack: Nil\nPet Care  -\nTerrorism  NA\n"+
+      "Hospital Cash  S$200 per day\nWaiting period: Nil\nAccidental Death  -  S$100,000\nMobile phone  not covered\nFracture of the thumb is not covered.";
+    const stated=(benefitName:string,quote:string)=>({planName:"Travel Business",sourcePage:1,benefitName,detail:benefitName,eventType:"other" as const,paysKind:"stated" as const,amount:null,quote});
+    for(const [b,q] of [["Home Guard","Section 9 Home Guard  Not Applicable"],["Golf Equipment","Golf Equipment\tN.A."],["Hijack","Hijack: Nil"],["Pet Care","Pet Care  -"],
+      ["Terrorism","Terrorism  NA"],["Mobile phone","Mobile phone  not covered"]])
+      assert.equal(rowSupported(stated(b,q),page),false,`${b}: printed as not applying`);
+    // Controls: a figure, a "Nil" on another line of the row's quote, and a dash before a figure are kept.
+    assert.equal(rowSupported({...stated("Rental Vehicle Excess","Section 10 Rental Vehicle Excess  S$500"),paysKind:"reimbursement_cap" as const,amount:500},page),true,"a printed figure is kept");
+    assert.equal(rowSupported({...stated("Hospital Cash","Hospital Cash  S$200 per day\nWaiting period: Nil"),eventType:"hospital_daily_cash" as const,paysKind:"per_day" as const,amount:200},page),true,
+      "another line's Nil is not the row's cell");
+    assert.equal(rowSupported({...stated("Accidental Death","Accidental Death  -  S$100,000"),eventType:"accidental_death" as const,paysKind:"lump_sum" as const,amount:100000},page),true,
+      "a dash before a figure is a separator");
+  });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under
     // one group policy number, but the certificate reading attaches them to
