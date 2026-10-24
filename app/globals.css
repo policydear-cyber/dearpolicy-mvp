@@ -199,6 +199,12 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .member-pill { white-space: nowrap; border: 1px solid var(--line-strong); background: var(--surface); border-radius: var(--r-md); padding: 8px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--ink); transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .member-pill:hover { border-color: var(--brand-ink); }
 .member-pill.active { border-color: var(--brand); background: var(--brand-tint); }
+/* A family member's own colour (components/person-colour.ts); dark mode keeps the tile and ink but softens the tile. */
+.person-coloured[style] { background: var(--person-bg); color: var(--person-ink); }
+:root[data-theme="dark"] .person-coloured[style] { background: color-mix(in srgb, var(--person-bg) 22%, var(--surface)); color: color-mix(in srgb, var(--person-bg) 85%, white); }
+.person-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.person-swatch.person-coloured[style] { background: var(--person-ink); }
+:root[data-theme="dark"] .person-swatch.person-coloured[style] { background: var(--person-bg); }
 .member-pill.add { color: var(--brand-ink); font-weight: 650; }
 .member-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; font-size: var(--fs-xs); }
 .member-pill span:last-child { display: grid; text-align: left; }
