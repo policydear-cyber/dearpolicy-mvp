@@ -103,19 +103,23 @@ const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`, "i");
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
 
-type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean };
+type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string };
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
 export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && looksScrambled(p.text)).map((p) => p.pageNumber);
 /** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
  * image reading confirms it; otherwise, and when the image could not be read, it becomes unchecked, its text replaced by
- * uncheckedText. `readImage` returns null when the reading failed. */
+ * uncheckedText, and uncheckedWhy says why, for the processing history. `readImage` returns null when the reading failed. */
 export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers: number[], readImage: (numbers: number[]) => Promise<CheckedPage[] | null>): Promise<P[]> {
   if (!numbers.length) return pages;
   const second = await readImage(numbers).catch(() => null);
   return pages.map((p) => {
     if (!numbers.includes(p.pageNumber)) return p;
     const image = second?.find((s) => s.pageNumber === p.pageNumber);
-    return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true };
+    const check = !second ? { agree: false as const, why: "the page image could not be read" }
+      : !image || image.extractionMethod !== "ocr" ? { agree: false as const, why: "the page image reading gave no text for this page" }
+      : image.unreadable ? { agree: false as const, why: "the page image could not be read clearly" }
+      : readingsAgree(p.text, image.text);
+    return check.agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.why };
   });
 }
 

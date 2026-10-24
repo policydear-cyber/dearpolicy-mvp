@@ -155,7 +155,7 @@ async function partA() {
     // At upload: only suspect text pages are read again; a page is kept only when the image reading confirms it, and
     // otherwise, or when the image could not be read, only its lines with no amount are kept as its text.
     const scrambled = "PruLink Enhanced Protector\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\n100,000.00\n50,000.00\n25,000.00";
-    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
+    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean; uncheckedWhy?: string }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
     assert.deepEqual(suspectPages(pages), [2, 4]);
     const image = { 2: "PruLink Enhanced Protector\nBasic Plan Sum Assured 100,000.00\nCrisis Cover Benefit 50,000.00\nEarly Crisis Cover 25,000.00", 4: "Sum Assured 50,000.00 50,000.00" } as Record<number, string>;
     const asked: number[][] = [];
@@ -165,6 +165,11 @@ async function partA() {
     assert.equal(checked[1].text, uncheckedText(scrambled));
     assert.doesNotMatch(checked[1].text, /\d/);
     assert.equal(checked[3].text, pages[3].text, "a confirmed page keeps the document's own words");
+    // Why a page failed is kept beside it for the processing history, not in its text (Critic plan step 3).
+    assert.match(checked[1].uncheckedWhy ?? "", /no label beside it/);
+    assert.equal(checked[3].uncheckedWhy, undefined);
+    assert.doesNotMatch(checked[1].text, /label beside/);
+    assert.equal((await crossCheckPages(pages, [4], async () => null))[3].uncheckedWhy, "the page image could not be read");
     for (const read of [async () => null, async () => { throw new Error("down"); }, async () => [{ pageNumber: 4, text: image[4], extractionMethod: "ocr", unreadable: true }], async () => [{ pageNumber: 4, text: image[4], extractionMethod: "native" }]])
       assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
     assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");

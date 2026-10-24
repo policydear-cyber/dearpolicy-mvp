@@ -8,7 +8,7 @@ import { readHousehold, renderLibrary, type Household } from "../../lib/simple-c
 import { alternating, anthropicRequest, ledgerUsage, type SimpleModel } from "../../lib/simple-chat/model";
 import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-chat/prompt";
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
-import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
+import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, libraryFact, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
 import { runSimpleChat } from "../../lib/simple-chat/hook";
 import { replayModel, runSet } from "./app-run";
 import type { ChatContext } from "../../lib/chat/workflow";
@@ -88,6 +88,22 @@ async function main() {
     assert.ok(seen.every((p) => p[0] === HOUSE.accountId));
     const leaky = async (sql: string) => (/FROM family_members/.test(sql) ? [{ account_id: "someone-else", display_name: "X", relationship: "self" }] : []);
     await assert.rejects(readHousehold(HOUSE.accountId, leaky), /another household/);
+  });
+
+  await check("a document with pages the upload check could not check says so, even when those pages are not sent (live 32fa444 E2, A1)", async () => {
+    const acc = HOUSE.accountId, pid = "22222222-2222-4222-8222-222222222222";
+    const run = async (sql: string) => /FROM family_members/.test(sql) ? [] : /FROM policies p/.test(sql)
+      ? [{ account_id: acc, id: pid, original_filename: "PruLink.pdf", product_name: "PruLink Enhanced Protector", processing_status: "ready" }]
+      : /FROM policy_pages/.test(sql) ? [1, 2, 3, 4].map((n) => ({ account_id: acc, policy_id: pid, page_number: n, text: n > 2 ? "Sum Assured 100,000.00" : "Policy Number: 63639755", method: n > 2 ? "unchecked" : "native" })) : [];
+    const h = await readHousehold(acc, run as never);
+    assert.deepEqual(h.documents[0].uncheckedPages, [3, 4]);
+    const lib = renderLibrary(h, new Set([`${pid}#1`]));
+    assert.match(lib, /reading_status="read in part: pages 3 and 4 could not be checked against the page image; no amount from them is used"/);
+    assert.doesNotMatch(lib, /100,000/);
+    assert.match(libraryFact(h, h.documents[0]), /^PruLink Enhanced Protector \(PruLink\.pdf\) was read in part: pages 3 and 4 couldn't be checked against the page image, so no amounts from them are used\./);
+    const whole = { ...h.documents[0], uncheckedPages: [] };
+    assert.doesNotMatch(renderLibrary({ ...h, documents: [whole] }), /reading_status/);
+    assert.match(libraryFact(h, whole), /was read\./);
   });
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {

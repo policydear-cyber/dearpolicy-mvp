@@ -24,6 +24,8 @@ export type HouseholdDocument = {
   supersededAt: string | null;
   /** The app's reading status, e.g. "ready" or "failed". */
   processingStatus?: string | null;
+  /** Pages the upload check could not check against the page image: no amount on them is used. */
+  uncheckedPages?: number[];
   pages: HouseholdPage[];
 };
 export type Household = {
@@ -75,6 +77,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
+      uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
       // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote.
       pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
     })),
@@ -104,13 +107,20 @@ export const PAGES_LEFT_OUT = "the app has read these pages; they are left out o
 /** Whether the app failed to read (or has not finished reading) this file; its text is not sent or quoted. */
 export const unreadable = (doc: HouseholdDocument) => !!doc.processingStatus && doc.processingStatus !== "ready";
 
+/** "page 3", "pages 3 and 4", "pages 2, 3 and 4". */
+export const pageList = (pages: number[]) => pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
+/** Said for a document with unchecked pages whichever of its pages are sent, so the answer never calls it fully read
+ * (live 32fa444 E2: PruLink's unchecked pages were not sent, so the chat never saw the notice). */
+export const readInPart = (doc: HouseholdDocument) => doc.uncheckedPages?.length && !unreadable(doc)
+  ? `read in part: ${pageList(doc.uncheckedPages)} could not be checked against the page image; no amount from ${doc.uncheckedPages.length === 1 ? "it" : "them"} is used` : null;
+
 export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>): string {
   const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
-    (unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : "") + ">";
+    (unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) + ">";
   // A file the app could not read is sent without its text: partial text read as the document misleads (release-set E1).
   const sent = pagesSent ? doc.pages.filter((p) => pagesSent.has(`${doc.policyId}#${p.page}`)) : doc.pages;
   const pages = unreadable(doc) || !doc.pages.length ? "<no_readable_text/>"

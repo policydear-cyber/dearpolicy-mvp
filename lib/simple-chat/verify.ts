@@ -24,7 +24,7 @@
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
-import { documentId, unreadable, type Household, type HouseholdDocument } from "./library";
+import { documentId, pageList, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 
@@ -1156,11 +1156,13 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
  * unless it also asks what was uploaded or linked (TE #104 L9). */
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
-function libraryFact(household: Household, d: HouseholdDocument): string {
+export function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
   const label = d.productName?.trim() ? docLabel(household, d) : d.name;
   const named = label === d.name ? d.name : `${label} (${d.name})`;
-  const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.` : `${named} was read.`;
+  const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.`
+    : d.uncheckedPages?.length ? `${named} was read in part: ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.`
+    : `${named} was read.`;
   const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
   return `${read}${linked}${d.uploadedFor ? ` It was uploaded for ${baseName(d.uploadedFor)}.` : ""}`;
 }
