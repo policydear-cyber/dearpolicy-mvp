@@ -6334,3 +6334,20 @@ The r9-redteam and r6 failures are reported as the same on main 4050804; I did n
 **READY.** R195-1 and R195-2 are applied as given, and the "becomes null." test bites (guardText alone returns null for it). Reported suites: simple chat 83, benefit-table chat 94, tsc clean.
 
 Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still stays beside the amount, which is the point. The guard should almost never fire on real document wording.
+
+## Round 197: #123 at 96ed299 (TE P123-2: an amount card with a leak in a condition or basis is dropped)
+
+**NOT READY, one addition.** Dropping the amount is the right call: it is better than an amount with altered qualifiers. The bottom line can't carry the dropped figure, because `withoutMoney` strips money from it (`verify.ts:1527`), and the summary is the bottom line. Children go by id prefix ("s1-" does not catch "s10-").
+
+- **R197-1 (medium, your open question): yes, say it.** A documented amount that disappears with no word is the "hiding a benefit" failure. The household must hear that an amount was left out.
+  - LEFT_OUT_AMOUNT is the wrong wording here ("couldn't find printed").
+  - Importing anything from verify or benefit-table into output-guard would also pull them into the chat page's client bundle through monetary-boundary.
+
+  So add a local note when `gone.size` is non-zero:
+  ```ts
+  const LEFT_OUT_UNSHOWABLE = "I left out an amount I couldn’t show with all of its conditions. The full wording is in the document.";
+  if (gone.size && !cards.statements.some((s) => s.id === "left-out-guarded"))
+    cards.statements.push({ id: "left-out-guarded", kind: "uncertainty", text: LEFT_OUT_UNSHOWABLE, fullText: LEFT_OUT_UNSHOWABLE, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null } as never);
+  ```
+  Add a test: one amount card with "pre_existing" in a condition gives no amount card and this note.
+- **R197-2 (low):** `st.text.includes(t)` over-matches: a dropped "S$50" also removes a note that names "S$500". Match on a boundary instead: `new RegExp(`(?<![\\d.,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d,]*\\d)`).test(st.text)`. The harm is only an extra note dropped, so it is low.
