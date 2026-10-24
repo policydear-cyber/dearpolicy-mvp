@@ -5958,3 +5958,13 @@ Free tests on 431c4b6: chat 91/91, headline 13/13, table 106/106.
 ## R170 — PR #113 re-check (431c4b6..0c5c151)
 
 **Verdict: READY.** check.ts, verify.ts and hook.ts match the R169 patch byte for byte. chat.ts matches too, except the header test is pulled into a `heading()` helper, which behaves the same. Tests were added for all five items. Free tests on 0c5c151: chat 91/91, headline 13/13, table 107/107. Process: accepted. DC's 06:47Z "ok" on fix-list group 3d covers the per-day stay change.
+
+## R171 — PR #113 re-check (0c5c151..489d55a)
+
+Free tests on 489d55a: chat 93/93, headline 13/13, table 107/107.
+
+**Verdict: NOT READY. One wrong-amount path (R171-1), reproduced. A tested patch is in scratchpad r171-fix.diff.**
+
+- **R171-1 (high) chat.ts planTableRows: PLAN_CELL now accepts footnote marks ("S$2,000*") but drops what the footnote says.** A page with "Personal accident / S$50,000^ S$100,000^ S$150,000^" and "^ Limited to S$25,000 for children." gives a child S$100,000. "* Reduced to 50% for insured persons aged 70 years and above." under medical gives a 70+ person S$500,000 (probe). Each row has conditions [], so the qualifier is stripped.
+  Fix: a marked cell gives a row only when the page prints that footnote and the footnote names no group, limit or share (no digits; no child/adult/age/senior/family/spouse/reduced/limited/sub-limit/max/per/each). The footnote then goes with the row as its condition. With the patch, both probes give no row, a benign footnote ("* Pre-existing conditions are excluded.") gives the row with that condition, and the existing P7 case ("S$2,000*" with no footnote on the page) now gives none. That one expectation needs to change to [] (or the test can add a benign footnote line). A missing card is acceptable; a wrong one is not.
+- Holds: capInRow (excess, per-day, NEAR_CAP all only withhold); the plan-table end on a foreign heading or optional line; adult/child inline lines skipped; the cell's own currency (a bare "$" keeps the template's currency, as before); the label-below rule; stayDaysSaid (my R169 probes still null; "for 12 days after the fall" = 12; a second "for N days" makes it unclear); claimWindows exclusions; dropLateClaims whose-claim check (only keeps more); the yesterday skip removal (the alternation already consumes "day before yesterday").
