@@ -194,7 +194,17 @@ async function partA() {
     const mid = "Your Schedule\nHospital Cash per day\n150\nNotes apply";
     assert.equal(readingsAgree(mid, mid).agree, false);
     const first = "3\nYour Schedule\nSum Assured\t100,000.00";
-    assert.deepEqual(readingsAgree(first, first.replace(/\t/g, " ")), { agree: true });
+    assert.deepEqual(readingsAgree(first, first.replace(/\t/g, " "), 3), { agree: true });
+    // The page's own number beside text agrees wherever the text layer puts it; a lone value at the page's edge under its
+    // label does not (Critic R189, TE P122-1).
+    const same = (t: string, n?: number) => readingsAgree(t, t, n).agree;
+    assert.equal(same("Sum Assured\t100,000.00\n3\nThis schedule forms part of the policy", 3), true);
+    assert.equal(same("PRUDENTIAL\n3\nSum Assured\t100,000.00", 3), true);
+    assert.equal(readingsAgree("Sum Assured\t100,000.00\n3\nPrudential Assurance", "Sum Assured 100,000.00\nPrudential Assurance\n3", 3).agree, true);
+    assert.equal(same("Benefit Schedule\nDeath Benefit\tS$100,000.00\nHospital Cash per day\n150", 4), false);
+    assert.equal(same("Benefit Schedule\nDeath Benefit\tS$100,000.00\nHospital Cash per day\n15\n\n", 4), false);
+    assert.equal(same("15\nHospital Cash per day\nDeath Benefit\tS$100,000.00", 4), false);
+    assert.equal(same("Death Benefit\tS$100,000.00\n1", 5), true);
     const paged = "Your Schedule\nPage 3\nSum Assured\t100,000.00\nNotes apply";
     assert.deepEqual(readingsAgree(paged, paged.replace(/\t/g, " ")), { agree: true });
     // An unchecked page that prints a rider premium and a benefit amount gives the premium check and the rider table
