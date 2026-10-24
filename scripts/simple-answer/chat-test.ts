@@ -304,8 +304,16 @@ async function main() {
       const others = amt.statements!.filter((x) => x.id !== id && !x.id.startsWith(`${id}-`) && (x.amount || !x.text.includes(amountText))).map((x) => x.id);
       assert.ok(amt.statements!.some((x) => !x.amount && x.text.includes(amountText)), "the fixture has a note naming the amount");
       guardChatAnswer(amt);
-      assert.deepEqual(amt.statements!.map((x) => x.id), others, c);
+      // And the household is told an amount was left out (Critic R197-1).
+      assert.deepEqual(amt.statements!.map((x) => x.id), [...others, "left-out-guarded"], c);
     }
+    // A dropped S$50 does not take a note naming S$500 with it (Critic R197-2).
+    const near = { summary: "x", details: [], nextSteps: [], claimItems: [], statements: [
+      { id: "s1", kind: "benefit_terms", text: "Delay", fullText: "Delay", amount: { text: "S$50", currencyResolved: true, illustration: false }, conditions: ["Per pre_existing rule."] },
+      { id: "s2", kind: "fact", text: "The overall limit is S$500.", fullText: "The overall limit is S$500.", amount: null, conditions: [] },
+      { id: "s3", kind: "fact", text: "S$50 and S$500 are not a total.", fullText: "S$50 and S$500 are not a total.", amount: null, conditions: [] }] } as never as typeof other;
+    guardChatAnswer(near);
+    assert.deepEqual(near.statements!.map((x) => x.id), ["s2", "left-out-guarded"]);
     const old = sanitizeStoredAnswer({ ...JSON.parse(JSON.stringify(other)), bottomLine: "The schedule is the file named secret_backup_2026.pdf." }) as { bottomLine?: string; summary: string };
     assert.equal(old.bottomLine, old.summary);
   });

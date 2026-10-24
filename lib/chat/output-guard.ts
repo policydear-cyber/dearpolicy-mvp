@@ -16,6 +16,7 @@
  */
 import type { ChatAnswer } from "@/types";
 
+export const LEFT_OUT_UNSHOWABLE = "I left out an amount I couldn’t show with all of its conditions. The full wording is in the document.";
 export const GUARD_FALLBACK_SUMMARY = "Sorry, I couldn’t put that answer together properly. Please ask again, or ask about one policy or one person at a time.";
 
 // V1.5: a key, token or credential-shaped value (prefixed API keys, JWTs, PEM blocks, long mixed-case random strings).
@@ -161,7 +162,7 @@ function guardInPlace(answer: ChatAnswer) {
     const goneAmounts = [...gone].map((st) => (st.amount as { text?: unknown }).text).filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.replace(/^up to\s+/i, ""));
     cards.statements = cards.statements.flatMap((st) => {
       if (gone.has(st) || goneIds.some((g) => st.id?.startsWith(`${g}-`))) return [];
-      if (!st.amount && goneAmounts.some((t) => st.text.includes(t))) return [];
+      if (!st.amount && goneAmounts.some((t) => new RegExp(String.raw`(?<![\d.,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\d,]*\d|\.\d)`).test(st.text))) return [];
       if (st.amount) return [st];
       const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
       const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;
@@ -169,6 +170,9 @@ function guardInPlace(answer: ChatAnswer) {
       if (!text || !text.trim()) return [];
       return [{ ...st, text, fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText, conditions, basis }];
     });
+    // A dropped amount is said to be left out, never hidden (Critic R197-1).
+    if (gone.size && !cards.statements.some((x) => x.id === "left-out-guarded"))
+      cards.statements.push({ id: "left-out-guarded", kind: "uncertainty", text: LEFT_OUT_UNSHOWABLE, fullText: LEFT_OUT_UNSHOWABLE, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null } as never);
   }
   // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
