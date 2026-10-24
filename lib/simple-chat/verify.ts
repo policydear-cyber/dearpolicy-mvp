@@ -642,23 +642,50 @@ function upTo(excerpt: string, at: number): string {
  * "a 12-day stay"), R59-3. Anything less shows the daily benefit as printed. */
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fourteen: 14, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60 };
 const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitted|warded|stayed|stay(?:ing)?\s+in\s+(?:the\s+)?hospital)`;
+// "Stayed in hospital there 4 days", "hospital cash ... for 25 days" (overnight run 23 Oct, N258, N145): a few words may
+// stand between the stay and its length.
+// "Admitted 10 days after the accident", "hospitalised 3 days ago" say when, not how long (Critic R169-4).
+// "Hospitalised for 12 days after the fall" is a length: "for" says so (TE pr113 S10). "Admitted within 30 days of the trip"
+// is not: the few words between never hold a word that says when (TE pr113 S5).
+const NOT_LENGTH = String.raw`(?!\s+(?:ago|after|before|later|earlier|prior|since|from|into|of)\b)`;
+const FILLER = String.raw`(?:\s+(?!(?:for|about|around|within|after|before|by|until|of|ago|since)\b)[a-z]+){0,3}?`;
+const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b${FILLER}(?:\s+(?:for|about|around)\s+${n}\s*days?\b(?!\s+ago\b)|\s+${n}\s*days?\b${NOT_LENGTH})`, "gi"),
+  new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi"),
+  new RegExp(String.raw`\bhospital\s+cash\b[^.?!]{0,40}?\bfor\s+(?:a\s+)?${n}[\s-]*days?\b`, "gi")];
+/** The one length of stay the household's latest message describing a stay gives, or null: what a daily card is worked out
+ * for when the model gave none (overnight run 23 Oct, N145). */
+export function stayDaysSaid(asked: string[]): number | null {
+  const n = String.raw`(\d{1,3}|${Object.keys(NUMBER_WORDS).join("|")})`;
+  for (const q of asked) {
+    const value = (m: RegExpMatchArray) => { const v = m[1] ?? m[2]; return /^\d+$/.test(v) ? Number(v) : NUMBER_WORDS[v.toLowerCase()]; };
+    const found = new Set(stayPatterns(n).flatMap((re) => [...q.matchAll(re)].map(value)));
+    // "In ICU for 3 days and then in the general ward for 7 days", "2 days in ICU and 5 days in the ward": another length makes
+    // the stay unclear (TE pr113 S3, R5). A claim window ("within 30 days") or a day said by when ("3 days ago") is not one.
+    // Nor is "30 days to claim" or "a 90 days waiting period" (TE pr113 H1).
+    const other = [...q.matchAll(new RegExp(String.raw`(?<!\b(?:within|in)\s)\b${n}[\s-]*days?\b${NOT_LENGTH}(?!\s*(?:'s\s+)?(?:waiting|period|notice|to\s+(?:claim|notify|tell|inform)))`, "gi"))].map(value);
+    if (found.size) return found.size === 1 && other.every((v) => found.has(v)) ? [...found][0] : null;
+  }
+  return null;
+}
 function stayDaysWritten(asked: string[], days: number): boolean {
   const n = String.raw`(\d{1,3}|${Object.keys(NUMBER_WORDS).join("|")})`;
-  const res = [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"), new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi")];
+  const res = stayPatterns(n);
   // Once the conversation is about a hospital stay, a later "and if it was 50 days?" or "3 days so far" gives its length
   // (stress run 23 Oct, S050, S088).
   // A turn that names a day rule ("claim within 30 days", "a 90 days waiting period") gives no bare count (TE T2).
   const bare = asked.some((q) => new RegExp(String.raw`\b${STAY_WORDS}\b`, "i").test(q))
     ? new RegExp(String.raw`\b${n}[\s-]*days?\b(?!\s*(?:'s\s+)?(?:waiting|period|ago|since|notice|of\s+(?:cover|the\s+policy)|to\s+(?:claim|notify|tell|inform)))`, "gi") : null;
   const ruleTurn = /\b(?:within|claim\w*|notif\w*|waiting|period|deadline|submit\w*)\b/i;
-  const said = (q: string, re: RegExp) => [...q.matchAll(re)].some((m) => (/^\d+$/.test(m[1]) ? Number(m[1]) : NUMBER_WORDS[m[1].toLowerCase()]) === days);
+  const said = (q: string, re: RegExp) => [...q.matchAll(re)].some((m) => { const v = m[1] ?? m[2]; return (/^\d+$/.test(v) ? Number(v) : NUMBER_WORDS[v.toLowerCase()]) === days; });
   return asked.some((q) => res.some((re) => said(q, re)) || (bare != null && !ruleTurn.test(q) && said(q, bare)));
 }
 /** "An 8-day", "an 11-day", "an 18-day", otherwise "A 12-day" (TE T4). */
 const aDay = (n: number) => `${n === 11 || n === 18 || String(n).startsWith("8") ? "An" : "A"} ${n}`;
 const OTHER_DAY_RULE = /\b(?:less\s+than|minimum|at\s+least|per\s+(?:admission|confinement|policy\s+year|year|disability)|intensive|ICU|not\s+payable|waiting)\b/i;
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
-  const stay = st.perDay?.stayDays;
+  // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
+  // again" after "hospitalised for 15 days").
+  const stay = st.perDay?.stayDays ?? stayDaysSaid(asked.slice(0, 1));
   if (!stay || !Number.isInteger(stay) || stay < 1 || stay > 366 || !stayDaysWritten(asked, stay)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!;
   // The row with its own continuing lines, or the quote when it reaches further; each rule is read once.
@@ -1305,7 +1332,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         continue;
       }
       const at = r.found ?? found;
-      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: st.perDay && !r.amount.illustration ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
+      checked.push({ s: st, found: at, amount: r.amount, person, note: null, base: r.base ?? null, whole, stay: !r.amount.illustration && (st.perDay || !model.statements.some((x) => x.perDay)) ? stayPays(st, at, household, r.amount, written) : null, bill: st.ofBill && !r.amount.illustration ? billAgainst(st, at, household, r.amount, written) : null });
     } else if (st.kind === "fact") {
       if (!found) {
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it

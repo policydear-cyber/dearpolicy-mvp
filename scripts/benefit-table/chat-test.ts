@@ -5,11 +5,11 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, chatRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
-import { datesSaidNote, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
+import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
 import type { ChatContext } from "@/lib/chat/workflow";
 
@@ -215,6 +215,13 @@ test("an answer card names the cover shortly; the product is added only when two
   ]);
   assert.deepEqual([...labels.values()], ["GROUP TERM LIFE", "Death Benefit, Singlife Shield", "Death Benefit, FWD Term", "Travel Care, plan Business",
     "Single Trip, plan Business, Travel insurance summary", "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
+});
+test("a plan or product printed with the cover's own name is not repeated on the card (Charmaine's new documents, AIA)", () => {
+  const labels = coverLabels([{ product: "AIA PRO LIFETIME PROTECTOR - MAX", cover: "PRO LIFETIME PROTECTOR - MAX", plan: "AIA PRO LIFETIME PROTECTOR - MAX" }]);
+  assert.deepEqual([...labels.values()], ["PRO LIFETIME PROTECTOR - MAX"]);
+  // A plan with words of its own still names it (Critic R173-1).
+  assert.deepEqual([...coverLabels([{ product: "Travel Insurance", cover: "Travel Insurance", plan: "Travel Insurance Premier" }]).values()], ["Travel Insurance, plan Travel Insurance Premier"]);
+  assert.match([...coverLabels([{ product: "Hospital & Surgical", cover: "Hospital & Surgical", plan: "Hospital & Surgical (Plan 2)" }]).values()][0], /plan Hospital & Surgical \(Plan 2\)/);
 });
 test("labels picked by different rules never land on the same words (TE #99)", () => {
   const labels = coverLabels([{ product: "Alpha", cover: "Life, Beta", plan: null }, { product: "Beta", cover: "Life", plan: null }, { product: "Gamma", cover: "Life", plan: null }]);
@@ -1335,6 +1342,129 @@ test("a benefit with a note of its own stays a rival to the plain one when match
   // The row's own longer line still binds (A6).
   const prem = at("R966", "Instalment Premium, Monthly", 470.85, "doc-a", "Instalment Premium : 470.85 Currency");
   assert.ok(shown([prem], prem, "Comprehensive Critical Illness Benefit", "Instalment Premium : 470.85"));
+});
+
+test("a plan table's lines the reading left out are rows for the person's plan column only, named by their own label (overnight run 23 Oct, N112, N113, N263)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const TRAVEL = "aaaaaaaa-0000-0000-0000-0000000000t1";
+  const page = (n: number, text: string) => ({ page: n, text });
+  const house: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(TRAVEL, "Travel wording.pdf", [
+    page(6, ["Table of benefits", "Protecting your stuff", "Premium\tBusiness\tFirst", "Theft of or damage to baggage or personal belongings", "S$3,000\tS$5,000\tS$7,500",
+      "Sub-limit for laptop / tablet (in total)", "S$1,000\tS$1,000\tS$1,000", "Sub-limit for jewellery (in total)", "S$300\tS$500\tS$500", "Overall limit for family plan*", "S$7,500\tS$12,500\tS$18,750",
+      "S$300\tS$600\tS$1,000", "Loss of passport, travel documents & theft of money", "Sub-limit for theft of your money", "S$300\tS$300\tS$300",
+      "Travel delay", "S$100 for every\tS$50 for every\tS$50 for every", "Delay while in Singapore", "Overall limit^\tS$300\tS$800\tS$1,500",
+      "Trip cancellation", "S$500\tS$1,000\tS$1,500\tS$2,000"].join("\n")),
+    page(9, ["Table of benefits", "Optional covers", "Premium\tBusiness\tFirst", "Home contents", "S$6,000\tS$6,000\tS$6,000"].join("\n")),
+    // Another table under the same plan headings (Critic R169-2), and a line with one figure more than the plans (R169-3).
+    page(7, ["For insured persons aged 70 years and above", "Premium\tBusiness\tFirst", "Overseas medical expenses", "S$50,000\tS$100,000\tS$150,000"].join("\n")),
+  ])] };
+  const docIndex = house.documents.length - 1;
+  const template: ChatRow = { ...amb, id: "R900", benefit: "Theft of or damage to baggage or personal belongings", column: "Business", plan: "Business", docIndex,
+    figure: { kind: "printed", amount: 5000, currency: "SGD", unit: "up_to", period: null }, source: { ...amb.source, documentId: TRAVEL, page: 6, excerpt: "Theft of or damage to baggage or personal belongings\nS$3,000 S$5,000 S$7,500" } };
+  const made = planTableRows([...rows, template], house).map((r) => [r.benefit, r.figure.kind === "printed" ? r.figure.amount : null]);
+  assert.deepEqual(made, [
+    ["Theft of or damage to baggage or personal belongings: Sub-limit for laptop / tablet (in total)", 1000],
+    ["Theft of or damage to baggage or personal belongings: Sub-limit for jewellery (in total)", 500],
+    ["Loss of passport, travel documents & theft of money", 600],
+    ["Loss of passport, travel documents & theft of money: Sub-limit for theft of your money", 300],
+  ], JSON.stringify(made));
+  // Never the family-plan limit, a sub-limit with no benefit just above it ("Overall limit^" under the merged delay cells),
+  // a row the reading has, or an optional cover's table.
+  // Another plan's column is its own: the Premium plan reads S$300 for jewellery.
+  const premium = planTableRows([...rows, { ...template, column: "Premium", plan: "Premium" }], house).find((r) => /jewellery/.test(r.benefit))!;
+  assert.equal(premium.figure.kind === "printed" && premium.figure.amount, 300);
+});
+
+test("a plan table's rows: the cell's own currency; never another table's heading, an optional-covers line, a label whose own cells carry a footnote, or an adult-only line (TE pr113 P3, P4, P6, P7, P8)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const TRAVEL = "aaaaaaaa-0000-0000-0000-0000000000t2";
+  const plan = (lines: string[], currency = "SGD") => {
+    const house: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(TRAVEL, "Travel wording.pdf", [{ page: 4, text: lines.join("\n") }])] };
+    const template: ChatRow = { ...amb, id: "R901", benefit: "Overseas medical expenses", column: "Premier", plan: "Premier", docIndex: house.documents.length - 1,
+      figure: { kind: "printed", amount: 300000, currency, unit: "up_to", period: null }, source: { ...amb.source, documentId: TRAVEL, page: 4, excerpt: lines[1] } };
+    return planTableRows([template], house).map((r) => [r.benefit, r.figure.kind === "printed" ? r.figure.amount : null, r.figure.kind === "printed" ? r.figure.currency : null]);
+  };
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tUS$150,000\tUS$300,000", "Trip cancellation\tS$5,000\tS$10,000"], "USD"), [["Trip cancellation", 10000, "SGD"]]);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Single Trip\tAnnual Trip", "Trip cancellation\tS$5,000\tS$15,000"]), []);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Optional covers (pay extra)", "Golf cover\tS$500\tS$1,000"]), []);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "S$50,000\tS$80,000", "Emergency evacuation", "S$1,000*\tS$2,000*", "* Pre-existing conditions are excluded."]), [["Emergency evacuation", 2000, "SGD"]]);
+  // A footnoted cell gives none with no footnote printed, or one that names a group, limit or share (Critic R171-1).
+  for (const note of [null, "^ Limited to S$25,000 for children.", "^ Reduced to 50% for insured persons aged 70 years and above."])
+    assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Personal accident\tS$50,000^\tS$100,000^", ...(note ? [note] : [])]), [], String(note));
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Personal accident (adult)", "S$50,000\tS$100,000"]), []);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Golf cover\tS$500^\tS$1,000^", "^ For Classic plan holders only."]), []);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "Personal accident", "Adult\tS$50,000\tS$100,000", "Child\tS$12,500\tS$25,000"]), []);
+});
+
+test("claim windows are never a waiting period or a free look; a passed deadline for one claim stays when only another claim's date is open (TE pr113 W2, W3, D4)", () => {
+  const house = (text: string) => ({ ...HOUSE, documents: [doc(CERT, "x.pdf", [{ page: 1, text }])] });
+  assert.deepEqual(claimWindows(house("No claim is payable for any illness that starts within 30 days of the cover start date.")), []);
+  assert.deepEqual(claimWindows(house("If no claim has been made, you may cancel this policy within 14 days of receiving it.")), []);
+  assert.deepEqual(claimWindows(house("upon receipt of your written notification of cancellation to us within 14 days from the date you receive your policy.")), []);
+  // Real windows stay: "payable only if notice is given within", a sentence before that starts cover, forms returned (TE pr113 R9, R10).
+  assert.deepEqual(claimWindows(house("Benefits are payable only if written notice of a claim is given within 30 days of the event.")), [30]);
+  assert.deepEqual(claimWindows(house("Cover starts on the day of admission. Notice of a claim must be given within 30 days of discharge.")), [30]);
+  assert.deepEqual(claimWindows(house("Claim forms must be completed and returned within 30 days of receiving them.")), [30]);
+  const a = { summary: "", bottomLine: "The baggage claim deadline has already passed; the medical claim is still open.", statements: [], nextSteps: ["Submit the medical claim by 30/10/2026."] };
+  dropLateClaims(a, new Date("2026-10-24T02:00:00Z"));
+  assert.equal(a.bottomLine, "The baggage claim deadline has already passed; the medical claim is still open.");
+  assert.match(datesSaidNote("he fell the day before yesterday and was admitted yesterday", new Date("2026-10-24T02:00:00Z")), /"yesterday" is 23\/10\/2026/);
+});
+
+test("claim deadlines: days said as 'yesterday' or 'N days ago' get their dates and each printed claim window's last day; a 'passed' clause goes when the answer's own deadline is open (overnight run 23 Oct, K1, N111, N118, N264)", () => {
+  const now = new Date("2026-10-23T02:00:00Z");
+  assert.match(datesSaidNote("charmaine had a heart attack yesterday", now, [30, 120]), /"yesterday" is 22\/10\/2026, 1 day before today \(30 days after it is 21\/11\/2026, 29 days after today; 120 days after it is 19\/02\/2027, 119 days after today\)/);
+  assert.match(datesSaidNote("he fell 3 days ago", now, []), /"3 days ago" is 20\/10\/2026, 3 days before today/);
+  assert.match(datesSaidNote("the day before yesterday", now, []), /21\/10\/2026, 2 days before today/);
+  assert.doesNotMatch(datesSaidNote("the day before yesterday", now, []), /"yesterday"/);
+  assert.deepEqual(claimWindows({ ...HOUSE, documents: [doc(CERT, "x.pdf", [{ page: 1, text: "Written notice of a claim must be given within one hundred and twenty (120) days of the event.\nWaiting period of 90 days from the start." }])] }), [120]);
+  const at = new Date("2026-10-24T02:00:00Z");
+  const a = { summary: "", bottomLine: "The theft falls inside the trip, but the laptop is not clearly covered, and the 30-day claim window has already passed.", statements: [] as { text: string; fullText?: string }[], nextSteps: ["Claim by 31/10/2026, 7 days from today."] };
+  dropLateClaims(a, at);
+  assert.equal(a.bottomLine, "The theft falls inside the trip, but the laptop is not clearly covered.");
+  const b = { summary: "", bottomLine: "It is covered, but the claim deadline has passed, so a claim may be refused unless FWD accepts it late.", statements: [], nextSteps: ["Claim by 30/10/2026."] };
+  dropLateClaims(b, at);
+  assert.equal(b.bottomLine, "It is covered.");
+  const c = { summary: "", bottomLine: "Not shown.", statements: [], nextSteps: ["Claim within 30 days of the incident; a cancellation around 29/09/2026 may already be past that."] };
+  dropLateClaims(c, at);
+  assert.deepEqual(c.nextSteps, ["Claim within 30 days of the incident."]);
+  // A date that is not a claim's last day opens no window (Critic R169-5).
+  const e = { summary: "", bottomLine: "The 30-day claim window has passed: it ended on 01/09/2026.", statements: [{ text: "Your cover runs until 31/12/2026." }], nextSteps: [] };
+  dropLateClaims(e, at);
+  assert.equal(e.bottomLine, "The 30-day claim window has passed: it ended on 01/09/2026.");
+  // A deadline that has passed, with no open date, and other periods, stay.
+  for (const t of ["The 30-day claim window has passed: it ended on 01/09/2026.", "The waiting period has passed, so it can be claimed by 30/10/2026."]) {
+    const d = { summary: "", bottomLine: t, statements: [], nextSteps: [] };
+    dropLateClaims(d, at);
+    assert.equal(d.bottomLine, t);
+  }
+});
+
+test("an NRIC or FIN is masked as the certificate prints it, everywhere in the answer (overnight run 23 Oct, N291, N292)", () => {
+  const a = { summary: "His NRIC is S8912048I.", statements: [{ text: "The schedule prints S8912048I", quote: "Identity Number : S8912048I" }], nextSteps: ["Quote T1234567J when you call."] };
+  maskIdentityNumbers(a);
+  assert.equal(a.summary, "His NRIC is S****048I.");
+  assert.equal(a.statements[0].quote, "Identity Number : S****048I");
+  assert.equal(a.nextSteps[0], "Quote T****567J when you call.");
+  // Policy numbers and amounts are not identity numbers.
+  const b = { summary: "Policy 3037850, S$1,000,000, G007500, A12345678B." };
+  maskIdentityNumbers(b);
+  assert.equal(b.summary, "Policy 3037850, S$1,000,000, G007500, A12345678B.");
+});
+
+test("a stay's length the latest message gives works out a daily card the model gave none for (overnight run 23 Oct, N145, N258)", () => {
+  assert.equal(stayDaysSaid(["how much hospital cash would charmaine get for 25 days"]), 25);
+  assert.equal(stayDaysSaid(["he broke his leg skiing on 1 oct, stayed in hospital there 4 days"]), 4);
+  assert.equal(stayDaysSaid(["hospitalised for 15 days"]), 15);
+  // No stay, two lengths, or a claim window: none.
+  assert.equal(stayDaysSaid(["claim within 30 days"]), null);
+  assert.equal(stayDaysSaid(["in hospital 3 days, then admitted again for 5 days"]), null);
+  // When, not how long (Critic R169-4).
+  for (const q of ["admitted 10 days after the accident", "he was admitted 3 days ago", "hospitalised 2 days before the trip ended"]) assert.equal(stayDaysSaid([q]), null, q);
+  // "Within N days of", and a second "for N days" elsewhere, say no one length; "for N days after" is one (TE pr113 S3, S5, S10).
+  for (const q of ["he was admitted within 30 days of the trip ending", "warded in ICU for 3 days and then in the general ward for 7 days", "stayed 2 days in ICU and 5 days in the ward"]) assert.equal(stayDaysSaid([q]), null, q);
+  assert.equal(stayDaysSaid(["he was hospitalised for 12 days after the fall"]), 12);
+  for (const q of ["he was in hospital for 5 days, and he has 30 days to claim", "admitted for 5 days; is there a 90 days waiting period?"]) assert.equal(stayDaysSaid([q]), 5, q);
 });
 
 test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {

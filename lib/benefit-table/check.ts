@@ -107,6 +107,25 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+const MONEY_IN = /(?:s\$|us\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
+/** The one money figure a percentage row's own words cap it at: printed right after a cap word, and the only money figure in
+ * the row. Null otherwise. */
+function capInRow(row: string): number | null {
+  const text = flat(row), found = [...text.matchAll(MONEY_IN)];
+  const values = new Set(found.map((m) => Number(m[1].replace(/,/g, ""))));
+  if (values.size !== 1 || !found.length) return null;
+  // A cap for some insured persons only ("Child: limited to S$50,000", "maximum S$200,000 above age 70") is not the row's
+  // (Critic R169-1).
+  if (/\b(?:child(?:ren)?|juveniles?|minors?|adults?|age[ds]?|years?\s+old|spouses?|dependants?|elderly|above|below|over|under)\b/.test(text)) return null;
+  const before = text.slice(Math.max(0, found[0].index! - 70), found[0].index!);
+  const after = text.slice(found[0].index! + found[0][0].length, found[0].index! + found[0][0].length + 30);
+  // An excess ("subject to an excess not exceeding S$100") is not a cap, and a cap for each day or item ("up to S$200 per
+  // day") is not the row's whole amount (TE pr113 A2, A11).
+  if (/\b(?:excess|deductible|co-?pay\w*|co-?insurance)\b/.test(before)) return null;
+  if (/^\s*(?:(?:per|a|an|each|every|for\s+(?:each|every)|\/)\s*(?:day|week|month|year|night|hour|visit|session|item|article|tooth|treatment)\b|daily\b)/.test(after)) return null;
+  return /(?:\bup\s+to|\bmax(?:imum)?(?:\s+amount)?(?:\s+of)?|\bcapped\s+at|\bnot\s+(?:to\s+)?exceed(?:ing)?|\blimited\s+to)\b[^%\d]{0,60}$/.test(before) ? [...values][0] : null;
+}
+const otherMoneyThan = (row: string, cap: number) => [...flat(row).matchAll(MONEY_IN)].some((m) => Number(m[1].replace(/,/g, "")) !== cap);
 // Signs that a line is another row: an item marker ("(b)", "ii.", "3)"), its own percentage, an upper-case label with a
 // figure, or tab-separated cells (Critic R96-1, R98-1, R99).
 const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
@@ -352,6 +371,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         capUnread = true;
       } else if (tied) {
         cap = claimed; capSource = s;
+      } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!) && !NEAR_CAP.test(near)
+        && !(/\bwhichever\b/i.test(`${row}\n${near}`) && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![capInRow(row), value].includes(Number(m[0].replace(/,/g, "")))))) {
+        // No cap read, but the row's own words print exactly one money figure right after a cap word ("100% Sum Insured (up
+        // to S$400,000)", "subject to a maximum amount of S$25,000"): that is its cap (overnight run 23 Oct, N016, N083).
+        cap = capInRow(row); capSource = source;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
         capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
