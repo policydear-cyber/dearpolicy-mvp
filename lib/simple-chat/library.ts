@@ -142,7 +142,7 @@ export const PAGES_NOTE = "Only the pages the benefit table's rows come from, an
 const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’]+)\s+)?(husband|hubby|wifey|wife)\b/gi;
 // Words before "husband"/"wife" that make it someone else's, or no one in particular ("her husband", "my sister's husband",
 // "my friend husband"; "ex-husband" never matches: a hyphen is not a word start).
-const NOT_MINE = /^(?:her|his|their|your|ur|our|a|an|any|every|each|no|ex|late|former|future|new|other|friend|sister|brother|mum|mom|mother|father|dad|daughter|son|cousin|colleague|boss|neighbou?r|aunt|aunty|auntie|uncle|niece|nephew|maid|helper)$|['’]s$/i;
+const NOT_MINE = /^(?:her|his|their|your|ur|our|a|an|any|every|each|no|ex|late|former|future|new|other|friend|frens?|sis|sister|bro|brother|grandma|grandpa|mum|mom|mother|father|dad|daughter|son|cousin|colleague|boss|neighbou?r|aunt|aunty|auntie|uncle|niece|nephew|maid|helper)$|['’]s$/i;
 /** The first "husband" or "wife" in a message that means the person's own spouse: "my husband", or the word alone as people
  * type it ("husband kena fracture leg", "hubby got cancer"; overnight run 23 Oct, N224, N226). Never someone else's
  * ("her husband", "my friend's wife"), and never "husband and wife" (a pair, not a person). */

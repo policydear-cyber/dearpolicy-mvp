@@ -1646,7 +1646,7 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["wifey fell down"])?.member, "Tan Mei Ling");
   assert.equal(spouseMeant(titled("Dear Mrs Tan Mei Ling,"), ["my wife's policy"])?.word, "my wife");
   // Someone else's spouse, a pair, or no one in particular settles nothing.
-  for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband"])
+  for (const t of ["her husband was in hospital", "my sister's husband", "my friend husband kena accident", "my bro wife warded", "her hubby", "my ex-husband", "my ex husband", "can a husband claim", "are husband and wife both covered", "housewife cover", "your husband"])
     assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
