@@ -29,6 +29,23 @@ export const kindOfName = (name: string) => {
   return COVER_KINDS.find((k) => k.id === id) ?? COVER_KINDS[COVER_KINDS.length - 1];
 };
 
+/** The parts of a benefit-table row (GET /api/benefit-table) kindsOfTable reads. */
+export type TableKindRow = { benefit: string; pays: string; product: string; cover: string };
+/** The kinds of cover a person's benefit-table rows show, for a household whose documents are read into the benefit table
+ * (its Coverage rows are no longer read or refreshed, so they can be stale: 24 Oct, Family showed "Home and vehicle" for
+ * a travel policy). A row printed as not covered is no cover, and a premium or a value is not a kind of cover. Every row
+ * of a travel policy is travel cover: its "Rental Vehicle Excess" is not motor insurance. */
+export function kindsOfTable(rows: TableKindRow[]): string[] {
+  const found = new Set<string>();
+  for (const r of rows) {
+    if (r.pays === "not_covered" || r.pays === "value" || /\bpremium/i.test(r.benefit)) continue;
+    const travel = /travel|trip/i.test(`${r.product} ${r.cover}`);
+    const kind = travel ? "travel" : kindOfName(r.benefit).id !== "other" ? kindOfName(r.benefit).id : kindOfName(r.cover).id;
+    found.add(kind);
+  }
+  return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
+}
+
 /** The parts of a Coverage row (GET /api/ledger) these helpers read. */
 export type KindRow = { eventType: string; eventLabel?: string | null; detail?: string | null; origin?: string; status?: string };
 export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfName(`${row.eventLabel ?? ""} ${row.detail ?? ""}`) : coverKindOf(row.eventType);

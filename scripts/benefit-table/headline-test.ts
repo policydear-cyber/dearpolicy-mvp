@@ -3,6 +3,7 @@
  *   npm run benefit-table:headline-test */
 import assert from "node:assert/strict";
 import { bySection, keyBenefits, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { kindsOfTable } from "@/components/cover-kinds";
 
 let passed = 0;
 const failures: string[] = [];
@@ -78,6 +79,21 @@ test("the full list is grouped by section in first-seen order, with rows that ha
   const g = bySection([{ section: "Fractures", n: 1 }, { section: null, n: 2 }, { section: "Death", n: 3 }, { section: "Fractures", n: 4 }]);
   assert.deepEqual(g.map((x) => [x.section, x.rows.map((r) => r.n)]), [["Fractures", [1, 4]], ["Death", [3]], ["Other", [2]]]);
   assert.deepEqual(bySection([{ section: null }]).map((x) => x.section), ["Benefits"]);
+});
+
+// Family's "Covered for" line from the benefit table (components/cover-kinds.ts; 24 Oct journeys: "Travel · Home and
+// vehicle" for a travel policy whose home cover is printed as not applicable).
+test("a person's kinds of cover come from their benefit-table rows", () => {
+  const r = (benefit: string, product: string, pays = "up_to", cover = product) => ({ benefit, pays, product, cover });
+  const travel = "FWD Travel Insurance";
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", travel), r("Home Guard", travel, "not_covered"), r("Overseas Medical Expenses", travel),
+    r("Personal Accident", travel, "amount")]), ["Travel"]);
+  assert.deepEqual(kindsOfTable([r("Hospital Cash", "Group Hospital & Surgical", "per_day"), r("Wrist fracture", "Group Personal Accident", "amount"),
+    r("Accident medical expenses", "Group Personal Accident", "not_covered"), r("Death", "Group Term Life", "amount")]), ["Death", "Hospital and medical", "Accidents and injuries"]);
+  // Nothing but a premium, a value or a cell printed as not covered: no kind of cover.
+  assert.deepEqual(kindsOfTable([r("Annual Premium", "Critical Illness II", "amount"), r("Surrender value", "Endowment Plan", "value"), r("Home contents", "HomeShield", "not_covered")]), []);
+  // A row named only by its sum is the kind its cover names; real motor and home cover still shows.
+  assert.deepEqual(kindsOfTable([r("Sum Insured", "Critical Illness II", "amount"), r("Own damage", "Motor Insurance", "up_to", "Motor Comprehensive")]), ["Critical illness", "Home and vehicle"]);
 });
 
 console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
