@@ -201,6 +201,23 @@ async function partA() {
     assert.deepEqual(numbersIn("13,500.00100,000.00"), []);
     assert.deepEqual(numbersIn("Premium 181.44181.44 and 50,000"), [50000]);
   });
+  await t("E1: the page image reader's reply is read even with a raw TAB or line break in a page, or a sentence before it (Prudential readings, 24 Oct)", async () => {
+    const { parseTranscription, acceptTranscribedPages } = await import("@/lib/documents/ocr-hosted");
+    const pagesOf = (reply: string) => acceptTranscribedPages([3, 4], (parseTranscription(reply) as { pages?: unknown } | null)?.pages).map((p) => [p.pageNumber, p.text]);
+    const want = [[3, "Benefit\tSum Assured\nDeath\t100,000.00"], [4, "Premium\t181.44"]];
+    const valid = JSON.stringify({ pages: [{ pageNumber: 3, text: want[0][1] }, { pageNumber: 4, text: want[1][1] }] });
+    assert.deepEqual(pagesOf(valid), want, "valid JSON is unchanged");
+    // The reader printed the TAB and the line break themselves inside the strings.
+    const raw = '{"pages":[{"pageNumber":3,"text":"Benefit\tSum Assured\nDeath\t100,000.00"},{"pageNumber":4,"text":"Premium\t181.44"}]}';
+    assert.throws(() => JSON.parse(raw));
+    assert.deepEqual(pagesOf(raw), want);
+    assert.deepEqual(pagesOf(raw.replace("\t", "\r\n\t")).map(([n]) => n), [3, 4]);
+    assert.deepEqual(pagesOf("Here is the transcription:\n```json\n" + valid + "\n```\nLet me know if you need more."), want);
+    // A quote escaped inside the text stays a quote; a raw TAB outside a string is left to JSON.
+    assert.deepEqual(pagesOf('{"pages":[{"pageNumber":3,\t"text":"He said \\"yes\\"\there"}]}'), [[3, 'He said "yes"\there']]);
+    // A reply that is not a transcription gives nothing.
+    for (const broken of ["", "I cannot read this page.", '{"pages":[{"pageNumber":3,"text":"cut off', "{not json}"]) assert.equal(parseTranscription(broken), null, broken);
+  });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");
     assert.equal(ev.parsePrintedDate("1 January 2025"), "2025-01-01");

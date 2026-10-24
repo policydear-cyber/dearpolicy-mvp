@@ -9,6 +9,7 @@ import { cachedReading, readingModelIdentity } from "@/lib/documents/evidence";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+import { recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 
 type BridgePage = { pageNumber: number; text: string; orientation?: "upright" | "sideways" | "upside_down"; rotation?: number; legibility?: "good" | "poor" | "unreadable" | "blank"; turnedBy?: number };
 
@@ -106,11 +107,12 @@ async function attemptHostedOcr(args: { accountId: string; resourceId?: string; 
   // isolation contract as lib/ai/llm.ts's structuredCompletion().
   if (record) assertVerifiedForMonetaryUse(record);
 
-  let parsed: { pages?: BridgePage[] };
-  try {
-    const text = reply.text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
-    parsed = JSON.parse(text) as { pages?: BridgePage[] };
-  } catch {
+  const parsed = parseTranscription(reply.text) as { pages?: BridgePage[] } | null;
+  if (!parsed) {
+    // Only the pages and the reply's length are kept: the reply is the household's page text.
+    // Only policy documents pass a resourceId here; claim evidence is read without one.
+    if (args.resourceId) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId, failureCode: "OCR_REPLY_UNPARSED",
+      error: `pages ${args.pageNumbers.join(", ")}: reply of ${reply.text.length} characters is not a transcription` }).catch(() => undefined);
     return [];
   }
   // The model is explicitly told to return an empty string for a page that is
@@ -121,6 +123,31 @@ async function attemptHostedOcr(args: { accountId: string; resourceId?: string; 
   // fail the whole document over a single decorative page. Only a page with
   // no entry at all in the reply is a real transcription failure.
   return acceptTranscribedPages(args.pageNumbers, parsed.pages);
+}
+
+/** The reader's JSON reply, read even when it is not strict JSON: a sentence before or after it, code fences, or a raw
+ * TAB or line break inside a page's text (the prompt asks for TAB-separated columns, and a raw TAB in a JSON string is
+ * "Bad control character"). Before this, every such reply was dropped, so the page was never compared at all
+ * (Prudential readings, 24 Oct). null when it still is not JSON. */
+export function parseTranscription(reply: string): unknown | null {
+  const fenced = reply.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
+  const start = fenced.indexOf("{"), end = fenced.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  const body = fenced.slice(start, end + 1);
+  try { return JSON.parse(body); } catch { /* escaped below */ }
+  let out = "", inString = false, escaped = false;
+  for (const ch of body) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      else if (ch === "\t") { out += "\\t"; continue; }
+      else if (ch === "\n") { out += "\\n"; continue; }
+      else if (ch === "\r") { out += "\\r"; continue; }
+    } else if (ch === '"') inString = true;
+    out += ch;
+  }
+  try { return JSON.parse(out); } catch { return null; }
 }
 
 /** Round 9: only the pages that were asked for, each once (the first
