@@ -122,7 +122,17 @@ async function attemptHostedOcr(args: { accountId: string; resourceId?: string; 
   // string the same as the model silently DROPPING the page entirely used to
   // fail the whole document over a single decorative page. Only a page with
   // no entry at all in the reply is a real transcription failure.
-  return acceptTranscribedPages(args.pageNumbers, parsed.pages);
+  const accepted = acceptTranscribedPages(args.pageNumbers, parsed.pages);
+  const absent = args.pageNumbers.filter((n) => !accepted.some((p) => p.pageNumber === n));
+  if (absent.length && args.resourceId) {
+    // What the reply's shape was, never its text: which numbers it gave, its first entry's keys, and each entry's length.
+    const entries = Array.isArray(parsed.pages) ? parsed.pages as unknown as Record<string, unknown>[] : [];
+    const shape = { requested: args.pageNumbers, absent, returned: entries.map((e) => e?.pageNumber ?? e?.page_number ?? e?.page ?? null),
+      keys: entries[0] && typeof entries[0] === "object" ? Object.keys(entries[0]).slice(0, 12) : [], lengths: entries.map((e) => (typeof e?.text === "string" ? e.text.length : Array.isArray(e?.text) ? `list of ${e.text.length}` : typeof e?.text)),
+      pagesKey: Array.isArray(parsed.pages) ? "pages" : Object.keys(parsed as object).slice(0, 6) };
+    await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.resourceId, failureCode: "OCR_PAGES_ABSENT", error: JSON.stringify(shape) }).catch(() => undefined);
+  }
+  return accepted;
 }
 
 /** The reader's JSON reply, read even when it is not strict JSON: a sentence before or after it, code fences, or a raw
@@ -156,15 +166,27 @@ export function parseTranscription(reply: string): unknown | null {
 export function acceptTranscribedPages(requested: number[], pages: unknown): BridgePage[] {
   const wanted = new Set(requested), seen = new Set<number>();
   const out: BridgePage[] = [];
-  for (const p of Array.isArray(pages) ? pages as { pageNumber?: unknown; text?: unknown; orientation?: unknown; rotation?: unknown; legibility?: unknown }[] : []) {
-    const n = Number(p?.pageNumber);
-    if (!Number.isInteger(n) || !wanted.has(n) || seen.has(n) || typeof p?.text !== "string") continue;
+  const entries = (Array.isArray(pages) ? pages : []) as { pageNumber?: unknown; page_number?: unknown; page?: unknown; text?: unknown; orientation?: unknown; rotation?: unknown; legibility?: unknown }[];
+  const numberOf = (p: (typeof entries)[number]) => Number(p?.pageNumber ?? p?.page_number ?? p?.page);
+  // The reader is sent only the requested pages, in that order, as their own small PDF; a reader that numbers them 1..n
+  // (pages 3 and 4 returned as 1 and 2) is mapped by position -- only when every number it gave is exactly 1..n, once
+  // each, and none is a page that was asked for (Prudential readings, 24 Oct). A wrong page is still caught downstream:
+  // the upload check compares it with the text reading.
+  const numbers = entries.map(numberOf);
+  const byPosition = numbers.length === requested.length && !numbers.some((n) => wanted.has(n))
+    && [...numbers].sort((x, y) => x - y).every((n, i) => n === i + 1);
+  for (const p of entries) {
+    const given = numberOf(p);
+    const n = byPosition ? requested[given - 1] : given;
+    // A reader that gives a page's lines as a list is read as those lines.
+    const text = Array.isArray(p?.text) && p.text.every((l) => typeof l === "string") ? (p.text as string[]).join("\n") : p?.text;
+    if (!Number.isInteger(n) || !wanted.has(n) || seen.has(n) || typeof text !== "string") continue;
     seen.add(n);
     // Round 10: what the reader saw of the page -- only the values it was asked for.
     const orientation = ["upright", "sideways", "upside_down"].includes(String(p.orientation)) ? p.orientation as BridgePage["orientation"] : undefined;
     const rotation = [0, 90, 180, 270].includes(Number(p.rotation)) ? Number(p.rotation) : undefined;
     const legibility = ["good", "poor", "unreadable", "blank"].includes(String(p.legibility)) ? p.legibility as BridgePage["legibility"] : undefined;
-    out.push({ pageNumber: n, text: p.text, ...(orientation ? { orientation } : {}), ...(rotation !== undefined ? { rotation } : {}), ...(legibility ? { legibility } : {}) });
+    out.push({ pageNumber: n, text, ...(orientation ? { orientation } : {}), ...(rotation !== undefined ? { rotation } : {}), ...(legibility ? { legibility } : {}) });
   }
   return out;
 }
