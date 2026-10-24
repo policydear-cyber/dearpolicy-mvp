@@ -6042,3 +6042,14 @@ Probes ran with tsx against 2fd0c58. I could not run v11-ingestion here (DB stac
   - crossCheckPages is pure. A failed image read makes the page unchecked, and a matching read keeps the page's own words.
   - uncheckedText is idempotent.
   - library.ts re-exports the single copy.
+
+## R178 — PR #114 upload check (head d679b94)
+
+Probes ran with tsx against d679b94. The free suites pass: chat 94/0, headline 13/0, benefit-table 107/0. I could not run v11-ingestion here (DB stack).
+
+**Verdict: READY.**
+
+- R177-1 / R176-1 fixed: evidencePages is rebuilt after the second pass, from the same `pages` array whose unchecked pages carry uncheckedText. Every reader now works from that text.
+- R176-2 fixed: the probe keeps "Basic Plan", "Policy Number: 63639755" and "Commencement Date: 01/02/2020", and drops "Sum Assured 13500" and "Date 50,000.00".
+- numbersIn: "13,500.00100,000.00" and "181.44181.44" give []. "1.375", "S$600,000" and "1 million" are read as before.
+- Low (observe, no change needed): the glued-tail skip also drops a number one character after a glued token ("13,500.00100,000.00 5 days" gives []). That only withholds, and only on a line that is already broken.
