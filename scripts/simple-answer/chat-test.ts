@@ -10,6 +10,7 @@ import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-cha
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
 import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, libraryFact, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
 import { runSimpleChat } from "../../lib/simple-chat/hook";
+import { appHelp } from "../../lib/simple-chat/app-help";
 import { replayModel, runSet } from "./app-run";
 import type { ChatContext } from "../../lib/chat/workflow";
 import { guardChatAnswer } from "../../lib/chat/output-guard";
@@ -257,6 +258,26 @@ async function main() {
     assert.ok(!call.library.includes("someone-else"));
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
     assert.deepEqual(state.simpleChat.turns[0].usage, { input: 62600, output: 400, cached: 0 });
+  });
+
+  await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
+    const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change charmaine's name to Charmaine Ong", "rename"],
+      ["who else can see my documents", "who-sees"], ["is my data safe", "safe"], ["how much has my household used this month", "usage"], ["what does it cost to use dearpolicy", "cost"],
+      ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"]];
+    for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
+    // Questions about cover, a claim or the insurer stay with the model, however they are worded.
+    for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
+      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy"])
+      assert.equal(appHelp(q), null, q);
+    const model = stub(c2);
+    const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];
+    const result = await runSimpleChat({ ...context(), request: { ...context().request, question: "delete my account", submittedQuestion: "delete my account" } } as ChatContext, {}, {
+      model, household: async () => HOUSE, history: async () => [], save: (async (a: { answer: { bottomLine?: string } }) => { saved.push(a); }) as never,
+    });
+    assert.equal(model.calls.length, 0);
+    assert.match(result.answer.summary, /Household > Delete this household\. It cannot be undone\./);
+    assert.equal(saved.length, 1);
+    assert.equal(result.answer.statements?.length ?? 0, 0);
   });
 
   await check("chat turn refuses a library read for another household", async () => {
