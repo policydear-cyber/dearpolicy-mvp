@@ -6415,3 +6415,24 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
   const low=l.toLowerCase(),last=words[words.length-1],at=low.indexOf(last,Math.max(0,low.indexOf(words[0])));
   ```
   With it, both rows are kept, and so are "Loss of baggage … Baggage delay  Nil", the R200 keeps and "No cover for war". "Hijack Nil", "Home Guard  Not Applicable*" and "Golf: ✗" are still dropped.
+
+## Round 203: design PRs #126 (b1922be), #127 (494d756), #128 (07bce21), #129 (699b6ea), for the UI/UX designer thread
+
+**All four READY.** None changes answer logic or data, and they are independent off main 4050804.
+
+- **#126 colour tokens: READY.**
+  - I computed the contrast of every text pair, and all clear AA: muted on bg 5.8; brand-ink on surface 5.74, on bg 5.25, on brand-tint 5.07; warn-text on its tint 6.65; critical on its tint 5.23; good-text 5.76. In dark mode: white on brand 4.7, muted 6.87, brand-ink 7.53. Input lines are 3.18 (light) and 3.36 (dark), and the UI minimum is 3.
+  - Low points:
+    1. The logo PNG is still terracotta (#884938, transparent) on the new cool grey and blue. The brand and the UI no longer match, which is for DC to decide.
+    2. Dark mode still paints a cream patch (#f9f5e4) behind the logo (globals.css, `.brand-logo` dark rule).
+    3. `--money` is now ink, so amounts no longer stand out from the text. That is a design choice; flagging it only because amounts are the product's main figure.
+    4. On the Portfolio "Not found" cards the dot is now link blue, which reads as "tap me" rather than "missing".
+- **#127 page titles as nouns: READY.**
+  - No test or script asserts any removed eyebrow or old title. The only hit, "cover at a glance" in scripts/v11-ingestion-regressions.ts, is document text and unrelated.
+  - The #118 app-help answers still match the new names: the Documents page, the Family page, Household, then Plan usage.
+  - Low: a first-time visitor now sees "Portfolio" instead of a sentence saying what the app does; the lead line still says it.
+- **#128 sentence-case labels: READY.**
+  - Labels now show their source text as written. The only lowercase source is the either-or divider "or" (answer-cards.tsx:182), which reads fine.
+- **#129 quieter sidebar footer and phone top bar: READY.**
+  - On phones the theme button keeps its accessible name, because the visually hidden span is clipped rather than `display:none`.
+  - Low, pre-existing and not this PR's: the footer still says "Your documents and questions are kept private to your household." Pages are also read by the reading model, and a DearPolicy reviewer can check answers. That is the same overclaim as R185-2, worth softening in a later PR.
