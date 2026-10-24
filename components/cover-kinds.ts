@@ -38,7 +38,7 @@ export type TableKindCover = { product: string; cover: string };
 const COVER_NAME_KINDS: [RegExp, string][] = [
   [/\b(?:travel\w*|trip|holiday|journey)\b/i, "travel"],
   // A mortgage plan ("HomeProtect", "Mortgage Reducing Term") is death cover on the borrower, not home insurance (Critic R201-1).
-  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect\b/i, "death"],
+  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect(?:ion)?\b/i, "death"],
   // Before motor and home: a "Public Vehicle Accident Plan" is accident cover (TE F12).
   [/accident|\bpa\b/i, "accident"],
   [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
