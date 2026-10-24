@@ -344,7 +344,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 12px; }
 .document-card.needs-review { border-color: var(--warn-line); }
 .document-card.processing { border-color: var(--brand-tint-2); }
-.document-head { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; }
+.document-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
 .document-title { display: grid; gap: 2px; min-width: 0; }
 .document-title strong { font-size: var(--fs-md); overflow-wrap: anywhere; }
 .document-title span { font-size: var(--fs-xs); color: var(--muted); }
@@ -758,7 +758,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .coverage-status { font-size: var(--fs-md); }
   .premium-breakdown-row, .payment-row { grid-template-columns: 34px 1fr; }
   .premium-breakdown-value, .payment-amount { grid-column: 2; text-align: left; }
-  .document-head { grid-template-columns: 36px 1fr; }
+  .document-head { grid-template-columns: minmax(0, 1fr); }
   .document-authority { grid-column: 2; justify-self: start; }
   .detected-row { grid-template-columns: 1fr; }
   .detected-row select { min-width: 0; width: 100%; }
@@ -1035,6 +1035,13 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .chat-composer .button { width: auto; min-height: 44px; padding: 0 16px; }
   .chat-composer textarea { min-height: 44px; padding: 10px; }
 }
+/* The document's state sits at the right of its name, not on a line of its own. */
+.document-title { grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+.document-title > * { grid-column: 1; }
+.document-title > .status { grid-column: 2; grid-row: 1; align-self: start; margin-top: 0; }
+/* A document's actions are plain controls in ink; only Delete keeps its warning colour. */
+.document-card .document-meta .mini-button:not(.danger) { color: var(--ink); }
+.document-card .document-meta .mini-button:not(.danger):hover { border-color: var(--ink-2); }
 .document-card.focused { box-shadow: 0 0 0 3px var(--brand); transition: box-shadow var(--t-state) var(--ease); }
 .row-error-actions { margin-top: 8px; display: flex; gap: 8px; }
 .summary-unknown { font-size: var(--fs-lg, 1.25rem); color: var(--ink-2); }
