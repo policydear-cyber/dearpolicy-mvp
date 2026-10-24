@@ -5938,3 +5938,19 @@ Free tests on 3f2547b: chat 86/86, headline 13/13, table 106/106.
 ## R168 — PR #112 re-check (b1e0669..07d14e6)
 
 **Verdict: READY.** B4b only adds rejects in copiedName's fit fallback: policy-type words are dropped before the cover compare, and an empty name is rejected. It can withhold, never mis-bind. Free tests on 07d14e6: chat 87/87, headline 13/13, table 106/106.
+
+## R169 — PR #113 (round 12, head 431c4b6) vs main a02c1da
+
+Free tests on 431c4b6: chat 91/91, headline 13/13, table 106/106.
+
+**Verdict: NOT READY. Four ways to show a wrong amount (R169-1 to R169-4) and one hidden true fact (R169-5), all reproduced. A tested patch fixes all five (scratchpad r169-fix.diff). With it: chat 91, headline 13, table 106, and every probe is fixed.**
+
+- **R169-1 (high) check.ts capInRow takes a cap meant for some insured persons only.** "Accidental Death 100% of Sum Insured (Child: limited to S$50,000)" now gives every adult S$50,000 (probe: worked_out 50000 on S$200,000). "maximum S$200,000 for insured persons above age 70" is also taken as everyone's cap. Fix: no cap from the row when it names a group (child, adult, age/aged, spouse, dependant, above/below/over/under).
+  Q1 answer: the changed test expectations (Advance Payment S$400,000, Burns S$5,000, ICU S$25,000 on the continuing line, Hip S$50,000 next line) are sound, and they still pass with the fix.
+- **R169-2 (high) chat.ts planTableRows reads every table on the document's pages that has the same plan headings.** A second table "for insured persons aged 70 years and above" (or an annual plan's table) gives "Overseas medical expenses" S$100,000 next to the real S$500,000, plus a 70+ "Personal accident" figure (probe). Name dedupe only checks the reading's own rows. Fix: read only the header block that holds one of this plan's reading rows (its excerpt's first line).
+- **R169-3 (high) planTableRows takes a money first cell as the line's name.** "S$500\tS$1,000\tS$1,500\tS$2,000" under three plans becomes "Trip cancellation: S$500", and the Business plan gets S$1,500, shifted one column (probe). Fix: an extra first cell must not be a PLAN_CELL.
+- **R169-4 (medium-high) verify.ts stayDaysSaid reads when, not how long.** "admitted 10 days after the accident" gives 10, "admitted 3 days ago" gives 3, and "hospitalised 2 days before the trip ended" gives 2. Now that the server works out a stay when the model gave none, these become worked-out stay totals. Fix: a negative lookahead for ago, after, before, later, earlier, prior, since, from and into.
+- **R169-5 (medium) hook.ts dropLateClaims deletes a true "window has passed" fact** whenever any sentence has "until/by/before + a future date". Example: "Your cover runs until 31/12/2026" removes the statement "The 30-day claim window has passed: it ended on 01/09/2026." (probe). Fix: openSaid needs claim/notice/deadline words and no OTHER_PERIOD.
+- Process: verify.ts money rules are frozen. The stayPays change (and the R169-4 fix) is a money path in verify.ts, so please confirm DC has said yes to it.
+- Low: the capInRow capSource is the row's quote, which may not print the cap when the cap is on the continuing line. At worst verify withholds.
+- Holds: stayPays stays limited to rows with one per-day figure equal to the card, one start rule and one max (lump sums cannot pass). claimWindows and datesSaidNote "yesterday / N days ago" hold, NRIC masking holds, and the prompt rules hold.
