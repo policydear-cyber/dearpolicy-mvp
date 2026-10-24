@@ -116,7 +116,8 @@ export function printedNotApplying(text:string,name?:string|null){
   const words=String(name??"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=3);
   const own=words.length?lines.filter(l=>words.every(w=>l.toLowerCase().includes(w))):[];
   if(own.length)return own.some(l=>{
-    const last=words[words.length-1],at=l.toLowerCase().lastIndexOf(last);
+    // The name's first printing: a later benefit's cell on a side-by-side table is not this one's (Critic R202-1).
+    const low=l.toLowerCase(),last=words[words.length-1],at=low.indexOf(last,Math.max(0,low.indexOf(words[0])));
     return NA_AFTER.test(l.slice(at+last.length).replace(/^[a-z0-9]*/i,""));
   });
   const first=lines[0]??"";

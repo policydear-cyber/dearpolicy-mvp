@@ -1570,6 +1570,8 @@ export function runSystemRegressions(){
     keep("Hospital Cash","Hospital Cash  S$200 per day; outpatient treatment not covered");
     keep("Home Guard","Home Guard\tS$500\tN.A.");
     keep("Pet care","Pet care - boarding  S$50 per day");
+    keep("Flight delay","Flight delay  S$100 per 6 hours  Baggage delay  Nil");
+    keep("Travel delay","Travel delay\tS$100\tTrip delay\tNot Applicable");
     // Single-space and other wordings of a benefit that does not apply (TE P125-2).
     for(const [b,q] of [["Golf Equipment","Golf Equipment N.A."],["Hijack","Hijack Nil"],["Pet Care","Pet Care -"],["Hijack","Hijack  Nil."],["Pet Care","Pet Care  -*"],
       ["Home Guard","Home Guard  Not Applicable*"],["Loss of income","Loss of income  Not Payable"],["Loss of income","Loss of income  Excluded"],["Loss of income","Loss of income  No cover"],
