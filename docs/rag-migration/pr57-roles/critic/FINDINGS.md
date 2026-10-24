@@ -5972,3 +5972,13 @@ Free tests on 489d55a: chat 93/93, headline 13/13, table 107/107.
 ## R172 — PR #113 re-check (489d55a..3ffce25)
 
 **Verdict: READY.** chat.ts is byte-identical to the R171 patch. Tests cover no footnote, the child footnote and the 70+ footnote; P7 now has a benign footnote. Free tests on 3ffce25: chat 93/93, headline 13/13, table 107/107.
+
+## R173 — PR #113 re-check (3ffce25..76a25e4)
+
+Free tests on 76a25e4: chat 94/94, headline 13/13, table 107/107.
+
+**Verdict: NOT READY. One fix (R173-1): a label drops the plan name. A tested patch is in scratchpad r173-fix.diff.**
+
+- **R173-1 (medium) coverLabels `repeats` uses a substring test in both directions, so the plan is dropped whenever it *contains* the cover name.** Probes: cover "Travel Insurance", plan "Travel Insurance Premier" → "Travel Insurance". Cover "Hospital & Surgical", plan "Hospital & Surgical (Plan 2)" → "Hospital & Surgical" (noNumbers also removes the 2). The amount is still the plan's, but the card no longer names the plan, which breaks "never strip a qualifier".
+  Fix: a plan or product is left out only when all of its words are already shown, except one word that is the product's first word (the insurer, as in "AIA"). With the patch: AIA → "PRO LIFETIME PROTECTOR - MAX" (test still passes); Travel/Plan 2 keep their plan; chat 94, headline 13.
+- Holds: the group-name and plan-footnote skips in planTableRows (they only skip); "for each day" per-unit in capInRow (only withholds); claimWindows (sentence scope, starts/diagnosed excluded; note only); the dropLateClaims "deadline for X" (only keeps more); the stayDaysSaid second length (only withholds; "within 30 days" and "3 days ago" are not counted).
