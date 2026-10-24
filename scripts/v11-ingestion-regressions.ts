@@ -190,6 +190,13 @@ async function partA() {
     const plain = "Your Schedule\nSum Assured\t100,000.00\n01/10/2026\n2";
     assert.deepEqual(readingsAgree(plain, plain.replace(/\t/g, " ")), { agree: true });
     assert.equal(readingsAgree("Ambulance\nDental\n500\n800", "Ambulance\nDental\n500\n800").agree, false);
+    // A lone number mid-page is an amount, not a page number: it stops agreement; first, last or "Page 3" lines do not (TE N8).
+    const mid = "Your Schedule\nHospital Cash per day\n150\nNotes apply";
+    assert.equal(readingsAgree(mid, mid).agree, false);
+    const first = "3\nYour Schedule\nSum Assured\t100,000.00";
+    assert.deepEqual(readingsAgree(first, first.replace(/\t/g, " ")), { agree: true });
+    const paged = "Your Schedule\nPage 3\nSum Assured\t100,000.00\nNotes apply";
+    assert.deepEqual(readingsAgree(paged, paged.replace(/\t/g, " ")), { agree: true });
     // An unchecked page that prints a rider premium and a benefit amount gives the premium check and the rider table
     // neither: what the rest of upload reads is its checked text (Critic R176-1).
     const { premiumPrinted, printedPremiumTable } = await import("@/lib/rag/ingest");

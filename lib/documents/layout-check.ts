@@ -75,9 +75,13 @@ export function readingsAgree(textReading: string, imageReading: string): { agre
   // A page number or a date on a line of its own pairs nothing; its figures are still counted above (TE UC-3). Any other
   // label-less line is refused below.
   // One lone number is the page number; several are values whose labels are elsewhere, and stay to be refused.
+  // A bare number counts as the page number only as the page's first or last line; "Page 3" or "3 of 12" anywhere. A
+  // value on a line of its own under its label ("Hospital Cash per day" over "150") stays to be refused (TE N8).
   const alone = (t: string) => {
     const lines = t.split("\n"), numbers = lines.filter((l) => LONE_NUMBER.test(l)).length;
-    return lines.filter((l) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l))).join("\n");
+    const filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+    const edge = (i: number) => i === filled[0] || i === filled[filled.length - 1] || /page|of/i.test(lines[i]);
+    return lines.filter((l, i) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l) && edge(i))).join("\n");
   };
   const text = figureLines(alone(textReading)), image = figureLines(alone(imageReading));
   for (const l of text) {
