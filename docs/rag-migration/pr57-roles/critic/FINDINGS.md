@@ -5986,3 +5986,17 @@ Free tests on 76a25e4: chat 94/94, headline 13/13, table 107/107.
 ## R174 — PR #113 re-check (76a25e4..c3c110b)
 
 **Verdict: READY.** chat.ts is byte-identical to the R173 patch, with tests for Travel Premier and Plan 2. H1 (stayDaysSaid ignores "N days to claim" and a waiting period as a second length) only narrows. My R169 probes still give null; "stayed 4 days" gives 4. Free tests on c3c110b: chat 94/94, headline 13/13, table 107/107.
+
+## R175 — Upload check, early review (patch series 14c0507 + f89e0ac on a02c1da)
+
+Probes ran with tsx against the applied series. v11-ingestion-regressions needs the DB stack, so I could not run it here; I relied on the author's run.
+
+**Verdict: NOT READY. One high fix (R175-1, tested) and one design gap (R175-2).**
+
+- **R175-1 (high) layout-check.ts `FIGURE` only counts two-decimal or comma-grouped numbers.** "S$300", "S$500", "25%" are ignored, so readingsAgree passes a suspect page whose text pairs them differently from the image. Probe: text "Ambulance S$300 / Hospital cash S$500 per day / Coma 25%", image "Ambulance S$500 / Hospital cash S$300 / Coma 50%" gives agree:true, and the text (wrong pairing) is kept. This is exactly the wrong-label case the gate exists for.
+  Fix: FIGURE = every number, /\d[\d,]*(?:\.\d+)?/g. With it, the swap is refused ("the image reading does not print 300 beside ambulance") and an agreeing glued page still agrees. A stricter check can only leave more pages unchecked.
+- **R175-2 (medium, design) the second reading starts only on visible signs (glued figures, or labels before values).** A layout that pairs a label with the next row's figure, with no glue and no label run, is never checked, which was the second trigger in the plan ("a schedule where most amounts fail the source check"). Suggest also checking a personal document's pages that hold coverages with evidenceVerified=false, or benefit-table rows dropped for "quote not found", once per document.
+- Low: numbersIn now skips any figure with three or more decimals ("1.375" matches /\.\d{2}\d/), which withholds such rates. Better to require a comma group or a currency before it.
+- Low: lineFrom splits "01.01" from "2024" when a date's items touch. That's harmless for amounts.
+- Low: an unchecked page gives the chat a placeholder, so the policy name, number and in-force status printed there are hidden too. That's acceptable as a withhold, but the household may see the policy as missing. Consider keeping lines that hold no figure.
+- Holds: the label:value merge (≥3 colon labels, ≥60% of the left band, ≥80% of values beside them); bare-figure value columns merged only when every line sits beside a label; the text is kept and only confirmed (never replaced); unchecked pages are left out of the table reading (service.ts) and the fact check; needs_review plus the "Read in part" message, including unverified coverages; clean pages make no paid call.
