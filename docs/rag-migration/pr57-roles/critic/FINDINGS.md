@@ -5954,3 +5954,7 @@ Free tests on 431c4b6: chat 91/91, headline 13/13, table 106/106.
 - Process: verify.ts money rules are frozen. The stayPays change (and the R169-4 fix) is a money path in verify.ts, so please confirm DC has said yes to it.
 - Low: the capInRow capSource is the row's quote, which may not print the cap when the cap is on the continuing line. At worst verify withholds.
 - Holds: stayPays stays limited to rows with one per-day figure equal to the card, one start rule and one max (lump sums cannot pass). claimWindows and datesSaidNote "yesterday / N days ago" hold, NRIC masking holds, and the prompt rules hold.
+
+## R170 — PR #113 re-check (431c4b6..0c5c151)
+
+**Verdict: READY.** check.ts, verify.ts and hook.ts match the R169 patch byte for byte. chat.ts matches too, except the header test is pulled into a `heading()` helper, which behaves the same. Tests were added for all five items. Free tests on 0c5c151: chat 91/91, headline 13/13, table 107/107. Process: accepted. DC's 06:47Z "ok" on fix-list group 3d covers the per-day stay change.
