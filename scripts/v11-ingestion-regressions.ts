@@ -166,10 +166,14 @@ async function partA() {
     assert.doesNotMatch(checked[1].text, /\d/);
     assert.equal(checked[3].text, pages[3].text, "a confirmed page keeps the document's own words");
     // Why a page failed is kept beside it for the processing history, not in its text (Critic plan step 3).
-    assert.match(checked[1].uncheckedWhy ?? "", /no label beside it/);
+    assert.equal(checked[1].uncheckedWhy, "figure line with no label");
     assert.equal(checked[3].uncheckedWhy, undefined);
     assert.doesNotMatch(checked[1].text, /label beside/);
-    assert.equal((await crossCheckPages(pages, [4], async () => null))[3].uncheckedWhy, "the page image could not be read");
+    assert.equal((await crossCheckPages(pages, [4], async () => null))[3].uncheckedWhy, "image reading failed");
+    // The reason quotes nothing from the page: no label, no figure (TE P115-1).
+    const swapped = await crossCheckPages<{ pageNumber: number; text: string; uncheckedWhy?: string }>([{ pageNumber: 1, text: "Insured Tan Ah Kow\t100,000.00\nPremium\t181.44" }], [1],
+      async () => [{ pageNumber: 1, text: "Insured Tan Ah Kow 181.44\nPremium 100,000.00", extractionMethod: "ocr" }]);
+    assert.equal(swapped[0].uncheckedWhy, "pairing differs");
     for (const read of [async () => null, async () => { throw new Error("down"); }, async () => [{ pageNumber: 4, text: image[4], extractionMethod: "ocr", unreadable: true }], async () => [{ pageNumber: 4, text: image[4], extractionMethod: "native" }]])
       assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
     assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");

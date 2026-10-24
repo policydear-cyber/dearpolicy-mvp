@@ -65,10 +65,13 @@ const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string").join(" ")
 /** Whether the page's image reading agrees with its text reading: the same figures (as many times each, reading glued ones
  * apart), and every line of each that prints figures has a line in the other with the same words and figures in the same
  * order. A figure line with no label in the text reading has nothing to agree on. */
-export function readingsAgree(textReading: string, imageReading: string): { agree: true } | { agree: false; why: string } {
+/** Why two readings did not agree, in words that quote nothing from the page: what is kept in the processing history
+ * (TE P115-1: a label or an amount there would outlive the deleted document). */
+export type DisagreeKind = "image prints no figures" | "figures differ" | "figure line with no label" | "pairing differs";
+export function readingsAgree(textReading: string, imageReading: string): { agree: true } | { agree: false; why: string; kind: DisagreeKind } {
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
-  if (!b.length) return { agree: false, why: "the image reading prints no figures" };
-  if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures" };
+  if (!b.length) return { agree: false, why: "the image reading prints no figures", kind: "image prints no figures" };
+  if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures", kind: "figures differ" };
   // A page number or a date on a line of its own pairs nothing; its figures are still counted above (TE UC-3). Any other
   // label-less line is refused below.
   // One lone number is the page number; several are values whose labels are elsewhere, and stay to be refused.
@@ -78,10 +81,10 @@ export function readingsAgree(textReading: string, imageReading: string): { agre
   };
   const text = figureLines(alone(textReading)), image = figureLines(alone(imageReading));
   for (const l of text) {
-    if (!labelOf(l)) return { agree: false, why: `the text reading prints ${figuresOf(l).join(", ")} with no label beside it` };
-    if (!image.some((o) => sameLine(l, o))) return { agree: false, why: `the image reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order` };
+    if (!labelOf(l)) return { agree: false, why: `the text reading prints ${figuresOf(l).join(", ")} with no label beside it`, kind: "figure line with no label" };
+    if (!image.some((o) => sameLine(l, o))) return { agree: false, why: `the image reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order`, kind: "pairing differs" };
   }
-  for (const l of image) if (!text.some((o) => sameLine(l, o))) return { agree: false, why: `the text reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order` };
+  for (const l of image) if (!text.some((o) => sameLine(l, o))) return { agree: false, why: `the text reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order`, kind: "pairing differs" };
   return { agree: true };
 }
 
@@ -108,18 +111,19 @@ type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string
 export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && looksScrambled(p.text)).map((p) => p.pageNumber);
 /** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
  * image reading confirms it; otherwise, and when the image could not be read, it becomes unchecked, its text replaced by
- * uncheckedText, and uncheckedWhy says why, for the processing history. `readImage` returns null when the reading failed. */
+ * uncheckedText, and uncheckedWhy says why in fixed words, for the processing history. `readImage` returns null when the reading failed. */
 export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers: number[], readImage: (numbers: number[]) => Promise<CheckedPage[] | null>): Promise<P[]> {
   if (!numbers.length) return pages;
   const second = await readImage(numbers).catch(() => null);
   return pages.map((p) => {
     if (!numbers.includes(p.pageNumber)) return p;
     const image = second?.find((s) => s.pageNumber === p.pageNumber);
-    const check = !second ? { agree: false as const, why: "the page image could not be read" }
-      : !image || image.extractionMethod !== "ocr" ? { agree: false as const, why: "the page image reading gave no text for this page" }
-      : image.unreadable ? { agree: false as const, why: "the page image could not be read clearly" }
+    // The reason is a fixed phrase: nothing from the page (TE P115-1).
+    const check = !second ? { agree: false as const, kind: "image reading failed" }
+      : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page" }
+      : image.unreadable ? { agree: false as const, kind: "image unreadable" }
       : readingsAgree(p.text, image.text);
-    return check.agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.why };
+    return check.agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind };
   });
 }
 
