@@ -11,6 +11,7 @@ import { readPolicyFile, savePolicyFile } from "@/lib/storage";
 import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
+import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
@@ -478,6 +479,24 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       }
     }
 
+    // A page whose table text came out scrambled (labels before values, figures glued together) is read again from its
+    // image, and its figures are used only when the two readings agree (lib/documents/layout-check.ts). A page they do
+    // not agree on stays searchable, but no amount is read from it, and the document says it was read in part
+    // (Charmaine's new documents, 24 Oct: Prudential schedules).
+    // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked, and
+    // only its lines with no amount are kept as its text, for the database, search and every reader alike.
+    const crossCheck = async (numbers: number[]) => {
+      if (!numbers.length || !ocrSourceBytes) return;
+      await progress(args, "ocr", 26, `Checking ${numbers.length} table page${numbers.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
+      pages = await crossCheckPages(pages, numbers, (pageNumbers) => completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes!, password: args.pdfPassword,
+        pages: pages.map((p) => (pageNumbers.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers })
+        .catch(async (error) => {
+          await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
+          return null;
+        }));
+    };
+    await crossCheck(ocrSourceBytes && sniffed.format === "pdf" ? suspectPages(pages) : []);
+
     // Round 10: a photo the reader could not make out at all is explained as a
     // photo, with how to take it again.
     if (sniffed.format !== "pdf" && sniffed.format !== "docx" && pages.length && pages.every((p) => p.unreadable || !p.text.trim())) {
@@ -537,11 +556,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           : `INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)
              ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text`,
         withMethod
-          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.extractionMethod ?? "native"]
+          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.unchecked ? "unchecked" : page.extractionMethod ?? "native"]
           : [args.accountId, args.policyId, page.pageNumber, page.text],
       );
     }
-    const evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
+    let evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
 
     const quickReferenceRole = detectHighConfidenceReferenceRole(pages);
     if (quickReferenceRole) {
@@ -575,7 +594,27 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Round 9: every name, figure, unit, date, person, number and role the
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
-    const extraction = verifiedExtraction(raw, pages, { documentTitle });
+    // A page that could not be checked confirms nothing: its figures, names and dates are not re-found on it.
+    let extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+    // A page whose cover amounts the fact check could not re-find, with no visible sign of a scrambled table (a label
+    // beside the next row's figure), is read again from its image too, once; a page the readings do not agree on is
+    // left out and the reading checked again (Critic R175-2).
+    if (ocrSourceBytes && sniffed.format === "pdf") {
+      const failed = [...new Set(extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified && c.sourcePage).map((c) => Number(c.sourcePage)))]
+        .filter((n) => pages.some((p) => p.pageNumber === n && p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && /\d/.test(p.text))).slice(0, 6);
+      if (failed.length) {
+        await crossCheck(failed);
+        const now = pages.filter((p) => p.unchecked && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
+        if (now.length) {
+          extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+          // What the catalogue and the evidence notes read is rebuilt too, so the newly unchecked pages give them no amount (Critic R176-1).
+          evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
+          for (const p of pages.filter((x) => now.includes(x.pageNumber))) {
+            await query(`UPDATE policy_pages SET text=$4${withMethod ? ",extraction_method='unchecked'" : ""} WHERE policy_id=$1 AND account_id=$2 AND page_number=$3`, [args.policyId, args.accountId, p.pageNumber, p.text]);
+          }
+        }
+      }
+    }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     const noCover = NON_COVER_ROLES.has(extraction.documentRole ?? "");
     // The reading named people, and none of them is printed in the document:
@@ -758,11 +797,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
     const unmatched = detected.filter((d) => !d.matchedMemberId && !dismissed.has(nameKey(d.name))).length;
-    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted);
+    const unchecked = pages.filter((p) => p.unchecked).map((p) => p.pageNumber);
+    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted || unchecked.length);
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
       uploadProfileLinks.length ? `The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: ${uploadProfileLinks.join("; ")}. Check this is the right person` : null,
       unverified ? `${unverified} extracted coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
+      unchecked.length ? `${unchecked.length === 1 ? "Page" : "Pages"} ${unchecked.join(", ")} could not be checked against the page image` : null,
       namedNobodyPrinted ? (linkedByPrintedName ? "The people this document was read as covering are not named in it; it was linked to the one family member whose name it prints. Check this is the right person"
         : "The people this document was read as covering are not named in it, so it was kept with the profile it was uploaded to. Check this is the right person") : null,
     ].filter(Boolean).join("; ");
@@ -915,7 +956,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : ["Ready.", unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
+        ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
       await query(

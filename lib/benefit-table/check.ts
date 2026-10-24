@@ -47,7 +47,12 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
 /** Every number printed in a text, commas removed ("S$600,000" -> 600000, "1 million" -> 1000000). */
 export function numbersIn(text: string): number[] {
   const out: number[] = [];
+  let gluedEnd = -2;
   for (const m of text.matchAll(/(\d[\d,]*(?:\.\d+)?)(\s*(?:million|m)\b)?/gi)) {
+    // Two figures glued together ("13,500.00100,000.00", "181.44181.44") print neither, nor any piece of their tail: which
+    // digits belong to which is not known. A rate with more decimals ("1.375") is one figure (Critic R175-a, R176).
+    if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
+    if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
     const n = Number(m[1].replace(/,/g, ""));
     if (Number.isFinite(n)) out.push(m[2] ? n * 1e6 : n);
   }

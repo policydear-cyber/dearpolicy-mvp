@@ -82,6 +82,120 @@ async function partA() {
     const prose = renderPageLayout([item("Left column opening words", 48, 790), item("Right column other text", 330, 790), item("left continues here", 48, 772), item("right continues there", 330, 772)], 595);
     assert.equal(prose.text, "Left column opening words\nleft continues here\nRight column other text\nright continues there");
   });
+  await t("E1: a schedule's bare-figure value columns stay beside their labels, and figures printed side by side are never glued (Charmaine's new documents, 24 Oct)", async () => {
+    const { renderPageLayout } = await import("@/lib/documents/layout");
+    const item = (text: string, x: number, y: number, w = text.length * 4.5) => ({ text, x, y, w });
+    // Two figures with no gap between them: "100,000.00" ends exactly where the next starts.
+    const page = renderPageLayout([item("Basic Plan Sum Assured", 48, 700), item("100,000.00", 330, 700, 45), item("100,000.00", 375, 700, 45),
+      item("Crisis Cover Benefit", 48, 682), item("50,000.00", 330, 682, 41), item("50,000.00", 371, 682, 41),
+      item("Premium", 48, 664), item("181.44", 330, 664, 27), item("181.44", 357, 664, 27)], 595);
+    assert.equal(page.text, "Basic Plan Sum Assured\t100,000.00\t100,000.00\nCrisis Cover Benefit\t50,000.00\t50,000.00\nPremium\t181.44\t181.44");
+    // Whole figures with comma groups printed side by side are two cells too.
+    assert.equal(renderPageLayout([item("Sum Assured", 48, 700), item("13,500", 330, 700, 27), item("100,000", 357, 700, 32), item("Premium", 48, 682), item("101.95", 330, 682, 27), item("101.95", 357, 682, 27)], 595).text, "Sum Assured\t13,500\t100,000\nPremium\t101.95\t101.95");
+    // A "label :" / value form keeps each value beside its label, even when the values are long names.
+    const form = renderPageLayout([item("Policy Number:", 48, 700), item("63639755", 300, 700), item("Basic Plan:", 48, 682), item("PruFlexiCash Protection Plus (7th Series) with a long name", 300, 682),
+      item("Servicing Financial Consultant:", 48, 664), item("A Consultant Name Here", 300, 664), item("Policy Status:", 48, 646), item("In Force", 300, 646)], 595);
+    assert.equal(form.text, "Policy Number:\t63639755\nBasic Plan:\tPruFlexiCash Protection Plus (7th Series) with a long name\nServicing Financial Consultant:\tA Consultant Name Here\nPolicy Status:\tIn Force");
+    // Two columns of prose whose left lines do not end with a colon still split.
+    const prose = renderPageLayout([item("Left column opening words", 48, 790), item("Right column other text that runs long enough", 330, 790), item("left continues here", 48, 772), item("right continues there and on", 330, 772)], 595);
+    assert.equal(prose.text.split("\n").length, 4);
+    // A plain number split into pieces is still one number; a figure followed by words is untouched.
+    assert.equal(renderPageLayout([item("Total", 48, 700), item("1,2", 330, 700, 12), item("34.56", 342, 700, 22)], 595).text.includes("1,234.56"), true);
+  });
+  await t("E1: a page whose table text came out scrambled is checked against its image; its figures are used only when both readings agree (Charmaine's new documents, 24 Oct)", async () => {
+    const { scrambleSigns, readingsAgree, uncheckedPagesNote } = await import("@/lib/documents/layout-check");
+    // The two faults: labels first, then values; figures glued together.
+    const split = "Policy Schedule\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\nPremium\n100,000.00 100,000.00\n50,000.00 50,000.00\n25,000.00\n181.44";
+    assert.deepEqual(scrambleSigns(split), ["labels came out before their values"]);
+    assert.deepEqual(scrambleSigns("Sum Assured\t50,000.0050,000.00"), ["figures printed side by side came out glued together"]);
+    // A clean schedule, prose, and a premium rate table are not suspect.
+    for (const clean of ["Basic Plan Sum Assured\t100,000.00\nPremium\t181.44", "Section 3 Exclusions\nWe will not pay for any claim arising from war.\nThis applies to all plans.",
+      "Age\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00"]) assert.deepEqual(scrambleSigns(clean), [], clean);
+    // The readings agree only line by line: each figure beside the same label in both. The text reading is what is kept.
+    const text = "Policy Schedule\nBasic Plan Sum Assured\t100,000.00\t100,000.00\nCrisis Cover Benefit\t50,000.00\t50,000.00\nEarly Crisis Cover\t25,000.00\nPremium\t181.44";
+    const image = "Policy Schedule\nBasic Plan Sum Assured 100,000.00 100,000.00\nCrisis Cover Benefit 50,000.00 50,000.00\nEarly Crisis Cover 25,000.00\nPremium 181.44";
+    assert.deepEqual(readingsAgree(text, image), { agree: true });
+    // Labels first and values after: only the image pairs them, and one reading of the pairing is not two.
+    assert.equal(readingsAgree(split, image).agree, false);
+    // Glued figures in the text cannot be paired either, and the text putting a label beside the wrong figure is refused.
+    assert.equal(readingsAgree("Sum Assured\t50,000.0050,000.00", "Sum Assured 50,000.00 50,000.00").agree, true);
+    assert.equal(readingsAgree(text.replace("Early Crisis Cover\t25,000.00\nPremium\t181.44", "Early Crisis Cover\t181.44\nPremium\t25,000.00"), image).agree, false);
+    // A figure read differently, a figure missing, or a label the text reading does not print: not agreed.
+    assert.equal(readingsAgree(text, image.replace("181.44", "181.41")).agree, false);
+    assert.equal(readingsAgree(text, image.replace("Early Crisis Cover 25,000.00\n", "")).agree, false);
+    assert.equal(readingsAgree(text, image.replace("Early Crisis Cover", "Accident Death Cover")).agree, false);
+    assert.equal(readingsAgree(text, "Policy Schedule").agree, false);
+    // Small amounts and percentages count too: a swap the text makes is refused (Critic R175-1).
+    assert.equal(readingsAgree("Ambulance\tS$300\nHospital cash\tS$500 per day\nComa\t25%", "Ambulance S$500\nHospital cash S$300 per day\nComa 50%").agree, false);
+    assert.equal(readingsAgree("Ambulance\tS$300\nHospital cash\tS$500 per day\nComa\t25%", "Ambulance S$300\nHospital cash S$500 per day\nComa 25%").agree, true);
+    // Glued figures print neither in the table check; a rate with more decimals is one figure (Critic R175-a).
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.equal(numbersIn("13,500.00100,000.00").some((n) => n === 13500 || n === 100000), false);
+    assert.equal(numbersIn("181.44181.44").includes(181.44), false);
+    assert.deepEqual(numbersIn("1.375% a year"), [1.375]);
+    // An unchecked page keeps its lines with no amount (name, number, status), and none with one (Critic R175-c).
+    const { uncheckedText, UNCHECKED_PAGE } = await import("@/lib/simple-chat/library");
+    assert.equal(uncheckedText("PruLink Enhanced Protector\nPolicy Number: 63639755\nIn Force\nSum Assured 100,000.00\nPremium S$181.44\nComa 25%"),
+      [UNCHECKED_PAGE, "PruLink Enhanced Protector", "Policy Number: 63639755", "In Force"].join("\n"));
+    assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: a second reading from the page image did not agree with their text, so no amount on them is used.");
+    assert.equal(uncheckedPagesNote([]), null);
+  });
+  await t("E1: clean pages are not suspect, a pairing swapped within a line or between short labels is refused, and an unchecked page's amounts reach nothing (TE upload check)", async () => {
+    const { scrambleSigns, readingsAgree, crossCheckPages, suspectPages, uncheckedText, UNCHECKED_PAGE: UNCHECKED_PAGE_TEXT } = await import("@/lib/documents/layout-check");
+    // A rate table under its title lines, a contents list, rates with more decimals, and dates with dots are not suspect (TE U-F2, U-F3).
+    for (const clean of ["Table of Premium Rates\nNon-Smoker\nAnnual Premium\nAge\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00\n37\t130.00\t118.40",
+      "Contents\nYour cover at a glance\nWhat we pay\nWhat we do not pay\nHow to claim\n3\n5\n9\n12", "Premium rate per S$1,000 sum assured\t1.235\nModal factor (monthly)\t0.0875",
+      "The guaranteed interest rate is 4.125% a year.", "Claims paid in US$ are converted at USD 1 = SGD 1.3456.", "Period of insurance: 01.10.2026 to 30.09.2027"]) assert.deepEqual(scrambleSigns(clean), [], clean);
+    assert.deepEqual(scrambleSigns("Premium\t181.44181.44"), ["figures printed side by side came out glued together"]);
+    // Order counts, and every word does (TE U-F1).
+    assert.equal(readingsAgree("Death Benefit\t100,000.00\tAccidental Death\t50,000.00", "Accidental Death 100,000.00 Death Benefit 50,000.00").agree, false);
+    assert.equal(readingsAgree("Plan A\t100,000.00\nPlan B\t50,000.00", "Plan A 50,000.00\nPlan B 100,000.00").agree, false);
+    assert.equal(readingsAgree("Plan A\t100,000.00\nPlan B\t50,000.00", "Plan A S$100,000.00\nPlan B SGD 50,000.00").agree, true);
+    assert.equal(readingsAgree("Hip\t75%\nWrist\t20%", "Hip 20%\nWrist 75%").agree, false);
+    // At upload: only suspect text pages are read again; a page is kept only when the image reading confirms it, and
+    // otherwise, or when the image could not be read, only its lines with no amount are kept as its text.
+    const scrambled = "PruLink Enhanced Protector\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\n100,000.00\n50,000.00\n25,000.00";
+    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
+    assert.deepEqual(suspectPages(pages), [2, 4]);
+    const image = { 2: "PruLink Enhanced Protector\nBasic Plan Sum Assured 100,000.00\nCrisis Cover Benefit 50,000.00\nEarly Crisis Cover 25,000.00", 4: "Sum Assured 50,000.00 50,000.00" } as Record<number, string>;
+    const asked: number[][] = [];
+    const checked = await crossCheckPages(pages, [2, 4], async (n) => { asked.push(n); return n.map((pageNumber) => ({ pageNumber, text: image[pageNumber], extractionMethod: "ocr" })); });
+    assert.deepEqual(asked, [[2, 4]]);
+    assert.deepEqual(checked.map((p) => [p.pageNumber, Boolean(p.unchecked)]), [[1, false], [2, true], [3, false], [4, false]]);
+    assert.equal(checked[1].text, uncheckedText(scrambled));
+    assert.doesNotMatch(checked[1].text, /\d/);
+    assert.equal(checked[3].text, pages[3].text, "a confirmed page keeps the document's own words");
+    for (const read of [async () => null, async () => { throw new Error("down"); }, async () => [{ pageNumber: 4, text: image[4], extractionMethod: "ocr", unreadable: true }], async () => [{ pageNumber: 4, text: image[4], extractionMethod: "native" }]])
+      assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
+    assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");
+    assert.equal(await crossCheckPages(pages, [], async () => { throw new Error("not read"); }), pages);
+    // Bare whole numbers are amounts too; a policy number or a date by its own label stays (Critic R176-2).
+    assert.equal(uncheckedText("Basic Plan: PruLink Enhanced Protector\nPolicy Number: 63639755\nSum Assured 13500\nCrisis Cover 100000\nDate of issue: 01/10/2026"),
+      [UNCHECKED_PAGE_TEXT, "Basic Plan: PruLink Enhanced Protector", "Policy Number: 63639755", "Date of issue: 01/10/2026"].join("\n"));
+    // The labelled number or date comes out first; any other figure on the line drops it (TE UC-1).
+    assert.equal(uncheckedText("Hospital cash 500 per day from the date of admission\nPolicy number TE-1 Annual limit 150000\nIssued 01/03/2025 Deductible 3500\nCommencement Date 1 March 2025\nExpiry 30 days 1500\nStart 12 months 2000\nIssued on March 3, 2024"),
+      [UNCHECKED_PAGE_TEXT, "Commencement Date 1 March 2025", "Issued on March 3, 2024"].join("\n"));
+    // A header over rows of amounts alone does not pair the plan labels above it (TE UC-2); a header over keyed rows does.
+    assert.deepEqual(scrambleSigns("Basic Plan\nCrisis Cover Benefit\nEarly Crisis Cover\nSum Assured\tPremium\n100,000.00\t181.44\n50,000.00\t20.00\n25,000.00\t10.00"), ["labels came out before their values"]);
+    // A page number or a date alone on its line pairs nothing and does not stop agreement; several lone numbers still do (TE UC-3).
+    const plain = "Your Schedule\nSum Assured\t100,000.00\n01/10/2026\n2";
+    assert.deepEqual(readingsAgree(plain, plain.replace(/\t/g, " ")), { agree: true });
+    assert.equal(readingsAgree("Ambulance\nDental\n500\n800", "Ambulance\nDental\n500\n800").agree, false);
+    // An unchecked page that prints a rider premium and a benefit amount gives the premium check and the rider table
+    // neither: what the rest of upload reads is its checked text (Critic R176-1).
+    const { premiumPrinted, printedPremiumTable } = await import("@/lib/rag/ingest");
+    const rider = "Premium Schedule\nBasic Plan\nCrisis Waiver Rider\nTotal Premium\nSum Assured\n150.00\n31.44\n181.44\n100,000.00";
+    const [riderPage] = await crossCheckPages<{ pageNumber: number; text: string; unchecked?: boolean }>([{ pageNumber: 1, text: rider }], [1], async () => null);
+    assert.equal(riderPage.unchecked, true);
+    assert.equal(premiumPrinted(181.44, "SGD", riderPage.text), false);
+    assert.deepEqual(printedPremiumTable(riderPage.text, 181.44).riders, []);
+    assert.equal(premiumPrinted(181.44, "SGD", rider), true, "control: the page's own text prints it");
+    // A glued token gives no piece of its tail either (Critic R176 low).
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.deepEqual(numbersIn("181.44181.44"), []);
+    assert.deepEqual(numbersIn("13,500.00100,000.00"), []);
+    assert.deepEqual(numbersIn("Premium 181.44181.44 and 50,000"), [50000]);
+  });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");
     assert.equal(ev.parsePrintedDate("1 January 2025"), "2025-01-01");

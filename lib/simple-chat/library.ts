@@ -4,6 +4,8 @@
  *
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
+import { uncheckedText } from "@/lib/documents/layout-check";
+export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
 export type HouseholdDocument = {
@@ -55,7 +57,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       WHERE pm.account_id=$1 AND pm.policy_id = ANY($2::uuid[])${notExcluded}`,
     [accountId, ids]) : [];
   const pages = ids.length ? await run(
-    "SELECT account_id, policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) ORDER BY policy_id, page_number",
+    "SELECT account_id, policy_id, page_number, text, to_jsonb(pp)->>'extraction_method' AS method FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) ORDER BY policy_id, page_number",
     [accountId, ids]) : [];
   for (const row of [...members, ...docs, ...links, ...pages])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
@@ -73,7 +75,8 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
-      pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: String(p.text) })),
+      // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote.
+      pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
     })),
   };
 }

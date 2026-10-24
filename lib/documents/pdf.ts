@@ -24,6 +24,9 @@ export type PdfPage = {
   /** Round 10: the reader said the page is hard to read (handwriting, a
    * smudged photo): only parts of it were transcribed with confidence. */
   legibility?: "poor";
+  /** The page's text showed signs of a scrambled table and a second reading from its image did not agree with it
+   * (lib/documents/layout-check.ts): its text stays searchable, but no amount is read from it. */
+  unchecked?: boolean;
   /** Round 10: the page was photographed or scanned sideways or upside down
    * and was read after turning it by this many degrees (clockwise). */
   turnedBy?: number;
