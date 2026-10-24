@@ -6105,3 +6105,25 @@ Probes ran against the extracted parseTranscription, since ocr-hosted.ts needs @
   `else if (ch < " ") { out += "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"); continue; }`
 - Low: when the parse fails, the dropped-page retry resends the same pages at temperature 0, so it gets the same reply. That costs one wasted call; it is not a correctness problem.
 - No integration test is needed for the failure row. The unit cases cover the parser, and the row write is one guarded call.
+
+## R183 — PR #116 OCR page numbers (head bdfe1e3)
+
+The probe ran against the extracted acceptTranscribedPages.
+
+**Verdict: READY.**
+
+- Probe results:
+
+  | Requested | Reply | Result |
+  |---|---|---|
+  | [3,4] | 1,2 | mapped to 3,4 |
+  | [3,4] | 2,1 | mapped by number, 2 to 4 and 1 to 3 |
+  | [3] | page_number 1, text as a list | mapped to 3, list joined |
+  | [3,4] | 1,5 | nothing mapped |
+  | [3,4] | 4,5 | 4 only (no positional map) |
+  | [3,4] | 3,4 plus an injected page 1 | 3 and 4 only |
+  | [3,4] | "1","2" | mapped to 3,4 |
+  | [1,3] | 1,2 | 1 only (no positional map) |
+
+- A wrong mapping can only end as an unchecked page, because the upload check compares it with the text reading.
+- Low (optional): OCR_PAGES_ABSENT logs `returned` as the raw value of pageNumber/page_number/page. If a reader put text in `page`, that text would be stored. Use `Number(...)`, falling back to its typeof, to keep only a number.
