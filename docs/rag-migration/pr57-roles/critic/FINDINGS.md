@@ -6072,3 +6072,7 @@ Probes ran with tsx against 4c58b2f. The free suites pass: 94/0, 13/0, 107/0.
   - UC-2: the header skip needs a non-amount key cell.
   - UC-3: a lone page number is ignored. A lone value still fails, because the image line "TPD 3" has no match in the text.
 - Low (accepted): "Policy no. 5000" is kept. Its label says it is a policy number.
+
+## R180 — PR #114 upload check (head 9e57e8e)
+
+**Verdict: READY.** R179-1 is fixed exactly as patched. The R179 probe now keeps the policy number and the real dates. It drops "Expiry 30 days 1500", "Start 12 months 2000", "End 90 days 25000" and "Sum Assured 13500". The free suites pass: 94/0, 13/0, 107/0. I could not run v11-ingestion here (DB stack).
