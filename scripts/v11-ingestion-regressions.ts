@@ -125,6 +125,18 @@ async function partA() {
     assert.equal(readingsAgree(text, image.replace("Early Crisis Cover 25,000.00\n", "")).agree, false);
     assert.equal(readingsAgree(text, image.replace("Early Crisis Cover", "Accident Death Cover")).agree, false);
     assert.equal(readingsAgree(text, "Policy Schedule").agree, false);
+    // Small amounts and percentages count too: a swap the text makes is refused (Critic R175-1).
+    assert.equal(readingsAgree("Ambulance\tS$300\nHospital cash\tS$500 per day\nComa\t25%", "Ambulance S$500\nHospital cash S$300 per day\nComa 50%").agree, false);
+    assert.equal(readingsAgree("Ambulance\tS$300\nHospital cash\tS$500 per day\nComa\t25%", "Ambulance S$300\nHospital cash S$500 per day\nComa 25%").agree, true);
+    // Glued figures print neither in the table check; a rate with more decimals is one figure (Critic R175-a).
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.equal(numbersIn("13,500.00100,000.00").some((n) => n === 13500 || n === 100000), false);
+    assert.equal(numbersIn("181.44181.44").includes(181.44), false);
+    assert.deepEqual(numbersIn("1.375% a year"), [1.375]);
+    // An unchecked page keeps its lines with no amount (name, number, status), and none with one (Critic R175-c).
+    const { uncheckedText, UNCHECKED_PAGE } = await import("@/lib/simple-chat/library");
+    assert.equal(uncheckedText("PruLink Enhanced Protector\nPolicy Number: 63639755\nIn Force\nSum Assured 100,000.00\nPremium S$181.44\nComa 25%"),
+      [UNCHECKED_PAGE, "PruLink Enhanced Protector", "Policy Number: 63639755", "In Force"].join("\n"));
     assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: their table text came out scrambled, and a second reading from the page image did not agree with it, so no amount on them is used.");
     assert.equal(uncheckedPagesNote([]), null);
   });

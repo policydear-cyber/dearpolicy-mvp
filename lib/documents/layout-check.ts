@@ -10,7 +10,9 @@
 
 /** "50,000.0050,000.00": a complete decimal amount with another digit straight after it. */
 const GLUED = /\d\.\d{2}\d/;
-const FIGURE = /\d[\d,]*\.\d{2}\b|\d{1,3}(?:,\d{3})+\b/g;
+// Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
+// must not agree (Critic R175-1).
+const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
 const NUMBERS_ONLY = /^[\s\d,.\-–—%$SGDU]*\d[\s\d,.\-–—%$SGDU]*$/;
 const LABEL_ONLY = (line: string) => line.length >= 3 && line.length <= 60 && !/\d/.test(line) && /[A-Za-z]{3}/.test(line);
 

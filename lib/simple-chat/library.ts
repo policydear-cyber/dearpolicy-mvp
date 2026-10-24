@@ -39,7 +39,11 @@ const text = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOStri
  * `notExcluded` is lib/policies/member-exclusions' clause for (pm.account_id, pm.policy_id, pm.family_member_id), so a
  * person the household removed from a document is not listed as linked to it. */
 /** What the answer is given in place of a page whose table text could not be checked. */
-export const UNCHECKED_PAGE = "[This page's table text came out scrambled and could not be checked against the page image, so nothing on it is used. Say its amounts are not shown.]";
+export const UNCHECKED_PAGE = "[This page's table text came out scrambled and could not be checked against the page image, so no amount on it is used. Say its amounts are not shown.]";
+/** An unchecked page keeps its lines that print no amount (the policy's name, number and status), so the policy is not
+ * missing from the answer, and none that does (Critic R175-c). */
+const AMOUNT_LINE = /\d[\d,]*\.\d{2}|\$\s?\d|\b(?:SGD|USD)\s?\d|\d{1,3}(?:,\d{3})+|\d\s*%/;
+export const uncheckedText = (text: string) => [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !AMOUNT_LINE.test(l))].join("\n");
 export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = ""): Promise<Household> {
   const members = await run(
     "SELECT account_id, display_name, preferred_name, relationship FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at",
@@ -76,7 +80,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status),
       linkedPeople: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))],
       // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote.
-      pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? UNCHECKED_PAGE : String(p.text) })),
+      pages: pages.filter((p) => String(p.policy_id) === String(d.id)).map((p) => ({ page: Number(p.page_number), text: p.method === "unchecked" ? uncheckedText(String(p.text)) : String(p.text) })),
     })),
   };
 }

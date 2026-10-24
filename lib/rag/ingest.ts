@@ -483,24 +483,26 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // image, and its figures are used only when the two readings agree (lib/documents/layout-check.ts). A page they do
     // not agree on stays searchable, but no amount is read from it, and the document says it was read in part
     // (Charmaine's new documents, 24 Oct: Prudential schedules).
-    const suspect = ocrSourceBytes && sniffed.format === "pdf"
-      ? pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && looksScrambled(p.text)).map((p) => p.pageNumber) : [];
-    if (suspect.length) {
-      await progress(args, "ocr", 26, `Checking ${suspect.length} table page${suspect.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
+    // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked.
+    const crossCheck = async (numbers: number[]) => {
+      if (!numbers.length || !ocrSourceBytes) return;
+      await progress(args, "ocr", 26, `Checking ${numbers.length} table page${numbers.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
       let second: PdfPage[] | null = null;
       try {
-        second = await completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes as Uint8Array, password: args.pdfPassword,
-          pages: pages.map((p) => (suspect.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers: suspect });
+        second = await completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes, password: args.pdfPassword,
+          pages: pages.map((p) => (numbers.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers: numbers });
       } catch (error) {
         await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
       }
       pages = pages.map((p) => {
-        if (!suspect.includes(p.pageNumber)) return p;
+        if (!numbers.includes(p.pageNumber)) return p;
         const image = second?.find((s) => s.pageNumber === p.pageNumber);
         // The text reading is the document's own words: it is kept when the image reading confirms it, never replaced.
         return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? p : { ...p, unchecked: true };
       });
-    }
+    };
+    await crossCheck(ocrSourceBytes && sniffed.format === "pdf"
+      ? pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && looksScrambled(p.text)).map((p) => p.pageNumber) : []);
 
     // Round 10: a photo the reader could not make out at all is explained as a
     // photo, with how to take it again.
@@ -542,7 +544,6 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // rest of the document is used, and the household is told which pages
     // are missing.
     const unreadableNote = unreadablePagesNote(pages.filter((p) => p.unreadable).map((p) => p.pageNumber));
-    const uncheckedNote = uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber));
 
     const ocrCount = pages.filter((page) => page.extractionMethod === "ocr").length;
     await progress(
@@ -601,7 +602,22 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
     // A page that could not be checked confirms nothing: its figures, names and dates are not re-found on it.
-    const extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+    let extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+    // A page whose cover amounts the fact check could not re-find, with no visible sign of a scrambled table (a label
+    // beside the next row's figure), is read again from its image too, once; a page the readings do not agree on is
+    // left out and the reading checked again (Critic R175-2).
+    if (ocrSourceBytes && sniffed.format === "pdf") {
+      const failed = [...new Set(extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified && c.sourcePage).map((c) => Number(c.sourcePage)))]
+        .filter((n) => pages.some((p) => p.pageNumber === n && p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && /\d/.test(p.text))).slice(0, 6);
+      if (failed.length) {
+        await crossCheck(failed);
+        const now = pages.filter((p) => p.unchecked && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
+        if (now.length) {
+          extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+          if (withMethod) await query("UPDATE policy_pages SET extraction_method='unchecked' WHERE policy_id=$1 AND account_id=$2 AND page_number = ANY($3::int[])", [args.policyId, args.accountId, now]);
+        }
+      }
+    }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     const noCover = NON_COVER_ROLES.has(extraction.documentRole ?? "");
     // The reading named people, and none of them is printed in the document:
@@ -943,7 +959,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedNote ?? (extraction.personalCoverageConfirmed && unverified
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedPagesNote(pages.filter((p) => p.unchecked).map((p) => p.pageNumber)) ?? (extraction.personalCoverageConfirmed && unverified
         ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
