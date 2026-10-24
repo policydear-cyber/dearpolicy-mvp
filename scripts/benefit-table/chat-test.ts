@@ -1380,7 +1380,10 @@ test("a plan table's rows: the cell's own currency; never another table's headin
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tUS$150,000\tUS$300,000", "Trip cancellation\tS$5,000\tS$10,000"], "USD"), [["Trip cancellation", 10000, "SGD"]]);
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Single Trip\tAnnual Trip", "Trip cancellation\tS$5,000\tS$15,000"]), []);
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Optional covers (pay extra)", "Golf cover\tS$500\tS$1,000"]), []);
-  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "S$50,000\tS$80,000", "Emergency evacuation", "S$1,000*\tS$2,000*"]), [["Emergency evacuation", 2000, "SGD"]]);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "S$50,000\tS$80,000", "Emergency evacuation", "S$1,000*\tS$2,000*", "* Pre-existing conditions are excluded."]), [["Emergency evacuation", 2000, "SGD"]]);
+  // A footnoted cell gives none with no footnote printed, or one that names a group, limit or share (Critic R171-1).
+  for (const note of [null, "^ Limited to S$25,000 for children.", "^ Reduced to 50% for insured persons aged 70 years and above."])
+    assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Personal accident\tS$50,000^\tS$100,000^", ...(note ? [note] : [])]), [], String(note));
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "Personal accident", "Adult\tS$50,000\tS$100,000", "Child\tS$12,500\tS$25,000"]), []);
 });
 

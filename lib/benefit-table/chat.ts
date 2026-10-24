@@ -156,11 +156,17 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         // The cell's own currency: "US$10,000" is US$ whatever the row it is read beside (TE pr113 P3).
         const currency = !money ? null : /^us\$/i.test(money[1]) ? "USD" : /^(?:s\$|sgd)/i.test(money[1]) ? "SGD" : template.figure.currency;
         if (!money && !notCovered) continue;
+        // A footnote mark is a qualifier: the cell gives a row only when the page prints that footnote and it names no group,
+        // limit or share ("* Reduced to 50% for insured persons aged 70 and above", "^ Limited to S$25,000 for children"), and
+        // the footnote goes with the row as its condition (Critic R171-1).
+        const mark = /([*^†#]+)$/.exec(cell)?.[1];
+        const note = mark ? lines.find((l) => l.startsWith(mark) && !l.startsWith(`${mark}${mark[0]}`) && l.length > mark.length + 3) : undefined;
+        if (mark && (!note || /\d|\b(?:child(?:ren)?|juveniles?|adults?|age[ds]?|seniors?|elderly|family|spouse|reduced|limited|sub-?\s?limit|max(?:imum)?|per|each)\b/i.test(note.slice(mark.length)))) continue;
         // A name another row from this page already has (as its name or in its line) is that row's.
         const keys = [own, above != null ? lines[above] : null, below != null ? lines[below] : null].filter((x): x is string => !!x).map(plain);
         if (theirs.some((o) => o.source.page === page.page && keys.some((key) => plain(o.benefit).includes(key) || plain(o.source.excerpt).includes(key)))) continue;
         const excerpt = [above, i, below].filter((x): x is number => x != null).sort((x, y) => x - y).map((k) => lines[k]).join("\n");
-        out.push({ ...template, benefit: name, pays: money ? "up_to" : "not_covered", conditions: [], fromDay: null, maxDays: null, qualifier: null,
+        out.push({ ...template, benefit: name, pays: money ? "up_to" : "not_covered", conditions: note ? [note.slice(mark!.length).trim()] : [], fromDay: null, maxDays: null, qualifier: null,
           figure: money ? { kind: "printed", amount: Number(money[2].replace(/,/g, "")), currency, unit: "up_to", period: null } : { kind: "none", why: "printed as not covered" },
           source: { ...template.source, page: page.page, excerpt }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
       }
