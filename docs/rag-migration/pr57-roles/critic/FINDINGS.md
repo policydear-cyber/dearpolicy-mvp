@@ -6351,3 +6351,7 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
   ```
   Add a test: one amount card with "pre_existing" in a condition gives no amount card and this note.
 - **R197-2 (low):** `st.text.includes(t)` over-matches: a dropped "S$50" also removes a note that names "S$500". Match on a boundary instead: `new RegExp(`(?<![\\d.,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\d,]*\\d)`).test(st.text)`. The harm is only an extra note dropped, so it is low.
+
+## Round 198: #123 at 6aa2e1d
+
+**READY.** R197-1 (the "left-out-guarded" note) and R197-2 (boundary match, plus `\.\d` so "S$50" doesn't match "S$50.50") are applied, with tests. Reported suites: simple chat 83, benefit-table chat 94, TE pr121 9 and pr123 13, tsc clean. #123 merges after #121.
