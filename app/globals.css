@@ -649,6 +649,26 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .schedule-filters { margin-left: auto; }
 .schedule-status { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--good-line); background: var(--good-tint); border-radius: var(--r-md); font-size: var(--fs-sm); line-height: 1.5; color: var(--good-text); }
 .schedule-group .section-heading small { font-size: var(--fs-xs); color: var(--muted); }
+.schedule-insurer { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--muted); }
+/* Benefits: each policy is one panel of ruled rows, the benefit on the left
+   and what it pays on the right in tabular figures; the source opens under
+   its row. On a phone a row is two lines: the benefit, then the amount. */
+.schedule-group .benefit-list { gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 2px 20px; }
+.schedule-group .benefit-item { grid-template-columns: minmax(0, 1fr) minmax(0, auto); column-gap: 24px; row-gap: 2px; align-items: baseline; padding: 14px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.schedule-group .benefit-item:first-child { border-top: 0; }
+.schedule-group .benefit-item > * { grid-column: 1 / -1; }
+.schedule-group .benefit-item > .benefit-head { grid-column: 1; grid-row: 1; display: grid; gap: 2px; justify-content: start; }
+.schedule-group .benefit-item > .pays-cell, .schedule-group .benefit-item > .muted-cell { grid-column: 2; grid-row: 1; text-align: right; max-width: 36ch; }
+.schedule-group .benefit-item > .pays-cell { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--money); }
+.schedule-group .benefit-item > .muted-cell { color: var(--warn-text); }
+.schedule-group .benefit-item > .pays-basis { grid-column: 2; text-align: right; color: var(--muted); }
+.schedule-group .benefit-item .source-details > summary { color: var(--muted); font-weight: 500; }
+.schedule-group .benefit-item .source-details[open] > summary { color: var(--brand-ink); }
+@media (max-width: 640px) {
+  .schedule-group .benefit-list { padding: 2px 16px; }
+  .schedule-group .benefit-item { grid-template-columns: minmax(0, 1fr); }
+  .schedule-group .benefit-item > .pays-cell, .schedule-group .benefit-item > .muted-cell, .schedule-group .benefit-item > .pays-basis { grid-column: 1; grid-row: auto; text-align: left; max-width: none; }
+}
 .schedule-table th { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 650; }
 .schedule-table td strong { font-size: var(--fs-sm); }
 .schedule-table td em { color: var(--muted); font-style: normal; }
