@@ -6293,3 +6293,16 @@ Two low points, no change needed:
 - "how much have I used this month" with no cover word gets the Plan usage reply, even though a user might mean an outpatient limit. The reply only points to a page and states no amount.
 
 #117 6b6411a was confirmed READY in R192.
+
+## Round 194: #121 at 7508309 (fix 8b4042e, TE P121-1/2)
+
+**READY.** In `guardInPlace`:
+- next steps now get the server-set `libraryNames` exemption, as details do;
+- a string `bottomLine` is guarded like the summary, and falls back to the guarded summary (or GUARD_FALLBACK_SUMMARY) when the summary is emptied or the bottom line is stripped. A removed internal name can no longer sit beside the fallback.
+- The guard strips model, provider and table names, not amounts or people, so the exemption cannot reopen an amount path.
+
+Two low follow-ups, not blocking:
+- Answers stored before this keep their raw bottomLine on reopen, because sanitizeStoredAnswer is unchanged.
+- `statements[]` are not guarded, as on main. Their text comes from checked rows, but a model-written `conditions` or `basis` string could carry a provider word. A later small PR could run guardText over those fields.
+
+The r9-redteam and r6 failures are reported as the same on main 4050804; I did not re-run them (DB suites).
