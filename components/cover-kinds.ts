@@ -29,20 +29,43 @@ export const kindOfName = (name: string) => {
   return COVER_KINDS.find((k) => k.id === id) ?? COVER_KINDS[COVER_KINDS.length - 1];
 };
 
-/** The parts of a benefit-table row (GET /api/benefit-table) kindsOfTable reads. */
+/** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
 export type TableKindRow = { benefit: string; pays: string; product: string; cover: string };
-/** The kinds of cover a person's benefit-table rows show, for a household whose documents are read into the benefit table
+export type TableKindCover = { product: string; cover: string };
+/** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
+ * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
+ * insurance. A life plan is death cover only when it says so: "CPF LIFE" is an annuity (Critic R199). */
+const COVER_NAME_KINDS: [RegExp, string][] = [
+  [/\b(?:travel\w*|trip|holiday|journey)\b/i, "travel"],
+  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard|protect)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
+  [/accident|\bpa\b/i, "accident"],
+  [/critical illness|\bci\b|cancer|dread disease|early crisis/i, "ci"],
+  [/careshield|eldershield|disab|\btpd\b|long[- ]term care/i, "disability"],
+  [/shield|hospital|medical|health|surg/i, "hospital"],
+  [/\b(?:term|whole)\s+life\b|\blife\s+(?:insurance|assurance|cover|protection)\b|\bgroup\s+term\b/i, "death"],
+];
+const coverKindOfName = (name: string) => COVER_NAME_KINDS.find(([re]) => re.test(name))?.[1] ?? null;
+/** A row that is only the premium ("Annual premium", "Premium payable"), never a premium waiver, which is cover (Critic R199-1). */
+const PREMIUM_ONLY = /^(?:(?:annual|monthly|quarterly|half[- ]yearly|yearly|single|modal|total|basic|regular|instalment)\s+)?premiums?(?:\s+(?:payable|amount|paid|due|term))?$/i;
+/** The kinds of cover a person's benefit table shows, for a household whose documents are read into the benefit table
  * (its Coverage rows are no longer read or refreshed, so they can be stale: 24 Oct, Family showed "Home and vehicle" for
- * a travel policy). A row printed as not covered is no cover, and a premium or a value is not a kind of cover. Every row
- * of a travel policy is travel cover: its "Rental Vehicle Excess" is not motor insurance. */
-export function kindsOfTable(rows: TableKindRow[]): string[] {
-  const found = new Set<string>();
+ * a travel policy). The cover's own name decides first; a row's benefit name adds its kind (a term life's TPD row is
+ * disability cover too), never "Home and vehicle" ("Home Nursing", "Home Modification" are not home insurance). A row
+ * printed as not covered, a value and a premium are no cover. A cover with no row counted (its pages not linked yet) is
+ * still cover: never "Nothing found" for a person who has one (Critic R199-2). */
+export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
+  const found = new Set<string>(), counted = new Set<string>();
+  const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
   for (const r of rows) {
-    if (r.pays === "not_covered" || r.pays === "value" || /\bpremium/i.test(r.benefit)) continue;
-    const travel = /travel|trip/i.test(`${r.product} ${r.cover}`);
-    const kind = travel ? "travel" : kindOfName(r.benefit).id !== "other" ? kindOfName(r.benefit).id : kindOfName(r.cover).id;
-    found.add(kind);
+    if (r.pays === "not_covered" || r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+    counted.add(`${r.product}\u0000${r.cover}`);
+    const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
+    if (cover) found.add(cover);
+    if (cover === "travel") continue;
+    if (benefit !== "other" && benefit !== "property") found.add(benefit);
+    else if (!cover) found.add("other");
   }
+  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
   return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
 }
 

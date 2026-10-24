@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
-import { COVER_KINDS, isToConfirm, kindOfRow, kindsOfTable, type KindRow, type TableKindRow } from "@/components/cover-kinds";
+import { COVER_KINDS, isToConfirm, kindOfRow, kindsOfTable, type KindRow, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -49,8 +49,10 @@ export default function FamilyPage() {
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
     void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
-      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[] }[] } | null) => {
-        if (table?.enabled) return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [])])));
+      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[] }[] } | null) => {
+        // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
+        if (!table) return;
+        if (table.enabled) return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [])])));
         return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[] } | null) => {
           if (!l) return;
           // Per person, each kind found and whether any of its rows is confirmed; a kind only a schedule line suggests is "to confirm".

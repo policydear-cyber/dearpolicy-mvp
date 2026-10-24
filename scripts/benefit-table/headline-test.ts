@@ -96,5 +96,23 @@ test("a person's kinds of cover come from their benefit-table rows", () => {
   assert.deepEqual(kindsOfTable([r("Sum Insured", "Critical Illness II", "amount"), r("Own damage", "Motor Insurance", "up_to", "Motor Comprehensive")]), ["Critical illness", "Home and vehicle"]);
 });
 
+// Critic R199 and TE #124: the benefit's own name never makes "Home and vehicle"; the cover's name decides first.
+test("the cover's own name decides the kind, and a home-care benefit is not home insurance", () => {
+  const r = (benefit: string, product: string, pays = "up_to", cover = product) => ({ benefit, pays, product, cover });
+  assert.deepEqual(kindsOfTable([r("Home Modification", "Group Personal Accident"), r("Mobility Aids", "Group Personal Accident")]), ["Accidents and injuries"]);
+  assert.deepEqual(kindsOfTable([r("Room and board", "PRUShield"), r("Home Nursing", "PRUShield"), r("Home Healthcare", "PRUShield")]), ["Hospital and medical"]);
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", "Chubb Holiday Plan", "up_to", "Classic")]), ["Travel"]);
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", "Singlife Journey Plan")]), ["Travel"]);
+  // A premium waiver is cover; a premium alone is not.
+  assert.deepEqual(kindsOfTable([r("Premium waiver on TPD", "PRUlife Vantage", "words"), r("Annual premium", "PRUlife Vantage", "amount")]), ["Disability"]);
+  assert.deepEqual(kindsOfTable([r("Waiver of Premium", "PRUlife Vantage", "words")]), ["Other"]);
+  // An annuity is not death cover.
+  assert.deepEqual(kindsOfTable([r("Monthly payout", "CPF LIFE Standard Plan", "per_period")]), ["Other"]);
+  // A term life's TPD row adds disability; a cover with no row counted still shows.
+  assert.deepEqual(kindsOfTable([r("Death", "Group Term Life", "amount"), r("Total and permanent disability", "Group Term Life", "amount")],
+    [{ product: "Group Term Life", cover: "Group Term Life" }, { product: "Critical Illness II", cover: "Critical Illness II" }]), ["Death", "Disability", "Critical illness"]);
+  assert.deepEqual(kindsOfTable([], [{ product: "HomeShield Contents", cover: "HomeShield Contents" }]), ["Home and vehicle"]);
+});
+
 console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error(" - " + f); process.exit(1); }
