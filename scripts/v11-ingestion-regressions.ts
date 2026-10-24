@@ -90,6 +90,15 @@ async function partA() {
       item("Crisis Cover Benefit", 48, 682), item("50,000.00", 330, 682, 41), item("50,000.00", 371, 682, 41),
       item("Premium", 48, 664), item("181.44", 330, 664, 27), item("181.44", 357, 664, 27)], 595);
     assert.equal(page.text, "Basic Plan Sum Assured\t100,000.00\t100,000.00\nCrisis Cover Benefit\t50,000.00\t50,000.00\nPremium\t181.44\t181.44");
+    // Whole figures with comma groups printed side by side are two cells too.
+    assert.equal(renderPageLayout([item("Sum Assured", 48, 700), item("13,500", 330, 700, 27), item("100,000", 357, 700, 32), item("Premium", 48, 682), item("101.95", 330, 682, 27), item("101.95", 357, 682, 27)], 595).text, "Sum Assured\t13,500\t100,000\nPremium\t101.95\t101.95");
+    // A "label :" / value form keeps each value beside its label, even when the values are long names.
+    const form = renderPageLayout([item("Policy Number:", 48, 700), item("63639755", 300, 700), item("Basic Plan:", 48, 682), item("PruFlexiCash Protection Plus (7th Series) with a long name", 300, 682),
+      item("Servicing Financial Consultant:", 48, 664), item("A Consultant Name Here", 300, 664), item("Policy Status:", 48, 646), item("In Force", 300, 646)], 595);
+    assert.equal(form.text, "Policy Number:\t63639755\nBasic Plan:\tPruFlexiCash Protection Plus (7th Series) with a long name\nServicing Financial Consultant:\tA Consultant Name Here\nPolicy Status:\tIn Force");
+    // Two columns of prose whose left lines do not end with a colon still split.
+    const prose = renderPageLayout([item("Left column opening words", 48, 790), item("Right column other text that runs long enough", 330, 790), item("left continues here", 48, 772), item("right continues there and on", 330, 772)], 595);
+    assert.equal(prose.text.split("\n").length, 4);
     // A plain number split into pieces is still one number; a figure followed by words is untouched.
     assert.equal(renderPageLayout([item("Total", 48, 700), item("1,2", 330, 700, 12), item("34.56", 342, 700, 22)], 595).text.includes("1,234.56"), true);
   });
@@ -102,15 +111,20 @@ async function partA() {
     // A clean schedule, prose, and a premium rate table are not suspect.
     for (const clean of ["Basic Plan Sum Assured\t100,000.00\nPremium\t181.44", "Section 3 Exclusions\nWe will not pay for any claim arising from war.\nThis applies to all plans.",
       "Age\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00"]) assert.deepEqual(scrambleSigns(clean), [], clean);
-    // The image reading agrees when it prints the same figures and only labels the text reading has.
+    // The readings agree only line by line: each figure beside the same label in both. The text reading is what is kept.
+    const text = "Policy Schedule\nBasic Plan Sum Assured\t100,000.00\t100,000.00\nCrisis Cover Benefit\t50,000.00\t50,000.00\nEarly Crisis Cover\t25,000.00\nPremium\t181.44";
     const image = "Policy Schedule\nBasic Plan Sum Assured 100,000.00 100,000.00\nCrisis Cover Benefit 50,000.00 50,000.00\nEarly Crisis Cover 25,000.00\nPremium 181.44";
-    assert.deepEqual(readingsAgree(split, image), { agree: true });
-    assert.deepEqual(readingsAgree("Sum Assured\t50,000.0050,000.00", "Sum Assured 50,000.00 50,000.00"), { agree: true });
+    assert.deepEqual(readingsAgree(text, image), { agree: true });
+    // Labels first and values after: only the image pairs them, and one reading of the pairing is not two.
+    assert.equal(readingsAgree(split, image).agree, false);
+    // Glued figures in the text cannot be paired either, and the text putting a label beside the wrong figure is refused.
+    assert.equal(readingsAgree("Sum Assured\t50,000.0050,000.00", "Sum Assured 50,000.00 50,000.00").agree, true);
+    assert.equal(readingsAgree(text.replace("Early Crisis Cover\t25,000.00\nPremium\t181.44", "Early Crisis Cover\t181.44\nPremium\t25,000.00"), image).agree, false);
     // A figure read differently, a figure missing, or a label the text reading does not print: not agreed.
-    assert.equal(readingsAgree(split, image.replace("181.44", "181.41")).agree, false);
-    assert.equal(readingsAgree(split, image.replace("Early Crisis Cover 25,000.00\n", "")).agree, false);
-    assert.equal(readingsAgree(split, image.replace("Early Crisis Cover", "Accident Death Cover")).agree, false);
-    assert.equal(readingsAgree(split, "Policy Schedule").agree, false);
+    assert.equal(readingsAgree(text, image.replace("181.44", "181.41")).agree, false);
+    assert.equal(readingsAgree(text, image.replace("Early Crisis Cover 25,000.00\n", "")).agree, false);
+    assert.equal(readingsAgree(text, image.replace("Early Crisis Cover", "Accident Death Cover")).agree, false);
+    assert.equal(readingsAgree(text, "Policy Schedule").agree, false);
     assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: their table text came out scrambled, and a second reading from the page image did not agree with it, so no amount on them is used.");
     assert.equal(uncheckedPagesNote([]), null);
   });

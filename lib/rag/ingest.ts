@@ -497,7 +497,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       pages = pages.map((p) => {
         if (!suspect.includes(p.pageNumber)) return p;
         const image = second?.find((s) => s.pageNumber === p.pageNumber);
-        return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? { ...image, lines: undefined } : { ...p, unchecked: true };
+        // The text reading is the document's own words: it is kept when the image reading confirms it, never replaced.
+        return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? p : { ...p, unchecked: true };
       });
     }
 
@@ -783,11 +784,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
     const unmatched = detected.filter((d) => !d.matchedMemberId && !dismissed.has(nameKey(d.name))).length;
-    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted);
+    const unchecked = pages.filter((p) => p.unchecked).map((p) => p.pageNumber);
+    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted || unchecked.length);
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
       uploadProfileLinks.length ? `The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: ${uploadProfileLinks.join("; ")}. Check this is the right person` : null,
       unverified ? `${unverified} extracted coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
+      unchecked.length ? `${unchecked.length === 1 ? "Page" : "Pages"} ${unchecked.join(", ")} could not be checked against the page image` : null,
       namedNobodyPrinted ? (linkedByPrintedName ? "The people this document was read as covering are not named in it; it was linked to the one family member whose name it prints. Check this is the right person"
         : "The people this document was read as covering are not named in it, so it was kept with the profile it was uploaded to. Check this is the right person") : null,
     ].filter(Boolean).join("; ");
@@ -940,7 +943,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedNote ?? "Ready.", unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : [uncheckedNote ?? (extraction.personalCoverageConfirmed && unverified
+        ? `Read in part. ${unverified} cover amount${unverified === 1 ? "" : "s"} could not be checked word for word against the document's pages, so ${unverified === 1 ? "it is" : "they are"} not shown as confirmed.` : "Ready."), unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
       await query(

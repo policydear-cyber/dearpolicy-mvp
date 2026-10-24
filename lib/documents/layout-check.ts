@@ -2,10 +2,11 @@
  * text came out with every label first and every value after, and neighbouring figures glued together, so no row could
  * be tied to its amount).
  *
- * A page whose text shows those signs is read a second time from its image. Its figures are used only when both readings
- * agree: every figure and every label the image reading prints beside a figure is in the text reading too, and the two
- * print the same figures. Otherwise the page is "unchecked": its text stays searchable, but nothing reads an amount from
- * it, and the document says it was read in part. Nothing here uses a model. */
+ * A page whose text shows those signs is read a second time from its image. The page is used only when both readings
+ * agree line by line: the same figures, and each figure beside the same label in both. The text reading, the document's
+ * own words, is what is stored; the image reading only confirms it. A page they do not agree on, or one whose text puts no
+ * label beside its figures (one reading of the pairing is not two), is "unchecked": its text stays searchable, but
+ * nothing reads an amount from it, and the document says it was read in part. Nothing here uses a model. */
 
 /** "50,000.0050,000.00": a complete decimal amount with another digit straight after it. */
 const GLUED = /\d\.\d{2}\d/;
@@ -34,20 +35,27 @@ export const looksScrambled = (text: string) => scrambleSigns(text).length > 0;
 const figuresIn = (text: string) => (text.replace(/(\d\.\d{2})(?=\d)/g, "$1 ").match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
 const words = (text: string) => text.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ").filter((w) => w.length >= 3);
 
+/** Each line that prints a figure: its label's words and its figures in order. */
+function figureLines(text: string) {
+  return text.split("\n").map((line) => ({ label: words(line.replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?%?/g, " ")), figures: figuresIn(line) }))
+    .filter((l) => l.figures.length);
+}
+const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
 /** Whether the page's image reading agrees with its text reading: the same figures (as many times each, reading glued ones
- * apart), and every word of each label the image reading prints beside a figure also in the text reading. Null with the
- * reason when they do not. */
+ * apart), and every line of each that prints figures has a line in the other with the same figures in the same order
+ * beside the same label words. A figure line with no label in the text reading has nothing to agree on. */
 export function readingsAgree(textReading: string, imageReading: string): { agree: true } | { agree: false; why: string } {
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
   if (!b.length) return { agree: false, why: "the image reading prints no figures" };
-  if (a.length !== b.length || a.some((n, i) => Math.abs(n - b[i]) > 0.005)) return { agree: false, why: "the two readings print different figures" };
-  const printed = new Set(words(textReading));
-  for (const line of imageReading.split("\n")) {
-    if (!/\d/.test(line)) continue;
-    const label = line.replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?%?/g, " ");
-    const missing = words(label).filter((w) => !printed.has(w));
-    if (missing.length) return { agree: false, why: `the image reading prints "${missing.slice(0, 3).join(" ")}" beside a figure, and the text reading does not` };
+  if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures" };
+  const text = figureLines(textReading), image = figureLines(imageReading);
+  const beside = (l: { label: string[]; figures: number[] }, other: typeof text) =>
+    other.some((o) => sameFigures(o.figures, l.figures) && l.label.every((w) => o.label.includes(w)) && o.label.every((w) => l.label.includes(w)));
+  for (const l of text) {
+    if (!l.label.length) return { agree: false, why: `the text reading prints ${l.figures.join(", ")} with no label beside it` };
+    if (!beside(l, image)) return { agree: false, why: `the image reading does not print ${l.figures.join(", ")} beside "${l.label.join(" ")}"` };
   }
+  for (const l of image) if (!beside(l, text)) return { agree: false, why: `the text reading does not print ${l.figures.join(", ")} beside "${l.label.join(" ")}"` };
   return { agree: true };
 }
 

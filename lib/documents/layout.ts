@@ -45,7 +45,7 @@ export function lineFrom(items:TextItem[],cellGap=10):PageLine{
     // Two figures printed side by side with no gap ("50,000.00" "50,000.00") are two cells, never one glued number
     // "50,000.0050,000.00": a complete decimal amount followed by another digit starts a new cell (Charmaine's new
     // documents, 24 Oct: Prudential schedules).
-    const glued=cursor!==null&&/\d\.\d{2}$/.test(current)&&/^[\d(]/.test(piece);
+    const glued=cursor!==null&&/(?:\d\.\d{2}|\d,\d{3})$/.test(current)&&/^[\d(]/.test(piece);
     if(cursor!==null&&(item.x-cursor>cellGap||glued)){if(current.trim()){cells.push(current.trim());xs.push(start);xe.push(cursor);}current="";}
     else if(cursor!==null&&item.x-cursor>1.2&&current)current+=" ";
     if(!current)start=item.x;
@@ -157,6 +157,20 @@ function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
     // label. Two columns of prose have long lines.
     const shortCells=rightLines.length>0&&rightLines.every(line=>line.text.length<=32);
     let merged=false;
+    // A "label :" / value form ("Policy Number:" beside "63639755", "Basic Plan:" beside "PruFlexiCash Protection Plus (7th
+    // Series)"): its values can be long names, but each sits on the baseline of a label that ends with a colon
+    // (Charmaine's new documents, 24 Oct: Prudential schedules read with every label first, then every value).
+    for(let j=i-1;j>=0&&!merged;j--){
+      const left=baselines(out[j]);
+      const labels=[...left.entries()].map(([y,row])=>({y,text:lineFrom(row).cells.join(" ")}));
+      const colon=labels.filter(line=>/:\s*$/.test(line.text));
+      const besideColon=(line:{y:number})=>[line.y,line.y-4,line.y+4].some(y=>colon.some(c=>c.y===y));
+      if(colon.length>=3&&colon.length/labels.length>=0.6&&rightLines.length>=2&&rightLines.filter(besideColon).length/rightLines.length>=0.8){
+        out.splice(j,i-j+1,{left:out[j].left,right:out[i].right});i=j+1;merged=true;
+      }
+      break;
+    }
+    if(merged)continue;
     if((valueLines.length>=1||shortCells&&rightLines.length>=2)&&(valueLines.length>=2&&valueLines.length/rightLines.length>=0.6||shortCells)){
       for(let j=i-1;j>=0;j--){
         const left=baselines(out[j]);
@@ -184,7 +198,7 @@ function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
             // ...or a schedule's value columns of bare figures ("100,000.00 100,000.00" under "Sum Assured" / "Premium"),
             // each line beside a label: read apart, every label came before every value (Charmaine's new documents, 24 Oct).
             ||(within.length>=2&&within.length===rightLines.length&&within.every(beside)
-              &&within.filter(line=>/^(?:(?:[\d][\d,]*\.\d{2}|[-–—])(?:\s+|$))+$/.test(line.text.trim())).length>=Math.max(2,Math.ceil(within.length*0.75)));
+              &&within.filter(line=>/^(?:(?:[\d][\d,]*\.\d{2}|\d{1,3}(?:,\d{3})+|[-–—])(?:\s+|$))+$/.test(line.text.trim())).length>=Math.max(2,Math.ceil(within.length*0.75)));
         if(aligned){out.splice(j,i-j+1,{left:out[j].left,right:out[i].right});i=j+1;merged=true;break;}
       }
     }
