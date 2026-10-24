@@ -6369,3 +6369,23 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 - **Fix**, tested: /mnt/project-files/critic/cover-kinds-r199.ts. The page change is `kindsOfTable(p.rows ?? [], p.covers ?? [])`, and `if (!table) return;` before the ledger fallback.
   - The waiver and "Premium waiver on TPD" rows now count (Other and Disability), while "Annual premium" is skipped.
   - Covers with no rows give their kinds, and annuity stays Other.
+
+## Round 200: #125 (7a8b5c2), ledger rows printed as not applying
+
+**NOT READY (false drops of real rows).** I probed `printedNotApplying` with 15 lines. `NOT_APPLYING_CELL` matches a not-applying cell **anywhere** on the benefit's own line, so these real rows are dropped:
+
+| Line | Row | #125 |
+|---|---|---|
+| `Hospital cash  S$100 per day  Waiting period: Nil` | Hospital cash | **dropped** |
+| `Accidental death\tS$100,000\tDeductible: Nil` | Accidental death | **dropped** |
+| `Outpatient\tS$1,000\tCo-payment: Nil` | Outpatient | **dropped** |
+| `Emergency dental  S$500  Excess: Nil  Sub-limit: -` | Emergency dental | **dropped** |
+| `Medical expenses overseas  S$200,000  -` | Medical expenses overseas | **dropped** |
+| `Terrorism  Covered  Hijack  Nil` | Terrorism | **dropped** (it's Hijack's cell) |
+
+- **R200-1 (high, hidden benefit):** a "Nil" deductible, waiting period or co-payment, or another benefit's cell on the same line, removes a real benefit.
+- **Fix** (tested, /mnt/project-files/critic/not-applying-r200.ts): only the cell printed **right after the benefit's own name** counts. With no findable name, the first line counts only when it prints no figure.
+  - All six rows above are kept.
+  - These are still dropped: "Home Guard  Not Applicable", "Pet care  -", "Golf equipment: N/A", "Hijack  Nil" (as Hijack), "Loss of income  NA", and "Golf  N.A." with a paraphrased name.
+  - "Pet care - boarding  S$50 per day" and "Section 3  Golf  N.A.  S$250" (no name) are kept.
+- Noted (low, a miss and not a false drop): a wrapped "Home Guard" / "Not Applicable" on the next line is still kept. "Home Guard\tNot Applicable\tS$500" (plan columns) is dropped. That withholds rather than guesses the plan, which is consistent with `rowFiguresDependOnPlan`.
