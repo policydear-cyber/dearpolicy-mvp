@@ -266,7 +266,7 @@ async function main() {
       ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"], ["update my wife's name", "rename"], ["plan usage", "usage"],
       ["how many questions have I used this month", "usage"],
       // TE P118-3, Critic R188-3.
-      ["how many questions do I have left this month", "usage"], ["How much does DearPolicy cost?", "cost"], ["how much does this app cost per month", "cost"], ["is this free?", "cost"],
+      ["how many questions do I have left this month", "usage"], ["How much does DearPolicy cost?", "cost"], ["how much does this app cost per month", "cost"], ["is it free to use", "cost"],
       ["how secure is DearPolicy", "safe"], ["how to delete dearpolicy account", "delete"], ["who can see my policies", "who-sees"], ["delete everything", "delete"],
       ["how much did I use this month", "usage"], ["how much have I used dearpolicy", "usage"],
       ["is it safe to upload my policy here", "safe"], ["rename my son", "rename"]];
@@ -280,7 +280,9 @@ async function main() {
       // TE P118-1/2, Critic R188-1/2: cover questions, one thing in the household, and how to use the app.
       "how many GP visits can I use this month", "can I use the polyclinic this month", "can I still use my TCM visits this month", "how much have I used for my maternity this month",
       "how much does a GP visit cost with you guys", "how do I remove household member Ah Kow", "remove the household helper from my list", "remove my profile photo",
-      "terminate the household member access for my maid", "remove the data for my son", "How do I use DearPolicy?", "can I use this app on my phone", "can I use the app for my parents"])
+      "terminate the household member access for my maid", "remove the data for my son", "How do I use DearPolicy?", "can I use this app on my phone", "can I use the app for my parents",
+      // Critic R190-1: only the message is read, so "is it free" may be a follow-up about a treatment.
+      "is it free", "is this free?", "is this treatment free"])
       assert.equal(appHelp(q), null, q);
     const model = stub(c2);
     const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];

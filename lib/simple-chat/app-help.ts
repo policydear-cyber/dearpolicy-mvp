@@ -64,7 +64,7 @@ const HELPS: Help[] = [
   },
   {
     id: "cost",
-    test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+(?:${APP}|this|it)\s+free\b|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b`, "i"),
+    test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+${APP}\s+free\b|\bfree\s+to\s+use\b|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b`, "i"),
     answer: {
       bottomLine: "The app doesn't show a price. Your household's plan, and how much of it you have used this month, are on the Plan usage page.",
       nextSteps: ["Open Household, then Plan usage."],
