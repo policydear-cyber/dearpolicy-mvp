@@ -6402,3 +6402,16 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
   [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
   ```
   With it, HomeProtect gives ["Death"], a mortgage reducing term gives ["Death"], and real home and motor covers keep "Home and vehicle".
+
+## Round 202: #125 at 4c908e4
+
+**NOT READY, one line.** R200-1 is in. The split-out dash is right ("Accidental Death  -  S$100,000" is kept), and so are the TE P125-2 additions.
+
+- **R202-1 (medium, hidden benefit):** `lastIndexOf(last)` finds the LAST printing of the name's last word. On a side-by-side travel table, a later benefit sharing that word supplies the cell:
+  - "Flight delay  S$100 per 6 hours  Baggage delay  Nil" drops Flight delay;
+  - "Travel delay\tS$100\tTrip delay\tNot Applicable" drops Travel delay.
+- **Fix** (tested): take the name's first printing, meaning its first word, then its last word after it.
+  ```ts
+  const low=l.toLowerCase(),last=words[words.length-1],at=low.indexOf(last,Math.max(0,low.indexOf(words[0])));
+  ```
+  With it, both rows are kept, and so are "Loss of baggage … Baggage delay  Nil", the R200 keeps and "No cover for war". "Hijack Nil", "Home Guard  Not Applicable*" and "Golf: ✗" are still dropped.
