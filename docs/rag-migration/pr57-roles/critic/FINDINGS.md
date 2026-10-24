@@ -6436,3 +6436,18 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 - **#129 quieter sidebar footer and phone top bar: READY.**
   - On phones the theme button keeps its accessible name, because the visually hidden span is clipped rather than `display:none`.
   - Low, pre-existing and not this PR's: the footer still says "Your documents and questions are kept private to your household." Pages are also read by the reading model, and a DearPolicy reviewer can check answers. That is the same overclaim as R185-2, worth softening in a later PR.
+
+## Round 204 (24 Oct): #124 1bc0910, #125 e5ccbe8
+
+**#125 e5ccbe8: READY.** R202-1 applied verbatim; both side-by-side delay lines are keep tests.
+
+**#124 1bc0910: NOT READY (one fix).** R201-1 and F12 are right (HomeProtect gives Death and Disability, Mortgage Reducing Term gives Death, Public Vehicle Accident Plan gives Accidents).
+
+- **R204-1 (high, hides a plan): components/cover-kinds.ts:64.** P124-2 counts the cover before *every* skip, so a cover whose only rows are a value or the premium now counts as no cover. Probe: an ILP with only "Fund value" + "Annual premium" rows gave `["Other"]` on 82ff6ce and `[]` on 1bc0910; "Critical Illness II" with only an "Annual premium" row went from `["Critical illness"]` to `[]`. With no other plan, Family shows "Nothing found in your uploaded documents" (app/family/page.tsx:145) for a person who has a plan, against R199-2. Fix: skip value/premium rows before counting; only a not-covered row counts the cover and then skips:
+  ```ts
+  // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1).
+  if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+  counted.add(`${r.product}\u0000${r.cover}`);
+  if (r.pays === "not_covered") continue;
+  ```
+  With it: ILP gives Other, CI premium-only gives Critical illness, all-not-covered HomeShield still gives nothing; headline 15/0.
