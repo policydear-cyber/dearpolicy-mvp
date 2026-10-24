@@ -6244,3 +6244,25 @@ Free probes only: the three benefit-table suites on #117 and #120, plus extracte
 
   All six layouts above then behave as wanted (the first three agree; N8 and the last-line 150 are refused). A printed "1" on PDF page 5 at the edge still passes.
 - Residual risk (low, accepted): a lone value equal to the page number ("3" days on page 3) is still stripped. Its figure is still counted on both sides.
+
+## Round 190: re-review of #122 (b8d372f), #118 (36cb215), #117 (e73dc4e)
+
+- **#122: READY.** The R189 diff and TE P122-1 are applied. I probed nine layouts: the footer then disclaimer, the header then number, the trailing blank and a page number beside a footer label all agree. N8 mid-page and a 2-digit value first or last under a label-only line are refused.
+  - The trade-off is accepted: a bundle page (printed "1" on PDF page 5) next to a label-only footer line is refused. That fails safe, and only pages already sent for a second reading are affected.
+- **#118: NOT READY** (R188-1/2/3 are met, and TE P118 is fine).
+  - **R190-1 (medium):** the new `is (?:APP|this|it) free` sends "is it free" and "is this free?" to the price answer. Only the message is read, so a follow-up about a treatment ("…GP visit." then "is this free?") gets "The app doesn't show a price". Fix: in the cost test, use `\bis\s+${APP}\s+free\b|\bfree\s+to\s+use\b` instead of `\bis\s+(?:${APP}|this|it)\s+free\b`.
+  - Probed with the fix: "is it free", "is this free?" and "is this treatment free" go to the model; "is it free to use" and "is dearpolicy free" get cost.
+- **#117: NOT READY.**
+  - **R190-2 (high, wrong person):** the possessive now resolves the household's spouse whenever the next word is not on NOT_THEM_AFTER. That is the R184 deny-list problem again. These all resolve to the spouse, so the question is answered about the wrong person: "my husband's niece", "my wife's nephew", "my husband's uncle", "my wife's aunt", "my husband's maid", "my wife's helper", "my wife's kids", "my husband's children", "my wife's brother-in-law", "my husband's friend's car", "my wife's stepdaughter", "my husband's goddaughter".
+  - **R190-3 (medium):** the trailing capture consumes the next word, so "my husband's first wife" resolves "wife".
+  - **Fix** (tested):
+    ```ts
+    const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(['’]s)?(?![\w'’-])(?=(?:\s+([\w'’-]+))?)/gi;
+    // After a possessive, only the spouse's own cover counts: an allow-list (Critic R190-2).
+    const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|aia|pru\w*|manulife|ge|great|income|singlife|fwd|aviva|tokio|hsbc|own)$/i;
+    // in the loop:
+    if (x[1] && !MINE_BEFORE.test(x[1])) continue;
+    if (x[3] ? x[4] && !HIS_OR_HERS.test(x[4]) : x[4] && NOT_THEM_AFTER.test(x[4])) continue;
+    const word = x[2].toLowerCase();
+    ```
+  - Probed with the fix: all 12 relatives above and "my husband's first wife" give null. These still resolve: "my husband's policy", "my wife's hospital plan", "husband's claim how", "hubby's AIA", "is this my husband's?", "my wife's Prudential plan" and "my husband kena fracture".
