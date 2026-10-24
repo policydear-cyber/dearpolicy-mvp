@@ -6144,3 +6144,32 @@ The probe ran against the extracted acceptTranscribedPages.
   - Never when it is followed by "'s", a hyphen, "of", or a family or other-person noun (mother/mum/dad/brother/sis/side/family/parents/boss/friend/colleague/cousin/ex).
   - Words before it may contain hyphens, so "sister-in-law husband" is caught.
   - Every phrase above gives null. "husband kena fracture leg", "hubby got cancer", "my wife kena dengue", "if wife hospitalised can claim", "husband and I both covered?", "Husband warded at SGH" and "my hubby, he fell" still resolve.
+
+## R185 — PR #118 app-help fixed answers (head fa556d4); #117 recheck (a694384)
+
+**Verdict on #118: NOT READY (two findings; patch tested).**
+
+- **R185-1 (high): cover questions get a canned reply instead of their amount.** ABOUT_COVER misses most cover words, and "plan" means the insurance plan to most people. Caught today:
+  - usage: "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan has been used up for physio sessions";
+  - cost: "do I pay anything to use it at a panel clinic", "how much does it cost to use this for an MRI scan? will it pay";
+  - who-sees: "who can access the policy documents if I die" (an estate question);
+  - rename: "change my name on the policy", "update my son's name on the rider";
+  - safe: "is my data safe to share with the agent".
+
+  **Fix (tested; file /mnt/project-files/critic/app-help-r185.ts):**
+  - Widen ABOUT_COVER with: policy/policies, rider, insured/assured, pay(s)/paid, reimburs*, outpatient, inpatient, dental, physio, clinic, panel, doctor, specialist, scan, mri, x-ray, surgery, operation, ward(ed), treatment, therapy, accident, illness, cancer, critical, disability, tpd, death/die/dies/died, medisave, shield, deductible, co-insurance, left, remaining, balance, estate, agent.
+  - Usage fires only on "plan usage", or on usage/used/use/left together with "this month", "questions", "documents read" or the app's name. "How much of my plan have I used this year" then goes to the model.
+  - All the phrases above go to the model. "what is dearpolicy", "who can see my documents", "delete my account", "update my wife's name", "is dearpolicy free" and "plan usage" keep their fixed answers.
+- **R185-2 (medium) who-sees / safe: the answers say more than the pages do.**
+  - "Your household's documents are shown to the members of your household", given as the answer to "who can see" or "is it safe", implies they are the only ones.
+  - But the app's own copy says "A DearPolicy reviewer will check this" (app/chat/page.tsx:45), and pages are sent to the reading model.
+  - No page states any security property.
+  - Suggested wording: "Within DearPolicy, the people in your household are listed under Household > Members, and the owner can remove a member or revoke an invitation there. The app's pages don't describe who else handles documents or how they are secured, so I can't say more than that."
+- Checked as true against the pages:
+  - Delete this household: owner only, the exact name is typed, and it cannot be undone.
+  - A member who isn't the owner can Leave.
+  - Revoke an invitation.
+  - Family > Edit details > Full name / Preferred name.
+  - Plan usage is linked from Household.
+  - No price is shown (the usage page says so).
+- **#117 at a694384 is still NOT READY.** The added deny-list words (sis, bro, frens, grandma, grandpa) don't close R184-1. "my client wife", "my bf wife", "my gf husband", "kakak husband", "jie jie husband", "my sister-in-law husband", "husband of my colleague", "husband mother warded" and "husband-and-wife plan" still resolve to the household spouse. The allow-list in /mnt/project-files/critic/spouse-said-r184.ts is still the fix.
