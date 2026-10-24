@@ -6053,3 +6053,22 @@ Probes ran with tsx against d679b94. The free suites pass: chat 94/0, headline 1
 - R176-2 fixed: the probe keeps "Basic Plan", "Policy Number: 63639755" and "Commencement Date: 01/02/2020", and drops "Sum Assured 13500" and "Date 50,000.00".
 - numbersIn: "13,500.00100,000.00" and "181.44181.44" give []. "1.375", "S$600,000" and "1 million" are read as before.
 - Low (observe, no change needed): the glued-tail skip also drops a number one character after a glued token ("13,500.00100,000.00 5 days" gives []). That only withholds, and only on a line that is already broken.
+
+## R179 — PR #114 upload check, TE UC delta (head 4c58b2f)
+
+Probes ran with tsx against 4c58b2f. The free suites pass: 94/0, 13/0, 107/0.
+
+**Verdict: NOT READY. One fix left (R179-1, tested patch).**
+
+- **R179-1 (high) lib/documents/layout-check.ts DATE:** the "d Month yyyy" forms match any word, `[A-Za-z]{3,9}`. LABELLED then strips "start/end/expiry/issue" plus a fake date and the line is kept with its amount: "Expiry 30 days 1500" and "Start 12 months 2000" both survive on an unchecked page.
+  Fix (tested; it also drops those two lines and keeps "Issue Date 12 March 2024" and "Issued on March 3, 2024"):
+  ```ts
+  const MONTH = String.raw`(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
+  const DATE = String.raw`(?:\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+${MONTH}\s+\d{4}|${MONTH}\s+\d{1,2},?\s+\d{4})`;
+  const LONE_DATE = new RegExp(String.raw`^\s*` + DATE + String.raw`\s*$`, "i");
+  ```
+- Holds:
+  - UC-1: "Policy number TE-1 Annual limit 150000" is dropped. "Date of issue 1 Jan 2020 Premium 1500" is dropped too.
+  - UC-2: the header skip needs a non-amount key cell.
+  - UC-3: a lone page number is ignored. A lone value still fails, because the image line "TPD 3" has no match in the text.
+- Low (accepted): "Policy no. 5000" is kept. Its label says it is a policy number.
