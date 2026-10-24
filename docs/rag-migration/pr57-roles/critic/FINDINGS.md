@@ -6076,3 +6076,19 @@ Probes ran with tsx against 4c58b2f. The free suites pass: 94/0, 13/0, 107/0.
 ## R180 — PR #114 upload check (head 9e57e8e)
 
 **Verdict: READY.** R179-1 is fixed exactly as patched. The R179 probe now keeps the policy number and the real dates. It drops "Expiry 30 days 1500", "Start 12 months 2000", "End 90 days 25000" and "Sum Assured 13500". The free suites pass: 94/0, 13/0, 107/0. I could not run v11-ingestion here (DB stack).
+
+## R181 — PR #115 Prudential plan steps 3–4 (head f99e66f)
+
+The free suites pass: 94/0, 13/0, 107/0. simple-answer chat-test can't run here (@anthropic-ai/sdk is missing locally), and neither can v11 (DB stack).
+
+**Verdict: READY for steps 3–4.** Step 2, a tolerant parse of the image-reading reply, is still to be added to this PR.
+
+- **Step 3:** uncheckedWhy is set in every branch. The probe gives:
+  - "could not be read" when there is no reading;
+  - "gave no text" when the page is missing or unreadable;
+  - readingsAgree's reason otherwise.
+
+  It goes only to processing_failure_diagnostics, the service-only table, as "page N: why", and never into the page text. The second-pass crossCheck logs as well.
+- **Step 4:** uncheckedPages comes from extraction_method. reading_status "read in part …" is printed whatever pages are sent. libraryFact says "was read in part". unreadable() is unchanged.
+- Low: prompt.ts:24 only explains the case where a document has no reading_status. It could add one line: "read in part" means saying which pages couldn't be checked, and never that the file couldn't be read. The attribute already reads plainly, so this is optional.
+- Low: a page the image reader dropped (PartialTranscription) and a reply that could not be parsed both give "gave no text". Step 2's OCR_REPLY_UNPARSED row will tell them apart.
