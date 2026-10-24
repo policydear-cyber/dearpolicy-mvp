@@ -60,9 +60,11 @@ export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []
   const found = new Set<string>(), counted = new Set<string>();
   const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
   for (const r of rows) {
-    // Its cover is counted first: a cover whose rows are all printed as not covered is no cover (TE P124-2).
+    // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
+    // rows are all printed as not covered is no cover (TE P124-2).
+    if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
     counted.add(`${r.product}\u0000${r.cover}`);
-    if (r.pays === "not_covered" || r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+    if (r.pays === "not_covered") continue;
     const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
     if (cover) found.add(cover);
     if (cover === "travel") continue;
