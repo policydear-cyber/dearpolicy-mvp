@@ -661,7 +661,8 @@ export function stayDaysSaid(asked: string[]): number | null {
     const found = new Set(stayPatterns(n).flatMap((re) => [...q.matchAll(re)].map(value)));
     // "In ICU for 3 days and then in the general ward for 7 days", "2 days in ICU and 5 days in the ward": another length makes
     // the stay unclear (TE pr113 S3, R5). A claim window ("within 30 days") or a day said by when ("3 days ago") is not one.
-    const other = [...q.matchAll(new RegExp(String.raw`(?<!\b(?:within|in)\s)\b${n}[\s-]*days?\b${NOT_LENGTH}`, "gi"))].map(value);
+    // Nor is "30 days to claim" or "a 90 days waiting period" (TE pr113 H1).
+    const other = [...q.matchAll(new RegExp(String.raw`(?<!\b(?:within|in)\s)\b${n}[\s-]*days?\b${NOT_LENGTH}(?!\s*(?:'s\s+)?(?:waiting|period|notice|to\s+(?:claim|notify|tell|inform)))`, "gi"))].map(value);
     if (found.size) return found.size === 1 && other.every((v) => found.has(v)) ? [...found][0] : null;
   }
   return null;

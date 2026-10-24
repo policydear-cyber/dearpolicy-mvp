@@ -220,10 +220,16 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
   };
   // A plan or product printed with the cover's own name ("PRO LIFETIME PROTECTOR - MAX", plan "AIA PRO LIFETIME PROTECTOR -
   // MAX") says nothing more: it is not repeated (Charmaine's new documents, 24 Oct, AIA).
-  const plainName = (t: string) => noNumbers(t).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const repeats = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && !!plainName(a) && !!plainName(b) && (plainName(a).includes(plainName(b)) || plainName(b).includes(plainName(a)));
-  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan && !repeats(c.plan, c.cover !== c.product ? c.cover : c.product) ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
-  const withProduct = (c: C) => c.cover !== c.product && !repeats(c.cover, c.product) ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
+  // Only when every word of it is shown already, but for the insurer's name the product opens with: "Travel Insurance Premier"
+  // or "Hospital & Surgical (Plan 2)" still names the plan (Critic R173-1).
+  const words = (t: string) => t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const repeats = (a: string | null | undefined, b: string | null | undefined, c: C) => {
+    if (!a || !b) return false;
+    const shown = new Set(words(b)), extra = words(a).filter((w) => !shown.has(w));
+    return extra.length === 0 || (extra.length === 1 && extra[0] === words(c.product ?? "")[0]);
+  };
+  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan && !repeats(c.plan, c.cover !== c.product ? c.cover : c.product, c) ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
+  const withProduct = (c: C) => c.cover !== c.product && !repeats(c.product, c.cover, c) ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
   const shortUnique = unique(short), productUnique = unique(withProduct);
   // A cover name that says no kind of cover ("Single Trip") keeps its product, so the card still says what it is (Critic R117-1).
   const saysKind = (c: C) => COVER_KIND.test(short(c));

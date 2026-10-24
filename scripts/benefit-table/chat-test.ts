@@ -219,6 +219,9 @@ test("an answer card names the cover shortly; the product is added only when two
 test("a plan or product printed with the cover's own name is not repeated on the card (Charmaine's new documents, AIA)", () => {
   const labels = coverLabels([{ product: "AIA PRO LIFETIME PROTECTOR - MAX", cover: "PRO LIFETIME PROTECTOR - MAX", plan: "AIA PRO LIFETIME PROTECTOR - MAX" }]);
   assert.deepEqual([...labels.values()], ["PRO LIFETIME PROTECTOR - MAX"]);
+  // A plan with words of its own still names it (Critic R173-1).
+  assert.deepEqual([...coverLabels([{ product: "Travel Insurance", cover: "Travel Insurance", plan: "Travel Insurance Premier" }]).values()], ["Travel Insurance, plan Travel Insurance Premier"]);
+  assert.match([...coverLabels([{ product: "Hospital & Surgical", cover: "Hospital & Surgical", plan: "Hospital & Surgical (Plan 2)" }]).values()][0], /plan Hospital & Surgical \(Plan 2\)/);
 });
 test("labels picked by different rules never land on the same words (TE #99)", () => {
   const labels = coverLabels([{ product: "Alpha", cover: "Life, Beta", plan: null }, { product: "Beta", cover: "Life", plan: null }, { product: "Gamma", cover: "Life", plan: null }]);
@@ -1461,6 +1464,7 @@ test("a stay's length the latest message gives works out a daily card the model 
   // "Within N days of", and a second "for N days" elsewhere, say no one length; "for N days after" is one (TE pr113 S3, S5, S10).
   for (const q of ["he was admitted within 30 days of the trip ending", "warded in ICU for 3 days and then in the general ward for 7 days", "stayed 2 days in ICU and 5 days in the ward"]) assert.equal(stayDaysSaid([q]), null, q);
   assert.equal(stayDaysSaid(["he was hospitalised for 12 days after the fall"]), 12);
+  for (const q of ["he was in hospital for 5 days, and he has 30 days to claim", "admitted for 5 days; is there a 90 days waiting period?"]) assert.equal(stayDaysSaid([q]), 5, q);
 });
 
 test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {
