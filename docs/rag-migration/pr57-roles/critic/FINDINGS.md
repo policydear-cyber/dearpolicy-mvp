@@ -6306,3 +6306,25 @@ Two low follow-ups, not blocking:
 - `statements[]` are not guarded, as on main. Their text comes from checked rows, but a model-written `conditions` or `basis` string could carry a provider word. A later small PR could run guardText over those fields.
 
 The r9-redteam and r6 failures are reported as the same on main 4050804; I did not re-run them (DB suites).
+
+## Round 195: #123 (5222e20, stacked on #121), statements guarded and the stored bottom line
+
+**NOT READY, one small change.**
+
+- **Calculation children are safe.** The guard runs at save (`lib/chat/store.ts:94`), after `keepLabelledAmounts` (`lib/simple-chat/hook.ts:279`), so dropping a point at save cannot change which amounts that step kept.
+  - "-stay" and "-bill" children are built only under a parent that has an amount (`verify.ts:1468-1490`, `c.amount!`), and an amount point is never dropped. So no child loses its parent.
+  - A "-stay" child with payable 0 and the not_found "-bill" carry server-built text with no leak pattern, so they stay.
+- **No import cycle.** output-guard imports only types. Monetary-boundary now pulls output-guard into the chat page's client bundle through app/chat/page.tsx, which is a few regexes and harmless.
+- **R195-1 (medium, qualifier):** on an AMOUNT point, `conditions` and `basis` go through guardText, which drops a whole sentence when any leak pattern matches. The amount would then show without its qualifier, which breaks "never strip a qualifier". Wordings that would trigger it:
+  - "…becomes null." (the debug-token pattern);
+  - a pasted snake_case code or form id;
+  - a 32+ character mixed reference string.
+
+  They are rare, but the result is an amount without its condition. Fix: on amount points, scrub the leaked token instead of dropping the sentence.
+  ```ts
+  const keepWords = (c: string) => guardText(c, names) || scrub(c);   // amount points: never lose a qualifier
+  const conditions = (st.conditions ?? []).map((c) => (st.amount ? keepWords(c) : guardText(c, names))).filter((c): c is string => !!c && !!c.trim());
+  const basis = typeof st.basis === "string" ? (st.amount ? keepWords(st.basis) : guardText(st.basis, names)) || null : st.basis;
+  ```
+- **R195-2 (low):** when a no-amount point's `text` is unchanged, `fullText` is kept unguarded, and the fullText of an amount point is never guarded. If the cards show fullText (the expand), guard it on its own: `fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText`. For amount points, fullText is the server label in verify.ts, so it is fine as is.
+- **The `sanitizeStoredAnswer` bottomLine fallback is correct.** It only replaces the bottom line when the stored summary is exactly GUARD_FALLBACK_SUMMARY.
