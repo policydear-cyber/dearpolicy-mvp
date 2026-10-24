@@ -6199,3 +6199,23 @@ The probe ran against the extracted acceptTranscribedPages.
 - libraryNames is built only from `household.documents[].name`, which is the signed-in household's own library. A name gets in only when the answer's text includes it. The model can't add a name: readModelAnswer doesn't carry the field, and verifyAnswer builds the answer object.
 - protectableNames still filters on the guard side: slashes, key-like values, bare UUIDs, record ids, and names under 3 or over 160 characters.
 - Low (observe): answer-verification.ts:1304 `unnamed` removes library names from a sentence with no whole-word check before reading money figures. Only a file name that is itself part of an amount (for example "000.pdf") could hide a figure. Real names carry an extension, so this is acceptable.
+
+## Round 188: re-review of #116 (9571c14), #117 (f9e56f7), #118 (cef1202), #120 (0069169)
+
+Free probes only: the three benefit-table suites on #117 and #120, plus extracted-function probes for #116, #117 and #118.
+
+- **#116: READY.** Probed acceptTranscribedPages with 11 reply shapes. These are mapped:
+  - 1..n for [3,4];
+  - page_number/page keys and a text array;
+  - a single [1] for [3];
+  - [1,2] for [2,3] (TE P116-1).
+
+  These give nothing: a shifted [4,5], a duplicated [1,1] and a partial [1]. An extra page beside the asked ones is only dropped. OCR_PAGES_ABSENT stores coerced numbers and letter-only keys (R183 met).
+  - Low, comments only: line ~177 says "none is a page that was asked for", but [3,4,5] answered as [3,1,2] is mapped by position (3 to 5), which is correct. Line ~185 says a shifted page "is asked for on its own", but the retry asks for all absent pages together. The upload check still guards both cases.
+- **#117: READY.** The R184 allow-list is verbatim, and its 18 probe phrases behave as intended. Unresolved stays safe: "pls check wife" and "my wife's policy" ask who is meant. Suites: 94/0, 13/0, 107/0.
+- **#120: READY.** R186-1 is fixed: a bare "$" gives a null currency, and "SGD " gives SGD. R186-2 is fixed: a third-line limit, a lowercase wrap or a figures line gives no row. periodWords is used in figureText, rowLabel and shortFigure. Suites: 95/0, 13/0, 107/0.
+- **#118: NOT READY** (R185-1 and R185-2 are met; the who-sees and safe wording is now honest).
+  - **R188-1 (medium, my own R185 pattern):** "How do I use DearPolicy?", "can I use this app on my phone" and "can I use the app for my parents" get the Plan usage answer. A how-to question gets a wrong canned reply. "left" in the same pattern can never fire either, because ABOUT_COVER has "left". Fix: `\bplan\s+usage\b|\b(?:usage|used)\b[^?.!]*\b(?:this\s+month|questions?|documents?\s+read|${APP})\b|\bhow\s+(?:much|many)\b[^?.!]*\buse\b[^?.!]*\b(?:this\s+month|questions?|documents?)\b`
+  - **R188-2 (low-medium):** "remove the data for my son" gets "delete the whole household". Fix: delete test noun followed by `(?!\s+(?:for|of|on|about)\b)`.
+  - **R188-3 (low):** "How much does DearPolicy cost?" goes to the model, because cost words are matched only before the app name. Add `|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b` to the cost test.
+  - Probed with the patch: the how-to questions go to the model; "how much did I use this month" and "how much have I used dearpolicy" still get usage; "How much does DearPolicy cost?" and "...this app cost per month" get cost; "delete my account" and "delete everything" still get delete.
