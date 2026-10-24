@@ -146,6 +146,8 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         if (!own) { parent = null; continue; }
         // "Personal accident" over "Adult\tS$50,000\tS$100,000" is for adults only (TE pr113 P8).
         if (inline && /^(?:adults?|child(?:ren)?|juveniles?|seniors?|overall)\b/i.test(inline) && !SUB_LIMIT.test(inline)) { parent = null; continue; }
+        // "Personal accident (adult)" on the line above names a group too (TE pr113 R3).
+        if (/\b(?:adults?|child(?:ren)?|juveniles?|seniors?|elderly|insured\s+persons?\s+aged)\b/i.test(own)) { parent = null; continue; }
         const sub = SUB_LIMIT.test(own);
         if (!sub) parent = own;
         if (sub && (!parent || /family/i.test(own))) continue;
@@ -161,6 +163,8 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         // the footnote goes with the row as its condition (Critic R171-1).
         const mark = /([*^†#]+)$/.exec(cell)?.[1];
         const note = mark ? lines.find((l) => l.startsWith(mark) && !l.startsWith(`${mark}${mark[0]}`) && l.length > mark.length + 3) : undefined;
+        // A footnote naming a plan ("^ For Premier plan holders only") is a qualifier too (TE pr113 R14).
+        if (mark && note && (/\bplans?\b/i.test(note) || cols.some((p) => p !== template.column && note.includes(p)))) continue;
         if (mark && (!note || /\d|\b(?:child(?:ren)?|juveniles?|adults?|age[ds]?|seniors?|elderly|family|spouse|reduced|limited|sub-?\s?limit|max(?:imum)?|per|each)\b/i.test(note.slice(mark.length)))) continue;
         // A name another row from this page already has (as its name or in its line) is that row's.
         const keys = [own, above != null ? lines[above] : null, below != null ? lines[below] : null].filter((x): x is string => !!x).map(plain);
@@ -218,7 +222,7 @@ export function coverLabels(rows: Pick<TableRow, "product" | "cover" | "plan">[]
   // MAX") says nothing more: it is not repeated (Charmaine's new documents, 24 Oct, AIA).
   const plainName = (t: string) => noNumbers(t).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const repeats = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && !!plainName(a) && !!plainName(b) && (plainName(a).includes(plainName(b)) || plainName(b).includes(plainName(a)));
-  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan && !repeats(c.plan, c.cover) && !repeats(c.plan, c.product) ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
+  const short = (c: C) => [noNumbers(c.cover !== c.product ? c.cover : c.product) || c.cover, c.plan && !repeats(c.plan, c.cover !== c.product ? c.cover : c.product) ? `plan ${c.plan}` : null].filter(Boolean).join(", ");
   const withProduct = (c: C) => c.cover !== c.product && !repeats(c.cover, c.product) ? `${short(c)}, ${noNumbers(c.product) || c.product}` : short(c);
   const shortUnique = unique(short), productUnique = unique(withProduct);
   // A cover name that says no kind of cover ("Single Trip") keeps its product, so the card still says what it is (Critic R117-1).

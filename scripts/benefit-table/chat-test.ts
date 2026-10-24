@@ -1388,6 +1388,8 @@ test("a plan table's rows: the cell's own currency; never another table's headin
   // A footnoted cell gives none with no footnote printed, or one that names a group, limit or share (Critic R171-1).
   for (const note of [null, "^ Limited to S$25,000 for children.", "^ Reduced to 50% for insured persons aged 70 years and above."])
     assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Personal accident\tS$50,000^\tS$100,000^", ...(note ? [note] : [])]), [], String(note));
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Personal accident (adult)", "S$50,000\tS$100,000"]), []);
+  assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses\tS$150,000\tS$300,000", "Golf cover\tS$500^\tS$1,000^", "^ For Classic plan holders only."]), []);
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "Personal accident", "Adult\tS$50,000\tS$100,000", "Child\tS$12,500\tS$25,000"]), []);
 });
 
@@ -1396,6 +1398,10 @@ test("claim windows are never a waiting period or a free look; a passed deadline
   assert.deepEqual(claimWindows(house("No claim is payable for any illness that starts within 30 days of the cover start date.")), []);
   assert.deepEqual(claimWindows(house("If no claim has been made, you may cancel this policy within 14 days of receiving it.")), []);
   assert.deepEqual(claimWindows(house("upon receipt of your written notification of cancellation to us within 14 days from the date you receive your policy.")), []);
+  // Real windows stay: "payable only if notice is given within", a sentence before that starts cover, forms returned (TE pr113 R9, R10).
+  assert.deepEqual(claimWindows(house("Benefits are payable only if written notice of a claim is given within 30 days of the event.")), [30]);
+  assert.deepEqual(claimWindows(house("Cover starts on the day of admission. Notice of a claim must be given within 30 days of discharge.")), [30]);
+  assert.deepEqual(claimWindows(house("Claim forms must be completed and returned within 30 days of receiving them.")), [30]);
   const a = { summary: "", bottomLine: "The baggage claim deadline has already passed; the medical claim is still open.", statements: [], nextSteps: ["Submit the medical claim by 30/10/2026."] };
   dropLateClaims(a, new Date("2026-10-24T02:00:00Z"));
   assert.equal(a.bottomLine, "The baggage claim deadline has already passed; the medical claim is still open.");
@@ -1453,7 +1459,7 @@ test("a stay's length the latest message gives works out a daily card the model 
   // When, not how long (Critic R169-4).
   for (const q of ["admitted 10 days after the accident", "he was admitted 3 days ago", "hospitalised 2 days before the trip ended"]) assert.equal(stayDaysSaid([q]), null, q);
   // "Within N days of", and a second "for N days" elsewhere, say no one length; "for N days after" is one (TE pr113 S3, S5, S10).
-  for (const q of ["he was admitted within 30 days of the trip ending", "warded in ICU for 3 days and then in the general ward for 7 days"]) assert.equal(stayDaysSaid([q]), null, q);
+  for (const q of ["he was admitted within 30 days of the trip ending", "warded in ICU for 3 days and then in the general ward for 7 days", "stayed 2 days in ICU and 5 days in the ward"]) assert.equal(stayDaysSaid([q]), null, q);
   assert.equal(stayDaysSaid(["he was hospitalised for 12 days after the fall"]), 12);
 });
 

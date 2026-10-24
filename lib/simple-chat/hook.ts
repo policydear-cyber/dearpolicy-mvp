@@ -102,13 +102,17 @@ export function claimWindows(household: Household): number[] {
   for (const d of household.documents) for (const p of d.pages) {
     const text = p.text.replace(/\s+/g, " ");
     for (const m of text.matchAll(/\b(?:within|no\s+later\s+than)\s+(?:[a-z-]+\s+){0,5}\(?(\d{1,3})\)?\s+days?\s+(?:of|from|after)\b/gi)) {
-      const n = Number(m[1]), before = text.slice(Math.max(0, m.index! - 90), m.index!);
+      // Only the window's own sentence: "Cover starts on the day of admission. Notice of a claim must be given within 30 days"
+      // is a claim window (TE pr113 R10).
+      const n = Number(m[1]), before = text.slice(Math.max(0, m.index! - 90), m.index!).split(/[.!?]\s+/).pop()!;
       // Not a waiting period ("no claim is payable for an illness that starts within 30 days of the cover start date") or a
       // free look ("if no claim has been made, you may cancel within 14 days") (TE pr113 W2, W3).
       const after = text.slice(m.index! + m[0].length, m.index! + m[0].length + 40);
       if (n >= 7 && n <= 365 && /\b(?:claims?|notice|notify|inform\s+us|tell\s+us)\b/i.test(before)
-        && !/\b(?:assault|authority|reported\s+to|premium|grace|payable|waiting|cancel\w*|refund\w*|free[\s-]look|cooling|starts?|commenc\w*)\b/i.test(before)
-        && !/^\s*(?:the\s+)?(?:cover|policy|commencement|start|receiv\w*|issue)\b/i.test(after)) found.add(n);
+        && !/\b(?:assault|authority|reported\s+to|premium|grace|waiting|cancel\w*|refund\w*|free[\s-]look|cooling)\b|\bno\s+claims?\s+(?:has|have)\s+been\s+made\b|\breturn\s+(?:the|this|your)\s+policy\b/i.test(before)
+        // An illness that "starts within 30 days" is a waiting period; a claim "given within 30 days" is a window (TE pr113 R9).
+        && !/\b(?:starts?|started|commenc\w*|begins?|occurs?|arises?|manifest\w*|diagnosed)\s*$/i.test(before)
+        && !/^\s*(?:(?:the\s+)?(?:cover|policy|commencement|start|issue)\b|receiv\w*\s+(?:it|(?:the|this|your)\s+policy)\b)/i.test(after)) found.add(n);
     }
   }
   return [...found].sort((a, b) => a - b).slice(0, 4);
@@ -189,8 +193,10 @@ export function dropLateClaims(answer: { summary: string; bottomLine?: string | 
   // "The baggage claim deadline has already passed" is not answered by "submit the medical claim by 30/10/2026": a clause
   // that names whose claim it is needs an open date for that one (TE pr113 D4).
   const openSaid = (c: string) => {
-    const whose = c.match(/\b([a-z]{3,})\s+(?:claims?|deadline|window|notice)\b/i)?.[1].toLowerCase();
-    return whose && !WHOSE_NOT.test(whose) ? opens.some((x) => new RegExp(String.raw`\b${whose}\b`, "i").test(x)) : opens.length > 0;
+    // "The baggage claim deadline", or "the claim deadline for baggage" (TE pr113 R7).
+    const whose = [...c.matchAll(/\b([a-z]{3,})\s+(?:claims?|deadline|window|notice)\b|\b(?:claims?|deadline|window|notice)\s+(?:deadline\s+|window\s+)?for\s+(?:the\s+|your\s+|a\s+|an\s+)?([a-z]{3,})/gi)]
+      .map((m) => (m[1] ?? m[2]).toLowerCase()).find((w) => !WHOSE_NOT.test(w));
+    return whose ? opens.some((x) => new RegExp(String.raw`\b${whose}\b`, "i").test(x)) : opens.length > 0;
   };
   const openIn = (sentence: string) => {
     const windows = [...sentence.matchAll(/\b(\d{1,3})[\s-]*days?\b/gi)].map((m) => Number(m[1]));

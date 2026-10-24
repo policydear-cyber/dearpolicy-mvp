@@ -659,8 +659,9 @@ export function stayDaysSaid(asked: string[]): number | null {
   for (const q of asked) {
     const value = (m: RegExpMatchArray) => { const v = m[1] ?? m[2]; return /^\d+$/.test(v) ? Number(v) : NUMBER_WORDS[v.toLowerCase()]; };
     const found = new Set(stayPatterns(n).flatMap((re) => [...q.matchAll(re)].map(value)));
-    // "In ICU for 3 days and then in the general ward for 7 days": another "for N days" makes the length unclear (TE pr113 S3).
-    const other = [...q.matchAll(new RegExp(String.raw`\b(?:for|about|around)\s+${n}\s*days?\b(?!\s+ago\b)`, "gi"))].map(value);
+    // "In ICU for 3 days and then in the general ward for 7 days", "2 days in ICU and 5 days in the ward": another length makes
+    // the stay unclear (TE pr113 S3, R5). A claim window ("within 30 days") or a day said by when ("3 days ago") is not one.
+    const other = [...q.matchAll(new RegExp(String.raw`(?<!\b(?:within|in)\s)\b${n}[\s-]*days?\b${NOT_LENGTH}`, "gi"))].map(value);
     if (found.size) return found.size === 1 && other.every((v) => found.has(v)) ? [...found][0] : null;
   }
   return null;

@@ -122,7 +122,7 @@ function capInRow(row: string): number | null {
   // An excess ("subject to an excess not exceeding S$100") is not a cap, and a cap for each day or item ("up to S$200 per
   // day") is not the row's whole amount (TE pr113 A2, A11).
   if (/\b(?:excess|deductible|co-?pay\w*|co-?insurance)\b/.test(before)) return null;
-  if (/^\s*(?:(?:per|a|an|each|every|\/)\s*(?:day|week|month|year|night|hour|visit|session|item|article|tooth|treatment)\b|daily\b)/.test(after)) return null;
+  if (/^\s*(?:(?:per|a|an|each|every|for\s+(?:each|every)|\/)\s*(?:day|week|month|year|night|hour|visit|session|item|article|tooth|treatment)\b|daily\b)/.test(after)) return null;
   return /(?:\bup\s+to|\bmax(?:imum)?(?:\s+amount)?(?:\s+of)?|\bcapped\s+at|\bnot\s+(?:to\s+)?exceed(?:ing)?|\blimited\s+to)\b[^%\d]{0,60}$/.test(before) ? [...values][0] : null;
 }
 const otherMoneyThan = (row: string, cap: number) => [...flat(row).matchAll(MONEY_IN)].some((m) => Number(m[1].replace(/,/g, "")) !== cap);
