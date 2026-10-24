@@ -229,11 +229,18 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
 }
 
+/** "a month" for a period the reading names ("half_year": "a half year"); "for every three-hour delay" for a block a plan
+ * table prints in words (lib/benefit-table/chat planTableRows). */
+export function periodWords(period: string | null | undefined): string {
+  const p = period ?? "period";
+  return /\s/.test(p) ? `for every ${p}` : `a ${p.replace("_", " ")}`;
+}
+
 export function figureText(f: Figure): string {
   if (f.kind === "none") return `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
   if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;
   if (f.kind === "projected") return `${m} projected, ${f.basis === "non_guaranteed" ? "not guaranteed" : "an illustration"}${f.asOf ? ` (${f.asOf})` : ""}: not an amount held or payable`;
   if (f.kind === "worked_out") return `${m}, worked out: ${f.how}`;
-  return f.unit === "up_to" ? `up to ${m}` : f.unit === "per_day" ? `${m} a day` : f.unit === "per_period" ? `${m} a ${(f.period ?? "period").replace("_", " ")}` : m;
+  return f.unit === "up_to" ? `up to ${m}` : f.unit === "per_day" ? `${m} a day` : f.unit === "per_period" ? `${m} ${periodWords(f.period)}` : m;
 }
