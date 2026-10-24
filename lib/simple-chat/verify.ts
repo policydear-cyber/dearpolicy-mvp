@@ -644,7 +644,9 @@ const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4
 const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitted|warded|stayed|stay(?:ing)?\s+in\s+(?:the\s+)?hospital)`;
 // "Stayed in hospital there 4 days", "hospital cash ... for 25 days" (overnight run 23 Oct, N258, N145): a few words may
 // stand between the stay and its length.
-const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?!for\b|about\b|around\b)[a-z]+){0,3}?(?:\s+(?:for|about|around))?\s+${n}\s*days?\b`, "gi"),
+// "Admitted 10 days after the accident", "hospitalised 3 days ago" say when, not how long (Critic R169-4).
+const NOT_LENGTH = String.raw`(?!\s+(?:ago|after|before|later|earlier|prior|since|from|into)\b)`;
+const stayPatterns = (n: string) => [new RegExp(String.raw`\b${STAY_WORDS}\b(?:\s+(?!for\b|about\b|around\b)[a-z]+){0,3}?(?:\s+(?:for|about|around))?\s+${n}\s*days?\b${NOT_LENGTH}`, "gi"),
   new RegExp(String.raw`\b${n}[\s-]*days?\s+(?:in\s+(?:the\s+)?hospital|hospital\s+stay|stay)\b`, "gi"), new RegExp(String.raw`\b${n}-day\s+(?:hospital\s+)?stay\b`, "gi"),
   new RegExp(String.raw`\bhospital\s+cash\b[^.?!]{0,40}?\bfor\s+(?:a\s+)?${n}[\s-]*days?\b`, "gi")];
 /** The one length of stay the household's latest message describing a stay gives, or null: what a daily card is worked out

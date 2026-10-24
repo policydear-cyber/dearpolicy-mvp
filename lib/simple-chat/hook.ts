@@ -168,6 +168,7 @@ const LATE = /\b(?:has|have|had)\s+(?:already\s+)?(?:passed|expired|closed|lapse
 const DEADLINE_WORDS = /\b(?:claims?|deadline|window|notice|notify|time\s+limit|days?)\b/i;
 const OTHER_PERIOD = /\b(?:waiting|free[-\s]?look|cooling|survival|grace|policy\s+(?:period|year)|trip|cover(?:age)?\s+period)\b/i;
 const DEADLINE_SAID = /\b(?:by|within|before|until|ends?|deadline|last\s+day|claim|notice)\b/i;
+const CLAIM_SAID = /\b(?:claims?|notice|notify|deadline|last\s+day)\b/i;
 const SLASH_DATE = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g;
 /** A clause saying a claim's deadline has passed, or a claim would be late, when the answer itself gives that deadline as
  * still open: a last day on or after today in a sentence about a deadline, or a date and a number of days in the clause's
@@ -178,7 +179,8 @@ export function dropLateClaims(answer: { summary: string; bottomLine?: string | 
   const today = Math.floor((now.getTime() + 8 * 3_600_000) / 86_400_000);
   const dayOf = (m: RegExpMatchArray) => printedDay(`${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[3]}`);
   const all = [answer.bottomLine ?? answer.summary, ...(answer.statements ?? []).map((s) => s.text), ...answer.nextSteps].filter(Boolean).join(" ");
-  const openSaid = sentencesOf(all).some((x) => DEADLINE_SAID.test(x) && !LATE.test(x) && [...x.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && d >= today; }));
+  // Only a date given as a claim's last day: "your cover runs until 31/12/2026" opens no claim window (Critic R169-5).
+  const openSaid = sentencesOf(all).some((x) => DEADLINE_SAID.test(x) && CLAIM_SAID.test(x) && !OTHER_PERIOD.test(x) && !LATE.test(x) && [...x.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && d >= today; }));
   const openIn = (sentence: string) => {
     const windows = [...sentence.matchAll(/\b(\d{1,3})[\s-]*days?\b/gi)].map((m) => Number(m[1]));
     return [...sentence.matchAll(SLASH_DATE)].some((m) => { const d = dayOf(m); return d != null && windows.some((w) => d + w >= today); });

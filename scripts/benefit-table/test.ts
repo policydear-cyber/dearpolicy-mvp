@@ -477,6 +477,17 @@ const capped: SourceDoc = { id: "capped", name: "Product summary.pdf", readable:
 const capRead = (o: Record<string, unknown>) => checkReading(capped, doc("product_summary", [], [benefit({ pays: "percent", percentOf: "sum_insured", ...o })]));
 const capLinks = (r: ReturnType<typeof capRead>) => [...new Set(r.benefits.map((b) => b.section))].map((sec) => ({ section: sectionKeyOf("capped", { section: sec, column: null }), cover: sec === "GROUP TERM LIFE" ? gtl : gpa, why: "x" }));
 const capRows = (r: ReturnType<typeof capRead>, id = "a") => assembleTable([certReading, r], family, capLinks(r)).people.find((p) => p.id === id)!.rows;
+// Critic R169-1: a cap printed for some insured persons only is never the row's.
+test("caps: a cap the row prints for a child or an age group only, unread, gives no amount", () => {
+  const groups: SourceDoc = { id: "capped", name: "Product summary.pdf", readable: true, pages: [
+    { page: 6, text: "GROUP PERSONAL ACCIDENT\nAccidental Death 100% of Sum Insured (Child: limited to S$50,000)\nDisappearance 100% of Sum Insured, maximum S$200,000 for insured persons above age 70" },
+  ] };
+  for (const [benefitName, quote] of [["Accidental Death", "Accidental Death 100% of Sum Insured (Child: limited to S$50,000)"], ["Disappearance", "Disappearance 100% of Sum Insured, maximum S$200,000 for insured persons above age 70"]]) {
+    const r = checkReading(groups, doc("product_summary", [], [benefit({ pays: "percent", percentOf: "sum_insured", section: "GROUP PERSONAL ACCIDENT", benefit: benefitName, value: 100, page: 6, quote })]));
+    const f = capRows(r)[0].figure;
+    assert.equal(f.kind, "none", `${benefitName}: ${figureText(f)}`);
+  }
+});
 test("caps: a percentage over its printed cap shows the cap, with the cap's own words", () => {
   const r = capRead({ section: "GROUP TERM LIFE", benefit: "Advance Payment Benefit", value: 100, page: 5, quote: "Advance Payment Benefit 100% Sum Insured (up to S$400,000)", cap: 400000, capQuote: "(up to S$400,000)" });
   assert.equal(r.benefits[0].cap, 400000);

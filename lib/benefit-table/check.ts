@@ -114,6 +114,9 @@ function capInRow(row: string): number | null {
   const text = flat(row), found = [...text.matchAll(MONEY_IN)];
   const values = new Set(found.map((m) => Number(m[1].replace(/,/g, ""))));
   if (values.size !== 1 || !found.length) return null;
+  // A cap for some insured persons only ("Child: limited to S$50,000", "maximum S$200,000 above age 70") is not the row's
+  // (Critic R169-1).
+  if (/\b(?:child(?:ren)?|juveniles?|minors?|adults?|age[ds]?|years?\s+old|spouses?|dependants?|elderly|above|below|over|under)\b/.test(text)) return null;
   const before = text.slice(Math.max(0, found[0].index! - 70), found[0].index!);
   return /(?:\bup\s+to|\bmax(?:imum)?(?:\s+amount)?(?:\s+of)?|\bcapped\s+at|\bnot\s+(?:to\s+)?exceed(?:ing)?|\blimited\s+to)\b[^%\d]{0,60}$/.test(before) ? [...values][0] : null;
 }

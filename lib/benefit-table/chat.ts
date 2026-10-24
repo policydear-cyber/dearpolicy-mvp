@@ -103,13 +103,24 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
       const lines = page.text.split("\n").map((l) => l.trim());
       const cellsOf = (l: string | undefined) => (l ?? "").split("\t").map((c) => c.trim()).filter(Boolean);
       let cols: string[] | null = null, parent: string | null = null;
-      const valuesOf = (l: string | undefined) => { const c = cellsOf(l); return cols && c.length >= cols.length && c.length <= cols.length + 1 && c.slice(-cols.length).every((x) => PLAN_CELL.test(x)) ? c : null; };
+      // A first cell beyond the plan columns is the line's own name, never a figure ("S$500\tS$1,000\tS$1,500\tS$2,000" under
+      // three plans is another table's line: Critic R169-3).
+      const valuesOf = (l: string | undefined) => { const c = cellsOf(l); return cols && c.length >= cols.length && c.length <= cols.length + 1 && c.slice(-cols.length).every((x) => PLAN_CELL.test(x)) && !(c.length > cols.length && PLAN_CELL.test(c[0])) ? c : null; };
+      const heading = (l: string | undefined) => { const c = cellsOf(l); return c.length >= 2 && c.includes(template.column!) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x)); };
       const labelLine = (l: string | undefined) => !!l && !l.includes("\t") && /^[A-Z]/.test(l) && !/\d/.test(l) && !valuesOf(l) && !/^(?:maximum benefit limit|unless otherwise|note\b)/i.test(l);
       const used = new Set<number>();
       for (let i = 0; i < lines.length; i++) {
         const c = cellsOf(lines[i]);
         // An optional cover's table ("Optional covers" over its heading) is for a cover the person may not hold: never read.
-        if (c.length >= 2 && c.includes(template.column) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x))) { cols = /\b(?:optional|add-?ons?|riders?)\b/i.test(lines[i - 1] ?? "") ? null : c; parent = null; continue; }
+        // Only a table the reading already took one of this plan's rows from: another table under the same plan headings (one
+        // for insured persons aged 70 and above, an annual plan's) prints other figures (Critic R169-2).
+        if (heading(lines[i])) {
+          let end = i + 1;
+          while (end < lines.length && !heading(lines[end])) end++;
+          const block = plain(lines.slice(i + 1, end).join(" "));
+          const anchored = theirs.some((o) => o.column === template.column && o.source.page === page.page && plain(o.source.excerpt.split("\n")[0]).length > 0 && block.includes(plain(o.source.excerpt.split("\n")[0])));
+          cols = !anchored || /\b(?:optional|add-?ons?|riders?)\b/i.test(lines[i - 1] ?? "") ? null : c; parent = null; continue;
+        }
         if (!cols || used.has(i)) continue;
         const cells = valuesOf(lines[i]);
         if (!cells) {

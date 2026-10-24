@@ -1345,8 +1345,11 @@ test("a plan table's lines the reading left out are rows for the person's plan c
     page(6, ["Table of benefits", "Protecting your stuff", "Premium\tBusiness\tFirst", "Theft of or damage to baggage or personal belongings", "S$3,000\tS$5,000\tS$7,500",
       "Sub-limit for laptop / tablet (in total)", "S$1,000\tS$1,000\tS$1,000", "Sub-limit for jewellery (in total)", "S$300\tS$500\tS$500", "Overall limit for family plan*", "S$7,500\tS$12,500\tS$18,750",
       "S$300\tS$600\tS$1,000", "Loss of passport, travel documents & theft of money", "Sub-limit for theft of your money", "S$300\tS$300\tS$300",
-      "Travel delay", "S$100 for every\tS$50 for every\tS$50 for every", "Delay while in Singapore", "Overall limit^\tS$300\tS$800\tS$1,500"].join("\n")),
+      "Travel delay", "S$100 for every\tS$50 for every\tS$50 for every", "Delay while in Singapore", "Overall limit^\tS$300\tS$800\tS$1,500",
+      "Trip cancellation", "S$500\tS$1,000\tS$1,500\tS$2,000"].join("\n")),
     page(9, ["Table of benefits", "Optional covers", "Premium\tBusiness\tFirst", "Home contents", "S$6,000\tS$6,000\tS$6,000"].join("\n")),
+    // Another table under the same plan headings (Critic R169-2), and a line with one figure more than the plans (R169-3).
+    page(7, ["For insured persons aged 70 years and above", "Premium\tBusiness\tFirst", "Overseas medical expenses", "S$50,000\tS$100,000\tS$150,000"].join("\n")),
   ])] };
   const docIndex = house.documents.length - 1;
   const template: ChatRow = { ...amb, id: "R900", benefit: "Theft of or damage to baggage or personal belongings", column: "Business", plan: "Business", docIndex,
@@ -1382,6 +1385,10 @@ test("claim deadlines: days said as 'yesterday' or 'N days ago' get their dates 
   const c = { summary: "", bottomLine: "Not shown.", statements: [], nextSteps: ["Claim within 30 days of the incident; a cancellation around 29/09/2026 may already be past that."] };
   dropLateClaims(c, at);
   assert.deepEqual(c.nextSteps, ["Claim within 30 days of the incident."]);
+  // A date that is not a claim's last day opens no window (Critic R169-5).
+  const e = { summary: "", bottomLine: "The 30-day claim window has passed: it ended on 01/09/2026.", statements: [{ text: "Your cover runs until 31/12/2026." }], nextSteps: [] };
+  dropLateClaims(e, at);
+  assert.equal(e.bottomLine, "The 30-day claim window has passed: it ended on 01/09/2026.");
   // A deadline that has passed, with no open date, and other periods, stay.
   for (const t of ["The 30-day claim window has passed: it ended on 01/09/2026.", "The waiting period has passed, so it can be claimed by 30/10/2026."]) {
     const d = { summary: "", bottomLine: t, statements: [], nextSteps: [] };
@@ -1409,6 +1416,8 @@ test("a stay's length the latest message gives works out a daily card the model 
   // No stay, two lengths, or a claim window: none.
   assert.equal(stayDaysSaid(["claim within 30 days"]), null);
   assert.equal(stayDaysSaid(["in hospital 3 days, then admitted again for 5 days"]), null);
+  // When, not how long (Critic R169-4).
+  for (const q of ["admitted 10 days after the accident", "he was admitted 3 days ago", "hospitalised 2 days before the trip ended"]) assert.equal(stayDaysSaid([q]), null, q);
 });
 
 test("a premium is never hidden by a waiting period or the cover's dates (live run 23 Oct, A6)", () => {
