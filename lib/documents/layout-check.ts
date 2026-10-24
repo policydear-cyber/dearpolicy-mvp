@@ -8,8 +8,12 @@
  * label beside its figures (one reading of the pairing is not two), is "unchecked": its text stays searchable, but
  * nothing reads an amount from it, and the document says it was read in part. Nothing here uses a model. */
 
-/** "50,000.0050,000.00": a complete decimal amount with another digit straight after it. */
-const GLUED = /\d\.\d{2}\d/;
+/** "50,000.0050,000.00": a complete decimal amount with a second one straight after it. A rate or date with more
+ * decimals ("1.235", "4.125%", "01.10.2026") is not glued (TE U-F3). */
+const GLUED = /\d\.\d{2}\d[\d,]*\.\d{2}(?!\d)/;
+const UNGLUE = /(\d\.\d{2})(?=\d[\d,]*\.\d{2}(?!\d))/g;
+/** An amount: two decimals or comma groups. A page number or an age is not one. */
+const AMOUNT = /\d[\d,]*\.\d{2}(?!\d)|\d{1,3}(?:,\d{3})+/;
 // Every number on the line, small amounts and percentages too ("S$300", "25%"): two readings that pair them differently
 // must not agree (Critic R175-1).
 const FIGURE = /\d[\d,]*(?:\.\d+)?/g;
@@ -25,46 +29,80 @@ export function scrambleSigns(text: string): string[] {
   for (let i = 0; i < lines.length; i++) {
     let labels = 0;
     while (i + labels < lines.length && LABEL_ONLY(lines[i + labels])) labels++;
-    let values = 0;
-    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) values++;
-    if (labels >= 3 && values >= 3) { signs.push("labels came out before their values"); break; }
+    let values = 0, amounts = 0;
+    while (i + labels + values < lines.length && NUMBERS_ONLY.test(lines[i + labels + values])) amounts += Number(AMOUNT.test(lines[i + labels + values++]));
+    // A table's own column header over its rows ("Age  Male  Female" over "35  120.50  110.20") is not scrambled, and
+    // a contents list's page numbers are not amounts (TE U-F2).
+    const cells = (line: string) => line.split("\t").length;
+    const header = labels > 0 && cells(lines[i + labels - 1]) >= 2 && values > 0 && cells(lines[i + labels]) === cells(lines[i + labels - 1]);
+    if (labels >= 3 && values >= 3 && amounts >= 2 && !header) { signs.push("labels came out before their values"); break; }
     i += Math.max(0, labels - 1);
   }
   return signs;
 }
 export const looksScrambled = (text: string) => scrambleSigns(text).length > 0;
 
-const figuresIn = (text: string) => (text.replace(/(\d\.\d{2})(?=\d)/g, "$1 ").match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
-const words = (text: string) => text.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ").filter((w) => w.length >= 3);
+const unglue = (text: string) => text.replace(UNGLUE, "$1 ");
+const figuresIn = (text: string) => (unglue(text).match(FIGURE) ?? []).map((f) => Number(f.replace(/,/g, ""))).filter((n) => n > 0);
 
-/** Each line that prints a figure: its label's words and its figures in order. */
-function figureLines(text: string) {
-  return text.split("\n").map((line) => ({ label: words(line.replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?%?/g, " ")), figures: figuresIn(line) }))
-    .filter((l) => l.figures.length);
+type Token = string | number;
+/** Each line that prints a figure, as its words and figures in printed order. Every word counts, "A" and "B" too, and
+ * order counts, so two pairs swapped within one line, or "Plan A" and "Plan B" swapped, do not agree (TE U-F1).
+ * Currency marks and "%" are left out: the two readings may print them differently. */
+function figureLines(text: string): Token[][] {
+  return unglue(text).split("\n")
+    .map((line) => (line.replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(/\d[\d,]*(?:\.\d+)?|[a-z]+/g) ?? [])
+      .map((t): Token => (/\d/.test(t) ? Number(t.replace(/,/g, "")) : t)))
+    .filter((l) => l.some((t) => typeof t === "number" && t > 0));
 }
 const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
+const sameLine = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
+const figuresOf = (l: Token[]) => l.filter((t): t is number => typeof t === "number");
+const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string").join(" ");
 /** Whether the page's image reading agrees with its text reading: the same figures (as many times each, reading glued ones
- * apart), and every line of each that prints figures has a line in the other with the same figures in the same order
- * beside the same label words. A figure line with no label in the text reading has nothing to agree on. */
+ * apart), and every line of each that prints figures has a line in the other with the same words and figures in the same
+ * order. A figure line with no label in the text reading has nothing to agree on. */
 export function readingsAgree(textReading: string, imageReading: string): { agree: true } | { agree: false; why: string } {
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
   if (!b.length) return { agree: false, why: "the image reading prints no figures" };
   if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures" };
   const text = figureLines(textReading), image = figureLines(imageReading);
-  const beside = (l: { label: string[]; figures: number[] }, other: typeof text) =>
-    other.some((o) => sameFigures(o.figures, l.figures) && l.label.every((w) => o.label.includes(w)) && o.label.every((w) => l.label.includes(w)));
   for (const l of text) {
-    if (!l.label.length) return { agree: false, why: `the text reading prints ${l.figures.join(", ")} with no label beside it` };
-    if (!beside(l, image)) return { agree: false, why: `the image reading does not print ${l.figures.join(", ")} beside "${l.label.join(" ")}"` };
+    if (!labelOf(l)) return { agree: false, why: `the text reading prints ${figuresOf(l).join(", ")} with no label beside it` };
+    if (!image.some((o) => sameLine(l, o))) return { agree: false, why: `the image reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order` };
   }
-  for (const l of image) if (!beside(l, text)) return { agree: false, why: `the text reading does not print ${l.figures.join(", ")} beside "${l.label.join(" ")}"` };
+  for (const l of image) if (!text.some((o) => sameLine(l, o))) return { agree: false, why: `the text reading does not print ${figuresOf(l).join(", ")} beside "${labelOf(l)}" in that order` };
   return { agree: true };
+}
+
+/** What is stored, searched and read in place of a page the two readings did not agree on: a notice, and the page's lines
+ * that print no amount (the policy's name, number and status), so the policy is not missing from answers (Critic R175-c).
+ * Storing it in place of the page text keeps every reader of the page, search included, off its amounts (TE U-F5). */
+export const UNCHECKED_PAGE = "[This page could not be checked against the page image, so no amount on it is used. Say its amounts are not shown.]";
+const AMOUNT_LINE = /\d[\d,]*\.\d{2}|\$\s?\d|\b(?:SGD|USD)\s?\d|\d{1,3}(?:,\d{3})+|\d\s*%/;
+export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
+  : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !AMOUNT_LINE.test(l))].join("\n");
+
+type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean };
+/** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
+export const suspectPages = (pages: CheckedPage[]) => pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && !p.unchecked && looksScrambled(p.text)).map((p) => p.pageNumber);
+/** Checks the given pages against their image reading. A page is kept as it is (the document's own words) only when the
+ * image reading confirms it; otherwise, and when the image could not be read, it becomes unchecked, its text replaced by
+ * uncheckedText. `readImage` returns null when the reading failed. */
+export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers: number[], readImage: (numbers: number[]) => Promise<CheckedPage[] | null>): Promise<P[]> {
+  if (!numbers.length) return pages;
+  const second = await readImage(numbers).catch(() => null);
+  return pages.map((p) => {
+    if (!numbers.includes(p.pageNumber)) return p;
+    const image = second?.find((s) => s.pageNumber === p.pageNumber);
+    return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true };
+  });
 }
 
 /** The note a document gets when some pages could not be checked. */
 export function uncheckedPagesNote(pageNumbers: number[]): string | null {
   if (!pageNumbers.length) return null;
   const list = pageNumbers.length === 1 ? `Page ${pageNumbers[0]}` : `Pages ${pageNumbers.slice(0, -1).join(", ")} and ${pageNumbers[pageNumbers.length - 1]}`;
-  return `Read in part. ${list} could not be checked: ${pageNumbers.length === 1 ? "its" : "their"} table text came out scrambled, and a second reading from the page image did not agree with it, so no amount on ${pageNumbers.length === 1 ? "it" : "them"} is used.`;
+  return `Read in part. ${list} could not be checked: a second reading from the page image did not agree with ${pageNumbers.length === 1 ? "its" : "their"} text, so no amount on ${pageNumbers.length === 1 ? "it" : "them"} is used.`;
 }
 export const READ_IN_PART = /^Read in part\b/;

@@ -137,8 +137,38 @@ async function partA() {
     const { uncheckedText, UNCHECKED_PAGE } = await import("@/lib/simple-chat/library");
     assert.equal(uncheckedText("PruLink Enhanced Protector\nPolicy Number: 63639755\nIn Force\nSum Assured 100,000.00\nPremium S$181.44\nComa 25%"),
       [UNCHECKED_PAGE, "PruLink Enhanced Protector", "Policy Number: 63639755", "In Force"].join("\n"));
-    assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: their table text came out scrambled, and a second reading from the page image did not agree with it, so no amount on them is used.");
+    assert.equal(uncheckedPagesNote([2, 3]), "Read in part. Pages 2 and 3 could not be checked: a second reading from the page image did not agree with their text, so no amount on them is used.");
     assert.equal(uncheckedPagesNote([]), null);
+  });
+  await t("E1: clean pages are not suspect, a pairing swapped within a line or between short labels is refused, and an unchecked page's amounts reach nothing (TE upload check)", async () => {
+    const { scrambleSigns, readingsAgree, crossCheckPages, suspectPages, uncheckedText } = await import("@/lib/documents/layout-check");
+    // A rate table under its title lines, a contents list, rates with more decimals, and dates with dots are not suspect (TE U-F2, U-F3).
+    for (const clean of ["Table of Premium Rates\nNon-Smoker\nAnnual Premium\nAge\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00\n37\t130.00\t118.40",
+      "Contents\nYour cover at a glance\nWhat we pay\nWhat we do not pay\nHow to claim\n3\n5\n9\n12", "Premium rate per S$1,000 sum assured\t1.235\nModal factor (monthly)\t0.0875",
+      "The guaranteed interest rate is 4.125% a year.", "Claims paid in US$ are converted at USD 1 = SGD 1.3456.", "Period of insurance: 01.10.2026 to 30.09.2027"]) assert.deepEqual(scrambleSigns(clean), [], clean);
+    assert.deepEqual(scrambleSigns("Premium\t181.44181.44"), ["figures printed side by side came out glued together"]);
+    // Order counts, and every word does (TE U-F1).
+    assert.equal(readingsAgree("Death Benefit\t100,000.00\tAccidental Death\t50,000.00", "Accidental Death 100,000.00 Death Benefit 50,000.00").agree, false);
+    assert.equal(readingsAgree("Plan A\t100,000.00\nPlan B\t50,000.00", "Plan A 50,000.00\nPlan B 100,000.00").agree, false);
+    assert.equal(readingsAgree("Plan A\t100,000.00\nPlan B\t50,000.00", "Plan A S$100,000.00\nPlan B SGD 50,000.00").agree, true);
+    assert.equal(readingsAgree("Hip\t75%\nWrist\t20%", "Hip 20%\nWrist 75%").agree, false);
+    // At upload: only suspect text pages are read again; a page is kept only when the image reading confirms it, and
+    // otherwise, or when the image could not be read, only its lines with no amount are kept as its text.
+    const scrambled = "PruLink Enhanced Protector\nBasic Plan Sum Assured\nCrisis Cover Benefit\nEarly Crisis Cover\n100,000.00\n50,000.00\n25,000.00";
+    const pages: { pageNumber: number; text: string; extractionMethod?: string; unchecked?: boolean }[] = [{ pageNumber: 1, text: "Policy Number\t63639755" }, { pageNumber: 2, text: scrambled }, { pageNumber: 3, text: "scan", extractionMethod: "ocr" }, { pageNumber: 4, text: "Sum Assured\t50,000.0050,000.00" }];
+    assert.deepEqual(suspectPages(pages), [2, 4]);
+    const image = { 2: "PruLink Enhanced Protector\nBasic Plan Sum Assured 100,000.00\nCrisis Cover Benefit 50,000.00\nEarly Crisis Cover 25,000.00", 4: "Sum Assured 50,000.00 50,000.00" } as Record<number, string>;
+    const asked: number[][] = [];
+    const checked = await crossCheckPages(pages, [2, 4], async (n) => { asked.push(n); return n.map((pageNumber) => ({ pageNumber, text: image[pageNumber], extractionMethod: "ocr" })); });
+    assert.deepEqual(asked, [[2, 4]]);
+    assert.deepEqual(checked.map((p) => [p.pageNumber, Boolean(p.unchecked)]), [[1, false], [2, true], [3, false], [4, false]]);
+    assert.equal(checked[1].text, uncheckedText(scrambled));
+    assert.doesNotMatch(checked[1].text, /\d/);
+    assert.equal(checked[3].text, pages[3].text, "a confirmed page keeps the document's own words");
+    for (const read of [async () => null, async () => { throw new Error("down"); }, async () => [{ pageNumber: 4, text: image[4], extractionMethod: "ocr", unreadable: true }], async () => [{ pageNumber: 4, text: image[4], extractionMethod: "native" }]])
+      assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
+    assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");
+    assert.equal(await crossCheckPages(pages, [], async () => { throw new Error("not read"); }), pages);
   });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");

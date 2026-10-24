@@ -11,7 +11,7 @@ import { readPolicyFile, savePolicyFile } from "@/lib/storage";
 import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
-import { looksScrambled, readingsAgree, uncheckedPagesNote } from "@/lib/documents/layout-check";
+import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
@@ -483,26 +483,19 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // image, and its figures are used only when the two readings agree (lib/documents/layout-check.ts). A page they do
     // not agree on stays searchable, but no amount is read from it, and the document says it was read in part
     // (Charmaine's new documents, 24 Oct: Prudential schedules).
-    // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked.
+    // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked, and
+    // only its lines with no amount are kept as its text, for the database, search and every reader alike.
     const crossCheck = async (numbers: number[]) => {
       if (!numbers.length || !ocrSourceBytes) return;
       await progress(args, "ocr", 26, `Checking ${numbers.length} table page${numbers.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
-      let second: PdfPage[] | null = null;
-      try {
-        second = await completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes, password: args.pdfPassword,
-          pages: pages.map((p) => (numbers.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers: numbers });
-      } catch (error) {
-        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
-      }
-      pages = pages.map((p) => {
-        if (!numbers.includes(p.pageNumber)) return p;
-        const image = second?.find((s) => s.pageNumber === p.pageNumber);
-        // The text reading is the document's own words: it is kept when the image reading confirms it, never replaced.
-        return image && image.extractionMethod === "ocr" && !image.unreadable && readingsAgree(p.text, image.text).agree ? p : { ...p, unchecked: true };
-      });
+      pages = await crossCheckPages(pages, numbers, (pageNumbers) => completePdfPagesWithOcr({ accountId: args.accountId, resourceId: args.policyId, bytes: ocrSourceBytes!, password: args.pdfPassword,
+        pages: pages.map((p) => (pageNumbers.includes(p.pageNumber) ? { ...p, text: "" } : p)), pageNumbers })
+        .catch(async (error) => {
+          await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_UNAVAILABLE", error }).catch(() => undefined);
+          return null;
+        }));
     };
-    await crossCheck(ocrSourceBytes && sniffed.format === "pdf"
-      ? pages.filter((p) => p.extractionMethod !== "ocr" && !p.unreadable && looksScrambled(p.text)).map((p) => p.pageNumber) : []);
+    await crossCheck(ocrSourceBytes && sniffed.format === "pdf" ? suspectPages(pages) : []);
 
     // Round 10: a photo the reader could not make out at all is explained as a
     // photo, with how to take it again.
@@ -614,7 +607,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         const now = pages.filter((p) => p.unchecked && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
         if (now.length) {
           extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
-          if (withMethod) await query("UPDATE policy_pages SET extraction_method='unchecked' WHERE policy_id=$1 AND account_id=$2 AND page_number = ANY($3::int[])", [args.policyId, args.accountId, now]);
+          for (const p of pages.filter((x) => now.includes(x.pageNumber))) {
+            await query(`UPDATE policy_pages SET text=$4${withMethod ? ",extraction_method='unchecked'" : ""} WHERE policy_id=$1 AND account_id=$2 AND page_number=$3`, [args.policyId, args.accountId, p.pageNumber, p.text]);
+          }
         }
       }
     }
