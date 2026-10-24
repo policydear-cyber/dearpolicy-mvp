@@ -560,7 +560,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           : [args.accountId, args.policyId, page.pageNumber, page.text],
       );
     }
-    const evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
+    let evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
 
     const quickReferenceRole = detectHighConfidenceReferenceRole(pages);
     if (quickReferenceRole) {
@@ -607,6 +607,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         const now = pages.filter((p) => p.unchecked && failed.includes(p.pageNumber)).map((p) => p.pageNumber);
         if (now.length) {
           extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle });
+          // What the catalogue and the evidence notes read is rebuilt too, so the newly unchecked pages give them no amount (Critic R176-1).
+          evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
           for (const p of pages.filter((x) => now.includes(x.pageNumber))) {
             await query(`UPDATE policy_pages SET text=$4${withMethod ? ",extraction_method='unchecked'" : ""} WHERE policy_id=$1 AND account_id=$2 AND page_number=$3`, [args.policyId, args.accountId, p.pageNumber, p.text]);
           }

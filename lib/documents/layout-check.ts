@@ -80,8 +80,11 @@ export function readingsAgree(textReading: string, imageReading: string): { agre
  * Storing it in place of the page text keeps every reader of the page, search included, off its amounts (TE U-F5). */
 export const UNCHECKED_PAGE = "[This page could not be checked against the page image, so no amount on it is used. Say its amounts are not shown.]";
 const AMOUNT_LINE = /\d[\d,]*\.\d{2}|\$\s?\d|\b(?:SGD|USD)\s?\d|\d{1,3}(?:,\d{3})+|\d\s*%/;
+// Only lines with no figure at all, or a number or date by its own label ("Policy Number: 63639755"): a bare "Sum Assured
+// 13500" on a page whose pairing is not checked is still an amount (Critic R176-2).
+const NUMBER_LABEL = /\b(?:policy|certificate|contract|member|account)\s*(?:no\.?|number)\b|\b(?:date|dated|commencement|expiry|issued?)\b/i;
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
-  : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !AMOUNT_LINE.test(l))].join("\n");
+  : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && (!/\d/.test(l) || (NUMBER_LABEL.test(l) && !AMOUNT_LINE.test(l))))].join("\n");
 
 type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean };
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */

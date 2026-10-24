@@ -141,7 +141,7 @@ async function partA() {
     assert.equal(uncheckedPagesNote([]), null);
   });
   await t("E1: clean pages are not suspect, a pairing swapped within a line or between short labels is refused, and an unchecked page's amounts reach nothing (TE upload check)", async () => {
-    const { scrambleSigns, readingsAgree, crossCheckPages, suspectPages, uncheckedText } = await import("@/lib/documents/layout-check");
+    const { scrambleSigns, readingsAgree, crossCheckPages, suspectPages, uncheckedText, UNCHECKED_PAGE: UNCHECKED_PAGE_TEXT } = await import("@/lib/documents/layout-check");
     // A rate table under its title lines, a contents list, rates with more decimals, and dates with dots are not suspect (TE U-F2, U-F3).
     for (const clean of ["Table of Premium Rates\nNon-Smoker\nAnnual Premium\nAge\tMale\tFemale\n35\t120.50\t110.20\n36\t125.10\t114.00\n37\t130.00\t118.40",
       "Contents\nYour cover at a glance\nWhat we pay\nWhat we do not pay\nHow to claim\n3\n5\n9\n12", "Premium rate per S$1,000 sum assured\t1.235\nModal factor (monthly)\t0.0875",
@@ -169,6 +169,23 @@ async function partA() {
       assert.equal((await crossCheckPages(pages, [4], read as never))[3].unchecked, true);
     assert.equal(uncheckedText(uncheckedText(scrambled)), uncheckedText(scrambled), "storing and reading it again adds nothing");
     assert.equal(await crossCheckPages(pages, [], async () => { throw new Error("not read"); }), pages);
+    // Bare whole numbers are amounts too; a policy number or a date by its own label stays (Critic R176-2).
+    assert.equal(uncheckedText("Basic Plan: PruLink Enhanced Protector\nPolicy Number: 63639755\nSum Assured 13500\nCrisis Cover 100000\nDate of issue: 01/10/2026"),
+      [UNCHECKED_PAGE_TEXT, "Basic Plan: PruLink Enhanced Protector", "Policy Number: 63639755", "Date of issue: 01/10/2026"].join("\n"));
+    // An unchecked page that prints a rider premium and a benefit amount gives the premium check and the rider table
+    // neither: what the rest of upload reads is its checked text (Critic R176-1).
+    const { premiumPrinted, printedPremiumTable } = await import("@/lib/rag/ingest");
+    const rider = "Premium Schedule\nBasic Plan\nCrisis Waiver Rider\nTotal Premium\nSum Assured\n150.00\n31.44\n181.44\n100,000.00";
+    const [riderPage] = await crossCheckPages<{ pageNumber: number; text: string; unchecked?: boolean }>([{ pageNumber: 1, text: rider }], [1], async () => null);
+    assert.equal(riderPage.unchecked, true);
+    assert.equal(premiumPrinted(181.44, "SGD", riderPage.text), false);
+    assert.deepEqual(printedPremiumTable(riderPage.text, 181.44).riders, []);
+    assert.equal(premiumPrinted(181.44, "SGD", rider), true, "control: the page's own text prints it");
+    // A glued token gives no piece of its tail either (Critic R176 low).
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.deepEqual(numbersIn("181.44181.44"), []);
+    assert.deepEqual(numbersIn("13,500.00100,000.00"), []);
+    assert.deepEqual(numbersIn("Premium 181.44181.44 and 50,000"), [50000]);
   });
   await t("E1: printed document date and cross-check of printed policy numbers and dates", () => {
     assert.equal(ev.parsePrintedDate("31/01/2025"), "2025-01-31");
