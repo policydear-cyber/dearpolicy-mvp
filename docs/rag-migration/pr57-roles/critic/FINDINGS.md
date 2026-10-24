@@ -6219,3 +6219,28 @@ Free probes only: the three benefit-table suites on #117 and #120, plus extracte
   - **R188-2 (low-medium):** "remove the data for my son" gets "delete the whole household". Fix: delete test noun followed by `(?!\s+(?:for|of|on|about)\b)`.
   - **R188-3 (low):** "How much does DearPolicy cost?" goes to the model, because cost words are matched only before the app name. Add `|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b` to the cost test.
   - Probed with the patch: the how-to questions go to the model; "how much did I use this month" and "how much have I used dearpolicy" still get usage; "How much does DearPolicy cost?" and "...this app cost per month" get cost; "delete my account" and "delete everything" still get delete.
+
+## Round 189: #122 (6e824ef), lone page number in readingsAgree (TE N8)
+
+**NOT READY.** It is the right direction: a lone value in the middle of a page no longer passes. But it refuses ordinary page-number layouts, and it still passes a lone value on the last line. Probed main against #122 with the same readings on both sides (`true` means the readings agree):
+
+| Layout | main | #122 |
+|---|---|---|
+| body, "3", disclaimer line (footer then disclaimer) | true | **false** |
+| "PRUDENTIAL", "3", body (header then number) | true | **false** |
+| text has "3" before a footer word; image has it last | true | **false** |
+| N8: value alone in the middle of the page | true | false (fixed) |
+| "Hospital Cash per day" then "150" as the **last** line | true | **true** (still passes) |
+| "Page 3 of 4" in the middle | true | true |
+
+- **R189-1 (medium):** the edge rule refuses real pages whose page number sits next to a header or footer line. The PDF text layer often extracts the page number before the footer text, so whole benefit pages would become unchecked and their amounts hidden.
+- **R189-2 (medium):** a lone value printed on the last line ("150" under its label) is still taken for the page number, so its pairing is never checked.
+- **Fix** (diff at /mnt/project-files/critic/readings-agree-r189.diff):
+  - pass the page's own number: `readingsAgree(text, image, pageNumber?)`, and `crossCheckPages` passes `p.pageNumber`;
+  - treat a bare number as the page number when any of these holds:
+    - it is the "page N" or "N of M" form;
+    - it equals the page's own number, wherever it sits;
+    - it is the first or last filled line and has at most 2 digits.
+
+  All six layouts above then behave as wanted (the first three agree; N8 and the last-line 150 are refused). A printed "1" on PDF page 5 at the edge still passes.
+- Residual risk (low, accepted): a lone value equal to the page number ("3" days on page 3) is still stripped. Its figure is still counted on both sides.
