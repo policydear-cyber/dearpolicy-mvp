@@ -6977,3 +6977,33 @@ Fixed and confirmed:
   Optional: add `is`, `are`, `outpatient`, `death`, `deaths`, and allow a comma list made only of cause words. The live J1 case still passes.
 
 Verdict: NOT READY on Q1 alone; Q2 and Q3 are optional.
+
+## R244: #147 Home tiles at ee1e2f9 (travel = travel name AND an abroad row): NOT READY, one High
+
+Checked for free:
+- tsx probes of the real `tileRows`/`tableDisplay`, with a standing group hospital cash S$30 a day beside a second cover paying S$100 a day;
+- regressions 25/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 51/0;
+- `tsc` clean, `next build` passes.
+
+Fixed and confirmed:
+- Employer-name schemes stay in: "Holiday Inn Group Insurance", "Sunny Holidays Group Insurance" and "Trip.com Group …" give no single figure.
+- The two-signal design is right: when unsure, the cover stays in and the tile gives "Covered".
+- The new `plainCondition` only ignores case, spacing and a closing stop. The display still prints the first row's own wording. Fine.
+
+- **High (Q1): the abroad signal is any mention of "overseas", so a standing cover that also pays overseas can still drop out.** `ABROAD_ROW` matches bare `overseas|abroad`, so "Hospital cash in Singapore and overseas" and "Hospital cash including overseas" count as rows that pay only abroad. `TRAVEL_NAME` also accepts "journey/holiday/trip" + plan|protection|assurance|guard, and `SCHEME_NAME` lacks "corporate". Probed outcomes beside the S$30 group cover:
+  - "Life Journey Plan / Basic", row "Hospital cash in Singapore and overseas" S$100 a day: tile shows **S$30 a day** (hides S$100 of standing cover)
+  - "Travel Guard Corporate Medical / Hospital", row "Hospital cash including overseas" S$100: tile shows **S$30 a day**
+  - Control "Travel insurance / Single Trip", row "Daily hospital cash while overseas": S$30 a day, which is correct.
+  - Fix: make the row signal mean "pays only abroad", and the name signal a travel product. Both are probed:
+  ```ts
+  const TRAVEL_NAME = /\btravel\w*|\b(?:single|annual|multi)[\s-]*trips?\b|\b(?:holiday|trip)\s+(?:insurance|cover)\b/i;
+  const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|corporate|company|members?)\b/i;
+  const ONLY_ABROAD = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\bduring\s+(?:the|your|a)\s+(?:trip|journey)\b/i;
+  const ALSO_HOME = /\b(?:including|incl\.?|also|even|as\s+well\s+as)\b|\b(?:or|and|&)\s+(?:at\s+home|locally|in\s+[A-Z])|\b(?:at\s+home|locally|in\s+[A-Z][\w-]*)\s+(?:and|or|&)\b/;
+  const abroadOnly = (b: string) => ONLY_ABROAD.test(b) && !ALSO_HOME.test(b);
+  ```
+  Probed: Life Journey Plan, Travel Guard Corporate Medical, Life Journey Saver ("while overseas or at home") and "while overseas, including at home" stay in. Travel insurance/Single Trip, TravelEasy, Travel Guard/Annual Multi-Trip and "during the trip" count as travel. With the stricter row signal, `\btravel\w*` can safely take one-word brands ("TravelEasy"), which the ee1e2f9 name rule misses, giving "Covered".
+- Verify before merge (I could not check this; the auto-mode safety check refused my read of the private live rows): the live travel cover's product/cover/plan must match the travel name rule. Otherwise the live J1 Hospital Cash tile gives "Covered" instead of "S$30 a day · from day 11 · up to 30 days". The regression fixture uses the friendly name "Travel insurance / Single Trip". The builder or the Live site tester should confirm against the live names.
+- Low, safe side: "SmartTraveller" and "Overseas Protection" are not travel. Beside other cover that gives "Covered".
+
+Verdict: NOT READY on Q1. After the Q1 fix, plus the live-name check, I expect READY.
