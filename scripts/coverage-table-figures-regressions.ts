@@ -185,13 +185,38 @@ test("a limit printed only as a condition must agree across rows; it is never dr
   // Two covers with the same rate, one with a limit: no figure.
   assert.equal(tableDisplay([keyed("a", perDay(30, "SGD")), keyed("b", perDay(30, "SGD", { conditions: max6 }))]), null);
   // The same limit on both: shown with it; a non-limiting wording difference does not block.
-  assert.equal(tableDisplay([keyed("a", perDay(30, "SGD", { conditions: max6 })), keyed("a", perDay(30, null, { conditions: [...max6, "not for self-inflicted injury"] }))]),
+  assert.equal(tableDisplay([keyed("a", perDay(30, "SGD", { conditions: max6 })), keyed("a", perDay(30, null, { conditions: [...max6, "no benefit for self-inflicted injury"] }))]),
     "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");
   // Two stated rows with the same limit and different other wording: the limit is still shown (Critic R239).
   assert.equal(tableDisplay([keyed("a", perDay(30, "SGD", { conditions: max6 })), keyed("b", perDay(30, "SGD", { conditions: ["as an inpatient", ...max6] }))]),
     "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");
   for (const c of ["once per life", "limited to the first admission", "per confinement", "only in Singapore", "up to S$500 a year"])
     assert.equal(tableDisplay([keyed("a", perDay(30, "SGD")), keyed("a", perDay(30, "SGD", { conditions: [c] }))]), null, c);
+});
+
+test("every condition is a limit unless it is plainly eligibility wording that changes no amount (TE P147-4, P147-5)", () => {
+  const pair = (c: string) => tableDisplay([keyed("a", perDay(30, "SGD")), keyed("a", perDay(30, "SGD", { conditions: [c] }))]);
+  // Eligibility only: the figure shows.
+  for (const c of ["inpatient only", "continuous stay", "No benefit is payable for self-inflicted injury or pregnancy", "excluding pre-existing conditions",
+    "while this policy is in force", "admitted on the advice of a doctor", "subject to the policy terms", "must be medically necessary"])
+    assert.equal(pair(c), "S$30 a day · from day 11 · up to 30 days", c);
+  // Anything that may change the amount, or that the rules cannot place: no figure.
+  for (const c of ["reduced by half after age sixty-five", "less any amount already paid under the critical illness benefit",
+    "the higher of this amount or the account value", "the lower of this amount or five times annual salary", "until the policy anniversary at age seventy",
+    "Max 6 claims per policy year", "payable once per life", "only one claim per admission", "inpatient only, capped at the ward rate",
+    "no benefit after the first sixty days", "paid to the policyowner's estate", "minus any outstanding loan"])
+    assert.equal(pair(c), null, c);
+});
+
+test("a name with its own figure is a benefit unless it states a threshold; 'including while overseas' is standing cover (TE P147-2, P147-3)", () => {
+  const named = (benefit: string, amount: number) => keyed(benefit, row(benefit, { pays: "per_day", figure: { kind: "printed", amount, currency: "SGD", unit: "per_day" } }));
+  assert.equal(tileRows([named("Daily Hospital Cash S$80 per day", 80), named("Hospital Cash Benefit", 40)]).length, 2);
+  for (const b of ["TPD: lump sum where the sum payable is above S$200,000", "TPD paid in instalments if the amount exceeds MYR 100,000", "Benefit for claims of £5,000 or less"])
+    assert.equal(tileRows([named(b, 1), named("Total and Permanent Disability", 2)]).length, 1, b);
+  for (const b of ["Daily Hospital Cash, including while overseas", "Hospital Income, also while abroad", "Hospital cash at home and overseas"])
+    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 2, b);
+  for (const b of ["Daily hospital cash while overseas", "Hospital allowance during the trip", "Hospital cash while you are travelling"])
+    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 1, b);
 });
 
 test("a waiver of premium and a travel accident row never decide the TPD tile; another cover with no figure still does (live 31357e4)", () => {

@@ -91,25 +91,36 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
     && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
 }
 
-/** Pays only during a trip abroad ("Daily hospital cash while overseas"): travel cover, not the person's standing cover. */
+/** Pays only during a trip abroad ("Daily hospital cash while overseas"): travel cover, not the person's standing cover.
+ * A name that also pays at home ("including while overseas", "also abroad") is standing cover (TE P147-3). */
 const TRIP_ONLY = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey)\b|\boverseas\s+(?:only|travel)\b/i;
-/** A part of a benefit's payment terms, not its amount: a name that prints its own money figure ("lump sum where the sum
- * payable is above 200,000 dollars" as printed with its sign) states a threshold, never what the benefit pays. */
-const CLAUSE = new RegExp(String.raw`${MONEY_SIGN}\s?\d|\d[\d,]*\s?(?:${MONEY_SIGN})`, "i");
-/** The rows a Home tile takes its figure from: the category's rows without trip-only rows and payment-term clauses, when
- * any other row is left (a person with travel cover only still sees its rows). The Coverage page keeps every row. */
+const ALSO_ABROAD = /\b(?:including|incl\.?|also|as\s+well\s+as|and|even)\s+(?:\w+\s+){0,2}?(?:(?:while|whilst|when)\s+)?(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b/i;
+const tripOnly = (benefit: string) => TRIP_ONLY.test(benefit) && !ALSO_ABROAD.test(benefit);
+/** A part of a benefit's payment terms, not its amount: a name that states a threshold with its own money figure ("paid
+ * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A benefit named with its own
+ * figure ("Daily Hospital Cash 80 dollars per day") is a benefit, not a clause (TE P147-2). */
+const FIGURE = String.raw`(?:${MONEY_SIGN}\s?\d|\d[\d,]*\s?(?:${MONEY_SIGN}))`;
+const THRESHOLD = String.raw`\b(?:above|below|over|under|exceed\w*|more\s+than|less\s+than|at\s+least|not\s+more\s+than)`;
+const CLAUSE = new RegExp(String.raw`${THRESHOLD}\s+(?:\w+\s+){0,2}?${FIGURE}|${FIGURE}[\d,.]*\s+(?:or\s+(?:less|more|above|below|under|over))\b`, "i");
+/** The rows a Home tile takes its figure from: the category's rows without trip-only rows, threshold clauses and premium
+ * waivers, when any other row is left (a person with travel cover only still sees its rows). The Coverage page keeps every
+ * row. */
 export function tileRows<T extends SummaryRow>(rows: T[]): T[] {
-  const standing = rows.filter((r) => !TRIP_ONLY.test(r.benefit) && !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
+  const standing = rows.filter((r) => !tripOnly(r.benefit) && !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
   return standing.length ? standing : rows;
 }
 /** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out, so it never decides a
  * tile's figure ("Waiver of premium on total and permanent disability benefit"). */
 const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
 
-/** A condition that limits what is paid ("Max 6 claims per policy year", "once per life"): rows must agree on these, so a
- * limit one document prints is never lost from a tile (Critic R238). */
-const LIMIT = /\d|\b(?:max(?:imum)?|up\s+to|limit\w*|only|once|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life))\b/i;
-const limits = (r: SummaryRow) => r.conditions.filter((c) => LIMIT.test(c)).sort().join(" · ");
+/** Every condition is taken to change what is paid, and so must be the same on every row of a tile, unless it is plainly
+ * who or what is eligible (an exclusion, an inpatient or continuous stay, while the policy is in force) and names nothing
+ * that changes an amount (Critic R238, TE P147-5: "reduced by half after age sixty-five", "the higher of this amount or
+ * the account value" are limits). A condition the rules cannot place is a limit: the tile then gives no figure. */
+const ELIGIBILITY = /^\s*(?:(?:no|not|nothing)\b.*\b(?:payable|paid|covered|cover|benefits?)\b|.*\b(?:excluding|excludes?|exclusions?|does\s+not\s+(?:cover|apply))\b|.*\b(?:in-?\s?patient|hospitali[sz]ed|admitted|continuous(?:ly)?|consecutive|confined)\b|.*\bwhile\s+(?:this|the)\s+(?:policy|cover|plan)\s+is\s+in\s+force\b|.*\bsubject\s+to\s+(?:the\s+)?(?:policy\s+)?(?:terms|conditions|provisions)\b|.*\bmedically\s+necessary\b)/i;
+const CHANGES_AMOUNT = /\d|%|\b(?:higher|lower|greater|lesser|less|minus|deduct\w*|reduc\w*|half|halv\w*|after\s+age|until|before\s+age|percent|max(?:imum)?|min(?:imum)?|up\s+to|limit\w*|caps?|capped|once|twice|double\w*|times|multipl\w*|plus|instead|refund\w*|after|beyond|within|first|last|days?|nights?|weeks?|months?|years?|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life|lifetime|disability|illness))\b|\bonly\s+(?:one|two|three|a|an|each|every|in\s+the\s+first)\b/i;
+const isLimit = (c: string) => !ELIGIBILITY.test(c) || CHANGES_AMOUNT.test(c);
+const limits = (r: SummaryRow) => r.conditions.filter(isLimit).sort().join(" · ");
 
 type Money = { amount: number; currency: string | null; unit?: string; period?: unknown };
 const moneyOf = (r: SummaryRow): Money | null => "amount" in r.figure ? r.figure as Money : null;
