@@ -6596,3 +6596,13 @@ Free review: code read only. I did not run the DB suite.
   - the image prints "Hospital cash per day 3" on one line: masked, "pairing differs" (fail safe).
   The exception runs before the kind check, so the page never counts as agreeing.
 - My R211 probes are unchanged: the continuation is masked, and the header and heading cases are unchecked. Accepted cost: a label-only header over a lone page number that the image drops masks just that number (part checked).
+
+## R217 — #139 e74d449: READY (one low cost noted)
+
+- P139-2 is closed safely. A lone page-number value under a line ending in words is kept only when the image prints the same line over it. My R215-1, R211 and label probes give the same results as R216.
+- **R217-1 (low, fails safe): a footer after a prose line counts as a value again.** Text `… / Please read the policy wording for full terms / 3` on page 3, image dropping the footer: the "3" is masked, kind "figures differ", and the page shows "read in part". Many pages end with a prose line over the page number, so some R215-1 noise comes back. Nothing wrong gets stored. To cut most of it, treat a line above that reads as a sentence as prose, not a label:
+  ```ts
+  const prose = (l: string) => /[.!?]\s*$/.test(l.trim()) || l.trim().length > 60;
+  // in valueUnder: return typeof last === "string" && !isDate(last) && !prose(above(ls, i));
+  ```
+  TE's labels ("Hospital cash per day (max 30 days)", "Persons covered (age 0-17)") are short and don't end in a full stop, so they stay values.
