@@ -6606,3 +6606,13 @@ Free review: code read only. I did not run the DB suite.
   // in valueUnder: return typeof last === "string" && !isDate(last) && !prose(above(ls, i));
   ```
   TE's labels ("Hospital cash per day (max 30 days)", "Persons covered (age 0-17)") are short and don't end in a full stop, so they stay values.
+
+## R218 — #117 0612632 (allow-list after a possessive): READY
+
+- coverAfter reads what follows the possessive: SPOUSE_WORD takes the next word only as a lookahead, so `rest` starts right after "'s", up to the first punctuation mark. It needs either a whole insurer or product name, or the insurer's first word alone or before a cover word.
+  - "my wife's domestic helper" with Domestic Helper Insurance: no match, as wanted.
+  - "my wife's Domestic Helper Insurance claim": match.
+  - "my wife's great aunt" with Great Eastern: no match.
+- Accepted cost: part of a product name gives no match, so the chat asks who is meant. This fails safe (it asks rather than picking a person).
+- Low, harmless: an insurer whose first word is ordinary English counts when that word stands alone ("my wife's income." with Income Insurance). It still resolves to the spouse, who is the subject anyway.
+- On #139 R217-1: the builder is right that my prose rule misses the probe line (no full stop, under 60 characters). Leaving it for later is fine, since it fails safe.
