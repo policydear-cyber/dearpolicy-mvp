@@ -76,7 +76,8 @@ const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?
  * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
 export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
   const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
-  if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section)
+  // A name that says it pays on any cause keeps its own category under any section (Critic R238).
+  if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section) && causeOf(benefit) !== "any"
     && causeOf(section) === "accident") return "Personal Accident";
   return category;
 }
@@ -105,6 +106,11 @@ export function tileRows<T extends SummaryRow>(rows: T[]): T[] {
  * tile's figure ("Waiver of premium on total and permanent disability benefit"). */
 const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
 
+/** A condition that limits what is paid ("Max 6 claims per policy year", "once per life"): rows must agree on these, so a
+ * limit one document prints is never lost from a tile (Critic R238). */
+const LIMIT = /\d|\b(?:max(?:imum)?|up\s+to|limit\w*|only|once|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life))\b/i;
+const limits = (r: SummaryRow) => r.conditions.filter((c) => LIMIT.test(c)).sort().join(" · ");
+
 type Money = { amount: number; currency: string | null; unit?: string; period?: unknown };
 const moneyOf = (r: SummaryRow): Money | null => "amount" in r.figure ? r.figure as Money : null;
 /** Another document of the same cover printing the same figure with its currency, where this row's page prints a bare
@@ -118,13 +124,14 @@ function restatedWithCurrency(r: SummaryRow & { coverKey?: string }, rows: (Summ
     const b = moneyOf(s);
     return s !== r && !!b && b.currency != null && s.coverKey === r.coverKey && s.figure.kind === r.figure.kind && b.amount === a.amount
       && b.unit === a.unit && JSON.stringify(b.period ?? null) === JSON.stringify(a.period ?? null)
-      && s.fromDay === r.fromDay && s.maxDays === r.maxDays && s.qualifier === r.qualifier && s.pays === r.pays;
+      && s.fromDay === r.fromDay && s.maxDays === r.maxDays && s.qualifier === r.qualifier && s.pays === r.pays && limits(s) === limits(r);
   });
 }
 
 /** The text for a tile: the row's short figure and its days ("MYR 80 a day · from day 4 · up to 60 days"), with its
  * conditions when every row prints the same ones. Rows agree on the figure, who it is for and its days; the conditions
- * are not compared, because two documents of one scheme word them differently (live 31357e4). A row that only restates
+ * are not compared, because two documents of one scheme word them differently (live 31357e4), except the ones that limit
+ * what is paid, which must agree. A row that only restates
  * another document's figure for the same cover without its currency is left out (restatedWithCurrency). Null when the rows print
  * different figures (two plans, or a table by age), or a row gives no figure: the tile then says Covered, and the
  * Coverage page lists each row with its own figure. */
@@ -133,7 +140,7 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
   const figure = (r: SummaryRow) => r.figure.kind === "none" && r.pays !== "as_charged" ? null
     : [shortFigure(r).text, rowDetail({ ...r, conditions: [] })].filter(Boolean).join(" · ");
   const texts = new Set(rows.map(figure));
-  if (texts.size !== 1 || [...texts][0] == null) return null;
+  if (texts.size !== 1 || [...texts][0] == null || new Set(rows.map(limits)).size > 1) return null;
   const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
   return [[...texts][0], conditions.size === 1 ? [...conditions][0] : ""].filter(Boolean).join(" · ");
 }
