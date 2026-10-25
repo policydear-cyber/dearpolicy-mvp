@@ -6461,3 +6461,34 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 ## Round 206 (24 Oct): #124 a1aeea4
 
 **#124 a1aeea4: READY.** 9aa5a61 (`\bHPS\b`, TE P124-3) and a1aeea4 (only "Home Protection Scheme" is a mortgage plan; "Home Protection Plan" for contents stays Home and vehicle) close the R205 low note, both tested. headline 15/0 on a1aeea4.
+
+## Round 207 (25 Oct): any-household / any-market re-review (#117 0aec6d7, #118 a2d5060, #119 c63a5e3) and sweep of #116-#125
+
+**#117 0aec6d7: NOT READY (one fix).**
+- **R207-1 (medium, wrong-person class): lib/simple-chat/library.ts `ownCoverWords`.** Every word of the household's insurer and product names counts after a possessive, including relation words. Probe with product words "family care plan": "my wife's family has cancer history, covered?" now resolves to the wife (null before); so does "my husband's family". Fix: drop words that NOT_THEM_AFTER already says are someone else:
+  ```ts
+  .flatMap((n) => n.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 2 && !NOT_THEM_AFTER.test(w)));
+  ```
+  With it: "my wife's family ..." gives null again, "my wife's care plan" still resolves.
+
+**#118 a2d5060: READY**, but **its PR #118 was merged at 8524386, so this commit is in no open PR**: it needs a new PR from main. Low: generic product words ("safe", "secure", "family") now send an app question to the model. That costs a model call, not a wrong answer.
+
+**#119 c63a5e3: READY**, with the same problem: **PR #119 was merged at 32e365d**, so this needs a new PR. Until then, main still carries the "Desmond travel.pdf", "charmaine's name to Charmaine Ong" and FWD/AIA test strings, which #118/#119 follow-ups remove.
+
+**#123 6aa2e1d is neither open nor merged** (closed). FYI in case that was not intended.
+
+**Sweep of #116-#125 (main 999048d) for one-household / one-market code:**
+- **R207-2 (medium, market): lib/benefit-table/chat.ts:198 BLOCK_FIGURE, :112 and :140 (#120).** Per-block delay cells match only S$/US$/SGD/$, and currency maps only to SGD/USD. An RM, HK$, A$, € or £ delay table gives no row (missing, not wrong). lib/chat/assertions.ts:224 already has a full sign table. Fix: one shared sign list:
+  ```ts
+  const SIGN_RE = String.raw`S\$|SG\$|SGD|US\$|USD|RM|MYR|HK\$|HKD|A\$|AU\$|AUD|€|EUR|£|GBP|₱|PHP|\$`;
+  const SIGNS: [RegExp, string][] = [[/^(?:S\$|SG\$|SGD)$/i, "SGD"], [/^(?:US\$|USD)$/i, "USD"], [/^(?:RM|MYR)$/i, "MYR"], [/^(?:HK\$|HKD)$/i, "HKD"],
+    [/^(?:A\$|AU\$|AUD)$/i, "AUD"], [/^(?:€|EUR)$/i, "EUR"], [/^(?:£|GBP)$/i, "GBP"], [/^(?:₱|PHP)$/i, "PHP"]];
+  // A bare "$" names no currency (Critic R186-1).
+  const currencyOfSign = (sign: string) => SIGNS.find(([re]) => re.test(sign.trim()))?.[1] ?? null;
+  const BLOCK_FIGURE = new RegExp(String.raw`^(${SIGN_RE})\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$`, "i");
+  // :112  (after.match(new RegExp(String.raw`(?:${SIGN_RE})\s?\d`, "g")) ?? []).length >= columns
+  // :140  const currency = currencyOfSign(sign);
+  ```
+- Low (pre-existing, round 12): chat.ts:172-175 plan-table cells take S$/US$/SGD only, and a bare "$" takes `template.figure.currency`. That conflicts with R186-1; a follow-up should use the same `currencyOfSign`.
+- Additive SG vocabulary is acceptable (it recognises more; it hides nothing elsewhere): CareShield/ElderShield, HomeProtect/HPS (#124), MediSave in ABOUT_COVER, Singlish particles in MINE_BEFORE. One label risk outside SG: cover-name `shield` means Hospital and medical (the SG Integrated Shield convention), so an "XYZ Shield" life plan elsewhere would show as Hospital and medical on Family. That is a label only, never an amount.
+- **R207-3 (repo-wide, pre-existing; not from #116-#125): real household names in code.** "Desmond", "Charmaine" and "Tan Yi Chuen" appear in 686 lines across 71 files in lib/app/components/scripts (comments and tests, e.g. chat.ts:1058-1092, layout-check.ts:1, claims/evidence/identity.ts:19). Against "keep private records out of Git" and any-household. Needs one sweep PR replacing them with made-up names (no logic change). #116-#125 themselves add none beyond the two test lines above.
