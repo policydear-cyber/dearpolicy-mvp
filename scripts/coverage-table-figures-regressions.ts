@@ -33,6 +33,20 @@ test("benefit names in three markets go to their category", () => {
   assert.equal(categoryOfBenefit("Funeral expenses"), null);
 });
 
+test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
+  for (const n of ["Death due to Accident", "Death by Accident", "Accidental Death Benefit", "TPD due to accident", "Accidental Total and Permanent Disability", "Accidental Dismemberment"])
+    assert.equal(categoryOfBenefit(n), "Personal Accident", n);
+  assert.equal(categoryOfBenefit("Death from any cause, including accident"), "Death");
+  assert.equal(categoryOfBenefit("Death due to illness or accident"), "Death");
+  assert.equal(categoryOfBenefit("Total and Permanent Disability (illness or accident)"), "Total Permanent Disability");
+});
+
+test("a fund or surrender value and a premium never give a tile's figure (Critic R225)", () => {
+  const rows = [row("Death Benefit fund value", { pays: "value", figure: { kind: "value", amount: 12000, currency: "GBP", asOf: null } }),
+    row("Premium waiver on death"), row("Death benefit premium", { figure: { kind: "printed", amount: 120, currency: "GBP", unit: "lump_sum" } })];
+  assert.deepEqual(categoryRows("Death", rows).map((r) => r.benefit), ["Premium waiver on death"]);
+});
+
 test("a per-day hospital cash row shows its rate, first day and most days, as printed", () => {
   const rows = [row("Daily Hospital Cash", { figure: { kind: "printed", amount: 80, currency: "MYR", unit: "per_day" }, fromDay: 4, maxDays: 60 })];
   assert.equal(tableDisplay(categoryRows("Hospital Cash", rows)), "MYR 80 a day · from day 4 · up to 60 days");
@@ -66,6 +80,7 @@ test("a wording describes an owned product only when product, group number and i
   assert.equal(wordingDescribes(owned("Critical Care", null, "Lion Mutual"), owned("Critical Care Plus", null, "Lion Mutual")), false);
   assert.equal(wordingDescribes(owned("Group Term Life", "GX-1001"), owned("Group Term Life", "GX-2002")), false);
   assert.equal(wordingDescribes(owned("Term Protect", null, "Lion Mutual"), owned("Term Protect", null, "Thames Life")), false);
+  assert.equal(wordingDescribes(owned("Term Protect", null, "Lion Mutual Ltd"), owned("Term Protect", null, "Lion Mutual Limited")), true);
   // Same group number, no product name on the wording: the scheme's wording.
   assert.equal(wordingDescribes(owned("Group Term Life", "GX-1001"), owned(null, "GX-1001")), true);
   // Nothing to match on: a wording never adds cover on its own.
