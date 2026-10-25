@@ -6808,3 +6808,7 @@ Free review: delta read plus a tsx probe of categoryOfBenefit on 20 names.
     - (b) Phrasings the allow-list doesn't know: "natural causes or accident", "accidental or otherwise", "2x for accidental death", "200% if accidental".
 - #144: merge only. READY.
 - #145: a bare R after or/and/to/max, plus a second pass once any rand figure is found, catches "up to R100,000 or R900" (two values, so the cap is refused). An extra "R1" label in such a text only withholds an amount. Superscripts are stripped the same way in moneyIn and capInRow, so the indexes still line up. READY.
+
+## R233 — #142 ed43151: READY (#144 bd2c3d0, #145 d979758 are merges only)
+
+- I re-ran the 20-name probe from R232 plus 7 new ones. Both R232 (a) names and all four (b) phrasings now go to Death or TPD. Every accident-only rider stays Personal Accident: "Double Indemnity…", "(including injury abroad)", "(2x on public transport)", "(pays 200% if on public transport)", "unless death is due to illness", "illness excluded", "natural causes excluded" and "other causes not covered". READY.
