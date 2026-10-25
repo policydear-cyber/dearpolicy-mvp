@@ -28,6 +28,13 @@ const ACCIDENT_ONLY = new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:(
 const ILLNESS_ONLY = new RegExp(String.raw`\bnon-?\s?accident\w*|\b(?:other\s+than|except(?:\s+for)?|excluding)\s+(?:by\s+|for\s+|through\s+)?(?:an?\s+)?${ACC}`, "i");
 const PAIR = String.raw`\s*(?:or|and|and\s*/\s*or|/|&)\s*(?:(?:by|from|due\s+to)\s+)?(?:an?\s+)?`;
 const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}${PAIR}${ACC}|\b${ACC}${PAIR}${ILL}|\b${ACC}\s+or\s+otherwise\b|\bnatural${PAIR}accident\w*|\baccident\w*${PAIR}natural\b`, "i");
+// A pair names the cause of the death itself only at the start of the name ("Accidental and Sickness Death Benefit") or
+// straight after the death words ("Death due to illness or accident"); anywhere else it is an exclusion's wording
+// ("Accidental Death not payable for illness or injury caused by war"; TE round 5).
+const PAIRS = String.raw`(?:${ILL}${PAIR}${ACC}|${ACC}${PAIR}${ILL}|${ACC}\s+or\s+otherwise\b|natural${PAIR}accident\w*|accident\w*${PAIR}natural\b)`;
+const PAIR_AT_START = new RegExp(String.raw`^\s*(?:the\s+)?${PAIRS}`, "i");
+const PAIR_AFTER_DEATH = new RegExp(String.raw`^\s*(?:the\s+)?(?:death|tpd|total\s+(?:and|&)\s+permanent\s+disabilit\w*|permanent\s+total\s+disabilit\w*|disabilit\w*)(?:\s+benefit)?\s+(?:(?:due\s+to|from|by|caused\s+by|resulting\s+from|through)\s+)?(?:an?\s+)?${PAIRS}`, "i");
+const STARTS_WITH_ACCIDENT = new RegExp(String.raw`^\s*(?:the\s+)?${ACC}`, "i");
 const PLAIN_DEATH = /^\s*death(?:\s+benefit)?\b/i;
 const UPLIFT_FOR_ACCIDENT = new RegExp(String.raw`(?:\b(?:doubl\w*|twice|uplift\w*)|\b\d+(?:\.\d+)?\s?(?:x|times)|\b\d{3}\s?%)\s+(?:for|on|if|upon|in\s+case\s+of)\s+(?:an?\s+)?accident\w*(?:\s+death)?\b`, "i");
 const INCLUDING_ACCIDENT = new RegExp(String.raw`\bincluding\s+(?:death\s+)?(?:due\s+to\s+|from\s+|by\s+|caused\s+by\s+)?(?:an?\s+)?${ACC}`, "i");
@@ -45,7 +52,9 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   // The words before an exclusion: "Accidental Death excluding injury from war" is accident cover (Critic R234).
   const lead = head.split(/\b(?:excluding|except|other\s+than|unless|but\s+not)\b/i)[0];
   if (/\bnon-?\s?accident/i.test(lead)) return "illness";
-  if (new RegExp(String.raw`\b${ACC}`, "i").test(lead) && !ANY_CAUSE.test(lead)) return "accident";
+  if (PAIR_AT_START.test(lead)) return "any";
+  if (STARTS_WITH_ACCIDENT.test(lead)) return "accident";
+  if (new RegExp(String.raw`\b${ACC}`, "i").test(lead)) return PAIR_AFTER_DEATH.test(lead) || /\b(?:any|all)\s+causes?\b/i.test(lead) ? "any" : "accident";
   if (ILLNESS_ONLY.test(head)) return "illness";
   if (ANY_CAUSE.test(head)) return "any";
   if (new RegExp(String.raw`\b${ACC}`, "i").test(head)) return "accident";
