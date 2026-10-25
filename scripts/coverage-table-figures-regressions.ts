@@ -240,6 +240,11 @@ test("only a fact about a row's own cover leaves it out: a clause or waiver of t
   const travel = on("t", "Daily hospital cash while overseas", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
   assert.equal(tile("Hospital Cash", [travel, on("b", "Hospital Cash Benefit", 40)]), "S$40 a day");
   assert.equal(tile("Hospital Cash", [travel]), "S$80 a day");
+  // Critic R244: a travel-named cover whose row also pays at home, a journey "plan" or "guard", a corporate product: standing.
+  for (const b of ["Hospital cash in Singapore and overseas", "Hospital cash, including while overseas", "Hospital cash while overseas or at home", "Hospital cash also while abroad"])
+    assert.equal(tile("Hospital Cash", [{ ...travel, benefit: b }, on("b", "Hospital Cash Benefit", 40)]), null, b);
+  for (const [product, cover] of [["Life Journey Plan", "Life Journey Plan"], ["Family Guard", "Family Guard"], ["Acme Corporate Travel Insurance", "Corporate Medical"]])
+    assert.equal(tile("Hospital Cash", [{ ...travel, product, cover }, on("b", "Hospital Cash Benefit", 40)]), null, product);
   // A travel-named cover with a home row as well is standing cover: no figure beside another cover's rate (TE P147-6 round 2).
   assert.equal(tile("Hospital Cash", [travel, { ...travel, benefit: "Hospital Cash Benefit" }, on("b", "Hospital Cash Benefit", 40)]), null);
   // Two signals are needed: a travel name and a row that pays only abroad. An employer's or product's travel-like word,
@@ -251,7 +256,9 @@ test("only a fact about a row's own cover leaves it out: a clause or waiver of t
       const standing = { ...on("e", "Hospital cash in hospital or overseas", 80, { product, cover }), figure: { kind: "printed" as const, amount: 80, currency: cur, unit: "per_day" as const } };
       const other = { ...on("b", "Hospital Cash Benefit", 40), figure: { kind: "printed" as const, amount: 40, currency: cur, unit: "per_day" as const } };
       const travelNamed = /Travel Insurance/.test(cover);
-      assert.equal(tile("Hospital Cash", [standing, other]) == null, !travelNamed, `${market} ${product} / ${cover}`);
+      // "in hospital or overseas" also pays at home: standing, whatever the names say.
+      assert.equal(tile("Hospital Cash", [standing, other]), null, `${market} ${product} / ${cover}`);
+      assert.equal(tile("Hospital Cash", [{ ...standing, benefit: "Daily hospital cash while overseas" }, other]) == null, !travelNamed, `${market} ${product} / ${cover}: abroad only`);
       assert.equal(tile("Hospital Cash", [{ ...standing, benefit: "Hospital Cash Benefit" }, other]), null, `${market} ${product} / ${cover}: no abroad row`);
     }
   // A cover whose rows here are all waivers pays nothing for the category.

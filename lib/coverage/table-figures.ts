@@ -96,12 +96,15 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
  * a cover with any home row is standing cover (TE P147-6 round 2).
  * A product name with a travel-like word alone ("Life Journey Saver", "Sunny Holidays Group Insurance") is standing cover,
  * and one benefit's wording alone never makes a cover travel. When unsure the cover stays in, and the tile gives no figure. */
-const TRAVEL_NAME = /\b(?:travel\w*|holiday|journey|trip)\s+(?:insurance|cover|protection|plan|policy|guard|assurance)\b|\b(?:single|annual|multi)[\s-]*trips?\b/i;
+const TRAVEL_NAME = /\btravel\w*\s+(?:insurance|cover|protection|policy|assurance)\b|\b(?:holiday|journey|trip)\s+(?:insurance|cover|policy)\b|\b(?:single|annual|multi)[\s-]*trips?\b/i;
 /** A group scheme's product name is often the employer's ("Holiday Inn Group Insurance", Critic R243): only the cover and
  * plan names are read for it, never the product name. */
-const SCHEME_NAME = /\b(?:group|scheme|staff|employees?)\b/i;
+const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|corporate|company|employer)\b/i;
 const travelName = (r: CoverRow) => TRAVEL_NAME.test([r.cover, r.plan, r.product && !SCHEME_NAME.test(r.product) ? r.product : null].filter(Boolean).join(" · "));
-const ABROAD_ROW = /\b(?:overseas|abroad|while\s+(?:you\s+are\s+)?travel\w*|during\s+(?:the|your|a)\s+(?:trip|journey))\b/i;
+const ABROAD_ROW = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\bduring\s+(?:the|your|a)\s+(?:trip|journey)\b/i;
+/** A row that also pays at home is not trip-only ("including while overseas", "or at home", "in Singapore and overseas"). */
+const ALSO_HOME = /\b(?:including|incl\.?|also|as\s+well\s+as|even|at\s+home|locally|home\s+country)\b|\bin\s+[A-Z][\w-]*\s+(?:and|or|&)\b/;
+const abroadOnly = (benefit: string) => ABROAD_ROW.test(benefit) && !ALSO_HOME.test(benefit.replace(/^\w/, (c) => c.toLowerCase()));
 /** A part of a benefit's payment terms, not its amount: a name that states a threshold with its own money figure ("paid
  * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A guaranteed minimum ("at least",
  * "not less than") is the benefit, not a clause (TE P147-2, round 5 C1-C4). */
@@ -123,7 +126,7 @@ export function tileRows<T extends CoverRow>(rows: T[]): T[] {
   for (const r of rows) { const k = r.coverKey ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
   const kept = [...covers.values()].map((list) => {
     const own = list.filter((r) => !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
-    return { list: own.length ? own : list, travel: list.some(travelName) && list.every((r) => ABROAD_ROW.test(r.benefit)),
+    return { list: own.length ? own : list, travel: list.some(travelName) && list.every((r) => abroadOnly(r.benefit)),
       waiverOnly: list.every((r) => WAIVER.test(r.benefit)) };
   });
   const paying = kept.filter((c) => !c.waiverOnly);
