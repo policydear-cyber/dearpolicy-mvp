@@ -9,9 +9,8 @@
 import { normalizePersonName } from "@/lib/insurance";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { MONEY_SIGN } from "@/lib/format/currency";
+import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
-import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -121,13 +120,7 @@ const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
  * RM 200,000 cap that the same row in S$ refuses). */
 function moneyIn(row: string): { value: number; index: number; length: number }[] {
-  const text = row.normalize("NFKC").replace(/\s+/g, " ").trim();
-  let from = 0;
-  return moneyFiguresIn(text).map((f) => {
-    const index = text.indexOf(f.raw, from);
-    from = index < 0 ? from : index + f.raw.length;
-    return { value: f.value, index, length: f.raw.length };
-  }).filter((f) => f.index >= 0).sort((a, b) => a.index - b.index);
+  return anyMoneyFigures(row.normalize("NFKC").replace(/\s+/g, " ").trim());
 }
 /** The one money figure a percentage row's own words cap it at: printed right after a cap word, and the only money figure in
  * the row. Null otherwise. */
@@ -156,8 +149,8 @@ const CONNECTIVE = /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|
 const TAB_CELLS = /\S\t+\S/;
 const PERCENT = /\d\s*%/;
 /** A cell with a percentage or a money figure in any currency. */
-const FIGURE_IN_CELL = new RegExp(String.raw`\d\s*%|${MONEY_SIGN}\s?\d`);
-const LABEL_FIGURE = new RegExp(String.raw`^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s${MONEY_SIGN}\s?\d`);
+const FIGURE_IN_CELL = new RegExp(String.raw`\d\s*%|${ANY_MONEY_FIGURE}`, "u");
+const LABEL_FIGURE = new RegExp(String.raw`^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:${ANY_MONEY_FIGURE})`, "u");
 /** How many lines below the row are looked at for a cap that was not joined to it. */
 const LINES_BELOW = 3;
 /** The row as printed, and the text near it whose cap words withhold the row's amount unless a cap is tied to the row.

@@ -277,5 +277,18 @@ test("no check that reads figures knows only Singapore dollars, and no claim tex
   }
 });
 
+test("a cap printed with a second limit is refused in every currency, and words like FORM 2 are never money (TE P145-1, P145-2)", () => {
+  const read = (line: string, cap: number, capQuote: string) => {
+    const docu: SourceDoc = { id: "d", name: "S.pdf", readable: true, pages: [{ page: 1, text: `Life Assured\tAlex Tan\nSum Insured\t250,000\n${line}` }] };
+    const r = checkReading(docu, reading("personal_proof", "Shield", [], [b({ benefit: "Accidental Death", pays: "percent", value: 200, percentOf: "sum_insured", cap, capQuote, page: 1, quote: line.replace(/\t/g, " ") })]));
+    return r.benefits[0]?.cap ?? null;
+  };
+  for (const sign of ["₹", "Rs.", "Rp", "฿", "RMB ", "NT$", "₩", "VND ", "C$", "CAD ", "ZAR ", "R ", "¥", "NZ$"])
+    assert.equal(read(`Accidental Death\t200% of Sum Insured up to ${sign}500,000 or ${sign}250,000 for juveniles`, 500000, `up to ${sign}500,000`), null, sign);
+  assert.equal(read("Accidental Death\t200% of Sum Insured up to 500,000 EUR or 250,000 EUR for juveniles", 500000, "up to 500,000 EUR"), null, "a code after the figure");
+  for (const words of ["(submit claim FORM 2)", "(TERM 5 applies)", "(PLATFORM 3)", "(ARM 2 excluded)"])
+    assert.equal(read(`Accidental Death\t200% of Sum Insured up to S$400,000 ${words}`, 400000, "up to S$400,000"), 400000, words);
+});
+
 console.log(`benefit table parity: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("FAIL", f); process.exit(1); }

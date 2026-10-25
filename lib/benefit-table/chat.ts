@@ -14,7 +14,7 @@ import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
-import { MONEY_SIGN, statedCurrencyCode } from "@/lib/format/currency";
+import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -213,7 +213,7 @@ function perBlock(above: string | undefined, figures: string[], lengths: string[
   // between do not end the block (TE P120-1, P120-2).
   const after = (next ?? "").trim();
   if (after && (/^[a-z]/.test(after) || /^(?:up\s+to|max(?:imum)?|subject|capped|limit|overall|total|aggregate|per\s+(?:trip|journey|period))\b/i.test(after)
-    || (after.match(new RegExp(String.raw`${MONEY_SIGN}\s?\d`, "g")) ?? []).length >= columns)) return null;
+    || anyMoneyFigures(after).length >= columns)) return null;
   const cells = figures.map((c) => BLOCK_FIGURE.exec(c));
   if (cells.some((c) => !c)) return null;
   const [label, ...periods] = lengths;

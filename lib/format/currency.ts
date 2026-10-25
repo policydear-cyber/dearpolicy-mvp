@@ -33,6 +33,7 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
     "C$": "CAD",
     "CA$": "CAD",
     "HK$": "HKD",
+    "NZ$": "NZD",
     "HKD$": "HKD",
     "RM": "MYR",
     "MYRRM": "MYR",
@@ -69,6 +70,20 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
  * not RM 2). Use it wherever a check asks "is a money figure printed here?", so a page in ringgit or pounds is checked
  * as one in Singapore dollars is (benefit-table parity test, 25 Oct). */
 export const MONEY_SIGN = String.raw`(?:(?<![A-Za-z])(?:S|SG|US|HK|A|AU|NZ)\$|(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP|RM)(?![A-Za-z])|[€£]|\$)`;
+
+/** Any money figure in any currency, for checks that must SEE money but never read its currency: "is a second limit
+ * printed beside this cap?", "does this line start another row with its own figure?". Wider than MONEY_SIGN on purpose: a
+ * sign it misses lets a cap printed with a second limit through (TE P145-1: ₹, Rs., Rp, ฿, RMB, NT$, ₩, VND, C$, CAD, ZAR,
+ * R, and a code or € after the figure). Seeing too much only withholds an amount. Never part of a word: "FORM 2", "TERM 5"
+ * and "PLATFORM 3" are not money (Critic R226). Groups: 1 is the figure before a sign, 2 the figure after one. */
+const ISO_CODES = "SGD|USD|EUR|GBP|JPY|CNY|RMB|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|NTD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|MMK|KHR|LAK";
+const ANY_SIGN = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|\p{Sc}|(?<![A-Za-z])(?:RM|Rs\.?|Rp\.?|R)(?![A-Za-z])|(?<![A-Za-z])(?:${ISO_CODES})(?![A-Za-z]))`;
+export const ANY_MONEY_FIGURE = String.raw`${ANY_SIGN}\s?(\d[\d,]*(?:\.\d+)?)|(?<![\d.,])(\d[\d,]*(?:\.\d+)?)\s?(?:\p{Sc}|(?:${ISO_CODES})(?![A-Za-z]))`;
+/** Every money figure of a text in any currency, with where it starts and how long it is (see ANY_MONEY_FIGURE). */
+export function anyMoneyFigures(text: string): { value: number; index: number; length: number }[] {
+  return [...(text ?? "").matchAll(new RegExp(ANY_MONEY_FIGURE, "gu"))].map((m) => ({ value: Number((m[1] ?? m[2]).replace(/,/g, "")), index: m.index!, length: m[0].length }))
+    .filter((f) => Number.isFinite(f.value));
+}
 
 export const CURRENCY_NOT_STATED = "(currency unknown)";
 const plainNumber = (amount: number) => amount.toLocaleString("en-SG", { maximumFractionDigits: Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2 });

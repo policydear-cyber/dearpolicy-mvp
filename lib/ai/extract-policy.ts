@@ -119,7 +119,11 @@ function groupPolicyNumber(text: string) {
  * Group Insurance Scheme"), for any employer or insurer. Null when there is none: no product name is guessed. */
 function inferProductName(text: string) {
   const title = text.split("\n").slice(0, 15).map((l) => l.trim().replace(/\s+/g, " "))
-    .find((l) => l.length <= 80 && /^[A-Za-z0-9][A-Za-z0-9&'.,() -]*\bgroup\s+insurance(?:\s+scheme)?$/i.test(l));
+    .find((l) => l.length <= 80 && /^[A-Za-z0-9][A-Za-z0-9&'.,() -]*\bgroup\s+insurance(?:\s+scheme)?$/i.test(l)
+      // A heading about the scheme ("Certificate of Group Insurance", "Important notice about your Group Insurance") is not its
+      // name (Critic R226).
+      && !/^(?:certificate|important|notice|summary|about|your|the|this|schedule|welcome|guide|claims?|how)\b/i.test(l)
+      && !/\b(?:of|your|about|to|for)\s+(?:the\s+)?group\s+insurance/i.test(l));
   return title ?? null;
 }
 
