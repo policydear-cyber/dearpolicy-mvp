@@ -6812,3 +6812,23 @@ Free review: delta read plus a tsx probe of categoryOfBenefit on 20 names.
 ## R233 — #142 ed43151: READY (#144 bd2c3d0, #145 d979758 are merges only)
 
 - I re-ran the 20-name probe from R232 plus 7 new ones. Both R232 (a) names and all four (b) phrasings now go to Death or TPD. Every accident-only rider stays Personal Accident: "Double Indemnity…", "(including injury abroad)", "(2x on public transport)", "(pays 200% if on public transport)", "unless death is due to illness", "illness excluded", "natural causes excluded" and "other causes not covered". READY.
+
+## R234 — #142 56c9434: NOT READY (one high; #144 e0d0ab7, #145 725af0f merges only, READY)
+
+Free review: tsx probe of categoryOfBenefit on 48 names (R232/R233 set plus round-4 cases).
+
+- High, the round-4 defect without brackets: the head check runs ILLNESS_ONLY before it tests for an accident word, and the head only ends at a bracket, dash, comma, semicolon or colon. So an exclusion clause with no punctuation still makes an accident rider "illness only" and puts it on the Death tile. Probe:
+  - "Accidental Death excluding injury from war" goes to Death.
+  - "Accidental Death other than injury from war" goes to Death.
+  - "Accidental death except injury from riots" goes to Death.
+  - "Accidental Death Benefit excluding injuries sustained while racing" goes to Death.
+  Fix: decide on the words before any exclusion word, before ILLNESS_ONLY runs:
+  ```ts
+  const lead = head.split(/\b(?:excluding|except|other\s+than|unless|but\s+not)\b/i)[0];
+  if (/\bnon-?\s?accident/i.test(lead)) return "illness";
+  if (new RegExp(String.raw`\b${ACC}`, "i").test(lead) && !ANY_CAUSE.test(lead)) return "accident";
+  // then the existing ILLNESS_ONLY / ANY_CAUSE / ACC tests on head
+  ```
+  Results with this: "Death other than by accident" has no accident word in its lead, so ILLNESS_ONLY makes it Death. "Non-accidental death" goes to illness. "Accidental and Sickness Death Benefit" has ANY_CAUSE in the lead, so it goes to Death.
+- Low (fails toward PA, so an any-cause row is missing from the Death tile): "Death and Accidental Death Benefit" (a combined row), "Death by accident, illness or otherwise" (the comma cuts the head) and "Death benefit (100%) accidental death 200%".
+- Every R232/R233 name, plus the round-4 bracket and dash cases, gives the expected tile.
