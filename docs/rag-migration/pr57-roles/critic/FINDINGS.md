@@ -6902,3 +6902,44 @@ Free review: I ran ELIGIBILITY, CHANGES_AMOUNT, TRIP_ONLY and ALSO_ABROAD, extra
   Better still, narrow the two broad alternatives to cause clauses, e.g. `^\s*(?:no|not)\b[^.]*\b(?:payable|covered)\s+(?:for|if|when|where\s+the\s+(?:insured|life)|due\s+to|arising|caused|resulting|in\s+respect\s+of\s+(?!amounts?))`. With both, the fixes stay on the safe side: anything unplaced gives Covered. "No benefit for self-inflicted injuries", "Excluding pregnancy", "Hospitalised as an inpatient" and "Not payable if the insured is outside Singapore" stay harmless, so the live J1 case keeps its figure.
 - Low (Q3): ALSO_ABROAD's bare `and` turns trip rows into standing cover. "Daily hospital cash while overseas and travelling" and "Hospital cash when you travel and are admitted abroad" become STANDING. Accept and/or only after a home word: `(?:at\s+home|locally|in\s+[A-Z]\w+)\s+(?:and|or)\s+(?:overseas|abroad)`, plus the including/also/as-well-as forms.
 - CLAUSE now needs threshold wording, so "Daily Hospital Cash S$80 per day" stays a benefit. Correct.
+
+## R242: #147 Home tiles at ad30d58 (strict eligibility allow-list): NOT READY, one High
+
+Checked for free: tsx probes of the new `isEligibility`/`tripOnly` on 46 condition and 15 benefit-name phrasings; `coverage-table-figures-regressions.ts` 25/0; `tsc` clean; `next build` passes (npm ci in a scratch worktree).
+
+Fixed and confirmed:
+- All 10 R241 phrasings and all 3 TE P147-5 phrasings ("reduced by half after age sixty-five", "less any amount already paid", "the higher of this amount or the account value") are now limits, so the tile gives no figure unless every row prints it.
+- The stay/standing shape is a true allow-list (`STANDING_WORDS`, every word must be in the set). It holds no amount words, so nothing amount-changing can be built from it. Correct design.
+- "while overseas and travelling" is trip-only again. "in Singapore and overseas", "at home and abroad", "including while overseas" stay standing cover.
+- Harmless controls keep the figure: "No benefit for self-inflicted injuries", "Excluding pregnancy", "Hospitalised as an inpatient", "Inpatient only", "Admitted on the advice of a registered medical practitioner", "Excluding war and terrorism", "No benefit if the illness is pre-existing".
+
+- **High (Q1): the cause shape is still a deny-list.** `NOT_A_CAUSE` lists amount words to refuse, so any amount change worded outside the list passes as harmless and the full figure shows. This was my own R241 suggestion; it repeats the R238 mistake. Each of these is ELIGIBILITY at ad30d58 (the tile would print the full figure when another row lacks it):
+  - "Excluding outstanding loans and interest", "Excluding indebtedness to the company", "Excluding unpaid premiums", "Excluding outstanding premium arrears", "Not payable for interest accrued" (life death benefits are paid net of these)
+  - "Excluding copayment", "Excluding coinsurance" (no word boundary before `pay`/`insur`)
+  - "Excluding the balance", "Excluding the shortfall", "Excluding the remainder", "No benefit for the top-up"
+  - "Excluding fifty dollars of each claim", "Excluding one hundred ringgit" (spelled-out figure and currency word)
+  - "Excluding the surrender value", "Excluding partial surrenders", "Excluding withdrawals made"
+  - "No benefit for subsequent claims", "No benefit for the second and further disabilities" (a count limit, like "once")
+  - Fix: give the cause the same design as the stay shape. Every word of the cause must be in a fixed set of risk words plus function words. Anything else is a limit:
+  ```ts
+  const CAUSE_WORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "by", "from", "in", "on", "under", "with", "while", "is", "are", "was", "be", "being", "any", "if", "its", "their", "his", "her",
+    "self", "inflicted", "self-inflicted", "intentional", "intentionally", "deliberate", "injury", "injuries", "suicide", "attempted",
+    "war", "terrorism", "riot", "riots", "strike", "strikes", "civil", "commotion", "invasion", "hostilities", "rebellion", "nuclear", "radiation", "radioactive", "contamination",
+    "pregnancy", "childbirth", "miscarriage", "abortion", "infertility", "sterilisation", "sterilization", "contraception",
+    "pre-existing", "preexisting", "existing", "condition", "conditions", "illness", "illnesses", "disease", "diseases", "disorder", "disorders", "congenital", "hereditary",
+    "cosmetic", "plastic", "surgery", "dental", "treatment", "treatments", "outpatient", "experimental", "elective", "mental", "psychiatric", "nervous",
+    "alcohol", "alcoholism", "drugs", "drug", "narcotics", "intoxication", "influence", "abuse", "hiv", "aids", "sexually", "transmitted",
+    "hazardous", "dangerous", "sports", "sport", "activities", "activity", "aviation", "flying", "racing", "diving", "mountaineering", "professional",
+    "criminal", "unlawful", "illegal", "act", "acts", "participation", "provoked", "assault"]);
+  function isCause(cause: string): boolean {
+    const words = cause.toLowerCase().replace(/[.,;:()]/g, " ").split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.every((w) => CAUSE_WORDS.has(w));
+  }
+  // in isEligibility: if (head) return isCause(c.slice(head[0].length));
+  ```
+  The safe side holds: an unlisted risk word ("Excluding skydiving") only drops the figure when rows differ, never shows a wrong one. Gate it with the list above as limits and the controls above as eligibility.
+- Low (Q2, over-block): "Not payable if the insured is outside Singapore" is now a limit (`insur\w*`). With the word set above it stays a limit too. That is acceptable: it only drops the figure when rows differ. The live J1 regression case still passes.
+- Medium (Q3, pre-existing gap now visible): `TRIP_ONLY` only knows "while/when (you are) overseas/abroad/travel…". So "Hospital cash when you travel", "Hospital cash whilst on holiday abroad", "Hospital cash overseas" and "Hospital cash abroad" count as standing cover, and a trip-only row can decide the Home tile. Fix: `\b(?:while|whilst|when)\s+(?:you\s+(?:are\s+)?)?(?:\w+\s+){0,2}?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey|holiday)\b|\boverseas\s+(?:only|travel)\b|^[^,;(]*\b(?:overseas|abroad)\s*$`, keeping ALSO_ABROAD/HOME_AND_ABROAD as the overrides.
+- Low: "Hospital cash while abroad or at home" stays trip-only (home word after). This hides the row; it never shows a wrong figure. Optional: also accept `(?:overseas|abroad)\s+(?:and|or)\s+(?:at\s+home|locally)`.
+
+Verdict: NOT READY. Fix Q1 (word allow-list for the cause) and Q3; Q2 and the last Low are optional.
