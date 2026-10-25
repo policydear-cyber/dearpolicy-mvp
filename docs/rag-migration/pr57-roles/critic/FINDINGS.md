@@ -6943,3 +6943,37 @@ Fixed and confirmed:
 - Low: "Hospital cash while abroad or at home" stays trip-only (home word after). This hides the row; it never shows a wrong figure. Optional: also accept `(?:overseas|abroad)\s+(?:and|or)\s+(?:at\s+home|locally)`.
 
 Verdict: NOT READY. Fix Q1 (word allow-list for the cause) and Q3; Q2 and the last Low are optional.
+
+## R243: #147 Home tiles at 34f5a8a (rows dropped per cover; travel known by cover name): NOT READY, one High
+
+Checked for free:
+- tsx probes of the real `tileRows`/`tableDisplay` with made-up two-cover households;
+- node probes of the new cause and stay rules, rerun on all R241/R242 phrasings;
+- `coverage-table-figures-regressions.ts` 25/0, `te-pr147b-test.ts` 51/0, `te-pr147c-test.ts` 39/0;
+- `tsc` clean, `next build` passes.
+
+Fixed and confirmed:
+- All 20 R242 adversarial causes are now limits: loans, unpaid premiums, indebtedness, copayment, coinsurance, balance, shortfall, "fifty dollars", "one hundred ringgit", subsequent/second claims, surrender value, withdrawals. The R241 ten and the TE P147-5 three stay limits.
+- `CAUSE_WORDS` and `STANDING_WORDS` are both word allow-lists, and the count words are a closed class. Correct design.
+- A row is dropped by its wording only within its own cover. Another cover is dropped only as a whole (travel, or waiver-only). A phrasing no rule knows now gives "Covered", not a wrong figure. Good structure. The trip-wording regexes and their R242 Q3 gaps are gone.
+
+- **High (Q1): `TRAVEL_COVER` misfires on employer and product names, and a whole standing cover then drops out of the tile.** It tests `product + cover + plan` for a bare `travel*|trips?|journeys?|holidays?`. A group scheme's product name usually carries the employer's name, so these count as travel: "Holiday Inn Group Insurance / Group Term Life", "Trip.com Group Employee Benefits / Group Hospital & Surgical", "Sunrise Travel & Tours Staff Scheme / Group Personal Accident". Personal products count too: "Life Journey Protector", "Premium Holiday Saver", "Journey Critical Illness Plan".
+  - Real outcome (made-up household): GTL Death S$500,000 under "Holiday Inn Group Insurance" plus whole life Death S$200,000. The Death tile shows **S$200,000**; the control with a plain employer name shows no single figure. The tile hides S$500,000 of documented cover and reads as the person's whole death cover. "Sunrise Travel & Tours Staff Scheme" gives the same result. "Life Journey Protector" 200k + GTL 500k gives S$500,000.
+  - Fix: decide travel on the cover's own name and plan first, and on the product only when it is not a scheme name. Drop the bare trip/journey/holiday words:
+  ```ts
+  const TRAVEL_COVER = /\btravel\w*|\b(?:single|annual|multi)[\s-]?trips?\b|\b(?:holiday|journey|trip)\s+(?:insurance|cover|plan|policy)\b/i;
+  const SCHEME_NAME = /\b(?:group|scheme|staff|employees?|members?|corporate|company|benefits?\s+(?:programme|program|plan))\b/i;
+  const isTravelCover = (r: CoverRow) => TRAVEL_COVER.test(r.cover ?? "") || TRAVEL_COVER.test(r.plan ?? "")
+    || (TRAVEL_COVER.test(r.product ?? "") && !SCHEME_NAME.test(r.product ?? ""));
+  ```
+  Probed: the 6 misfires above become standing cover. These stay travel: "TravelEasy", "Single Trip Plan", "Annual Multi-Trip Plan", "Holiday Insurance", "Overseas Travel Insurance", and a scheme's own "Group Business Travel Accident" or "Business Travel Cover" line. Gate it with the employer-name household above (expected: no single Death figure) in SG/MY/UK.
+- Low (Q2, missed travel, safe side): "SmartTraveller", "Overseas Guard Plan", "Takaful Perjalanan" and "Assurance Voyage" are not travel. With other cover that gives "Covered", never a wrong figure. Optional for other markets: add `perjalanan|voyage|viaje|reise\w*`.
+- Low (Q3, over-block, safe side): these are now limits, so the figure drops when rows differ:
+  - "No benefit if the illness is pre-existing" (`is`)
+  - "Excluding outpatient treatment" (`outpatient`)
+  - "Excluding pregnancy, childbirth and miscarriage" (comma rule)
+  - "No benefit for death due to suicide (including attempted suicide)" (`death`)
+  - "Not payable if the insured is outside Singapore"
+  Optional: add `is`, `are`, `outpatient`, `death`, `deaths`, and allow a comma list made only of cause words. The live J1 case still passes.
+
+Verdict: NOT READY on Q1 alone; Q2 and Q3 are optional.
