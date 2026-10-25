@@ -13,7 +13,7 @@ FAIL R2 reported conversation, minimal (live-shape) model
      + actual - expected
      
      + [
-     +   "turn 4 (“Transverse fracture.”): missing S$100; missing /complete period of 24 hours/i; missing /haven't yet read Desmond's own sum insured/i; shows Updated:; expected one question like /simple|closed/i, got none; no citation of PA_WORD:2"
+     +   "turn 4 (“Transverse fracture.”): missing S$100; missing /complete period of 24 hours/i; missing /haven't yet read Raymond's own sum insured/i; shows Updated:; expected one question like /simple|closed/i, got none; no citation of PA_WORD:2"
      + ]
      - []
      
@@ -74,9 +74,9 @@ FAIL CONTROL repair attempts (separate from what is shown): each turn's one repa
 PASS CONTROL category: a detail the schedule does not use is not mapped to its catch-all row
 
 ### R1 reported conversation, capable model
-USER: Desmond broke his leg.
-APP:  Certificate amount: Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray.
-      [Q] How did Desmond break his leg?
+USER: Raymond broke his leg.
+APP:  Certificate amount: Raymond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray.
+      [Q] How did Raymond break his leg?
       cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
       facts: injury=broke his leg
       GRADE: pass
@@ -100,15 +100,15 @@ APP:  I couldn’t finish: the assistant model returned an error, so I stopped b
       GRADE: FAIL -- missing S$300,000; missing S$18,000; missing S$9,000; missing S$30,000; missing S$15,000; missing S$12,000; missing S$6,000; missing /simple \(closed\)/i; missing S$100; missing /complete period of 24 hours/i; missing /two nights/i; missing /admission and discharge times/i; expected one question like /which bone/i, got none; no citation of CERT:1; no citation of PA_WORD:1; no citation of PA_WORD:2
 USER: Transverse fracture.
 APP:  Updated: injury is now transverse fracture (you said broke his leg at first). You told me it is a transverse fracture. The Schedule of Compensation sets the percentage by the bone that is broken, and the payable share by whether the fracture is simple (closed) or compound (open); a transverse fracture, which describes the line of the break, is neither of those, so it does not decide the row.
-      [Q] Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
+      [Q] Which bone in Raymond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
       cites=PA_WORD:1 steps=2 gate=[]
       facts: injury=transverse fracture [corrected from broke his leg]; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
       GRADE: FAIL -- shows Updated:
 
 ### R2 reported conversation, minimal (live-shape) model
-USER: Desmond broke his leg.
+USER: Raymond broke his leg.
 APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
-      [Q] How did Desmond break his leg?
+      [Q] How did Raymond break his leg?
       cites=PA_WORD:1,PA_WORD:2 steps=3 gate=[]
       facts: injury=broke his leg
       GRADE: pass
@@ -129,12 +129,12 @@ APP:  Updated: injury is now transverse fracture (you said broke his leg at firs
       You told me it is a transverse fracture.
       cites= steps=2 gate=[]
       facts: injury=transverse fracture [corrected from broke his leg]; fracture_type=transverse; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
-      GRADE: FAIL -- missing S$100; missing /complete period of 24 hours/i; missing /haven't yet read Desmond's own sum insured/i; shows Updated:; expected one question like /simple|closed/i, got none; no citation of PA_WORD:2
+      GRADE: FAIL -- missing S$100; missing /complete period of 24 hours/i; missing /haven't yet read Raymond's own sum insured/i; shows Updated:; expected one question like /simple|closed/i, got none; no citation of PA_WORD:2
 
 ### R3 reported conversation, minimal model that follows the repair
-USER: Desmond broke his leg.
+USER: Raymond broke his leg.
 APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
-      [Q] How did Desmond break his leg?
+      [Q] How did Raymond break his leg?
       cites=PA_WORD:1,PA_WORD:2 steps=3 gate=[]
       facts: injury=broke his leg
       GRADE: pass
@@ -158,15 +158,15 @@ APP:  Updated: injury is now transverse fracture (you said broke his leg at firs
       GRADE: FAIL -- missing S$300,000; missing /1 July 2025|01\/07\/2025/; missing S$18,000; missing S$9,000; missing S$100; missing /complete period of 24 hours/i; shows Updated:; expected one question like /which bone/i, got none; no citation of CERT:1; no citation of PA_WORD:1; no citation of PA_WORD:2
 
 ### P1 paraphrase: shin bone, closed fracture, stay with times
-USER: My husband Desmond fractured his shin bone, he slipped on the stairs at home.
-APP:  Certificate amount: Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray.
+USER: My husband Raymond fractured his shin bone, he slipped on the stairs at home.
+APP:  Certificate amount: Raymond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray.
       [Q] Was the fracture confirmed by an X-ray?
       cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
       facts: injury=fractured his shin bone; how_it_happened=slipped on the stairs at home
       GRADE: pass
 USER: Yes, the X-ray showed it, it's a closed fracture, and he stayed two nights in the ward.
-APP:  Certificate amount: Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture. You told me he was warded for two nights; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods.
-      [Q] When was Desmond admitted to hospital (date and time)?
+APP:  Certificate amount: Raymond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025 (the amount on that date, not confirmation of current cover); the wording's Sum Insured is that amount. Printed percentages: the Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture. You told me he was warded for two nights; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods.
+      [Q] When was Raymond admitted to hospital (date and time)?
       cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=4 gate=[]
       facts: injury=fractured his shin bone; fracture_type=closed; xray_confirmed=yes; how_it_happened=slipped on the stairs at home; nights_in_hospital=2
       ! calculate: args.proportion is not a parameter of this tool
@@ -177,7 +177,7 @@ APP:  I couldn’t finish: the assistant model returned an error, so I stopped b
       cites= steps=3 gate=[]
       facts: injury=fractured his shin bone; fracture_type=closed; xray_confirmed=yes; how_it_happened=slipped on the stairs at home; admission_datetime=2026-10-03T21:00+08:00; discharge_datetime=2026-10-05T11:00+08:00; nights_in_hospital=2
       ! calculate: args.rate_passage is not a parameter of this tool
-      ! final_answer: the household answered your question ("When was Desmond admitted to hospital (date and time)?") (not shown: "The wording's Accident Hospital Income pays S$100 for each complete period of 24" -- S$100 is printed in none of the evidence the sentence cites). Do not only say back what they told you. Answer with final_answer: (1) what they told you, as "You told me ..." -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: "Certificate amount: Desmond's Certificate of Group Insuranc
+      ! final_answer: the household answered your question ("When was Raymond admitted to hospital (date and time)?") (not shown: "The wording's Accident Hospital Income pays S$100 for each complete period of 24" -- S$100 is printed in none of the evidence the sentence cites). Do not only say back what they told you. Answer with final_answer: (1) what they told you, as "You told me ..." -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: "Certificate amount: Raymond's Certificate of Group Insuranc
       ! model: script turn 3 has no step 4
       GRADE: FAIL -- missing /indicative estimate/i; missing S$100
 

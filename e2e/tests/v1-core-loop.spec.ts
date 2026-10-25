@@ -60,7 +60,7 @@ function mixedCurrencyCheck(text: string, where: string) {
 }
 
 // ---- fixtures (e2e/support/v1-fixtures.ts, written by the ingestion agent) --
-type Fixture = { key: string; file: string; mimeType: string; format: string; owner: "Charmaine" | "Marcus"; household: "A" | "B"; role: string; product: string; buffer: Buffer; expected: FX.V1Fixture["expected"] };
+type Fixture = { key: string; file: string; mimeType: string; format: string; owner: "Josephine" | "Marcus"; household: "A" | "B"; role: string; product: string; buffer: Buffer; expected: FX.V1Fixture["expected"] };
 async function loadFixtures(): Promise<Fixture[]> {
   return (await FX.generateV1Fixtures({ include: "all" })).map((f) => ({
     key: f.key, file: f.name, mimeType: f.mimeType, format: f.format, owner: f.member, household: f.household, role: f.role,
@@ -272,7 +272,7 @@ async function reopenLatest(page: Page, titleHint: RegExp | null) {
 }
 
 // ====================================================================================
-const PEOPLE = [["Charmaine", "spouse"], ["Marcus", "self"]] as const;
+const PEOPLE = [["Josephine", "spouse"], ["Marcus", "self"]] as const;
 async function uploadAll(page: Page, fx: Fixture[], people: Record<string, { relationship: string }>, timings: unknown[], outFile: string) {
   const records: UploadRecord[] = [];
   for (const f of fx) {
@@ -355,10 +355,10 @@ test.describe.serial("V1 core loop (phase A)", () => {
     // 3-4. Chat turns.
     await page.goto("/chat");
     await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
-    await ask(page, "What policies does Charmaine have?");
+    await ask(page, "What policies does Josephine have?");
     await ask(page, "What is her hospital coverage?");
     const fracture1 = await ask(page, "Does she have a fracture benefit?");
-    await ask(page, "Charmaine broke her arm.", { noMoneyYet: true });
+    await ask(page, "Josephine broke her arm.", { noMoneyYet: true });
     let t = await ask(page, "An accident.", { noMoneyYet: true });
     // Location, date and treatment questions -- answered through the answer buttons / inline answer.
     for (let i = 0; i < 7 && t.nextQuestion && !t.stuck && !t.error; i++) {
@@ -383,7 +383,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
 
     // 6a. Reload and reopen from history. The chat currently on screen is
     // reopened first (whatever history entry is marked current), then the
-    // Charmaine conversation; each must show the same last answer and the
+    // Josephine conversation; each must show the same last answer and the
     // same next question as before the reload.
     const beforeReopen = (await lastAnswer(page).innerText()).trim();
     const beforeQuestion = await currentQuestion(page);
@@ -391,7 +391,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined); await expect(async () => { await page.locator("details.chat-history").evaluate((d) => { (d as HTMLDetailsElement).open = true; }); await page.locator(".history-open").first().waitFor({ state: "visible", timeout: 2_000 }); }).toPass({ timeout: 30_000 });
     const currentTitle = (await page.locator(".history-open[aria-current=true]").first().innerText().catch(() => "")).trim();
     soft(currentTitle, "reopen: no history entry is marked as the current chat before reload");
-    const lastCharmaineTurn = [...transcript].reverse().find((x) => !/marcus/i.test(x.user))!;
+    const lastJosephineTurn = [...transcript].reverse().find((x) => !/marcus/i.test(x.user))!;
     await page.reload();
     const title1 = await reopenLatest(page, currentTitle ? new RegExp("^" + currentTitle.split("\n")[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) : null);
     const afterReopen = (await lastAnswer(page).innerText()).trim();
@@ -400,15 +400,15 @@ test.describe.serial("V1 core loop (phase A)", () => {
     soft(reopen1.sameLastAnswer, `reopen: last answer differs after reopening the current chat "${title1}"`);
     soft(reopen1.beforeQuestion === reopen1.afterQuestion, `reopen: next question changed ("${beforeQuestion}" -> "${reopen1.afterQuestion}")`);
     await page.screenshot({ path: path.join(OUT, "reopen-1.png"), fullPage: true });
-    const titleC = await reopenLatest(page, /^What policies does Charmaine/);
+    const titleC = await reopenLatest(page, /^What policies does Josephine/);
     const cLast = (await lastAnswer(page).innerText()).trim();
-    const reopen1c = { title: titleC, expectedFromTurn: lastCharmaineTurn.turn, sameLastAnswer: cLast === lastCharmaineTurn.answer, expectedQuestion: lastCharmaineTurn.nextQuestion, afterQuestion: await currentQuestion(page), afterCount: await answersLoc(page).count(), afterText: cLast };
-    soft(reopen1c.sameLastAnswer, `reopen Charmaine chat: last answer differs from turn ${lastCharmaineTurn.turn}`);
-    soft(reopen1c.expectedQuestion === reopen1c.afterQuestion, `reopen Charmaine chat: next question changed ("${reopen1c.expectedQuestion}" -> "${reopen1c.afterQuestion}")`);
-    await page.screenshot({ path: path.join(OUT, "reopen-1-charmaine.png"), fullPage: true });
+    const reopen1c = { title: titleC, expectedFromTurn: lastJosephineTurn.turn, sameLastAnswer: cLast === lastJosephineTurn.answer, expectedQuestion: lastJosephineTurn.nextQuestion, afterQuestion: await currentQuestion(page), afterCount: await answersLoc(page).count(), afterText: cLast };
+    soft(reopen1c.sameLastAnswer, `reopen Josephine chat: last answer differs from turn ${lastJosephineTurn.turn}`);
+    soft(reopen1c.expectedQuestion === reopen1c.afterQuestion, `reopen Josephine chat: next question changed ("${reopen1c.expectedQuestion}" -> "${reopen1c.afterQuestion}")`);
+    await page.screenshot({ path: path.join(OUT, "reopen-1-josephine.png"), fullPage: true });
 
     // 5. Delete the policy the fracture answer relied on, through the Policies page.
-    const fixtureWithFracture = fxA.find((f) => f.owner === "Charmaine" && f.expected.benefits.some((x) => /fracture/i.test(x.name)));
+    const fixtureWithFracture = fxA.find((f) => f.owner === "Josephine" && f.expected.benefits.some((x) => /fracture/i.test(x.name)));
     const citedNames = fracture1.citations.join(" ");
     const target = policiesA.find((p) => fixtureWithFracture && p.original_filename === fixtureWithFracture.file)
       ?? policiesA.find((p) => p.product_name && citedNames.includes(p.product_name));
@@ -426,7 +426,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
       // Any other household-A policy that carries the same fracture wording stays; record which.
       await writeFile(path.join(OUT, "policies-A-after-delete.json"), JSON.stringify(await policies(page), null, 2));
     }
-    await reopenLatest(page, /^What policies does Charmaine/);
+    await reopenLatest(page, /^What policies does Josephine/);
     const invalidated = await page.locator("[data-testid=answer-invalidated]").count();
     const fracture2 = await ask(page, "Does she have a fracture benefit?");
     if (deletedName) {
@@ -437,7 +437,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
     // 6b. Reload and reopen once more after the deletion.
     const lastBefore = (await lastAnswer(page).innerText()).trim();
     await page.reload();
-    const title2 = await reopenLatest(page, /^What policies does Charmaine/);
+    const title2 = await reopenLatest(page, /^What policies does Josephine/);
     const lastAfter = (await lastAnswer(page).innerText()).trim();
     soft(lastAfter === lastBefore, `reopen after deletion: last answer differs`);
     await page.screenshot({ path: path.join(OUT, "reopen-2.png"), fullPage: true });

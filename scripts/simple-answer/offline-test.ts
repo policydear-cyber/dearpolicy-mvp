@@ -117,14 +117,14 @@ await check("release-set format: chat <id> continues that conversation, chat new
   const p = join(dir, "release.json");
   writeFileSync(p, JSON.stringify([
     { id: "B1", chat: "new", message: "wife broke her wrist", category: "scenario" },
-    { id: "A1", chat: "new", message: "what is charmaine covered for" },
+    { id: "A1", chat: "new", message: "what is josephine covered for" },
     { id: "C1", chat: "B1", message: "how much could she get" },
     { id: "C2", chat: "C1", message: "what do i do now" },
   ]));
   const qs = loadQuestions(p);
   assert.deepEqual(qs.map((q) => [q.id, q.turns, q.turnIds]), [
     ["B1", ["wife broke her wrist", "how much could she get", "what do i do now"], ["B1", "C1", "C2"]],
-    ["A1", ["what is charmaine covered for"], ["A1"]],
+    ["A1", ["what is josephine covered for"], ["A1"]],
   ]);
   writeFileSync(p, JSON.stringify([{ id: "C1", chat: "B9", message: "x" }]));
   assert.throws(() => loadQuestions(p), /not an earlier question/);

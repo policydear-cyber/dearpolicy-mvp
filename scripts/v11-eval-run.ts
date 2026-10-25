@@ -105,7 +105,7 @@ async function apiRun(out: string) {
     for (const key of UPLOAD_ORDER) {
       const d = rendered.find((r) => r.key === key)!;
       const account = households[d.household];
-      const member = d.person ? memberIds[d.person] : memberIds[d.household === "A" ? "marcus" : "charmaineB"];
+      const member = d.person ? memberIds[d.person] : memberIds[d.household === "A" ? "marcus" : "josephineB"];
       const policyId = randomUUID(); policyIds[key] = policyId;
       const bytes = new Uint8Array(d.buffer);
       const t0 = Date.now();
@@ -249,7 +249,7 @@ async function apiRun(out: string) {
       const saved = conv?.id ? await (await getSavedChat(new NextRequest(`http://localhost/api/chat/history/${conv.id}`), { params: Promise.resolve({ id: conv.id }) })).json() : null;
       const msgs = saved?.messages ?? [];
       const lastAnswer = [...msgs].reverse().find((m: any) => m.answer_json)?.answer_json ?? null;
-      const events = await rows(`SELECT id,event_summary,status,event_type,conversation_id FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2`, [households.A, memberIds.charmaine]).catch(() => []);
+      const events = await rows(`SELECT id,event_summary,status,event_type,conversation_id FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2`, [households.A, memberIds.josephine]).catch(() => []);
       const claimStatus: Record<string, unknown>[] = [];
       let displayStatus: ((c: any) => any) | null = null;
       try { displayStatus = (await import(/* webpackIgnore: true */ "@/lib/claims/status" as string)).claimDisplayStatus ?? null; } catch { displayStatus = null; }

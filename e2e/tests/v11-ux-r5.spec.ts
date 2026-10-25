@@ -226,12 +226,12 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     // Original (starter questions built from this household's people):
     //   const grid = page.locator(".prompt-grid");
     //   await expect(grid).toBeVisible();
-    //   await expect(grid).not.toContainText(/Charmaine|endowment/);
+    //   await expect(grid).not.toContainText(/Josephine|endowment/);
     //   await expect(grid).toContainText(PEOPLE.employee);
     const welcome = page.getByTestId("chat-welcome");
     await expect(welcome).toBeVisible();
     await expect(welcome).toContainText("Ask anything about your policies, in your own words.");
-    await expect(welcome).not.toContainText(/Upload a policy first|Charmaine|endowment/);
+    await expect(welcome).not.toContainText(/Upload a policy first|Josephine|endowment/);
     await expect(page.locator(".prompt-grid")).toHaveCount(0);
     const box = page.getByLabel("Message to DearPolicy");
     await box.fill("x".repeat(2100));

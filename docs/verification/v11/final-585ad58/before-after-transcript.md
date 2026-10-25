@@ -4,37 +4,37 @@ Browser journey, same 28 questions, same synthetic documents, same scoring.
 "Before" = base 60b8ac8 (docs/verification/v11/before/journey). "After" = FINAL candidate 585ad58 (docs/verification/v11/final-585ad58/journey).
 Test-name prefixes are removed from product names. Synthetic data only.
 
-## Q01 — What policies does Charmaine have?
+## Q01 — What policies does Josephine have?
 
 ### Before (60b8ac8) — pass (7870 ms)
 
-**You:** What policies does Charmaine have?
+**You:** What policies does Josephine have?
 
 > DearPolicy
 > 
 > I found 6 personal policy contracts across 1 family profile. The table separates confirmed cover from records that still need review.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Personal policy inventory
 > Family member	Policy	Confirmed cover	Active status
-> Charmaine Tan Hui Min	AccidentGuard	
+> Josephine Tan Hui Min	AccidentGuard	
 > AccidentGuard
 > AccidentGuard · S$100,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	
+> Josephine Tan Hui Min	GroupTermLife	
 > GroupTermLife
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	
+> Josephine Tan Hui Min	DisabilityCare	
 > DisabilityCare · S$200,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	
+> Josephine Tan Hui Min	CritiCare	
 > CritiCare · S$120,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	
+> Josephine Tan Hui Min	JetSure	
 > JetSure
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	
+> Josephine Tan Hui Min	HospitalShield	
 > HospitalShield
 > 	Active status not recently verified
 > 
@@ -44,14 +44,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHAT TO DO NEXT
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · AccidentGuard; Charmaine Tan Hui Min · GroupTermLife; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · CritiCare so current status can be verified separately from ownership.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · AccidentGuard; Josephine Tan Hui Min · GroupTermLife; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · CritiCare so current status can be verified separately from ownership.
 > WHY DEARPOLICY SAYS THIS · 7 SOURCES
 > AccidentGuard
 > Verified personal cover
@@ -78,33 +78,33 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (7948 ms)
 
-**You:** What policies does Charmaine have?
+**You:** What policies does Josephine have?
 
 > DearPolicy
 > 
 > I found 6 personal policy contracts across 1 family profile. The table separates confirmed cover from records that still need review.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Personal policy inventory
 > Family member	Policy	Confirmed cover	Active status
-> Charmaine Tan Hui Min	JetSure	
+> Josephine Tan Hui Min	JetSure	
 > JetSure
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	
+> Josephine Tan Hui Min	HospitalShield	
 > HospitalShield
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	
+> Josephine Tan Hui Min	DisabilityCare	
 > DisabilityCare · S$200,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	AccidentGuard	
+> Josephine Tan Hui Min	AccidentGuard	
 > AccidentGuard
 > AccidentGuard · S$100,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	
+> Josephine Tan Hui Min	CritiCare	
 > CritiCare · S$120,000
 > 	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	
+> Josephine Tan Hui Min	GroupTermLife	
 > GroupTermLife
 > 	Active status not recently verified
 > 
@@ -114,7 +114,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > NEXT STEP
 > 
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · JetSure; Charmaine Tan Hui Min · HospitalShield; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · AccidentGuard so current status can be verified separately from ownership.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · JetSure; Josephine Tan Hui Min · HospitalShield; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · AccidentGuard so current status can be verified separately from ownership.
 > 
 > SOURCES
 > JetSure
@@ -140,20 +140,20 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 1
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q02 — What is Charmaine's hospital room and board benefit?
+## Q02 — What is Josephine's hospital room and board benefit?
 
 ### Before (60b8ac8) — FAIL (2377 ms)
 - positive_control: missing: S$800 per day from the 2025 edition
 
-**You:** What is Charmaine's hospital room and board benefit?
+**You:** What is Josephine's hospital room and board benefit?
 
 > DearPolicy
 > 
-> Here is the hospital cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the hospital cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -169,12 +169,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
 > Synthetic Test Assurance (fictitious) · HospitalShield
 > Benefit schedule, read when the document was uploaded
@@ -183,15 +183,15 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (2389 ms)
 
-**You:** What is Charmaine's hospital room and board benefit?
+**You:** What is Josephine's hospital room and board benefit?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$800Charmaine · Daily room and board
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$800Josephine · Daily room and board
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -209,24 +209,24 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 2
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q03 — Does Charmaine have a fracture benefit?
+## Q03 — Does Josephine have a fracture benefit?
 
 ### Before (60b8ac8) — pass (2081 ms)
 
-**You:** Does Charmaine have a fracture benefit?
+**You:** Does Josephine have a fracture benefit?
 
 > DearPolicy
 > 
-> Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From AccidentGuard, page 1: “Fracture of arm S$1,200”
-> Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+> Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -238,12 +238,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 2 SOURCES
 > Synthetic Test Assurance (fictitious) · AccidentGuard
 > Benefit schedule, read when the document was uploaded
@@ -255,15 +255,15 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (2367 ms)
 
-**You:** Does Charmaine have a fracture benefit?
+**You:** Does Josephine have a fracture benefit?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state about accident cover. Each line shows the page it comes from. AccidentGuard states different figures for fracture of arm: S$1,200 on page 1 and S$1,000 on page 2. DearPolicy can’t tell which one applies, so it has not picked one; the insurer can confirm. One of them comes from an endorsement to the policy. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state about accident cover. Each line shows the page it comes from. AccidentGuard states different figures for fracture of arm: S$1,200 on page 1 and S$1,000 on page 2. DearPolicy can’t tell which one applies, so it has not picked one; the insurer can confirm. One of them comes from an endorsement to the policy. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$1,500Charmaine · Fracture of leg
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$1,500Josephine · Fracture of leg
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -288,25 +288,25 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 1
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q04 — What is the waiting period for critical illness on Charmaine's CritiCare plan?
+## Q04 — What is the waiting period for critical illness on Josephine's CritiCare plan?
 
 ### Before (60b8ac8) — FAIL (2330 ms)
 - internal_text: rule/row/page counts: "13 of 23 processed pages"
 
-**You:** What is the waiting period for critical illness on Charmaine's CritiCare plan?
+**You:** What is the waiting period for critical illness on Josephine's CritiCare plan?
 
 > DearPolicy
 > 
 > The uploaded passages support the policy details below.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
-> Charmaine Tan Hui Min · CritiCare: General Conditions Waiting period: 90 days from the effective date for any critical illness.
+> Josephine Tan Hui Min · CritiCare: General Conditions Waiting period: 90 days from the effective date for any critical illness.
 > 
-> Charmaine Tan Hui Min · CritiCare: Schedule of Benefits - Critical Illness Critical illness benefit 100% of Sum Insured Early stage critical illness 25% of Sum Insured
+> Josephine Tan Hui Min · CritiCare: Schedule of Benefits - Critical Illness Critical illness benefit 100% of Sum Insured Early stage critical illness 25% of Sum Insured
 > 
-> Charmaine Tan Hui Min · HospitalShield: General Conditions Waiting period: no benefit is payable for any illness that starts within 30 days of the effective date.
+> Josephine Tan Hui Min · HospitalShield: General Conditions Waiting period: no benefit is payable for any illness that starts within 30 days of the effective date.
 > 
 > 6 policy contracts still need wording, processing or further review. See the policy review list.
 > 
@@ -316,12 +316,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 3 SOURCES
 > Synthetic Test Assurance (fictitious) · CritiCare
 > Personal document
@@ -336,14 +336,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (924 ms)
 
-**You:** What is the waiting period for critical illness on Charmaine's CritiCare plan?
+**You:** What is the waiting period for critical illness on Josephine's CritiCare plan?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Mar 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Mar 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
 > CritiCare — Waiting period: 90 days from the effective date for any critical illness. (page 3, document dated 1 Mar 2025; not confirmed current).
 > 
@@ -357,20 +357,20 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 3
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q05 — Does Charmaine's hospital plan cover dental treatment?
+## Q05 — Does Josephine's hospital plan cover dental treatment?
 
 ### Before (60b8ac8) — FAIL (1068 ms)
 - positive_control: missing: dental excluded unless caused by an accident
 
-**You:** Does Charmaine's hospital plan cover dental treatment?
+**You:** Does Josephine's hospital plan cover dental treatment?
 
 > DearPolicy
 > 
-> Here is the hospital cover and dental cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the hospital cover and dental cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -386,12 +386,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
 > Synthetic Test Assurance (fictitious) · HospitalShield
 > Benefit schedule, read when the document was uploaded
@@ -400,14 +400,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (2001 ms)
 
-**You:** Does Charmaine's hospital plan cover dental treatment?
+**You:** Does Josephine's hospital plan cover dental treatment?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
 > HospitalShield — Exclusions: cosmetic surgery; dental treatment unless caused by an accident; self-inflicted injury. (page 3, document dated 1 Jan 2025; not confirmed current).
 > 
@@ -421,35 +421,35 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 3
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q06 — If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?
+## Q06 — If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?
 
 ### Before (60b8ac8) — FAIL (1353 ms)
 - positive_control: missing: only the higher amount is payable
 
-**You:** If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?
+**You:** If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?
 
 > DearPolicy
 > 
-> Here is the fracture cover and disability cover and accident cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the fracture cover and disability cover and accident cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-> Policy-stated coverage limitS$50,000Charmaine Tan Hui Min · Additional accidental death benefit
+> Policy-stated coverage limitS$50,000Josephine Tan Hui Min · Additional accidental death benefit
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From GroupTermLife, page 2: “Additional accidental death benefit S$50,000”
-> Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+> Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From AccidentGuard, page 1: “Fracture of arm S$1,200”
-> Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+> Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -473,12 +473,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 4 SOURCES
 > Synthetic Test Assurance (fictitious) · AccidentGuard
 > Benefit schedule, read when the document was uploaded
@@ -496,14 +496,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (1788 ms)
 
-**You:** If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?
+**You:** If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
 > AccidentGuard — Alternative benefits: where a Fracture benefit and a Permanent Disablement benefit arise from the same accident, only the higher amount is payable. (page 3, document dated 1 Jan 2025; not confirmed current).
 > 
@@ -517,25 +517,25 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 3
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q07 — What does Charmaine's group life policy pay if she dies?
+## Q07 — What does Josephine's group life policy pay if she dies?
 
 ### Before (60b8ac8) — FAIL (2352 ms)
 - internal_text: model / reader status: "by a second read"
 - positive_control: missing: S$150,000 death (any cause)
 
-**You:** What does Charmaine's group life policy pay if she dies?
+**You:** What does Josephine's group life policy pay if she dies?
 
 > DearPolicy
 > 
 > If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Preliminary claim assessment
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · GroupTermLife — Death (any cause)
+> Josephine Tan Hui Min · GroupTermLife — Death (any cause)
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -544,7 +544,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accidental death
+> Josephine Tan Hui Min · AccidentGuard — Accidental death
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -553,7 +553,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · GroupTermLife — Additional accidental death benefit
+> Josephine Tan Hui Min · GroupTermLife — Additional accidental death benefit
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -569,12 +569,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 2 SOURCES
 > Synthetic Test Assurance (fictitious) · GroupTermLife
 > Policy wording, read when the document was uploaded
@@ -586,20 +586,20 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (2158 ms)
 
-**You:** What does Charmaine's group life policy pay if she dies?
+**You:** What does Josephine's group life policy pay if she dies?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state about death cover. Each line shows the page it comes from.
+> Here is what Josephine’s documents state about death cover. Each line shows the page it comes from.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$150,000Charmaine · Death (any cause)
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$150,000Josephine · Death (any cause)
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From GroupTermLife, page 2: “Death (any cause) S$150,000”
-> Policy-stated coverage limitS$50,000Charmaine · Additional accidental death benefit
+> Policy-stated coverage limitS$50,000Josephine · Additional accidental death benefit
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -615,24 +615,24 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 2
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q08 — What is Charmaine covered for if she dies in an accident?
+## Q08 — What is Josephine covered for if she dies in an accident?
 
 ### Before (60b8ac8) — FAIL (3211 ms)
 - internal_text: model / reader status: "by a second read"
 
-**You:** What is Charmaine covered for if she dies in an accident?
+**You:** What is Josephine covered for if she dies in an accident?
 
 > DearPolicy
 > 
 > If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Preliminary claim assessment
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · GroupTermLife — Death (any cause)
+> Josephine Tan Hui Min · GroupTermLife — Death (any cause)
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -641,7 +641,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accidental death
+> Josephine Tan Hui Min · AccidentGuard — Accidental death
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -650,7 +650,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · GroupTermLife — Additional accidental death benefit
+> Josephine Tan Hui Min · GroupTermLife — Additional accidental death benefit
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -666,12 +666,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 2 SOURCES
 > Synthetic Test Assurance (fictitious) · GroupTermLife
 > Policy wording, read when the document was uploaded
@@ -683,19 +683,19 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (1795 ms)
 
-**You:** What is Charmaine covered for if she dies in an accident?
+**You:** What is Josephine covered for if she dies in an accident?
 
 > DearPolicy
 > 
 > If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Preliminary claim assessment
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · GroupTermLife — Death (any cause)
+> Josephine Tan Hui Min · GroupTermLife — Death (any cause)
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -704,7 +704,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accidental death
+> Josephine Tan Hui Min · AccidentGuard — Accidental death
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -713,7 +713,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · GroupTermLife — Additional accidental death benefit
+> Josephine Tan Hui Min · GroupTermLife — Additional accidental death benefit
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -736,19 +736,19 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 2
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-## Q09 — What is Charmaine's maternity coverage?
+## Q09 — What is Josephine's maternity coverage?
 
 ### Before (60b8ac8) — FAIL (1899 ms)
 - internal_text: rule/row/page counts: "13 of 23 pages"
 
-**You:** What is Charmaine's maternity coverage?
+**You:** What is Josephine's maternity coverage?
 
 > DearPolicy
 > 
-> DearPolicy didn’t find maternity cover in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+> DearPolicy didn’t find maternity cover in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
 > 6 policy contracts still need wording, processing or further review. See the policy review list.
 > 
@@ -758,24 +758,24 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — pass (2209 ms)
 
-**You:** What is Charmaine's maternity coverage?
+**You:** What is Josephine's maternity coverage?
 
 > DearPolicy
 > 
-> DearPolicy didn’t find maternity cover in the parts of Charmaine’s policies read so far. That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+> DearPolicy didn’t find maternity cover in the parts of Josephine’s policies read so far. That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > 
 > 6 policy contracts still need wording, processing or further review. See the policy review list.
 > 
@@ -783,25 +783,25 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q10 — Does Charmaine have travel insurance?
+## Q10 — Does Josephine have travel insurance?
 
 ### Before (60b8ac8) — FAIL (1822 ms)
 - unsupported_assertion: an expired policy's terms presented without its date (not identified as outdated)
 
-**You:** Does Charmaine have travel insurance?
+**You:** Does Josephine have travel insurance?
 
 > DearPolicy
 > 
-> Here is the travel and overseas cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the travel and overseas cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$100,000Charmaine Tan Hui Min · Overseas medical expenses
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$100,000Josephine Tan Hui Min · Overseas medical expenses
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From JetSure, page 2: “Overseas medical expenses S$100,000”
-> Policy-stated coverage limitS$3,000Charmaine Tan Hui Min · Trip cancellation
+> Policy-stated coverage limitS$3,000Josephine Tan Hui Min · Trip cancellation
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -813,12 +813,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
 > Synthetic Test Assurance (fictitious) · JetSure
 > Benefit schedule, read when the document was uploaded
@@ -827,20 +827,20 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (1779 ms)
 
-**You:** Does Charmaine have travel insurance?
+**You:** Does Josephine have travel insurance?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state about travel cover. Each line shows the page it comes from. JetSure expired on 2024-12-31 (page 1), so its terms may no longer apply.
+> Here is what Josephine’s documents state about travel cover. Each line shows the page it comes from. JetSure expired on 2024-12-31 (page 1), so its terms may no longer apply.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$100,000Charmaine · Overseas medical expenses
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$100,000Josephine · Overseas medical expenses
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From JetSure, page 2: “Overseas medical expenses S$100,000”
-> Policy-stated coverage limitS$3,000Charmaine · Trip cancellation
+> Policy-stated coverage limitS$3,000Josephine · Trip cancellation
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -861,15 +861,15 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Page 1
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q11 — Charmaine broke her arm.
+## Q11 — Josephine broke her arm.
 
 ### Before (60b8ac8) — pass (2391 ms)
 
-**You:** Charmaine broke her arm.
+**You:** Josephine broke her arm.
 
 > DearPolicy
 > 
-> I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.
+> I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.
 > 
 > A FACT THAT CHANGES THIS ASSESSMENT
 > Was this caused by an accident, or an illness?
@@ -879,32 +879,32 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Fracture: arm
 > Injuries: broke her arm
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — pass (2008 ms)
 
-**You:** Charmaine broke her arm.
+**You:** Josephine broke her arm.
 
 > DearPolicy
 > 
-> I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.
+> I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.
 > 
 > A FACT THAT CHANGES THIS ASSESSMENT
 > Was this caused by an accident, or an illness?
@@ -915,12 +915,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Fracture: arm
 > Injuries: broke her arm
@@ -934,7 +934,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> I’m sorry Charmaine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Charmaine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
+> I’m sorry Josephine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Josephine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
 > 
 > A FACT THAT CHANGES THIS ASSESSMENT
 > Where did the accident happen?
@@ -944,23 +944,23 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Fracture: arm
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — pass (2162 ms)
@@ -969,7 +969,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> I’m sorry Charmaine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, hospitalisation, fracture or hospital cash benefits in Charmaine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
+> I’m sorry Josephine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, hospitalisation, fracture or hospital cash benefits in Josephine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
 > 
 > A FACT THAT CHANGES THIS ASSESSMENT
 > Where did the accident happen?
@@ -980,12 +980,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Fracture: arm
@@ -1008,24 +1008,24 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Answer
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Fracture: arm
 > Event Location: Singapore
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — not run
@@ -1044,12 +1044,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Fracture: arm
@@ -1074,12 +1074,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Location: Singapore
@@ -1087,12 +1087,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Event Date: 2026-09-20
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — not run
@@ -1112,12 +1112,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Location: Singapore
@@ -1144,12 +1144,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1158,12 +1158,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Fracture Confirmed: yes
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — not run
@@ -1184,12 +1184,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Information needed
+> Josephine Tan Hui Min · Injury Information needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1216,12 +1216,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1235,12 +1235,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — not run
@@ -1260,12 +1260,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1296,12 +1296,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Answer
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1316,12 +1316,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — not run
@@ -1340,12 +1340,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Injuries: broke her arm
 > Event Date: 2026-09-20
@@ -1370,7 +1370,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until claim evidence has been reviewed. Each card says what is still needed.
 > 
-> CHARMAINE TAN HUI MIN · INJURY
+> JOSEPHINE TAN HUI MIN · INJURY
 > Has any other insurer or the employer already paid part of the bill?
 > Reimbursement is coordinated so the same bill is not paid twice.
 > Yes
@@ -1379,12 +1379,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1402,7 +1402,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -1411,7 +1411,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -1427,14 +1427,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHAT TO DO NEXT
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · AccidentGuard; Charmaine Tan Hui Min · GroupTermLife; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · AccidentGuard; Josephine Tan Hui Min · GroupTermLife; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
 > Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.
 > Gather: Police or accident report, if one was made.
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
@@ -1449,16 +1449,16 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> Thanks — that’s what I need for now. For the broken arm, Charmaine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+> Thanks — that’s what I need for now. For the broken arm, Josephine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1473,7 +1473,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -1482,7 +1482,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -1517,12 +1517,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1543,7 +1543,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · Accident medical reimbursement
+> Josephine Tan Hui Min · Accident medical reimbursement
 > POTENTIALLY APPLICABLE
 > Information needed
 > 
@@ -1553,7 +1553,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Still needed: the actual eligible amount for Accident medical reimbursement
 > DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · Fracture of arm
+> Josephine Tan Hui Min · Fracture of arm
 > NEEDS CHECKING
 > Reviewer assessment needed
 > 
@@ -1563,7 +1563,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
 > A material fact or policy condition is still unresolved.
-> Charmaine Tan Hui Min · Overseas medical expenses
+> Josephine Tan Hui Min · Overseas medical expenses
 > NEEDS CHECKING
 > Policy condition unresolved
 > 
@@ -1578,16 +1578,16 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Retrieved sections checked	Not measured	Active status not recently verified
 > WHAT TO DO NEXT
 > Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.
 > Gather: Police or accident report, if one was made.
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · AccidentGuard; Charmaine Tan Hui Min · GroupTermLife; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · AccidentGuard; Josephine Tan Hui Min · GroupTermLife; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
 > WHY DEARPOLICY SAYS THIS · 5 SOURCES
 > Synthetic Test Assurance (fictitious) · AccidentGuard
 > Policy wording, read when the document was uploaded
@@ -1612,16 +1612,16 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> Thanks — that’s what I need for now. For the broken arm, Charmaine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+> Thanks — that’s what I need for now. For the broken arm, Josephine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1636,7 +1636,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -1645,7 +1645,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -1674,15 +1674,15 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1696,12 +1696,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Fracture Confirmed: yes
 > Other Insurance Paid: not sure
 > Permanent Impairment: no
-> Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+> Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From AccidentGuard, page 1: “Fracture of arm S$1,200”
-> Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+> Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -1713,12 +1713,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 2 SOURCES
 > Synthetic Test Assurance (fictitious) · AccidentGuard
 > Benefit schedule, read when the document was uploaded
@@ -1734,9 +1734,9 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+> Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
-> CHARMAINE TAN HUI MIN · INJURY · 1 MORE QUESTION AFTER THIS
+> JOSEPHINE TAN HUI MIN · INJURY · 1 MORE QUESTION AFTER THIS
 > Has any other insurer or the employer already paid part of the bill?
 > Reimbursement is coordinated so the same bill is not paid twice.
 > Yes
@@ -1744,12 +1744,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Not sure
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1760,12 +1760,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Treatment Type: Emergency department
 > Fracture: arm
 > Fracture Confirmed: yes
-> Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+> Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
 > From AccidentGuard, page 1: “Fracture of arm S$1,200”
-> Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+> Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -1794,10 +1794,10 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+> DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1823,12 +1823,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — pass (1227 ms)
@@ -1837,16 +1837,16 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> Here is where this claim stands. For the broken arm, Charmaine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+> Here is where this claim stands. For the broken arm, Josephine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1861,7 +1861,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -1870,7 +1870,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -1897,10 +1897,10 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 > DearPolicy
 > 
-> DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+> DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1926,28 +1926,28 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 > DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 
 ### After (585ad58) — pass (4760 ms)
 
 > DearPolicy
 > 
-> Here is where this claim stands. For the broken arm, Charmaine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+> Here is where this claim stands. For the broken arm, Josephine’s policies have possible benefits: AccidentGuard — Fracture of arm (page 2) and AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -1962,7 +1962,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -1971,7 +1971,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -2582,19 +2582,19 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.
 
-## Q28 — Does Charmaine have a fracture benefit?
+## Q28 — Does Josephine have a fracture benefit?
 
 ### Before (60b8ac8) — pass (2954 ms)
 
-**You:** Does Charmaine have a fracture benefit?
+**You:** Does Josephine have a fracture benefit?
 
 > DearPolicy
 > 
 > Here is the fracture cover in your policy, from the benefit schedule on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$3,500Charmaine Tan Hui Min · Fracture of arm
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$3,500Josephine Tan Hui Min · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -2604,7 +2604,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 1 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	OtherHouseholdPA	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	OtherHouseholdPA	Matching wording needed	Not measured	Active status not recently verified
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
 > Synthetic Test Assurance (fictitious) · OtherHouseholdPA
 > Benefit schedule, read when the document was uploaded
@@ -2613,15 +2613,15 @@ Test-name prefixes are removed from product names. Synthetic data only.
 
 ### After (585ad58) — pass (4626 ms)
 
-**You:** Does Charmaine have a fracture benefit?
+**You:** Does Josephine have a fracture benefit?
 
 > DearPolicy
 > 
-> Here is what Charmaine’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+> Here is what Josephine’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
-> Policy-stated coverage limitS$3,500Charmaine · Fracture of arm
+> Josephine Tan Hui Min
+> Policy-stated coverage limitS$3,500Josephine · Fracture of arm
 > 
 > This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 > 
@@ -2649,7 +2649,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until claim evidence has been reviewed. Each card says what is still needed.
 > 
-> CHARMAINE TAN HUI MIN · INJURY
+> JOSEPHINE TAN HUI MIN · INJURY
 > Has a doctor said the injury will leave any lasting impairment?
 > Only a lasting impairment can bring permanent-disability benefits into play.
 > Yes
@@ -2658,12 +2658,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > Show full assessment
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -2683,7 +2683,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · AccidentGuard — Fracture of arm
+> Josephine Tan Hui Min · AccidentGuard — Fracture of arm
 > LIKELY APPLICABLE
 > Policy condition unresolved
 > 
@@ -2692,7 +2692,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 2 conditions
 > Subject to the insurer's assessment and the plan's own terms and exclusions.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · AccidentGuard — Accident medical reimbursement
+> Josephine Tan Hui Min · AccidentGuard — Accident medical reimbursement
 > NEEDS CHECKING
 > Information needed
 > 
@@ -2708,14 +2708,14 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Matching wording needed	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 > WHAT TO DO NEXT
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · AccidentGuard; Charmaine Tan Hui Min · GroupTermLife; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · AccidentGuard; Josephine Tan Hui Min · GroupTermLife; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
 > Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.
 > Gather: Police or accident report, if one was made.
 > WHY DEARPOLICY SAYS THIS · 1 SOURCES
@@ -2738,12 +2738,12 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 > What DearPolicy still needs
-> Charmaine Tan Hui Min · Injury Evidence needed
+> Josephine Tan Hui Min · Injury Evidence needed
 > 
 > Documents: Doctor's report (or X-ray or scan report) describing the injury
 > 
 > FACTS AND UNCERTAINTIES
-> Charmaine Tan Hui Min
+> Josephine Tan Hui Min
 > Injured: yes
 > Surgery: no
 > Injuries: broke her arm
@@ -2764,7 +2764,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 > 
-> Charmaine Tan Hui Min · Accident medical reimbursement
+> Josephine Tan Hui Min · Accident medical reimbursement
 > POTENTIALLY APPLICABLE
 > Information needed
 > 
@@ -2774,7 +2774,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > Still needed: the actual eligible amount for Accident medical reimbursement
 > DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-> Charmaine Tan Hui Min · Fracture of arm
+> Josephine Tan Hui Min · Fracture of arm
 > NEEDS CHECKING
 > Reviewer assessment needed
 > 
@@ -2784,7 +2784,7 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 > Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
 > A material fact or policy condition is still unresolved.
-> Charmaine Tan Hui Min · Overseas medical expenses
+> Josephine Tan Hui Min · Overseas medical expenses
 > NEEDS CHECKING
 > Policy condition unresolved
 > 
@@ -2799,16 +2799,16 @@ Test-name prefixes are removed from product names. Synthetic data only.
 > 
 > Policy review · 6 contracts
 > Family member	Policy	Review	Evidence read	Active status
-> Charmaine Tan Hui Min	AccidentGuard	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	GroupTermLife	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	DisabilityCare	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	CritiCare	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	JetSure	Retrieved sections checked	Not measured	Active status not recently verified
-> Charmaine Tan Hui Min	HospitalShield	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	AccidentGuard	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	GroupTermLife	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	DisabilityCare	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	CritiCare	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	JetSure	Retrieved sections checked	Not measured	Active status not recently verified
+> Josephine Tan Hui Min	HospitalShield	Retrieved sections checked	Not measured	Active status not recently verified
 > WHAT TO DO NEXT
 > Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.
 > Gather: Police or accident report, if one was made.
-> Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · AccidentGuard; Charmaine Tan Hui Min · GroupTermLife; Charmaine Tan Hui Min · DisabilityCare; Charmaine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
+> Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · AccidentGuard; Josephine Tan Hui Min · GroupTermLife; Josephine Tan Hui Min · DisabilityCare; Josephine Tan Hui Min · CritiCare so the active status can be verified. Ownership is already confirmed and is unaffected.
 > WHY DEARPOLICY SAYS THIS · 5 SOURCES
 > Synthetic Test Assurance (fictitious) · AccidentGuard
 > Policy wording, read when the document was uploaded

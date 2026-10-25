@@ -2,8 +2,8 @@
  * V1.1 independent release evaluation -- the reviewed synthetic dataset.
  *
  * Two households:
- *   A: Charmaine Tan Hui Min (spouse) and Marcus Lim Wei Jie (self)
- *   B: another household whose member is ALSO called Charmaine Tan Hui Min
+ *   A: Josephine Tan Hui Min (spouse) and Marcus Lim Wei Jie (self)
+ *   B: another household whose member is ALSO called Josephine Tan Hui Min
  *      (same printed name: household isolation cannot rely on names).
  *
  * Every document is generated at runtime, says "SYNTHETIC TEST DOCUMENT - NOT
@@ -44,11 +44,11 @@ export const INSURER = "Synthetic Test Assurance (fictitious)";
 export const EMPLOYER = "Synthetic Employer Pte Ltd (fictitious)";
 
 export type HouseholdKey = "A" | "B";
-export type PersonKey = "charmaine" | "marcus" | "charmaineB";
+export type PersonKey = "josephine" | "marcus" | "josephineB";
 export const PEOPLE: Record<PersonKey, { household: HouseholdKey; fullName: string; preferred: string; relationship: string }> = {
-  charmaine: { household: "A", fullName: "Charmaine Tan Hui Min", preferred: "Charmaine", relationship: "spouse" },
+  josephine: { household: "A", fullName: "Josephine Tan Hui Min", preferred: "Josephine", relationship: "spouse" },
   marcus: { household: "A", fullName: "Marcus Lim Wei Jie", preferred: "Marcus", relationship: "self" },
-  charmaineB: { household: "B", fullName: "Charmaine Tan Hui Min", preferred: "Charmaine", relationship: "self" },
+  josephineB: { household: "B", fullName: "Josephine Tan Hui Min", preferred: "Josephine", relationship: "self" },
 };
 
 type Row = [label: string, value: string];
@@ -98,7 +98,7 @@ function particulars(d: { productName: string; policyNumber: string; insured: st
   ];
 }
 
-const C = PEOPLE.charmaine.fullName, M = PEOPLE.marcus.fullName, CB = PEOPLE.charmaineB.fullName;
+const C = PEOPLE.josephine.fullName, M = PEOPLE.marcus.fullName, CB = PEOPLE.josephineB.fullName;
 
 /** The documents. Page numbers referenced by the questions are noted inline. */
 export function datasetDocs(): DatasetDoc[] {
@@ -106,16 +106,16 @@ export function datasetDocs(): DatasetDoc[] {
   const add = (d: Omit<DatasetDoc, "productName" | "policyNumber"> & { productName?: string; policyNumber?: string }) =>
     docs.push({ productName: d.productName ?? P(d.label), policyNumber: d.policyNumber ?? num(d.key), ...d } as DatasetDoc);
 
-  // ---- Charmaine: hospital plan, outdated 2022 edition then current 2025 edition (same policy number).
+  // ---- Josephine: hospital plan, outdated 2022 edition then current 2025 edition (same policy number).
   const hospNumber = num("hospital");
-  add({ key: "hosp2022", household: "A", person: "charmaine", format: "pdf", label: "HospitalShield", policyNumber: hospNumber, documentRole: "personal_schedule",
+  add({ key: "hosp2022", household: "A", person: "josephine", format: "pdf", label: "HospitalShield", policyNumber: hospNumber, documentRole: "personal_schedule",
     effectiveDate: "2022-01-01", expiryDate: "2024-12-31", lifecycle: "superseded_by_hosp2025", covers: ["current_vs_outdated", "superseded", "hospital", "medical_bills"],
     notes: "2022 edition: room and board S$500/day. Superseded by the 2025 edition (same policy number); its figures must never be presented as current.",
     pages: [
       particulars({ productName: P("HospitalShield"), policyNumber: hospNumber, insured: C, type: "Hospitalisation", effective: "2022-01-01", expiry: "2024-12-31", extra: ["Edition: 2022 schedule"] }),
       ["Schedule of Benefits - Hospital and Surgical (2022 edition)", ["Daily room and board", "S$500 per day, maximum 90 days"], ["Surgical fees", "Up to S$15,000 per surgery"], SYNTHETIC_BANNER],
     ] });
-  add({ key: "hosp2025", household: "A", person: "charmaine", format: "pdf", label: "HospitalShield", policyNumber: hospNumber, documentRole: "personal_schedule",
+  add({ key: "hosp2025", household: "A", person: "josephine", format: "pdf", label: "HospitalShield", policyNumber: hospNumber, documentRole: "personal_schedule",
     effectiveDate: "2025-01-01", expiryDate: "2027-12-31", lifecycle: "current", supersedes: "hosp2022",
     covers: ["current_vs_outdated", "hospital", "hospital_cash", "medical_bills", "exclusions", "waiting_periods", "caps", "positive_control"],
     notes: "Current edition. p2: room S$800/day max 120 days, ICU, surgical cap S$25,000, hospital cash S$100/day max 30 days. p3: 30-day illness waiting period; exclusions incl. dental unless caused by an accident.",
@@ -128,8 +128,8 @@ export function datasetDocs(): DatasetDoc[] {
         "Claims must be submitted within 90 days of discharge from hospital.", SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: personal accident with fracture benefits + alternative-benefit rule; endorsement amends the arm fracture amount.
-  add({ key: "accident", household: "A", person: "charmaine", format: "pdf", label: "AccidentGuard", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
+  // ---- Josephine: personal accident with fracture benefits + alternative-benefit rule; endorsement amends the arm fracture amount.
+  add({ key: "accident", household: "A", person: "josephine", format: "pdf", label: "AccidentGuard", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
     lifecycle: "current", covers: ["fracture_vs_permanent_loss", "death_vs_accidental_death", "alternative_benefits", "exclusions", "identical_wording", "medical_bills", "positive_control"],
     notes: "p1 sum insured S$100,000. p2: fracture of arm S$1,000, fracture of leg S$1,500, accident medical reimbursement up to S$2,000, accidental death 100% SI. p3: only the higher of fracture / permanent disablement is payable; professional sports exclusion. Wording shared verbatim with Marcus's AccidentGuard (different amounts).",
     pages: [
@@ -139,7 +139,7 @@ export function datasetDocs(): DatasetDoc[] {
       ["General Conditions", "Alternative benefits: where a Fracture benefit and a Permanent Disablement benefit arise from the same accident, only the higher amount is payable.",
         "Exclusions: injuries sustained while taking part in professional sports.", "A fracture must be confirmed by X-ray or by a registered medical practitioner.", SYNTHETIC_BANNER],
     ] });
-  add({ key: "accidentEndorsement", household: "A", person: "charmaine", format: "pdf", label: "AccidentGuard-Endorsement-1", documentRole: "endorsement", productName: P("AccidentGuard"),
+  add({ key: "accidentEndorsement", household: "A", person: "josephine", format: "pdf", label: "AccidentGuard-Endorsement-1", documentRole: "endorsement", productName: P("AccidentGuard"),
     policyNumber: num("accident"), effectiveDate: "2026-01-01", expiryDate: null, lifecycle: "current", covers: ["amendment"],
     notes: "Endorsement No. 1 (p1): from 2026-01-01 the Fracture of arm benefit is amended to S$1,200. An answer may give S$1,200 citing this page, or both figures with the endorsement; never S$1,000 as current without it.",
     pages: [
@@ -147,8 +147,8 @@ export function datasetDocs(): DatasetDoc[] {
         "With effect from 2026-01-01 the Schedule of Benefits is amended as follows.", ["Fracture of arm", "S$1,200"], "All other terms remain unchanged.", SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: permanent disablement schedule (must never answer a fracture).
-  add({ key: "disability", household: "A", person: "charmaine", format: "pdf", label: "DisabilityCare", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
+  // ---- Josephine: permanent disablement schedule (must never answer a fracture).
+  add({ key: "disability", household: "A", person: "josephine", format: "pdf", label: "DisabilityCare", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
     lifecycle: "current", covers: ["fracture_vs_permanent_loss", "disability"],
     notes: "p1 sum insured S$200,000. p2: loss of arm at or above elbow 100% SI, loss of hand 75%, permanent total disability 100%.",
     pages: [
@@ -157,8 +157,8 @@ export function datasetDocs(): DatasetDoc[] {
         ["Permanent total disablement", "100% of Sum Insured"], "Permanent disablement means a loss that has lasted 12 months and is beyond hope of improvement.", SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: employer group term life (group cover, death any cause + accidental death add-on).
-  add({ key: "groupLife", household: "A", person: "charmaine", format: "pdf", label: "GroupTermLife", documentRole: "certificate", effectiveDate: "2026-01-01", expiryDate: "2026-12-31",
+  // ---- Josephine: employer group term life (group cover, death any cause + accidental death add-on).
+  add({ key: "groupLife", household: "A", person: "josephine", format: "pdf", label: "GroupTermLife", documentRole: "certificate", effectiveDate: "2026-01-01", expiryDate: "2026-12-31",
     lifecycle: "current", covers: ["group_cover", "death_vs_accidental_death"],
     notes: "Employer group certificate. p2: death (any cause) S$150,000; additional accidental death S$50,000. Group cover ends when employment ends.",
     pages: [
@@ -168,8 +168,8 @@ export function datasetDocs(): DatasetDoc[] {
         "Cover for the employee ends on the date employment with the group policyholder ends.", SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: critical illness (waiting period, exclusion).
-  add({ key: "criticalIllness", household: "A", person: "charmaine", format: "pdf", label: "CritiCare", documentRole: "personal_schedule", effectiveDate: "2025-03-01", expiryDate: "2035-03-01",
+  // ---- Josephine: critical illness (waiting period, exclusion).
+  add({ key: "criticalIllness", household: "A", person: "josephine", format: "pdf", label: "CritiCare", documentRole: "personal_schedule", effectiveDate: "2025-03-01", expiryDate: "2035-03-01",
     lifecycle: "current", covers: ["illness", "waiting_periods", "exclusions", "positive_control"],
     notes: "p1 sum insured S$120,000. p2: critical illness 100% SI. p3: 90-day waiting period; pre-existing condition exclusion.",
     pages: [
@@ -179,8 +179,8 @@ export function datasetDocs(): DatasetDoc[] {
         "Exclusions: any pre-existing condition diagnosed before the effective date.", SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: an expired travel policy (outdated, not superseded).
-  add({ key: "travelExpired", household: "A", person: "charmaine", format: "pdf", label: "JetSure", documentRole: "personal_schedule", effectiveDate: "2024-01-01", expiryDate: "2024-12-31",
+  // ---- Josephine: an expired travel policy (outdated, not superseded).
+  add({ key: "travelExpired", household: "A", person: "josephine", format: "pdf", label: "JetSure", documentRole: "personal_schedule", effectiveDate: "2024-01-01", expiryDate: "2024-12-31",
     lifecycle: "outdated_expired", covers: ["current_vs_outdated", "travel"],
     notes: "Expired 2024-12-31. p2: overseas medical expenses S$100,000. An answer must give its dates and must not call it active.",
     pages: [
@@ -188,8 +188,8 @@ export function datasetDocs(): DatasetDoc[] {
       ["Schedule of Benefits - Annual Travel", ["Overseas medical expenses", "S$100,000"], ["Trip cancellation", "S$3,000"], SYNTHETIC_BANNER],
     ] });
 
-  // ---- Charmaine: an unreadable upload and a scanned page.
-  add({ key: "unreadable", household: "A", person: "charmaine", format: "corrupt-pdf", label: "DentalCare-scan", documentRole: "personal_schedule", effectiveDate: null, expiryDate: null,
+  // ---- Josephine: an unreadable upload and a scanned page.
+  add({ key: "unreadable", household: "A", person: "josephine", format: "corrupt-pdf", label: "DentalCare-scan", documentRole: "personal_schedule", effectiveDate: null, expiryDate: null,
     lifecycle: "unreadable", covers: ["unreadable_ocr", "missing_documents"], notes: "Starts like a PDF, cannot be parsed. Must end in a clean terminal state with a short customer message and no internals.", pages: [] });
   add({ key: "scannedPage", household: "A", person: null, format: "png", label: "ScannedWording", documentRole: "policy_wording", effectiveDate: null, expiryDate: null,
     lifecycle: "reference", covers: ["scanned_pages"], notes: "A photographed wording page (PNG). Locally only proves the OCR plumbing; not assigned to anyone and not used by any question.",
@@ -204,10 +204,10 @@ export function datasetDocs(): DatasetDoc[] {
       ["Schedule of Benefits - Travel", ["Overseas medical expenses", "US$250,000"], ["Emergency medical evacuation", "USD 500,000"], ["Trip cancellation", "S$5,000"],
         ["Baggage delay", "S$200 for every 6 hours, maximum S$1,000"], SYNTHETIC_BANNER],
     ] });
-  // ---- Marcus: the SAME accident wording as Charmaine's, different amounts; deleted mid-run.
+  // ---- Marcus: the SAME accident wording as Josephine's, different amounts; deleted mid-run.
   add({ key: "accidentMarcus", household: "A", person: "marcus", format: "pdf", label: "AccidentGuard-M", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
     lifecycle: "deleted_mid_run", covers: ["identical_wording", "fracture_vs_permanent_loss", "deleted"],
-    notes: "Identical wording to Charmaine's AccidentGuard; fracture of arm S$500. Deleted through the app after the pre-deletion questions.",
+    notes: "Identical wording to Josephine's AccidentGuard; fracture of arm S$500. Deleted through the app after the pre-deletion questions.",
     pages: [
       particulars({ productName: P("AccidentGuard-M"), policyNumber: num("accidentm"), insured: M, type: "Personal Accident", effective: "2025-01-01", expiry: "2027-12-31", extra: ["Sum insured: S$50,000"] }),
       ["Schedule of Benefits - Accident", ["Fracture of arm", "S$500"], ["Fracture of leg", "S$750"], ["Accident medical reimbursement", "Up to S$2,000 per accident"],
@@ -248,7 +248,7 @@ export function datasetDocs(): DatasetDoc[] {
     ] });
 
   // ---- Household B: same printed name, a different accident plan.
-  add({ key: "otherHouseholdAccident", household: "B", person: "charmaineB", format: "pdf", label: "OtherHouseholdPA", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
+  add({ key: "otherHouseholdAccident", household: "B", person: "josephineB", format: "pdf", label: "OtherHouseholdPA", documentRole: "personal_schedule", effectiveDate: "2025-01-01", expiryDate: "2027-12-31",
     lifecycle: "current", covers: ["another_household", "positive_control"],
     notes: "Household B only. p2: fracture of arm S$3,500. Must never appear in household A.",
     pages: [
@@ -389,27 +389,27 @@ const cross = (docs: DocKey[], why: string) => docs.map((doc) => ({ doc, why, ga
 const OTHER_HH_TEXT = { re: "OtherHouseholdPA|HB-OTHERPA|S\\$\\s?3,500|S\\$\\s?9,000|S\\$\\s?80,000", desc: "household B's policy or amounts", gate: "cross_scope" as const };
 
 export const V11_QUESTIONS: EvalQuestion[] = [
-  // ---------------- Charmaine, factual (stored facts)
-  q({ id: "Q01", conversation: "c-facts", household: "A", person: "charmaine", text: "What policies does Charmaine have?", tags: ["factual", "portfolio"], positiveControl: true,
+  // ---------------- Josephine, factual (stored facts)
+  q({ id: "Q01", conversation: "c-facts", household: "A", person: "josephine", text: "What policies does Josephine have?", tags: ["factual", "portfolio"], positiveControl: true,
     answerable: [
       { re: "HospitalShield", desc: "lists the hospital plan", cite: [{ doc: "hosp2025", page: 1 }] },
       { re: "AccidentGuard(?!-M)", desc: "lists the accident plan", cite: [{ doc: "accident", page: 1 }] },
       { re: "CritiCare", desc: "lists the critical illness plan", cite: [{ doc: "criticalIllness", page: 1 }] },
       { re: "GroupTermLife", desc: "lists the employer group cover", cite: [{ doc: "groupLife", page: 1 }] }],
-    forbidden: [OTHER_HH_TEXT, { re: "WanderSafe|FutureSaver|DailyCash|TermGuard|HealthPlusRider|AccidentGuard-M", desc: "Marcus's policies listed as Charmaine's", gate: "cross_scope" }],
+    forbidden: [OTHER_HH_TEXT, { re: "WanderSafe|FutureSaver|DailyCash|TermGuard|HealthPlusRider|AccidentGuard-M", desc: "Marcus's policies listed as Josephine's", gate: "cross_scope" }],
     amountAllowed: true, allowedAmounts: [
       { amount: 100000, currency: "SGD", doc: "accident", page: 1 }, { amount: 200000, currency: "SGD", doc: "disability", page: 1 },
       { amount: 120000, currency: "SGD", doc: "criticalIllness", page: 1 }, { amount: 1000000, currency: "SGD", doc: "hosp2025", page: 1 },
       { amount: 150000, currency: "SGD", doc: "groupLife", page: 2 }],
-    forbiddenCitations: [...cross(["otherHouseholdAccident", "travel", "endowment", "accidentMarcus"], "not Charmaine's"), { doc: "hosp2022", why: "superseded edition", gate: "deleted_superseded" }],
+    forbiddenCitations: [...cross(["otherHouseholdAccident", "travel", "endowment", "accidentMarcus"], "not Josephine's"), { doc: "hosp2022", why: "superseded edition", gate: "deleted_superseded" }],
     notes: "Portfolio positive control. Sums insured may be shown only with their page-1 source." }),
-  q({ id: "Q02", conversation: "c-facts", household: "A", person: "charmaine", text: "What is Charmaine's hospital room and board benefit?", tags: ["factual", "superseded", "hospital"], positiveControl: true,
+  q({ id: "Q02", conversation: "c-facts", household: "A", person: "josephine", text: "What is Josephine's hospital room and board benefit?", tags: ["factual", "superseded", "hospital"], positiveControl: true,
     answerable: [{ re: "S\\$\\s?800", desc: "S$800 per day from the 2025 edition", cite: [{ doc: "hosp2025", page: 2 }] }],
     forbidden: [{ re: "S\\$\\s?500", desc: "the superseded 2022 figure presented", gate: "deleted_superseded" }, OTHER_HH_TEXT],
     amountAllowed: true, allowedAmounts: [{ amount: 800, currency: "SGD", doc: "hosp2025", page: 2 }, { amount: 1500, currency: "SGD", doc: "hosp2025", page: 2 }, { amount: 1000000, currency: "SGD", doc: "hosp2025", page: 1 }],
     forbiddenCitations: [{ doc: "hosp2022", why: "superseded edition", gate: "deleted_superseded" }],
     notes: "Current vs superseded: only the 2025 edition may answer." }),
-  q({ id: "Q03", conversation: "c-facts", household: "A", person: "charmaine", text: "Does Charmaine have a fracture benefit?", tags: ["factual", "fracture", "amendment", "identical_wording"], positiveControl: true,
+  q({ id: "Q03", conversation: "c-facts", household: "A", person: "josephine", text: "Does Josephine have a fracture benefit?", tags: ["factual", "fracture", "amendment", "identical_wording"], positiveControl: true,
     answerable: [{ re: "fracture of arm|arm fracture|fracture", desc: "names the fracture benefit", cite: [{ doc: "accident", page: 2 }, { doc: "accidentEndorsement", page: 1 }] },
       { re: "S\\$\\s?1,200|S\\$\\s?1,000", desc: "states the policy's fracture-of-arm amount", cite: [{ doc: "accident", page: 2 }, { doc: "accidentEndorsement", page: 1 }] }],
     forbidden: [OTHER_HH_TEXT, { re: "S\\$\\s?500\\b|S\\$\\s?750\\b", desc: "Marcus's identical-wording amounts", gate: "cross_scope" }, { re: NOT_COVERED, desc: "negative coverage claim", gate: "unsupported_assertion" }],
@@ -419,49 +419,49 @@ export const V11_QUESTIONS: EvalQuestion[] = [
     forbiddenCitations: [...cross(["otherHouseholdAccident", "accidentMarcus"], "other household / other person, identical wording")],
     amended: { current: "S\\$\\s?1,200", replaced: "S\\$\\s?1,000\\b", desc: "fracture of arm S$1,000 given as current although Endorsement No. 1 amends it to S$1,200" },
     notes: "Endorsement: S$1,200 from 2026-01-01 is current. S$1,000 alone (without the endorsement) is scored by the amendment check." }),
-  q({ id: "Q04", conversation: "c-facts", household: "A", person: "charmaine", text: "What is the waiting period for critical illness on Charmaine's CritiCare plan?", tags: ["factual", "waiting_periods", "illness"], positiveControl: true,
+  q({ id: "Q04", conversation: "c-facts", household: "A", person: "josephine", text: "What is the waiting period for critical illness on Josephine's CritiCare plan?", tags: ["factual", "waiting_periods", "illness"], positiveControl: true,
     answerable: [{ re: "90[- ]day", desc: "90 days", cite: [{ doc: "criticalIllness", page: 3 }] }],
     forbidden: [{ re: "CritiCare[^\\n]{0,120}\\b30[- ]days?", desc: "the hospital plan's 30-day waiting period attributed to CritiCare", gate: "unsupported_assertion" }],
     amountAllowed: true, allowedAmounts: [{ amount: 120000, currency: "SGD", doc: "criticalIllness", page: 1 }],
     notes: "Waiting period on the conditions page (p3)." }),
-  q({ id: "Q05", conversation: "c-facts", household: "A", person: "charmaine", text: "Does Charmaine's hospital plan cover dental treatment?", tags: ["factual", "exclusions"], positiveControl: true,
+  q({ id: "Q05", conversation: "c-facts", household: "A", person: "josephine", text: "Does Josephine's hospital plan cover dental treatment?", tags: ["factual", "exclusions"], positiveControl: true,
     answerable: [{ re: "dental[^.]*(?:unless|except)[^.]*accident|accident[^.]*dental|exclu", desc: "dental excluded unless caused by an accident", cite: [{ doc: "hosp2025", page: 3 }] }],
     forbidden: [{ re: "dental[^.]*(?:is|are) covered(?![^.]*(?:unless|only|accident))", desc: "dental stated as covered", gate: "unsupported_assertion" }],
     amountAllowed: true, notes: "Exclusion with a condition; must cite p3." }),
-  q({ id: "Q06", conversation: "c-facts", household: "A", person: "charmaine", text: "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?", tags: ["factual", "alternative_benefits"], positiveControl: true,
+  q({ id: "Q06", conversation: "c-facts", household: "A", person: "josephine", text: "If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?", tags: ["factual", "alternative_benefits"], positiveControl: true,
     answerable: [{ re: "higher|only one|not both", desc: "only the higher amount is payable", cite: [{ doc: "accident", page: 3 }] }],
     forbidden: [{ re: "both (?:would|will|are) (?:be )?paid|paid in full for both", desc: "both paid", gate: "unsupported_assertion" }],
     amountAllowed: true, notes: "Alternative-benefits clause." }),
-  q({ id: "Q07", conversation: "c-facts", household: "A", person: "charmaine", text: "What does Charmaine's group life policy pay if she dies?", tags: ["factual", "group_cover", "death"], positiveControl: true,
+  q({ id: "Q07", conversation: "c-facts", household: "A", person: "josephine", text: "What does Josephine's group life policy pay if she dies?", tags: ["factual", "group_cover", "death"], positiveControl: true,
     answerable: [{ re: "S\\$\\s?150,000", desc: "S$150,000 death (any cause)", cite: [{ doc: "groupLife", page: 2 }] }],
     forbidden: [{ re: "S\\$\\s?200,000(?![^.]*(?:disab|loss))|S\\$\\s?250,000|S\\$\\s?300,000", desc: "added-up death totals", gate: "unsupported_amount" }],
     amountAllowed: true, allowedAmounts: [{ amount: 150000, currency: "SGD", doc: "groupLife", page: 2 }, { amount: 50000, currency: "SGD", doc: "groupLife", page: 2 }],
     notes: "Group cover; accidental-death add-on only on accidental death." }),
-  q({ id: "Q08", conversation: "c-facts", household: "A", person: "charmaine", text: "What is Charmaine covered for if she dies in an accident?", tags: ["factual", "death_vs_accidental_death"],
+  q({ id: "Q08", conversation: "c-facts", household: "A", person: "josephine", text: "What is Josephine covered for if she dies in an accident?", tags: ["factual", "death_vs_accidental_death"],
     answerable: [{ re: "accidental death", desc: "names the accidental death benefits", cite: [{ doc: "accident", page: 2 }, { doc: "groupLife", page: 2 }] }],
     forbidden: [{ re: "S\\$\\s?(?:250,000|300,000|350,000)", desc: "a combined total across policies", gate: "unsupported_amount" }, OTHER_HH_TEXT],
     amountAllowed: true, allowedAmounts: [{ amount: 100000, currency: "SGD", doc: "accident", page: 1 }, { amount: 50000, currency: "SGD", doc: "groupLife", page: 2 }, { amount: 150000, currency: "SGD", doc: "groupLife", page: 2 }],
     notes: "Death vs accidental death: each policy's figure with its own source, never an added total." }),
-  q({ id: "Q09", conversation: "c-facts", household: "A", person: "charmaine", text: "What is Charmaine's maternity coverage?", tags: ["missing_documents", "blocked"],
+  q({ id: "Q09", conversation: "c-facts", household: "A", person: "josephine", text: "What is Josephine's maternity coverage?", tags: ["missing_documents", "blocked"],
     forbidden: [{ re: NOT_COVERED, desc: "'not found' turned into 'not covered'", gate: "unsupported_assertion" }, OTHER_HH_TEXT],
     gap: GAP_RE, amountAllowed: false, notes: "Nothing uploaded mentions maternity: explain the gap; never say she is not covered." }),
-  q({ id: "Q10", conversation: "c-facts", household: "A", person: "charmaine", text: "Does Charmaine have travel insurance?", tags: ["current_vs_outdated", "travel"],
+  q({ id: "Q10", conversation: "c-facts", household: "A", person: "josephine", text: "Does Josephine have travel insurance?", tags: ["current_vs_outdated", "travel"],
     answerable: [{ re: "JetSure", desc: "identifies the JetSure travel policy", cite: [{ doc: "travelExpired", page: 1 }, { doc: "travelExpired", page: 2 }] },
       { re: "expir|2024|ended|no longer|lapsed|out of date|outdated", desc: "says it expired / gives its date", cite: [{ doc: "travelExpired", page: 1 }] }],
     requiresIfMentioned: [{ mention: "JetSure", require: "expir|2024|ended|no longer|lapsed|out of date|outdated", desc: "an expired policy's terms presented without its date (not identified as outdated)" }],
-    forbidden: [{ re: "WanderSafe", desc: "Marcus's travel policy attributed to Charmaine", gate: "cross_scope" }, { re: "(?:is|remains) (?:currently )?active|currently covered", desc: "expired policy called active", gate: "unsupported_assertion" }],
+    forbidden: [{ re: "WanderSafe", desc: "Marcus's travel policy attributed to Josephine", gate: "cross_scope" }, { re: "(?:is|remains) (?:currently )?active|currently covered", desc: "expired policy called active", gate: "unsupported_assertion" }],
     amountAllowed: true, allowedAmounts: [{ amount: 100000, currency: "SGD", doc: "travelExpired", page: 2 }, { amount: 3000, currency: "SGD", doc: "travelExpired", page: 2 }],
     forbiddenCitations: cross(["travel"], "Marcus's policy"), notes: "Outdated document: may be answered from, with its date, never as active." }),
 
-  // ---------------- Charmaine, arm-fracture claim interview (Task 3), one conversation
-  q({ id: "Q11", conversation: "c-injury", household: "A", person: "charmaine", text: "Charmaine broke her arm.", tags: ["claim_interview", "fracture_vs_permanent_loss", "task0_1"],
+  // ---------------- Josephine, arm-fracture claim interview (Task 3), one conversation
+  q({ id: "Q11", conversation: "c-injury", household: "A", person: "josephine", text: "Josephine broke her arm.", tags: ["claim_interview", "fracture_vs_permanent_loss", "task0_1"],
     forbidden: [{ re: PERMANENT_LOSS, desc: "permanent loss / amputation surfaced for a fracture", gate: "unsupported_assertion" },
       { re: "assessment ready|here is (?:the|your) assessment", desc: "premature assessment", gate: "fact_finding" }],
     requiredNextQuestion: "accident|illness", amountAllowed: false, notes: "Task 0 defect 1. No assessment, no permanent-loss schedule, ask accident vs illness first." }),
-  q({ id: "Q12", conversation: "c-injury", household: "A", person: "charmaine", text: "An accident.", tags: ["claim_interview"],
+  q({ id: "Q12", conversation: "c-injury", household: "A", person: "josephine", text: "An accident.", tags: ["claim_interview"],
     forbidden: [{ re: PERMANENT_LOSS, desc: "permanent loss surfaced", gate: "unsupported_assertion" }],
     requiredNextQuestion: "where", amountAllowed: false, notes: "Next: location." }),
-  q({ id: "Q13", conversation: "c-injury", household: "A", person: "charmaine", text: "(the app's questions, answered as the chat UI does until none is left)", mode: "interview",
+  q({ id: "Q13", conversation: "c-injury", household: "A", person: "josephine", text: "(the app's questions, answered as the chat UI does until none is left)", mode: "interview",
     tags: ["claim_interview"], amountAllowed: false,
     forbidden: [{ re: PERMANENT_LOSS, desc: "permanent loss surfaced during the interview", gate: "unsupported_assertion" },
       { re: "assessment ready", desc: "'Assessment ready' during the interview", gate: "fact_finding" }, OTHER_HH_TEXT],
@@ -472,7 +472,7 @@ export const V11_QUESTIONS: EvalQuestion[] = [
         { match: "admitted|inpatient|stay", reply: "No" }, { match: "confirm|x-?ray|scan", reply: "Yes" }, { match: "treatment|treated|what care", reply: "Emergency department" },
         { match: "sport", reply: "No" }, { match: "accident|illness", reply: "An accident" }, { match: ".", reply: "Not sure" }] },
     notes: "Task 3: accident/illness, location, date, treatment/evidence in order; one question at a time; known facts never asked again; no amount; no permanent loss." }),
-  q({ id: "Q14", conversation: "c-injury", household: "A", person: "charmaine", text: "(the final response once the interview has no question left)", mode: "interview_final", tags: ["claim_interview", "possible_benefit", "final_answer"],
+  q({ id: "Q14", conversation: "c-injury", household: "A", person: "josephine", text: "(the final response once the interview has no question left)", mode: "interview_final", tags: ["claim_interview", "possible_benefit", "final_answer"],
     answerable: [{ re: "fracture", desc: "the fracture benefit as a possible benefit, cited", cite: [{ doc: "accident", page: 2 }, { doc: "accidentEndorsement", page: 1 }] }],
     forbidden: [{ re: PERMANENT_LOSS, desc: "permanent loss surfaced", gate: "unsupported_assertion" }, { re: PAYOUT_PROMISE, desc: "a payout promise", gate: "unsupported_amount" }, OTHER_HH_TEXT,
       { re: "assessment ready", desc: "'Assessment ready' without an evidence-backed estimate", gate: "fact_finding" }],
@@ -480,35 +480,35 @@ export const V11_QUESTIONS: EvalQuestion[] = [
       { doc: "travelExpired", why: "an expired overseas travel policy offered for an accident in Singapore", gate: "unsupported_assertion" }],
     gap: "evidence|document|report|x-?ray|receipt|bill|review|not yet|before|until",
     notes: "After the last question: no fallback to the old noisy assessment; the fracture benefit as a possible benefit with its source; what evidence is still needed." }),
-  q({ id: "Q15", conversation: "c-injury", household: "A", person: "charmaine", text: "Which of her policies could pay for the broken arm?", tags: ["claim_interview", "possible_benefit"],
+  q({ id: "Q15", conversation: "c-injury", household: "A", person: "josephine", text: "Which of her policies could pay for the broken arm?", tags: ["claim_interview", "possible_benefit"],
     answerable: [{ re: "fracture", desc: "the fracture benefit as a possible benefit", cite: [{ doc: "accident", page: 2 }, { doc: "accidentEndorsement", page: 1 }] }],
     forbidden: [{ re: PERMANENT_LOSS, desc: "permanent loss surfaced", gate: "unsupported_assertion" }, { re: PAYOUT_PROMISE, desc: "a payout promise", gate: "unsupported_amount" }, OTHER_HH_TEXT],
     amountAllowed: true, forbiddenCitations: [...cross(["otherHouseholdAccident", "accidentMarcus"], "other household / person"), { doc: "disability", why: "permanent-disablement schedule cited for a fracture", gate: "unsupported_assertion" }],
     notes: "Possible benefit: fracture of arm cited, conditions/evidence named, no promise, no estimate." }),
-  q({ id: "Q16", conversation: "c-injury", household: "A", person: "charmaine", text: "How much can she claim?", tags: ["claim_interview", "indicative_estimate_gate"],
+  q({ id: "Q16", conversation: "c-injury", household: "A", person: "josephine", text: "How much can she claim?", tags: ["claim_interview", "indicative_estimate_gate"],
     forbidden: [{ re: PAYOUT_PROMISE, desc: "a payout promise", gate: "unsupported_amount" }, { re: "S\\$\\s?200,000|S\\$\\s?100,000(?![^.]*sum insured)", desc: "sum insured / permanent-loss amount as a claim amount", gate: "unsupported_amount" }, OTHER_HH_TEXT,
       { re: "didn['’]t find how much|not find how much", desc: "the question itself treated as a benefit name", gate: "blocked_gap" }],
     gap: "evidence|report|x-?ray|receipt|bill|review(?:ed)? (?:claim )?evidence|upload|until", amountAllowed: true,
     allowedAmounts: [{ amount: 1200, currency: "SGD", doc: "accidentEndorsement", page: 1 }, { amount: 1000, currency: "SGD", doc: "accident", page: 2 }, { amount: 2000, currency: "SGD", doc: "accident", page: 2 }],
     notes: "No indicative estimate without reviewed evidence: explain what evidence is needed. Policy-stated amounts only with their page." }),
-  q({ id: "Q17", conversation: "c-injury", household: "A", person: "charmaine", text: "(reopen c-injury from history)", mode: "reopen", tags: ["reopened_conversation"],
+  q({ id: "Q17", conversation: "c-injury", household: "A", person: "josephine", text: "(reopen c-injury from history)", mode: "reopen", tags: ["reopened_conversation"],
     notes: "Reopening restores the same last answer and next question; one claim event for the conversation, not a new event named 'An accident.'" }),
 
   // ---------------- Marcus
   q({ id: "Q18", conversation: "c-marcus", household: "A", person: "marcus", text: "What does Marcus's travel policy cover overseas?", tags: ["factual", "travel", "currency_mixed"], positiveControl: true,
     answerable: [{ re: "US\\$\\s?250,000|USD\\s?250,000", desc: "overseas medical US$250,000", cite: [{ doc: "travel", page: 2 }] },
       { re: "US\\$\\s?500,000|USD\\s?500,000", desc: "evacuation USD 500,000", cite: [{ doc: "travel", page: 2 }] }],
-    forbidden: [{ re: "(?:S\\$|US\\$|USD|SGD)\\s?(?:750,000|755,000|255,000|505,000)", desc: "added across benefits/currencies", gate: "unsupported_amount" }, { re: "JetSure", desc: "Charmaine's policy", gate: "cross_scope" }],
+    forbidden: [{ re: "(?:S\\$|US\\$|USD|SGD)\\s?(?:750,000|755,000|255,000|505,000)", desc: "added across benefits/currencies", gate: "unsupported_amount" }, { re: "JetSure", desc: "Josephine's policy", gate: "cross_scope" }],
     amountAllowed: true, allowedAmounts: [{ amount: 250000, currency: "USD", doc: "travel", page: 2 }, { amount: 500000, currency: "USD", doc: "travel", page: 2 },
       { amount: 5000, currency: "SGD", doc: "travel", page: 2 }, { amount: 200, currency: "SGD", doc: "travel", page: 2 }, { amount: 1000, currency: "SGD", doc: "travel", page: 2 }],
-    forbiddenCitations: cross(["travelExpired"], "Charmaine's policy"), notes: "Mixed currencies; never a combined figure." }),
+    forbiddenCitations: cross(["travelExpired"], "Josephine's policy"), notes: "Mixed currencies; never a combined figure." }),
   q({ id: "Q19", conversation: "c-marcus", household: "A", person: "marcus", text: "What is the baggage delay benefit on Marcus's travel policy?", tags: ["factual", "caps"], positiveControl: true,
     answerable: [{ re: "S\\$\\s?200", desc: "S$200 for every 6 hours", cite: [{ doc: "travel", page: 2 }] }, { re: "S\\$\\s?1,000|maximum", desc: "maximum S$1,000 (cap)", cite: [{ doc: "travel", page: 2 }] }],
     amountAllowed: true, allowedAmounts: [{ amount: 200, currency: "SGD", doc: "travel", page: 2 }, { amount: 1000, currency: "SGD", doc: "travel", page: 2 }], notes: "Cap." }),
   q({ id: "Q20", conversation: "c-marcus", household: "A", person: "marcus", text: "How much hospital cash does Marcus get per day?", tags: ["factual", "currency_missing", "hospital_cash"],
     answerable: [{ re: "\\b150\\b", desc: "150 per day, currency not stated", cite: [{ doc: "hospitalCashNoCurrency", page: 2 }] }],
     forbidden: [{ re: "(?:S\\$|SGD|US\\$|USD|\\$)\\s?150\\b|150\\s?(?:SGD|USD|dollars)", desc: "a currency invented for an amount that states none", gate: "unsupported_amount" },
-      { re: "S\\$\\s?100\\b", desc: "Charmaine's hospital cash", gate: "cross_scope" }],
+      { re: "S\\$\\s?100\\b", desc: "Josephine's hospital cash", gate: "cross_scope" }],
     amountAllowed: false, notes: "Currency missing: the number may be given as printed, a currency may not be added." }),
   q({ id: "Q21", conversation: "c-marcus", household: "A", person: "marcus", text: "What is Marcus's death benefit on his TermGuard policy?", tags: ["contradictory_pages", "currency_mismatch"],
     mustNotChooseOneOf: ["300,000", "350,000"],
@@ -524,13 +524,13 @@ export const V11_QUESTIONS: EvalQuestion[] = [
     amountAllowed: true, allowedAmounts: [{ amount: 50000, currency: "SGD", doc: "endowment", page: 2 }, { amount: 50000, currency: "SGD", doc: "endowment", page: 1 }], notes: "Positive control for the quota case." }),
   q({ id: "Q24", conversation: "c-marcus", household: "A", person: "marcus", text: "Does Marcus have a fracture benefit?", tags: ["factual", "identical_wording"], positiveControl: true,
     answerable: [{ re: "S\\$\\s?500\\b", desc: "Marcus's own S$500", cite: [{ doc: "accidentMarcus", page: 2 }] }],
-    forbidden: [{ re: "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b", desc: "Charmaine's fracture amount (identical wording)", gate: "cross_scope" }, OTHER_HH_TEXT],
+    forbidden: [{ re: "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b", desc: "Josephine's fracture amount (identical wording)", gate: "cross_scope" }, OTHER_HH_TEXT],
     amountAllowed: true, allowedAmounts: [{ amount: 500, currency: "SGD", doc: "accidentMarcus", page: 2 }, { amount: 750, currency: "SGD", doc: "accidentMarcus", page: 2 }, { amount: 2000, currency: "SGD", doc: "accidentMarcus", page: 2 }, { amount: 50000, currency: "SGD", doc: "accidentMarcus", page: 1 }],
     forbiddenCitations: cross(["accident", "accidentEndorsement", "otherHouseholdAccident"], "other person / household"), notes: "Identical wording in different policies." }),
   q({ id: "Q25", conversation: "c-marcus", household: "A", person: "marcus", text: "Does Marcus have car insurance?", tags: ["missing_documents", "blocked"],
     forbidden: [{ re: NOT_COVERED, desc: "'not found' turned into 'not covered'", gate: "unsupported_assertion" }], gap: GAP_RE, amountAllowed: false, notes: "Missing document." }),
   q({ id: "Q26", conversation: "c-marcus", household: "A", person: "marcus", text: "Does Marcus have a fracture benefit?", phase: "post", tags: ["deleted", "blocked"],
-    forbidden: [{ re: "S\\$\\s?500\\b|AccidentGuard-M", desc: "the deleted policy used", gate: "deleted_superseded" }, { re: "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b", desc: "Charmaine's amount", gate: "cross_scope" },
+    forbidden: [{ re: "S\\$\\s?500\\b|AccidentGuard-M", desc: "the deleted policy used", gate: "deleted_superseded" }, { re: "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b", desc: "Josephine's amount", gate: "cross_scope" },
       { re: NOT_COVERED, desc: "'not found' turned into 'not covered'", gate: "unsupported_assertion" }, OTHER_HH_TEXT],
     forbiddenCitations: [{ doc: "accidentMarcus", why: "deleted", gate: "deleted_superseded" }, ...cross(["accident", "accidentEndorsement", "otherHouseholdAccident"], "other person / household")],
     gap: GAP_RE, amountAllowed: false, notes: "After deleting AccidentGuard-M." }),
@@ -541,7 +541,7 @@ export const V11_QUESTIONS: EvalQuestion[] = [
     notes: "Task 0 defect 3. The provider answers 429 insufficient_quota with an org id for every call." }),
 
   // ---------------- Household B
-  q({ id: "Q28", conversation: "c-b", household: "B", person: "charmaineB", text: "Does Charmaine have a fracture benefit?", tags: ["another_household"], positiveControl: true,
+  q({ id: "Q28", conversation: "c-b", household: "B", person: "josephineB", text: "Does Josephine have a fracture benefit?", tags: ["another_household"], positiveControl: true,
     answerable: [{ re: "S\\$\\s?3,500", desc: "B's own S$3,500", cite: [{ doc: "otherHouseholdAccident", page: 2 }] }],
     forbidden: [{ re: "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b|S\\$\\s?500\\b|AccidentGuard|HospitalShield|CritiCare", desc: "household A's data", gate: "cross_scope" }],
     amountAllowed: true, allowedAmounts: [{ amount: 3500, currency: "SGD", doc: "otherHouseholdAccident", page: 2 }, { amount: 9000, currency: "SGD", doc: "otherHouseholdAccident", page: 2 }, { amount: 80000, currency: "SGD", doc: "otherHouseholdAccident", page: 1 }],
@@ -550,7 +550,7 @@ export const V11_QUESTIONS: EvalQuestion[] = [
 
 /** Dataset coverage matrix: every Task 6 item -> documents and questions that exercise it. */
 export const COVERAGE: Record<string, string> = {
-  "two family members + another household": "charmaine, marcus (A); charmaineB (B, same printed name) -- Q01, Q24, Q28",
+  "two family members + another household": "josephine, marcus (A); josephineB (B, same printed name) -- Q01, Q24, Q28",
   "personal and group cover": "personal schedules; groupLife certificate -- Q01, Q07",
   "identical wording from different policies": "accident vs accidentMarcus (same wording, different amounts) -- Q03, Q24",
   "current and outdated versions": "hosp2022 superseded by hosp2025; travelExpired -- Q02, Q10",

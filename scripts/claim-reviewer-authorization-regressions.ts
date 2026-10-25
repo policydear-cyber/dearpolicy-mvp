@@ -40,9 +40,9 @@ function asUser(userId: string) { process.env.DEV_AUTH_ENABLED = "1"; process.en
 
 const uuid = (prefix: string, n: number) => `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const CAUSE_TEXT = "Blunt force trauma from a road traffic accident";
-const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Desmond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
+const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Jia Ming Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
 const EXTRACTION = {
-  deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [],
+  deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [],
   dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE_TEXT, mannerOfDeath: "accident",
   issuingAuthority: "SPF", documentReference: "REF-1", documentType: "police_report",
   pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE_TEXT }],
@@ -137,18 +137,18 @@ async function main() {
     const householdA = uuid("a1000000", 1), householdB = uuid("a1000000", 2);
     const ownerA = uuid("b1000000", 1), memberUserA = uuid("b1000000", 2), ownerB = uuid("b1000000", 3);
     const reviewer = uuid("c1000000", 1), suspended = uuid("c1000000", 2), idle = uuid("c1000000", 3), insider = uuid("c1000000", 4), unprovisioned = uuid("c1000000", 5);
-    const desmond = uuid("d1000000", 1), spouse = uuid("d1000000", 2), memberB = uuid("d1000000", 3);
+    const raymond = uuid("d1000000", 1), spouse = uuid("d1000000", 2), memberB = uuid("d1000000", 3);
     const claimA1 = uuid("e1000000", 1), claimA2 = uuid("e1000000", 2), claimB1 = uuid("e1000000", 3);
     const policyA = uuid("f1000000", 1), policySpouse = uuid("f1000000", 2), policyB = uuid("f1000000", 3);
     const coverageA = uuid("f2000000", 1), coverageSpouse = uuid("f2000000", 2), coverageB = uuid("f2000000", 3);
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Household A'),($2,'Household B')`, [householdA, householdB]);
     await pool.query(`INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner'),($1,$3,'member'),($4,$5,'owner')`, [householdA, ownerA, memberUserA, householdB, ownerB]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Desmond','Desmond','self'),($3,$2,'Casey Tan','Casey','spouse'),($4,$5,'Blake Lim','Blake','self')`,
-      [desmond, householdA, spouse, memberB, householdB]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self'),($3,$2,'Casey Tan','Casey','spouse'),($4,$5,'Blake Lim','Blake','self')`,
+      [raymond, householdA, spouse, memberB, householdB]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death'),($5,$6,$7,'fact_finding','death')`,
-      [claimA1, householdA, desmond, claimA2, claimB1, householdB, memberB]);
+      [claimA1, householdA, raymond, claimA2, claimB1, householdB, memberB]);
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
-    for (const [policyId, account, member, coverageId] of [[policyA, householdA, desmond, coverageA], [policySpouse, householdA, spouse, coverageSpouse], [policyB, householdB, memberB, coverageB]]) {
+    for (const [policyId, account, member, coverageId] of [[policyA, householdA, raymond, coverageA], [policySpouse, householdA, spouse, coverageSpouse], [policyB, householdB, memberB, coverageB]]) {
       await pool.query(
         `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
          VALUES($1,$2,$3,'Singlife','Group Personal Accident','G007500','certificate',true,'ready','cert.pdf','k',90,'scan_clean')`, [policyId, account, member]);
@@ -186,9 +186,9 @@ async function main() {
       await transitionEvidenceStatus({ accountId: account, id, from: "extracted", to: "needs_review" });
       return id;
     }
-    const docA1 = await readyDocument(householdA, ownerA, desmond, claimA1);
-    const docA1b = await readyDocument(householdA, ownerA, desmond, claimA1);
-    const docA2 = await readyDocument(householdA, ownerA, desmond, claimA2);
+    const docA1 = await readyDocument(householdA, ownerA, raymond, claimA1);
+    const docA1b = await readyDocument(householdA, ownerA, raymond, claimA1);
+    const docA2 = await readyDocument(householdA, ownerA, raymond, claimA2);
     const docB1 = await readyDocument(householdB, ownerB, memberB, claimB1);
 
     // --- Reviewers: only through the operator procedure.
@@ -219,7 +219,7 @@ async function main() {
     const assignmentCount = async () => Number((await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM claim_review_assignments`)).rows[0].n);
     const householdStatuses = async (claim = claimA1) => {
       asUser(ownerA);
-      const res = await listEvidence(new NextRequest(`http://localhost/api/claims/evidence?familyMemberId=${desmond}&claimSessionId=${claim}`, { headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` } }));
+      const res = await listEvidence(new NextRequest(`http://localhost/api/claims/evidence?familyMemberId=${raymond}&claimSessionId=${claim}`, { headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` } }));
       assert.equal(res.status, 200);
       const text = await res.text();
       assert.ok(!text.includes("reviewer:") && !text.includes("Reviewer One") && !text.includes("ops.lead"), "the household never sees who reviewed, or who assigned");
@@ -241,7 +241,7 @@ async function main() {
       });
       await asDatabaseUser(ownerA, async () => {
         await assert.rejects(db.query(`INSERT INTO claim_review_assignments(reviewer_user_id,account_id,family_member_id,claim_session_id,expires_at,assigned_by) VALUES($1,$2,$3,$4,now()+interval '1 day','household')`,
-          [reviewer, householdA, desmond, claimA1]), /row-level security|permission denied/);
+          [reviewer, householdA, raymond, claimA1]), /row-level security|permission denied/);
       });
       await asDatabaseUser(ownerA, async () => {
         const visible = await db.query(`SELECT 1 FROM claim_reviewers UNION ALL SELECT 1 FROM claim_review_assignments UNION ALL SELECT 1 FROM claim_reviewer_audit_log`);
@@ -250,7 +250,7 @@ async function main() {
       await asDatabaseUser(ownerA, async () => {
         await assert.rejects(db.query(
           `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by)
-           VALUES($1,$2,$3,$4,$5,'{}'::jsonb,'{}'::jsonb,'matches','household')`, [householdA, desmond, claimA1, policyA, docA1]), /row-level security|permission denied/,
+           VALUES($1,$2,$3,$4,$5,'{}'::jsonb,'{}'::jsonb,'matches','household')`, [householdA, raymond, claimA1, policyA, docA1]), /row-level security|permission denied/,
           "a household session can no longer write its own definition decision directly");
       });
       asUser(ownerA);
@@ -398,7 +398,7 @@ async function main() {
       assert.equal(rows.length, 3, "every decision is kept");
       for (const row of rows) {
         assert.equal(row.reviewed_by, `reviewer:${reviewer}`, "the authenticated reviewer, never a name from the body");
-        assert.equal(row.account_id, householdA); assert.equal(row.family_member_id, desmond); assert.equal(row.claim_session_id, claimA1);
+        assert.equal(row.account_id, householdA); assert.equal(row.family_member_id, raymond); assert.equal(row.claim_session_id, claimA1);
         assert.equal(row.cause_evidence.pageStart, 1, "page overrides from the body are ignored");
       }
       assert.equal(rows.filter((r) => r.superseded_at === null).length, 1, "only one decision is active");
@@ -437,17 +437,17 @@ async function main() {
     });
 
     await testAsync("17/18. a reviewed match on verified, current provenance unlocks the deterministic estimate for its own scope only; missing, mismatched or stale provenance still blocks", async () => {
-      const facts = await loadCauseDefinitionMatchesForFacts(householdA, desmond, claimA1);
+      const facts = await loadCauseDefinitionMatchesForFacts(householdA, raymond, claimA1);
       const loaded = facts.find((m) => (m.causeEvidence as { documentId?: string }).documentId === docA1);
       assert.ok(loaded?.provenance, "provenance is snapshotted server-side from the stored extraction");
       const check = validatePolicyEvidence(loaded!.definitionEvidence, "MALFORMED_POLICY_DEFINITION_EVIDENCE");
       assert.ok(check.valid);
       if (!check.valid) return;
       const input = (match: NonNullable<typeof loaded>, contractId = policyA, coverageId = coverageA) => ({
-        ownership: { contractId, coverageId }, familyMember: { id: desmond, confirmed: true }, claimEventId: claimA1,
+        ownership: { contractId, coverageId }, familyMember: { id: raymond, confirmed: true }, claimEventId: claimA1,
         deathConfirmed: true, dateOfDeath: "2026-09-14", policyEffectiveDate: "2020-01-01", sumInsured: 600_000, currency: "SGD",
         formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: check.evidence },
-        ruleEvidence: check.evidence, ownershipEvidence: { policyId: contractId, chunkId: `coverage:${coverageId}`, coverageId, familyMemberId: desmond },
+        ruleEvidence: check.evidence, ownershipEvidence: { policyId: contractId, chunkId: `coverage:${coverageId}`, coverageId, familyMemberId: raymond },
         accidentalDeathDefinitionEvidence: check.evidence, causeDefinitionMatch: match,
       });
       const result = calculateAccidentalDeath(input(loaded!));
@@ -458,15 +458,15 @@ async function main() {
       const swapped = { ...loaded!, causeEvidence: { ...(loaded!.causeEvidence as object), documentId: docA1b } };
       assert.equal(calculateAccidentalDeath(input(swapped)).status, "blocked", "provenance bound to another document");
       const context = (await loadEvidenceProvenanceContext(householdA, [docA1])).get(docA1)!;
-      const stale = resolveMatchProvenance(loaded!.provenance, { ...context, fileHash: "sha256:a-corrected-upload" }, { documentId: docA1, familyMemberId: desmond, claimSessionId: claimA1 });
+      const stale = resolveMatchProvenance(loaded!.provenance, { ...context, fileHash: "sha256:a-corrected-upload" }, { documentId: docA1, familyMemberId: raymond, claimSessionId: claimA1 });
       assert.equal(evaluateEvidenceAuthority(stale).authorized, false, "a changed document version");
 
-      const withoutProvenance = await readyDocument(householdA, ownerA, desmond, claimA2, false);
+      const withoutProvenance = await readyDocument(householdA, ownerA, raymond, claimA2, false);
       const second = (await admin.assignClaimReview({ reviewerUserId: reviewer, accountId: householdA, claimSessionId: claimA2, expiresInHours: 24, operator: "ops.lead" })).assignmentId;
       asUser(reviewer);
       const res = await decide("match", withoutProvenance, decisionBody({ assignmentId: second, result: "matches", reason: "Matches, but the reading has no provenance." }));
       assert.equal(res.status, 200, await res.clone().text());
-      const unverified = (await loadCauseDefinitionMatchesForFacts(householdA, desmond, claimA2)).find((m) => (m.causeEvidence as { documentId?: string }).documentId === withoutProvenance)!;
+      const unverified = (await loadCauseDefinitionMatchesForFacts(householdA, raymond, claimA2)).find((m) => (m.causeEvidence as { documentId?: string }).documentId === withoutProvenance)!;
       const blocked = calculateAccidentalDeath({ ...input(unverified), claimEventId: claimA2 });
       assert.equal(blocked.status, "blocked");
       if (blocked.status === "blocked") assert.equal(blocked.reasonCode, "EVIDENCE_PROVENANCE_MISSING");
@@ -475,7 +475,7 @@ async function main() {
     await testAsync("household sees 'reviewed' or 'more evidence needed' -- and no reviewer identity or notes", async () => {
       assert.equal((await householdStatuses())[docA1], "reviewed");
       asUser(ownerA);
-      const text = await (await listEvidence(new NextRequest(`http://localhost/api/claims/evidence?familyMemberId=${desmond}&claimSessionId=${claimA1}`, { headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` } }))).text();
+      const text = await (await listEvidence(new NextRequest(`http://localhost/api/claims/evidence?familyMemberId=${raymond}&claimSessionId=${claimA1}`, { headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` } }))).text();
       assert.ok(!text.includes("compared page 1 with the definition"), "the reviewer's reason is internal");
       asUser(reviewer);
       const res = await decide("match", docA1b, decisionBody({ result: "needs_review", reason: "Page 2 is missing; ask for the full report." }));

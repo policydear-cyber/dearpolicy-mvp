@@ -11,12 +11,12 @@ import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provena
 export async function runDeathEvidenceRegressions() {
   let cases=0;
   const test=(name:string,fn:()=>void)=>{try{fn();cases++;}catch(error){throw new Error(name,{cause:error});}};
-  const base:OwnedCoverage={id:"gtl",policyId:"personal",familyMemberId:"desmond",category:"Death",amount:1_000_000,currency:"SGD",productName:"Group Term Life",sourcePage:1,evidenceText:"personal certificate",insurer:"Singapore Life Ltd",policyName:"MINDEF & MHA",policyNumber:"personal",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true};
+  const base:OwnedCoverage={id:"gtl",policyId:"personal",familyMemberId:"raymond",category:"Death",amount:1_000_000,currency:"SGD",productName:"Group Term Life",sourcePage:1,evidenceText:"personal certificate",insurer:"Singapore Life Ltd",policyName:"MINDEF & MHA",policyNumber:"personal",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true};
   const covers=[base,{...base,id:"gpa",category:"Personal Accident",amount:600_000,productName:"Group Personal Accident"}];
   const pages=fixture.benefitSummary.pages.map(p=>({page_number:p.pageNumber,text:p.text}));
   const rows:DeathWordingPage[]=pages.map(p=>({...p,policy_id:"summary",group_policy_number:null,insurer:"Singlife",product_name:"Benefit Summary",original_filename:fixture.benefitSummary.sourceFile,document_role:"benefit_guide",personal_coverage_confirmed:false,linked_to_member:false}));
   const context={now:new Date("2026-09-14T12:00:00Z"),timeZone:"Asia/Singapore",allowAi:false};
-  const facts=await extractClaimFacts({text:"desmond died in a motorbike accident yesterday",...context});
+  const facts=await extractClaimFacts({text:"raymond died in a motorbike accident yesterday",...context});
   const result=resolveDeathEvidence(covers,rows);
   const SESSION_ID="session-death-evidence-regressions";
   // Builds the one applicable, policy-specific match for the gpa-accidental-
@@ -25,8 +25,8 @@ export async function runDeathEvidenceRegressions() {
   // never a hand-picked page number.
   const confirmedMatch=(rules:DeathRuleEvidence[]):CauseDefinitionMatch=>{
     const rule=rules.find(r=>r.benefit==="gpa-accidental-death")!;
-    return {familyMemberId:"desmond",claimEventId:SESSION_ID,contractId:"personal",coverageId:"gpa",
-      causeEvidence:{documentId:"police-report-1",documentType:"police_report",pageStart:1,pageEnd:1,familyMemberId:"desmond",claimEventId:SESSION_ID},
+    return {familyMemberId:"raymond",claimEventId:SESSION_ID,contractId:"personal",coverageId:"gpa",
+      causeEvidence:{documentId:"police-report-1",documentType:"police_report",pageStart:1,pageEnd:1,familyMemberId:"raymond",claimEventId:SESSION_ID},
       definitionEvidence:{policyId:rule.citation.policyId,chunkId:rule.citation.chunkId,pageStart:rule.citation.pageStart,pageEnd:rule.citation.pageEnd,wordingHash:definitionWordingHash(rule.quote)},
       result:"matches",reviewedAt:"2026-09-14",provenance:verifiedEvidenceProvenance("police-report-1")};
   };
@@ -61,7 +61,7 @@ export async function runDeathEvidenceRegressions() {
     assert.equal(resolveDeathEvidence(covers,rows.map(r=>({...r,insurer:null}))).rules.length,2);
   });
   test("Shared summary needs no duplicate upload or personal member link",()=>{
-    assert.equal(resolveDeathEvidence(covers.map(c=>({...c,familyMemberId:"charmaine"})),rows).rules.length,2);
+    assert.equal(resolveDeathEvidence(covers.map(c=>({...c,familyMemberId:"josephine"})),rows).rules.length,2);
     assert.deepEqual(resolveDeathEvidence([],rows),{rules:[],gaps:[]});
     assert.equal(resolveDeathEvidence([covers[0]],rows).rules.length,1);
   });

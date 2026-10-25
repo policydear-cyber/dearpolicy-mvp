@@ -118,7 +118,7 @@ export function runBenefitFormulaStress(){
     if(rnd()<0.15)(facts as Record<string,unknown>).hospitalStayOngoing=fact(true);
 
     let assessed;
-    try{assessed=assessCatalogBenefit({benefit:rule,coverage:cover,ownerName:"Charmaine",facts,
+    try{assessed=assessCatalogBenefit({benefit:rule,coverage:cover,ownerName:"Josephine",facts,
       contractId:"contract-1",contractName:"Scheme",insurer:"Singlife",events:["death"]});}
     catch(error){fail("threw on a generated rule: "+(error instanceof Error?error.message:String(error)),{rule,cover,facts});}
     const item=assessed!.item;
@@ -224,7 +224,7 @@ export function runBenefitFormulaStress(){
   }
   {
     // The one that has to keep working.
-    const item=assessCatalogBenefit({benefit:benefit(),coverage:coverage(1_000_000),ownerName:"Charmaine",
+    const item=assessCatalogBenefit({benefit:benefit(),coverage:coverage(1_000_000),ownerName:"Josephine",
       facts:{death:fact(true)} as SubjectFacts,events:["death"]}).item;
     assert.equal(item.calculatedAmount,1_000_000);
     assert.equal(item.estimateBasis,"confirmed","a certificate sum insured and a quoted clause is as good as it gets");

@@ -6,7 +6,7 @@
  * local Postgres, the deterministic model stand-in). Synthetic data only (e2e/support/v11-dataset.ts).
  *
  *   T0-8  sign-up, confirmation, sign-out, then sign-in with ONE click (the login defect)
- *   1     family: Charmaine and Marcus through the Family page
+ *   1     family: Josephine and Marcus through the Family page
  *   2     upload every household-A document through the Policies page (the 2025 HospitalShield
  *         edition supersedes the 2022 one through the upload API field -- no control exists in
  *         the page), processing to a terminal state, family linking
@@ -235,7 +235,7 @@ test.describe.serial("V1.1 release journey", () => {
     // ---------------- 1. family
     await timed("family (2 people)", async () => {
       await owner.goto("/family");
-      for (const key of ["charmaine", "marcus"] as const) {
+      for (const key of ["josephine", "marcus"] as const) {
         const p = PEOPLE[key];
         await owner.locator("#fm-new-name").fill(p.fullName);
         await owner.locator("#fm-new-relationship").selectOption(p.relationship);
@@ -245,7 +245,7 @@ test.describe.serial("V1.1 release journey", () => {
       }
     });
     const family = (await api<{ family: { id: string; display_name: string }[] }>(owner, "/api/family")).body.family;
-    for (const key of ["charmaine", "marcus"] as const) journey[`member:${key}`] = family.find((f) => f.display_name === PEOPLE[key].fullName)?.id;
+    for (const key of ["josephine", "marcus"] as const) journey[`member:${key}`] = family.find((f) => f.display_name === PEOPLE[key].fullName)?.id;
 
     // ---------------- 2. uploads (household A)
     const uploads: Record<string, unknown>[] = [];
@@ -487,14 +487,14 @@ test.describe.serial("V1.1 release journey", () => {
       const hb = await api<{ activeHouseholdId: string; activeHouseholdName: string }>(other, "/api/household");
       ids.householdB = hb.body.activeHouseholdId; recordHousehold(ids.householdB); journey.householdB = ids.householdB;
       await other.goto("/family");
-      const p = PEOPLE.charmaineB;
+      const p = PEOPLE.josephineB;
       await other.locator("#fm-new-name").fill(p.fullName);
       await other.locator("#fm-new-relationship").selectOption(p.relationship);
       await other.locator("#fm-new-preferred").fill(p.preferred);
       await other.getByRole("button", { name: "+ Add person" }).click();
       await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.", { timeout: 60_000 });
       const famB = (await api<{ family: { id: string; display_name: string }[] }>(other, "/api/family")).body.family;
-      journey["member:charmaineB"] = famB[0]?.id;
+      journey["member:josephineB"] = famB[0]?.id;
       const d = docs.find((x) => x.key === "otherHouseholdAccident")!;
       const r = await uploadDoc(other, d, `${p.fullName} · ${p.relationship}`);
       soft(r.p?.processing_status === "ready", `household B upload ended ${r.p?.processing_status}`);

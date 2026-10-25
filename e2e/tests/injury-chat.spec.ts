@@ -5,7 +5,7 @@ import path from "node:path";
 
 /**
  * The live injury-chat defect, replayed in a real browser against the local
- * synthetic stack (seed: e2e/support/seed-injury-fixture.ts). Charmaine's
+ * synthetic stack (seed: e2e/support/seed-injury-fixture.ts). Josephine's
  * synthetic personal-accident plan has a permanent-loss "Loss of arm" row, a
  * genuine "Fracture of arm" benefit and accident medical reimbursement.
  * Writes a transcript and per-turn screenshots of synthetic pages only.
@@ -44,7 +44,7 @@ test("broken arm: fracture kept, permanent loss never shown, one question at a t
   await page.goto("/chat");
   await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
 
-  const t1 = await send(page, 1, "Charmaine broke her arm.");
+  const t1 = await send(page, 1, "Josephine broke her arm.");
   expect(t1.visible).toMatch(/accident|illness/i);
   expect(t1.visible).not.toMatch(/loss of arm/i);
   expect(t1.visible).not.toMatch(MONEY);

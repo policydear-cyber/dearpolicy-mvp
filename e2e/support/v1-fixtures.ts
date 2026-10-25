@@ -6,9 +6,9 @@
  * real policy, insurer or person: every page says "SYNTHETIC TEST DOCUMENT -
  * NOT A REAL POLICY", the insurer is fictitious, and every product name and
  * policy number carries this run's SYNTHETIC-DPTEST-<run id> prefix. The two
- * household-A family members' DISPLAY names are "Charmaine" and "Marcus" (so
+ * household-A family members' DISPLAY names are "Josephine" and "Marcus" (so
  * the chat questions work); the documents print a two-word insured name
- * ("Charmaine Dptest<tag>") because DearPolicy's person-name sanitizer
+ * ("Josephine Dptest<tag>") because DearPolicy's person-name sanitizer
  * (lib/documents/intelligence.ts looksLikeActualPersonName) rejects a single
  * word, exactly as a real certificate prints a full name.
  *
@@ -53,7 +53,7 @@ export type V1Fixture = {
   format: V1Format;
   buffer: Buffer;
   /** Household-A display name, or the household-B member's display name. */
-  member: "Charmaine" | "Marcus";
+  member: "Josephine" | "Marcus";
   household: "A" | "B";
   /** primary = the one copy of each policy to upload for the chat journey;
    * format-variant = the same policy in another format (upload to a scratch
@@ -79,7 +79,7 @@ type Row = [label: string, value: string];
 type Spec = {
   key: string;
   household: "A" | "B";
-  member: "Charmaine" | "Marcus";
+  member: "Josephine" | "Marcus";
   label: string;
   policyType: string;
   category: string;
@@ -91,7 +91,7 @@ type Spec = {
 
 const SPECS: Spec[] = [
   {
-    key: "hospital", household: "A", member: "Charmaine", label: "HospitalShield", policyType: "Hospitalisation", category: "Hospitalisation",
+    key: "hospital", household: "A", member: "Josephine", label: "HospitalShield", policyType: "Hospitalisation", category: "Hospitalisation",
     sumInsured: { amount: 1000000, currency: "SGD", printed: "S$1,000,000" },
     schedule: [{ heading: "Schedule of Benefits - Hospital and Surgical", rows: [
       ["Daily room and board (1-bed private ward)", "S$800 per day, maximum 120 days"],
@@ -108,7 +108,7 @@ const SPECS: Spec[] = [
     absent: ["Fracture", "Maturity benefit"],
   },
   {
-    key: "accident", household: "A", member: "Charmaine", label: "AccidentGuard", policyType: "Personal Accident", category: "Personal Accident",
+    key: "accident", household: "A", member: "Josephine", label: "AccidentGuard", policyType: "Personal Accident", category: "Personal Accident",
     sumInsured: { amount: 100000, currency: "SGD", printed: "S$100,000" },
     schedule: [{ heading: "Schedule of Benefits - Accident", rows: [
       ["Fracture of arm", "S$1,000"],
@@ -125,7 +125,7 @@ const SPECS: Spec[] = [
     absent: ["Loss of arm"],
   },
   {
-    key: "disability", household: "A", member: "Charmaine", label: "DisabilityCare", policyType: "Permanent Disability", category: "Total Permanent Disability",
+    key: "disability", household: "A", member: "Josephine", label: "DisabilityCare", policyType: "Permanent Disability", category: "Total Permanent Disability",
     sumInsured: { amount: 200000, currency: "SGD", printed: "S$200,000" },
     schedule: [{ heading: "Schedule of Permanent Disablement (% of Sum Insured)", rows: [
       ["Loss of arm at or above the elbow", "100% of Sum Insured"],
@@ -170,7 +170,7 @@ const SPECS: Spec[] = [
     absent: ["Hospitalisation", "Fracture", "Medical expenses"],
   },
   {
-    key: "isolation-b", household: "B", member: "Charmaine", label: "OtherHouseholdPA", policyType: "Personal Accident", category: "Personal Accident",
+    key: "isolation-b", household: "B", member: "Josephine", label: "OtherHouseholdPA", policyType: "Personal Accident", category: "Personal Accident",
     sumInsured: { amount: 80000, currency: "SGD", printed: "S$80,000" },
     schedule: [{ heading: "Schedule of Benefits - Accident", rows: [
       ["Fracture of arm", "S$3,500"],

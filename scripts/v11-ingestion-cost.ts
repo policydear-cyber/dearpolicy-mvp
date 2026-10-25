@@ -34,7 +34,7 @@ process.env.E2E_RUN_ID ||= `v11c${Date.now().toString(36)}`;
     for (const key of UPLOAD_ORDER) {
       const d = rendered.find((r) => r.key === key)!;
       const account = households[d.household];
-      const member = d.person ? memberIds[d.person] : memberIds[d.household === "A" ? "marcus" : "charmaineB"];
+      const member = d.person ? memberIds[d.person] : memberIds[d.household === "A" ? "marcus" : "josephineB"];
       const policyId = randomUUID();
       const bytes = new Uint8Array(d.buffer);
       const storageKey = await savePolicyFile({ accountId: account, familyMemberId: member, policyId, filename: d.fileName, bytes });

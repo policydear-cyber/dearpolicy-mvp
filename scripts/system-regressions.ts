@@ -65,7 +65,7 @@ export function runSystemRegressions(){
     assert.equal(state.scenarios?.[person]?.length??0,0);
   });
   test("Murder is retained as a reported death and location, not assumed accidental",()=>{
-    const message="Desmond was murdered in Thailand";
+    const message="Raymond was murdered in Thailand";
     const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"claim",facts:[]},message,subjectIds:[person],now});
     assert.equal(knownValue(state.subjects[person],"death"),true);
     assert.equal(knownValue(state.subjects[person],"eventType"),"death");
@@ -75,13 +75,13 @@ export function runSystemRegressions(){
     assert.ok(state.scenarios?.[person]?.some(s=>s.label==="Reported homicide"&&s.traits.includes("violent")));
   });
   test("A factual homicide report remains a claim when the same turn asks about cover",()=>{
-    const message="Desmond was murdered in Thailand. What can I claim?";
+    const message="Raymond was murdered in Thailand. What can I claim?";
     const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[]},message,subjectIds:[person],now});
     assert.equal(state.intent,"claim");assert.equal(knownValue(state.subjects[person],"death"),true);
     assert.equal(knownValue(state.subjects[person],"eventLocation"),"Thailand");
   });
   test("A reported condition survives a weak model interpretation",()=>{
-    const message="Charmaine caught dengue";
+    const message="Josephine caught dengue";
     const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[]},message,subjectIds:[person],now});
     assert.equal(state.intent,"claim");assert.equal(knownValue(state.subjects[person],"diagnosis"),"dengue");
     assert.ok(state.scenarios?.[person]?.some(s=>s.family==="illness"&&s.traits.includes("diagnosis")));
@@ -91,7 +91,7 @@ export function runSystemRegressions(){
     assert.equal(reportedConditionStatement("If Alex caught dengue, would it pay?"),null);
   });
   test("A hypothetical murder question does not report a death",()=>{
-    const message="If Desmond was murdered in Thailand, would the policy pay?";
+    const message="If Raymond was murdered in Thailand, would the policy pay?";
     const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[
       {subjectId:person,key:"death",value:true,state:"known",quote:message},
     ]},message,subjectIds:[person],now});
@@ -506,29 +506,29 @@ export function runSystemRegressions(){
   });
   test("One shared group summary supports every family member who owns that group cover",()=>{
     const scheme=(over:Partial<InventoryDocument>)=>document({insurer:"Singapore Life Ltd",group_policy_number:"G007500",...over});
-    const desmond=scheme({id:"cert-desmond",policy_number:"CERT-D",member_ids:["desmond"]});
-    const charmaine=scheme({id:"cert-charmaine",policy_number:"CERT-C",member_ids:["charmaine"]});
+    const raymond=scheme({id:"cert-raymond",policy_number:"CERT-D",member_ids:["raymond"]});
+    const josephine=scheme({id:"cert-josephine",policy_number:"CERT-C",member_ids:["josephine"]});
     const summary=scheme({id:"summary",personal_coverage_confirmed:false,document_role:"benefit_guide",policy_number:null,document_authority:60});
-    for(const owner of [desmond,charmaine]){
+    for(const owner of [raymond,josephine]){
       const outcome=referenceMatchReason(owner,summary);
       assert.equal(outcome.matches,true,"The shared summary must bind to "+owner.id);
       assert.match(outcome.reason,/G007500/);
     }
     // It binds through the contract builder too, not only the matcher.
-    const people=[{id:"desmond",display_name:"Desmond",preferred_name:null,relationship:"self"},
-      {id:"charmaine",display_name:"Charmaine",preferred_name:null,relationship:"spouse"}];
-    const contracts=buildContracts([desmond,charmaine,summary],people,
-      [coverage({id:"c-d",policyId:"cert-desmond",familyMemberId:"desmond"}),coverage({id:"c-c",policyId:"cert-charmaine",familyMemberId:"charmaine"})]);
+    const people=[{id:"raymond",display_name:"Raymond",preferred_name:null,relationship:"self"},
+      {id:"josephine",display_name:"Josephine",preferred_name:null,relationship:"spouse"}];
+    const contracts=buildContracts([raymond,josephine,summary],people,
+      [coverage({id:"c-d",policyId:"cert-raymond",familyMemberId:"raymond"}),coverage({id:"c-c",policyId:"cert-josephine",familyMemberId:"josephine"})]);
     assert.equal(contracts.length,2);
     assert.equal(contracts.every(c=>c.references.some(r=>r.id==="summary")),true,"Both people must reach the same wording");
     assert.equal(contracts.every(c=>c.confirmed),true);
   });
   test("A combined certificate keeps its own wording sections for each owner",()=>{
-    const combined=document({id:"combined",member_ids:["desmond","charmaine"],has_reference_sections:true,group_policy_number:"G007500"});
-    const people=[{id:"desmond",display_name:"Desmond",preferred_name:null,relationship:"self"},
-      {id:"charmaine",display_name:"Charmaine",preferred_name:null,relationship:"spouse"}];
+    const combined=document({id:"combined",member_ids:["raymond","josephine"],has_reference_sections:true,group_policy_number:"G007500"});
+    const people=[{id:"raymond",display_name:"Raymond",preferred_name:null,relationship:"self"},
+      {id:"josephine",display_name:"Josephine",preferred_name:null,relationship:"spouse"}];
     const contracts=buildContracts([combined],people,
-      [coverage({id:"c-d",policyId:"combined",familyMemberId:"desmond"}),coverage({id:"c-c",policyId:"combined",familyMemberId:"charmaine"})]);
+      [coverage({id:"c-d",policyId:"combined",familyMemberId:"raymond"}),coverage({id:"c-c",policyId:"combined",familyMemberId:"josephine"})]);
     assert.equal(contracts.length,2,"One PDF naming two people is two contracts, not one");
     assert.equal(contracts.every(c=>c.documents.some(d=>d.id==="combined"&&d.has_reference_sections===true)),true);
     assert.equal(referenceMatchReason(combined,combined).matches,true);
@@ -1588,25 +1588,25 @@ export function runSystemRegressions(){
       documents:[document({id:"cert-"+ownerId})],references:[],confirmed:true,effectiveDate:"2022-10-06",ownershipBasis:"evidence",
       coverages:rows.map(([product,amount],index)=>coverage({id:ownerId+"-"+index,productName:product,amount,
         policyNumber:"3037850",documentRole:"certificate"}))});
-    const desmond=scheme("Desmond","p1",[["Group Term Life",1_000_000],["Living Care",350_000],
+    const raymond=scheme("Raymond","p1",[["Group Term Life",1_000_000],["Living Care",350_000],
       ["Living Care Plus",300_000],["Group Personal Accident",600_000]]);
-    const charmaine=scheme("Charmaine","p2",[["Group Term Life",300_000],["Living Care",600_000],
+    const josephine=scheme("Josephine","p2",[["Group Term Life",300_000],["Living Care",600_000],
       ["Living Care Plus",350_000],["Group Personal Accident",1_000_000]]);
-    const warnings=transposedScheduleWarnings([desmond,charmaine]);
+    const warnings=transposedScheduleWarnings([raymond,josephine]);
     assert.equal(warnings.length,1);
     assert.equal(warnings[0].policyNumber,"3037850");
-    assert.match(warnings[0].detail,/lists the same amounts for Desmond and Charmaine/);
+    assert.match(warnings[0].detail,/lists the same amounts for Raymond and Josephine/);
     assert.match(warnings[0].detail,/only the certificate can say which/);
     // Agreeing schedules say nothing.
-    const agreeing=scheme("Charmaine","p2",[["Group Term Life",1_000_000],["Living Care",350_000],
+    const agreeing=scheme("Josephine","p2",[["Group Term Life",1_000_000],["Living Care",350_000],
       ["Living Care Plus",300_000],["Group Personal Accident",600_000]]);
-    assert.deepEqual(transposedScheduleWarnings([desmond,agreeing]),[]);
+    assert.deepEqual(transposedScheduleWarnings([raymond,agreeing]),[]);
     // Genuinely different cover is not a drifted column, so it is left alone.
-    const different=scheme("Charmaine","p2",[["Group Term Life",250_000],["Living Care",100_000],
+    const different=scheme("Josephine","p2",[["Group Term Life",250_000],["Living Care",100_000],
       ["Living Care Plus",50_000],["Group Personal Accident",75_000]]);
-    assert.deepEqual(transposedScheduleWarnings([desmond,different]),[]);
+    assert.deepEqual(transposedScheduleWarnings([raymond,different]),[]);
     // One person alone cannot disagree with anyone.
-    assert.deepEqual(transposedScheduleWarnings([desmond]),[]);
+    assert.deepEqual(transposedScheduleWarnings([raymond]),[]);
   });
   test("A line from a certificate's cover table is not a benefit",()=>{
     // Straight out of the live benefit table: a certificate prints one row per

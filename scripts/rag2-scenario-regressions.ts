@@ -1,7 +1,7 @@
 /**
  * Scenario completion (node --import tsx scripts/rag2-scenario-regressions.ts; npm run rag2:scenario-test).
  *
- * Reproduces a reported live conversation -- "Desmond broke his leg." / "He fell down the stairs." / "Yes, confirmed
+ * Reproduces a reported live conversation -- "Raymond broke his leg." / "He fell down the stairs." / "Yes, confirmed
  * with an X-ray. He was also warded for two nights." / "Transverse fracture." -- on a SYNTHETIC household
  * (scripts/fixtures/rag2-scenario/household.ts) through the REAL chat route, plus paraphrases, other people and other
  * policies, and grades the WHOLE visible conversation: what reached the household, not only whether the right question
@@ -43,7 +43,7 @@ const money = (n: number) => "S$" + n.toLocaleString("en-SG", { minimumFractionD
 const docKey = (id: string) => HH.DOCS.find((d) => d.id === id)?.key ?? null;
 
 // ------------------------------------------------------------------ the capable model's moves
-const D = M.desmond.id, G = M.grace.id, K = M.kai.id;
+const D = M.raymond.id, G = M.grace.id, K = M.kai.id;
 const ROWS = { femur: { label: "Fracture of thigh bone (femur)", re: /femur/, says: "a fracture of the thigh bone (femur)" }, lower: { label: "Fracture of lower leg (tibia or fibula)", re: /tibia/, says: "a fracture of the lower leg (tibia or fibula)" }, patella: { label: "Fracture of kneecap (patella)", re: /patella/, says: "a fracture of the kneecap (patella)" } } as const;
 type RowKey = keyof typeof ROWS;
 const NOTE_QUOTE = "For a simple (closed) fracture 50% of the percentage shown is payable";
@@ -96,9 +96,9 @@ const LEG: RowKey[] = ["femur", "lower", "patella"];
 /** The reported conversation, CAPABLE model. */
 const CAPABLE_REPORTED: ScriptTurn[] = [
   { user: "broke his leg", steps: [
-    () => [call("resolve_person", { mention: "Desmond" })],
-    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), ...paLookups(D, LEG), call("search_passages", { query: "Accident means sudden unforeseen external violent", subject_id: D })],
-    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Desmond break his leg?", because_evidence_ids: ids(hit(v, /Accident means/)), statements: [certSentence(v, D, "Desmond"), rowsSentence(v, D, LEG)] })],
+    () => [call("resolve_person", { mention: "Raymond" })],
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }] }), ...paLookups(D, LEG), call("search_passages", { query: "Accident means sudden unforeseen external violent", subject_id: D })],
+    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Raymond break his leg?", because_evidence_ids: ids(hit(v, /Accident means/)), statements: [certSentence(v, D, "Raymond"), rowsSentence(v, D, LEG)] })],
     askRetry,
   ] },
   { user: "stairs", steps: [
@@ -107,13 +107,13 @@ const CAPABLE_REPORTED: ScriptTurn[] = [
   ] },
   { user: "X-ray", steps: [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "xray_confirmed", value: "yes", words: "Yes, confirmed with an X-ray" }, { key: "nights_in_hospital", value: "2", words: "He was also warded for two nights" }] }), ...paLookups(D, LEG)],
-    (v) => lumpCalls(v, D, LEG, "Desmond broke his leg", true),
-    (v) => [boneQ(v, D, "Desmond", [certSentence(v, D, "Desmond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights"), synthesis(v, D, "which bone was broken, whether the fracture is simple (closed) or compound (open), and the admission and discharge times")])],
+    (v) => lumpCalls(v, D, LEG, "Raymond broke his leg", true),
+    (v) => [boneQ(v, D, "Raymond", [certSentence(v, D, "Raymond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights"), synthesis(v, D, "which bone was broken, whether the fracture is simple (closed) or compound (open), and the admission and discharge times")])],
     askRetry,
   ] },
   { user: "Transverse", steps: [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "transverse fracture", words: "Transverse fracture." }] }), ...paLookups(D, LEG)],
-    (v) => [boneQ(v, D, "Desmond", [
+    (v) => [boneQ(v, D, "Raymond", [
       S("You told me it is a transverse fracture.", {}),
       S("The Schedule of Compensation sets the percentage by the bone that is broken, and the payable share by whether the fracture is simple (closed) or compound (open); a transverse fracture, which describes the line of the break, is neither of those, so it does not decide the row.", { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/), hit(v, /simple \(closed\)/)), subject_id: D }),
     ])],
@@ -126,9 +126,9 @@ const repeatLast = (v: ScriptView): ScriptCall[] => { const prev = [...v.turn].r
 /** The reported conversation, MINIMAL model (the live shape): one clause, repeated; the last answer only says back. */
 const MINIMAL_REPORTED: ScriptTurn[] = [
   { user: "broke his leg", steps: [
-    () => [call("resolve_person", { mention: "Desmond" })],
-    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), call("search_passages", { query: "fracture leg", subject_id: D }), call("search_passages", { query: "Accident means", subject_id: D })],
-    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Desmond break his leg?", because_evidence_ids: ids(hit(v, /Accident means/)), statements: [noteSentence(v, D)] })],
+    () => [call("resolve_person", { mention: "Raymond" })],
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }] }), call("search_passages", { query: "fracture leg", subject_id: D }), call("search_passages", { query: "Accident means", subject_id: D })],
+    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Raymond break his leg?", because_evidence_ids: ids(hit(v, /Accident means/)), statements: [noteSentence(v, D)] })],
     repeatLast,
   ] },
   { user: "stairs", steps: [
@@ -156,9 +156,9 @@ const RESPONSIVE_REPORTED: ScriptTurn[] = [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "transverse fracture", words: "Transverse fracture." }, { key: "fracture_type", value: "transverse", words: "Transverse fracture." }] })],
     () => [call("final_answer", { subject_id: D, sentences: [S("You told me it is a transverse fracture.")] })],
     (v) => { const repair = String(v.last[0]?.result.error ?? ""); return /certificate|sum insured/i.test(repair) ? paLookups(D, LEG) : [call("search_passages", { query: "fracture", subject_id: D })]; },
-    (v) => lumpCalls(v, D, LEG, "Desmond broke his leg", true),
+    (v) => lumpCalls(v, D, LEG, "Raymond broke his leg", true),
     (v) => { const repair = String(v.turn.find((o) => o.name === "final_answer" && !o.ok)?.result.error ?? ""); const hosp = /warded|nights_in_hospital|hospital/i.test(repair);
-      return [boneQ(v, D, "Desmond", [S("You told me it is a transverse fracture."), certSentence(v, D, "Desmond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), ...(hosp ? [hospitalSentence(v, D), nightsSentence(v, D, "two nights")] : [])])]; },
+      return [boneQ(v, D, "Raymond", [S("You told me it is a transverse fracture."), certSentence(v, D, "Raymond"), rowsSentence(v, D, LEG), noteSentence(v, D), ...lumpSentences(v, D), ...(hosp ? [hospitalSentence(v, D), nightsSentence(v, D, "two nights")] : [])])]; },
     askRetry,
   ] },
 ];
@@ -166,22 +166,22 @@ const RESPONSIVE_REPORTED: ScriptTurn[] = [
 /** Paraphrase: the bone and the closed fracture are given, the stay is given with dates and times later. */
 const CAPABLE_PARAPHRASE: ScriptTurn[] = [
   { user: "shin", steps: [
-    () => [call("resolve_person", { mention: "Desmond" })],
-    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "fractured his shin bone", words: "Desmond fractured his shin bone" }, { key: "how_it_happened", value: "slipped on the stairs at home", words: "slipped on the stairs at home" }] }), ...paLookups(D, ["lower"])],
-    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "xray_confirmed", question: "Was the fracture confirmed by an X-ray?", because_evidence_ids: ids(hit(v, /confirmed by X-ray/)), statements: [certSentence(v, D, "Desmond"), rowsSentence(v, D, ["lower"])] })],
+    () => [call("resolve_person", { mention: "Raymond" })],
+    () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "fractured his shin bone", words: "Raymond fractured his shin bone" }, { key: "how_it_happened", value: "slipped on the stairs at home", words: "slipped on the stairs at home" }] }), ...paLookups(D, ["lower"])],
+    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "xray_confirmed", question: "Was the fracture confirmed by an X-ray?", because_evidence_ids: ids(hit(v, /confirmed by X-ray/)), statements: [certSentence(v, D, "Raymond"), rowsSentence(v, D, ["lower"])] })],
     askRetry,
   ] },
   { user: "closed", steps: [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "xray_confirmed", value: "yes", words: "the X-ray showed it" }, { key: "fracture_type", value: "closed", words: "it's a closed fracture" }, { key: "nights_in_hospital", value: "2", words: "he stayed two nights in the ward" }] }), ...paLookups(D, ["lower"])],
-    (v) => [call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, sum_insured_value_id: vid(v, "CERT", /Personal Accident/, D), percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Desmond fractured his shin bone", condition: `${ROWS.lower.says}, simple (closed)`, proportion: { page: 1, quote: NOTE_QUOTE, percent: 50, applies_when: "a simple (closed) fracture" } })],
-    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "admission_datetime", question: "When was Desmond admitted to hospital (date and time)?", because_evidence_ids: ids(hit(v, /Accident Hospital Income/)), statements: [certSentence(v, D, "Desmond"), rowsSentence(v, D, ["lower"]), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights")] })],
+    (v) => [call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, sum_insured_value_id: vid(v, "CERT", /Personal Accident/, D), percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Raymond fractured his shin bone", condition: `${ROWS.lower.says}, simple (closed)`, proportion: { page: 1, quote: NOTE_QUOTE, percent: 50, applies_when: "a simple (closed) fracture" } })],
+    (v) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "admission_datetime", question: "When was Raymond admitted to hospital (date and time)?", because_evidence_ids: ids(hit(v, /Accident Hospital Income/)), statements: [certSentence(v, D, "Raymond"), rowsSentence(v, D, ["lower"]), noteSentence(v, D), ...lumpSentences(v, D), hospitalSentence(v, D), nightsSentence(v, D, "two nights")] })],
     askRetry,
   ] },
   { user: "admitted", steps: [
     () => [call("note_facts", { subject_id: D, facts: [{ key: "admission_datetime", value: "2026-10-03T21:00+08:00", words: "admitted at 9pm on 3 October" }, { key: "discharge_datetime", value: "2026-10-05T11:00+08:00", words: "discharged at 11am on 5 October" }] }), call("search_passages", { query: "Accident Hospital Income complete period of 24 hours confinement", subject_id: D })],
     (v) => [call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: "Accident Hospital Income", rate_passage: { page: 2, quote: "Accident Hospital Income: S$100 for each complete period of 24 hours", amount: 100, currency: "SGD" }, admission: { at: "2026-10-03T21:00+08:00", words: "admitted at 9pm on 3 October" }, discharge: { at: "2026-10-05T11:00+08:00", words: "discharged at 11am on 5 October" } })],
     (v) => { const c = v.find("calculate"); return [call("final_answer", { subject_id: D, sentences: [
-      S("You told me Desmond was admitted at 9pm on 3 October and discharged at 11am on 5 October."),
+      S("You told me Raymond was admitted at 9pm on 3 October and discharged at 11am on 5 October."),
       ...(c?.ok && c.result.data.kind === "indicative_estimate" ? [S(`On those times the stay counts as ${Number(c.result.data.amount) / 100} complete period${Number(c.result.data.amount) === 100 ? "" : "s"} of 24 hours, so the Accident Hospital Income indicative estimate is ${money(Number(c.result.data.amount))}, not an approved amount.`, { result_id: c.result.data.calc_id, subject_id: D })] : [hospitalSentence(v, D)]),
     ] })]; },
   ] },
@@ -227,7 +227,7 @@ const CERT_DATE = /1 July 2025|01\/07\/2025/;
 const CONVS: Conv[] = [
   { id: "R1", title: "reported conversation, capable model", script: CAPABLE_REPORTED,
     turns: [
-      { user: "Desmond broke his leg.", include: ["S$300,000", CERT_DATE, "10%", "6%", "4%"], question: /how/i, cites: ["CERT:1", "PA_WORD:1"] },
+      { user: "Raymond broke his leg.", include: ["S$300,000", CERT_DATE, "10%", "6%", "4%"], question: /how/i, cites: ["CERT:1", "PA_WORD:1"] },
       { user: "He fell down the stairs.", question: /X-ray/i },
       { user: "Yes, confirmed with an X-ray. He was also warded for two nights.", include: ["S$300,000", "S$18,000", "S$9,000", "S$30,000", "S$15,000", "S$12,000", "S$6,000", /simple \(closed\)/i, "S$100", /complete period of 24 hours/i, /two nights/i, /admission and discharge times/i], exclude: ["S$200", /\b1%|Other fracture/i, "S$3,000"], question: /which bone/i, cites: ["CERT:1", "PA_WORD:1", "PA_WORD:2"] },
       { user: "Transverse fracture.", include: [/transverse/i, /bone/i, /simple \(closed\)|compound \(open\)/i], exclude: [/\b1%|Other fracture/i, "S$3,000", "S$1,500"], question: /which bone/i },
@@ -235,7 +235,7 @@ const CONVS: Conv[] = [
     whole: { maxRepeats: [[/your own account/i, 1], [/include the doctor|claim form/i, 1], [/50% of the percentage shown/i, 2]] } },
   { id: "R2", title: "reported conversation, minimal (live-shape) model", script: MINIMAL_REPORTED,
     turns: [
-      { user: "Desmond broke his leg.", question: /how/i },
+      { user: "Raymond broke his leg.", question: /how/i },
       { user: "He fell down the stairs.", question: /X-ray/i },
       { user: "Yes, confirmed with an X-ray. He was also warded for two nights.", question: /simple|closed/i },
       { user: "Transverse fracture.", include: [/transverse/i, "S$100", /complete period of 24 hours/i, "S$300,000", CERT_DATE], exclude: [/\b1%|Other fracture/i, "S$200", /haven['’]t yet read/i], question: /simple|closed/i, cites: ["PA_WORD:2", "CERT:1"] },
@@ -243,7 +243,7 @@ const CONVS: Conv[] = [
     whole: { maxRepeats: [[/your own account/i, 1], [/include the doctor|claim form/i, 1]] } },
   { id: "R3", title: "reported conversation, minimal model that follows the repair", script: RESPONSIVE_REPORTED,
     turns: [
-      { user: "Desmond broke his leg.", question: /how/i },
+      { user: "Raymond broke his leg.", question: /how/i },
       { user: "He fell down the stairs.", question: /X-ray/i },
       { user: "Yes, confirmed with an X-ray. He was also warded for two nights.", question: /simple|closed/i },
       { user: "Transverse fracture.", include: [/transverse/i, "S$300,000", CERT_DATE, "S$18,000", "S$9,000", "S$100", /complete period of 24 hours/i], exclude: [/\b1%|Other fracture/i, "S$200"], question: /which bone/i, cites: ["CERT:1", "PA_WORD:1", "PA_WORD:2"] },
@@ -251,7 +251,7 @@ const CONVS: Conv[] = [
     whole: { maxRepeats: [[/your own account/i, 1], [/include the doctor|claim form/i, 1]] } },
   { id: "P1", title: "paraphrase: shin bone, closed fracture, stay with times", script: CAPABLE_PARAPHRASE,
     turns: [
-      { user: "My husband Desmond fractured his shin bone, he slipped on the stairs at home.", include: ["S$300,000", "6%"], question: /X-ray/i },
+      { user: "My husband Raymond fractured his shin bone, he slipped on the stairs at home.", include: ["S$300,000", "6%"], question: /X-ray/i },
       { user: "Yes, the X-ray showed it, it's a closed fracture, and he stayed two nights in the ward.", include: ["S$9,000", /simple \(closed\)/i, "S$100", /complete period of 24 hours/i], exclude: ["S$18,000", "S$200", /\bwhich bone\b/i], question: /admitted/i },
       { user: "He was admitted at 9pm on 3 October and discharged at 11am on 5 October.", include: [/indicative estimate/i, "S$100"], exclude: ["S$200"], question: null },
     ] },
@@ -340,11 +340,11 @@ async function main() {
 
   await check("CONTROL facts: an added detail is not a correction; a stated correction (or a changed count) still is", async () => {
     const t = await run([
-      { steps: [() => [call("resolve_person", { mention: "Desmond" })], () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }, { key: "nights_in_hospital", value: "2", words: "warded for two nights" }] })], () => [call("final_answer", { subject_id: D, sentences: [S("You told me Desmond broke his leg.")] })]] },
+      { steps: [() => [call("resolve_person", { mention: "Raymond" })], () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }, { key: "nights_in_hospital", value: "2", words: "warded for two nights" }] })], () => [call("final_answer", { subject_id: D, sentences: [S("You told me Raymond broke his leg.")] })]] },
       noteTurn([{ key: "injury", value: "transverse fracture", words: "Transverse fracture." }]),
       noteTurn([{ key: "injury", value: "broke his arm", words: "sorry, it was his arm, not his leg" }]),
       noteTurn([{ key: "nights_in_hospital", value: "3", words: "three nights" }]),
-    ], ["Desmond broke his leg and was warded for two nights.", "Transverse fracture.", "Sorry, it was his arm, not his leg.", "It was three nights."]);
+    ], ["Raymond broke his leg and was warded for two nights.", "Transverse fracture.", "Sorry, it was his arm, not his leg.", "It was three nights."]);
     const f1 = t[1].state.ragLoop.claim.facts;
     assert.equal(f1.injury.value, "broke his leg", "the first report is kept");
     assert.ok(Object.values(f1).some((f: any) => f.value === "transverse fracture" && !f.previous?.length), "the detail is recorded as its own fact: " + JSON.stringify(f1));
@@ -354,22 +354,22 @@ async function main() {
   });
 
   await check("CONTROL calculator: the wording's simple-fracture share is applied only from a quote printing it on that policy", async () => {
-    const pct = (v: ScriptView) => ({ calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, sum_insured_value_id: vid(v, "CERT", /Personal Accident/, D), percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Desmond broke his leg", condition: "a fracture of the lower leg (tibia or fibula), simple (closed)" });
+    const pct = (v: ScriptView) => ({ calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, sum_insured_value_id: vid(v, "CERT", /Personal Accident/, D), percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Raymond broke his leg", condition: "a fracture of the lower leg (tibia or fibula), simple (closed)" });
     const bad = [
       { page: 1, quote: NOTE_QUOTE, percent: 40, applies_when: "a simple (closed) fracture" }, // not the printed share
       { page: 1, quote: "For a simple fracture 50% is paid", percent: 50, applies_when: "a simple (closed) fracture" }, // not on the page
       { page: 2, quote: NOTE_QUOTE, percent: 50, applies_when: "a simple (closed) fracture" }, // another page
     ];
     const t = await run([{ steps: [
-      () => [call("resolve_person", { mention: "Desmond" })],
-      () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), ...paLookups(D, ["lower"])],
+      () => [call("resolve_person", { mention: "Raymond" })],
+      () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }] }), ...paLookups(D, ["lower"])],
       (v) => [call("calculate", { ...pct(v), proportion: { page: 1, quote: NOTE_QUOTE, percent: 50, applies_when: "a simple (closed) fracture" } }), ...bad.slice(0, 2).map((p) => call("calculate", { ...pct(v), proportion: p }))],
       (v) => [call("final_answer", { subject_id: D, sentences: lumpSentences(v, D) })],
     ] }, { steps: [
       () => paLookups(D, ["lower"]),
       (v) => [call("calculate", { ...pct(v), proportion: bad[2] })],
-      () => [call("final_answer", { subject_id: D, sentences: [S("You told me Desmond broke his leg.")] })],
-    ] }], ["Desmond broke his leg.", "And for a simple fracture?"]);
+      () => [call("final_answer", { subject_id: D, sentences: [S("You told me Raymond broke his leg.")] })],
+    ] }], ["Raymond broke his leg.", "And for a simple fracture?"]);
     const calls = [...t[0].trace.toolCalls, ...t[1].trace.toolCalls].filter((x: any) => x.name === "calculate");
     assert.deepEqual(calls.map((x: any) => x.ok), [true, false, false, false], JSON.stringify(calls.map((x: any) => x.error ?? "ok")));
     assert.match(String(calls[1].error), /not printed in the quote/); assert.match(String(calls[2].error), /not on that page/); assert.match(String(calls[3].error), /not on that page/);
@@ -380,18 +380,18 @@ async function main() {
     const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
     const tampered = structuredClone(t[0].answer) as any;
     tampered.calculations[0].operands.find((o: any) => o.value === 50).value = 60;
-    const problems = await verifyAnswerFigures(tampered, { accountId: HH.ACCOUNT, userText: "Desmond broke his leg.", report: true, priorUserTexts: [] });
+    const problems = await verifyAnswerFigures(tampered, { accountId: HH.ACCOUNT, userText: "Raymond broke his leg.", report: true, priorUserTexts: [] });
     assert.ok(problems.length > 0, "a tampered share passed the save-time gate");
   });
 
   await check("CONTROL certificate link: the sum insured is the person's own row under the wording's product, on the current certificate", async () => {
     const t = await run([{ steps: [
-      () => [call("resolve_person", { mention: "Desmond" })],
-      () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), ...paLookups(D, ["lower"]), sel("CERT", "Group Term Life", D), call("select_table_value", { policy_id: doc("CERT_OLD").id, benefit: "Group Personal Accident", subject_id: D, want: "amount" }), call("select_table_value", { policy_id: doc("OTHER").id, benefit: "Group Personal Accident", subject_id: D, want: "amount" })],
-      (v) => { const base = { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Desmond broke his leg", condition: "a fracture of the lower leg (tibia or fibula), compound (open)" };
+      () => [call("resolve_person", { mention: "Raymond" })],
+      () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }] }), ...paLookups(D, ["lower"]), sel("CERT", "Group Term Life", D), call("select_table_value", { policy_id: doc("CERT_OLD").id, benefit: "Group Personal Accident", subject_id: D, want: "amount" }), call("select_table_value", { policy_id: doc("OTHER").id, benefit: "Group Personal Accident", subject_id: D, want: "amount" })],
+      (v) => { const base = { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: doc("PA_WORD").id, benefit: ROWS.lower.label, percent_value_id: vid(v, "PA_WORD", /tibia/, D), assumption_words: "Raymond broke his leg", condition: "a fracture of the lower leg (tibia or fibula), compound (open)" };
         return [call("calculate", { ...base, sum_insured_value_id: vid(v, "CERT", /Term Life/, D) }), call("calculate", { ...base, sum_insured_value_id: vid(v, "CERT", /Personal Accident/, D) })]; },
       (v) => [call("final_answer", { subject_id: D, sentences: lumpSentences(v, D) })],
-    ] }], ["Desmond broke his leg."]);
+    ] }], ["Raymond broke his leg."]);
     const tc = t[0].trace.toolCalls;
     const sels = tc.filter((x: any) => x.name === "select_table_value");
     const read = (x: any) => x.ok && /"status":"ok"/.test(String(x.summary ?? ""));
@@ -404,13 +404,13 @@ async function main() {
   });
 
   await check("CONTROL fallback after the one repair: only the calculation the reply tried to state is rendered from its record", async () => {
-    const calcs = (v: ScriptView) => lumpCalls(v, D, LEG, "Desmond broke his leg", false);
+    const calcs = (v: ScriptView) => lumpCalls(v, D, LEG, "Raymond broke his leg", false);
     const lowerId = (v: ScriptView) => v.turn.find((o) => o.name === "calculate" && o.ok && /tibia/.test(String(o.args.benefit)))!.result.data.calc_id;
-    const noIf = (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [S("Desmond's certificate lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025.", { value_ids: ids(vid(v, "CERT", /Personal Accident/, D)), subject_id: D }), S("On those facts the conditional illustration for the lower leg is S$18,000.", { result_id: lowerId(v), subject_id: D })] })];
+    const noIf = (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [S("Raymond's certificate lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025.", { value_ids: ids(vid(v, "CERT", /Personal Accident/, D)), subject_id: D }), S("On those facts the conditional illustration for the lower leg is S$18,000.", { result_id: lowerId(v), subject_id: D })] })];
     const t = await run([
-      { steps: [() => [call("resolve_person", { mention: "Desmond" })], () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), ...paLookups(D, LEG)], calcs, noIf, noIf] },
+      { steps: [() => [call("resolve_person", { mention: "Raymond" })], () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Raymond broke his leg" }] }), ...paLookups(D, LEG)], calcs, noIf, noIf] },
       { steps: [() => [call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "fell down the stairs", words: "He fell down the stairs" }] }), ...paLookups(D, LEG)], calcs, (v) => [call("final_answer", { subject_id: D, sentences: [S("On the documents, the fracture rows differ by bone.", { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/)), subject_id: D })] })], (v) => [call("final_answer", { subject_id: D, sentences: [S("On the documents, the fracture rows differ by bone.", { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/)), subject_id: D })] })]] },
-    ], ["Desmond broke his leg.", "He fell down the stairs."]);
+    ], ["Raymond broke his leg.", "He fell down the stairs."]);
     const a1 = t[0].answer as any, v1 = visible(t[0].answer);
     assert.match(v1, /\bIf\b[^.]*S\$18,000(?![\d,]*\d)/, "the attempted lower-leg illustration was not rendered: " + v1);
     assert.ok(!/S\$30,000|S\$12,000/.test(v1), "an exploratory femur / kneecap illustration was resurrected: " + v1);
@@ -427,7 +427,7 @@ async function main() {
   };
   const byFallback = (t: any) => (t.trace?.toolCalls ?? []).filter((x: any) => /grounded fallback/.test(String(x.args?.by ?? "")));
   await check("CONTROL lookup: one valid certificate -- its dated Personal Accident row for THIS person (never Term Life, the superseded or another household's)", async () => {
-    const [d] = await run([pctOnly(D, "Desmond", "Desmond broke his leg", "broke his leg")], ["Desmond broke his leg."]);
+    const [d] = await run([pctOnly(D, "Raymond", "Raymond broke his leg", "broke his leg")], ["Raymond broke his leg."]);
     const v = visible(d.answer);
     assert.match(v, /S\$300,000(?![\d,]*\d)[^.]*1 July 2025/, v);
     for (const f of ["S$500,000", "S$250,000", "S$800,000", "S$200,000"]) assert.ok(!lit(f).test(v), f + " shown: " + v);
@@ -438,7 +438,7 @@ async function main() {
     assert.ok(b && /personal accident/i.test(b.benefit) && b.subjectId === D && docKey(b.policyId) === "CERT", JSON.stringify(b));
     const [g] = await run([pctOnly(G, "Grace", "Grace broke her leg", "broke her leg")], ["Grace broke her leg."]);
     const vg = visible(g.answer);
-    assert.match(vg, /S\$200,000(?![\d,]*\d)/, "Grace's own row: " + vg); assert.ok(!lit("S$300,000").test(vg), "Desmond's amount for Grace: " + vg);
+    assert.match(vg, /S\$200,000(?![\d,]*\d)/, "Grace's own row: " + vg); assert.ok(!lit("S$300,000").test(vg), "Raymond's amount for Grace: " + vg);
   });
   await check("CONTROL lookup: two current certificates printing the product for the person -- ambiguous, never the first; one grounded question", async () => {
     const c = HH.doc("CERT"); const dupId = "7c000000-0000-4000-8000-000000000199";
@@ -446,7 +446,7 @@ async function main() {
     for (const m of c.members) await h.db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'test',1)", [dupId, m.id, HH.ACCOUNT]);
     await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)", [HH.ACCOUNT, dupId, String(c.pages[1]).replace(/S\$300,000/, "S$350,000")]);
     try {
-      const [d] = await run([pctOnly(D, "Desmond", "Desmond broke his leg", "broke his leg")], ["Desmond broke his leg."]);
+      const [d] = await run([pctOnly(D, "Raymond", "Raymond broke his leg", "broke his leg")], ["Raymond broke his leg."]);
       const v = visible(d.answer);
       assert.ok(!lit("S$300,000").test(v) && !lit("S$350,000").test(v), "an amount was picked: " + v);
       assert.match(v, /more than one current document/i, v);
@@ -457,7 +457,7 @@ async function main() {
     }
   });
   await check("CONTROL lookup: not made for an ordinary question that needs no certificate amount", async () => {
-    const [d] = await run([{ steps: [() => [call("resolve_person", { mention: "Desmond" })], () => [sel("PA_WORD", ROWS.patella.label, D, "percent")], (v) => [call("final_answer", { subject_id: D, sentences: [S("The Schedule of Compensation lists a fracture of the kneecap (patella) at 4% of the Sum Insured.", { value_ids: ids(vid(v, "PA_WORD", /patella/, D)), subject_id: D })] })]] }], ["What percentage does the schedule list for a kneecap fracture?"]);
+    const [d] = await run([{ steps: [() => [call("resolve_person", { mention: "Raymond" })], () => [sel("PA_WORD", ROWS.patella.label, D, "percent")], (v) => [call("final_answer", { subject_id: D, sentences: [S("The Schedule of Compensation lists a fracture of the kneecap (patella) at 4% of the Sum Insured.", { value_ids: ids(vid(v, "PA_WORD", /patella/, D)), subject_id: D })] })]] }], ["What percentage does the schedule list for a kneecap fracture?"]);
     assert.equal(byFallback(d).length, 0, "a lookup was made for an ordinary question");
     assert.match(visible(d.answer), /4%/); assert.ok(!/sum insured as S\$/i.test(visible(d.answer)));
   });

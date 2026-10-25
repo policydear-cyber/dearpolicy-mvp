@@ -1,6 +1,6 @@
 /**
  * Adversarial injury-chat regressions (Agent D). Encodes the SPEC for the
- * "Charmaine broke her arm" -> "An accident." defect independently of the
+ * "Josephine broke her arm" -> "An accident." defect independently of the
  * implementation agents' own suites. Synthetic fixtures only: no database,
  * network or hosted model. The conversation is driven through the same pure
  * pipeline runChatWorkflow uses for a turn (mergeInterpretation ->
@@ -47,8 +47,8 @@ function test(label: string, fn: () => void) {
   }
 }
 const NOW = new Date("2026-09-28T02:00:00.000Z");
-const CHARMAINE = "fm-charmaine", BOB = "fm-bob";
-const PEOPLE: Record<string, string> = { [CHARMAINE]: "Charmaine", [BOB]: "Bob" };
+const JOSEPHINE = "fm-josephine", BOB = "fm-bob";
+const PEOPLE: Record<string, string> = { [JOSEPHINE]: "Josephine", [BOB]: "Bob" };
 const LOSS_OF_ARM_NAME = "Loss of arm (at shoulder, between shoulder and elbow, at elbow, between elbow and wrist)";
 const RAW_LOSS = /loss of arm/i;
 
@@ -93,7 +93,7 @@ function catalogFor(policyId: string): CatalogBenefit[] {
       formulaKind: "expense_cap", formulaValue: 2000, factKey: "hospitalBill" }),
   ];
 }
-const DOC_C = "doc-pa-charmaine", DOC_B = "doc-pa-bob";
+const DOC_C = "doc-pa-josephine", DOC_B = "doc-pa-bob";
 const CATALOG = [...catalogFor(DOC_C), ...catalogFor(DOC_B)];
 
 // ------------------------------------------------------------ pipeline turn
@@ -121,14 +121,14 @@ function blankAnswer(): ChatAnswer {
     claimSessionId: null, questions: [], knownFacts: [], missingFacts: [] } as ChatAnswer;
 }
 function turn(prior: ConversationState, message: string, opts: { subjectIds?: string[]; model?: Model; contracts?: PolicyContract[] } = {}): TurnResult {
-  const subjectIds = opts.subjectIds ?? [CHARMAINE];
+  const subjectIds = opts.subjectIds ?? [JOSEPHINE];
   const model = opts.model ?? stub;
   const pendingBefore = prior.pending ?? null;
   let state = mergeInterpretation({ state: structuredClone(prior), interpretation: model(message, prior, subjectIds), message, subjectIds,
     subjectNames: Object.fromEntries(subjectIds.map(id => [id, [PEOPLE[id]]])), now: NOW, timeZone: "Asia/Singapore" });
   state = applyExplicitDeferrals(state, message, subjectIds, NOW);
   (recordDirectFactAnswer as (a: unknown) => boolean)({ message, subjects: state.subjects, subjectIds, scenarios: state.scenarios, now: NOW, pending: pendingBefore });
-  const contracts = opts.contracts ?? [contract(CHARMAINE, DOC_C)];
+  const contracts = opts.contracts ?? [contract(JOSEPHINE, DOC_C)];
   const perContract = contracts.map(c => {
     const facts = state.subjects[c.ownerId] ?? {};
     const traits = eventTraits(facts, (state.scenarios?.[c.ownerId] ?? []).flatMap(s => s.traits));
@@ -185,7 +185,7 @@ function turn(prior: ConversationState, message: string, opts: { subjectIds?: st
   return { state, nextQuestion, questionCount, categories, perContract, planJson: JSON.stringify(plans), answer };
 }
 const fresh = (): ConversationState => ({ subjects: {} });
-const factsOf = (r: TurnResult, id = CHARMAINE): SubjectFacts => r.state.subjects[id] ?? {};
+const factsOf = (r: TurnResult, id = JOSEPHINE): SubjectFacts => r.state.subjects[id] ?? {};
 const candidateNames = (r: TurnResult) => r.perContract.flatMap(p => p.assessed.matches.map(m => m.benefit.benefitName));
 const itemTitles = (r: TurnResult) => r.perContract.flatMap(p => p.assessed.items.map(i => i.title));
 /** Every string a person could see from this turn (claim cards, ruled-out
@@ -216,11 +216,11 @@ function assertNoFracture(facts: SubjectFacts, label: string) {
 const withoutTimes = (value: unknown) => JSON.stringify(value, (k, v) => (k === "recordedAt" ? undefined : v));
 
 // The realistic model reply for "An accident." (the pending question's answer).
-const accidentAnswer = withModel({ intent: "follow_up", facts: [mf(CHARMAINE, "eventType", "accident", "An accident")] });
+const accidentAnswer = withModel({ intent: "follow_up", facts: [mf(JOSEPHINE, "eventType", "accident", "An accident")] });
 
 // =================================================================== A
-test("A. 'Charmaine broke her arm.' -> 'An accident.': fracture kept, no Loss of arm, no amount, next asks location", () => {
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+test("A. 'Josephine broke her arm.' -> 'An accident.': fracture kept, no Loss of arm, no amount, next asks location", () => {
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const f1 = factsOf(t1);
   assert.equal(knownValue(f1, "injured"), true, "turn1 injured");
   assert.equal(knownValue(f1, "injuryKind"), "fracture", "turn1 injuryKind");
@@ -280,11 +280,11 @@ test("A2. workflow/page source: no 'Not applicable here' line, no benefit-rule c
 
 // =================================================================== B
 test("B. 'permanently lost use of her arm in an accident': Loss-of-arm may be a candidate, but no payable amount/total", () => {
-  const msg = "Charmaine permanently lost use of her arm in an accident";
-  const model = withModel({ intent: "claim", facts: [mf(CHARMAINE, "injured", true, "permanently lost use of her arm"),
-    mf(CHARMAINE, "permanentImpairment", "permanently lost use of her arm", "permanently lost use of her arm"),
-    mf(CHARMAINE, "eventType", "accident", "in an accident")],
-    scenarioCandidates: [{ subjectId: CHARMAINE, label: "Permanent loss of use of arm", family: "injury", traits: ["bodily_injury", "accident", "disability"], quote: msg }] });
+  const msg = "Josephine permanently lost use of her arm in an accident";
+  const model = withModel({ intent: "claim", facts: [mf(JOSEPHINE, "injured", true, "permanently lost use of her arm"),
+    mf(JOSEPHINE, "permanentImpairment", "permanently lost use of her arm", "permanently lost use of her arm"),
+    mf(JOSEPHINE, "eventType", "accident", "in an accident")],
+    scenarioCandidates: [{ subjectId: JOSEPHINE, label: "Permanent loss of use of arm", family: "injury", traits: ["bodily_injury", "accident", "disability"], quote: msg }] });
   const r = turn(fresh(), msg, { model });
   assertNoFracture(factsOf(r), "B");
   assertNoAmount(r, "B");
@@ -298,8 +298,8 @@ test("B. 'permanently lost use of her arm in an accident': Loss-of-arm may be a 
 });
 
 // =================================================================== C
-test("C. 'Charmaine hurt her arm': no fracture/permanent-loss assumed; next question is injury detail", () => {
-  const r = turn(fresh(), "Charmaine hurt her arm");
+test("C. 'Josephine hurt her arm': no fracture/permanent-loss assumed; next question is injury detail", () => {
+  const r = turn(fresh(), "Josephine hurt her arm");
   const f = factsOf(r);
   assertNoFracture(f, "C");
   assert.equal(knownValue(f, "permanentImpairment"), null, "C: permanentImpairment assumed");
@@ -310,16 +310,16 @@ test("C. 'Charmaine hurt her arm': no fracture/permanent-loss assumed; next ques
   assert.match(r.nextQuestion!.text, /kind of injury|broken bone|what (?:happened|injury)/i, "C: injury-detail wording");
   assertNoAmount(r, "C");
   // The model's vague label must not be taken for a kind of injury.
-  const vague = turn(fresh(), "Charmaine hurt her arm", { model: withModel({ facts: [mf(CHARMAINE, "injuryKind", "hurt", "hurt her arm")] }) });
+  const vague = turn(fresh(), "Josephine hurt her arm", { model: withModel({ facts: [mf(JOSEPHINE, "injuryKind", "hurt", "hurt her arm")] }) });
   assert.equal(vague.nextQuestion?.factKey, "injuryKind", "C(vague model kind): still asks injury kind, got " + vague.nextQuestion?.factKey);
 });
 
 // =================================================================== D
 test("D. 'She did not break her arm': no confirmed fracture (fresh and as a correction)", () => {
-  const model = withModel({ facts: [mf(CHARMAINE, "fractureBodyPart", "arm", "break her arm")] });
+  const model = withModel({ facts: [mf(JOSEPHINE, "fractureBodyPart", "arm", "break her arm")] });
   const d1 = turn(fresh(), "She did not break her arm", { model });
   assertNoFracture(factsOf(d1), "D1 fresh");
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const d2 = turn(t1.state, "Sorry, she did not break her arm.", { model: withModel({ intent: "follow_up" }) });
   assertNoFracture(factsOf(d2), "D2 correction");
   assert.ok(!candidateNames(d2).some(n => /fracture of arm|^fractures$/i.test(n)), "D2: fracture rows still candidates " + JSON.stringify(candidateNames(d2)));
@@ -327,10 +327,10 @@ test("D. 'She did not break her arm': no confirmed fracture (fresh and as a corr
 
 // =================================================================== E
 test("E. hypotheticals create no claim-event fact or scenario", () => {
-  for (const q of ["Could this cover a broken arm?", "What if someone fractures a wrist?", "Does my policy pay if Charmaine breaks her arm?"]) {
+  for (const q of ["Could this cover a broken arm?", "What if someone fractures a wrist?", "Does my policy pay if Josephine breaks her arm?"]) {
     const r = turn(fresh(), q);
     assertNoInjuryFacts(factsOf(r), "E " + q);
-    assert.deepEqual(r.state.scenarios?.[CHARMAINE] ?? [], [], "E scenario for: " + q);
+    assert.deepEqual(r.state.scenarios?.[JOSEPHINE] ?? [], [], "E scenario for: " + q);
     assert.ok(!r.categories.some(c => c.endsWith("accidental_injury")), "E injury category opened for: " + q);
     assert.equal(r.nextQuestion, null, "E asked a claim question for: " + q + " -> " + r.nextQuestion?.text);
     assert.equal((Facts as unknown as { reportedFractureStatement?: (t: string) => unknown }).reportedFractureStatement?.(q) ?? null, null, "E reportedFractureStatement: " + q);
@@ -339,7 +339,7 @@ test("E. hypotheticals create no claim-event fact or scenario", () => {
 
 // =================================================================== F
 test("F. a genuine fracture benefit stays eligible/visible for the arm fracture", () => {
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const t2 = turn(t1.state, "An accident.", { model: accidentAnswer });
   const names = candidateNames(t2);
   assert.ok(names.includes("Fracture of arm"), "F: 'Fracture of arm' not a candidate: " + JSON.stringify(names));
@@ -353,14 +353,14 @@ test("F. a genuine fracture benefit stays eligible/visible for the arm fracture"
   const m = (matchBenefits as (...a: unknown[]) => { benefit: CatalogBenefit }[])(catalogFor(DOC_C), eventTraits(factsOf(t2)), [], factsOf(t2)).map(x => x.benefit.benefitName);
   assert.ok(m.includes("Fracture of arm") && !m.some(n => RAW_LOSS.test(n)), "F: matchBenefits(facts) " + JSON.stringify(m));
   // Left elbow fracture still answers the generic arm row.
-  const elbow = turn(fresh(), "Charmaine fractured her left elbow.");
+  const elbow = turn(fresh(), "Josephine fractured her left elbow.");
   assert.equal(knownValue(factsOf(elbow), "fractureBodyPart"), "left elbow", "F: left elbow site");
   assert.equal(compat!(fracture, factsOf(elbow)).visible, true, "F: arm row for left elbow");
 });
 
 // =================================================================== G
 test("G. medical reimbursement stays a plausible candidate for a fracture with bills unknown", () => {
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const t2 = turn(t1.state, "An accident.", { model: accidentAnswer });
   assert.ok(candidateNames(t2).includes("Accident medical reimbursement"), "G: not a candidate after accident: " + JSON.stringify(candidateNames(t2)));
   const item = t2.perContract[0].assessed.items.find(i => /Accident medical reimbursement/.test(i.title));
@@ -376,7 +376,7 @@ test("G. medical reimbursement stays a plausible candidate for a fracture with b
 // =================================================================== H
 test("H. identical input/state -> identical facts and next question; reopened chat continues identically", () => {
   const run = () => {
-    const t1 = turn(fresh(), "Charmaine broke her arm.");
+    const t1 = turn(fresh(), "Josephine broke her arm.");
     const t2 = turn(t1.state, "An accident.", { model: accidentAnswer });
     return { t1: { state: t1.state, q: t1.nextQuestion }, t2: { state: t2.state, q: t2.nextQuestion, items: t2.answer.claimItems } };
   };
@@ -384,7 +384,7 @@ test("H. identical input/state -> identical facts and next question; reopened ch
   assert.equal(a, b, "H: two independent runs differ");
   // Reopen: the saved state goes through JSON (DB round-trip) before turn 2,
   // and the same message is answered again from the same state.
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const reopened = JSON.parse(JSON.stringify(t1.state)) as ConversationState;
   const live = turn(t1.state, "An accident.", { model: accidentAnswer });
   const again = turn(reopened, "An accident.", { model: accidentAnswer });
@@ -396,13 +396,13 @@ test("H. identical input/state -> identical facts and next question; reopened ch
 });
 
 // =================================================================== I
-test("I. cross-member isolation: Charmaine's fracture never unlocks Bob's policy; Bob's facts stay empty", () => {
-  const contracts = [contract(CHARMAINE, DOC_C), contract(BOB, DOC_B)];
+test("I. cross-member isolation: Josephine's fracture never unlocks Bob's policy; Bob's facts stay empty", () => {
+  const contracts = [contract(JOSEPHINE, DOC_C), contract(BOB, DOC_B)];
   // Adversarial model: attributes the fracture to Bob as well.
-  const model = withModel({ facts: [mf(BOB, "fractureBodyPart", "arm", "Charmaine broke her arm"), mf(BOB, "injured", true, "Charmaine broke her arm")],
-    scenarioCandidates: [{ subjectId: BOB, label: "Fracture", family: "injury", traits: ["bodily_injury", "accident"], quote: "Charmaine broke her arm" }] });
-  const t1 = turn(fresh(), "Charmaine broke her arm.", { subjectIds: [CHARMAINE], model, contracts });
-  const t2 = turn(t1.state, "An accident.", { subjectIds: [CHARMAINE], model: accidentAnswer, contracts });
+  const model = withModel({ facts: [mf(BOB, "fractureBodyPart", "arm", "Josephine broke her arm"), mf(BOB, "injured", true, "Josephine broke her arm")],
+    scenarioCandidates: [{ subjectId: BOB, label: "Fracture", family: "injury", traits: ["bodily_injury", "accident"], quote: "Josephine broke her arm" }] });
+  const t1 = turn(fresh(), "Josephine broke her arm.", { subjectIds: [JOSEPHINE], model, contracts });
+  const t2 = turn(t1.state, "An accident.", { subjectIds: [JOSEPHINE], model: accidentAnswer, contracts });
   for (const r of [t1, t2]) {
     assert.deepEqual(r.state.subjects[BOB] ?? {}, {}, "I: Bob's facts not empty: " + JSON.stringify(r.state.subjects[BOB]));
     assert.deepEqual(r.state.scenarios?.[BOB] ?? [], [], "I: Bob has scenarios");
@@ -410,12 +410,12 @@ test("I. cross-member isolation: Charmaine's fracture never unlocks Bob's policy
     assert.equal(bob.matches.length, 0, "I: Bob's benefits matched: " + JSON.stringify(bob.matches.map(m => m.benefit.benefitName)));
     assert.equal(bob.items.length, 0, "I: Bob's cards produced");
     assert.ok(!r.answer.claimItems.some(i => /^Bob\b/.test(i.title)), "I: a Bob card reached the answer");
-    const charm = r.perContract.find(p => p.contract.ownerId === CHARMAINE)!.assessed;
-    assert.ok(charm.items.every(i => !i.contractId || i.contractId === contracts[0].id), "I: Charmaine's cards cite another contract");
-    assert.ok(charm.citations.every(c => c.policyId === DOC_C), "I: Charmaine cites Bob's document");
+    const charm = r.perContract.find(p => p.contract.ownerId === JOSEPHINE)!.assessed;
+    assert.ok(charm.items.every(i => !i.contractId || i.contractId === contracts[0].id), "I: Josephine's cards cite another contract");
+    assert.ok(charm.citations.every(c => c.policyId === DOC_C), "I: Josephine cites Bob's document");
   }
-  // Both people in scope (e.g. "we"): the fracture sentence names only Charmaine.
-  const both = turn(fresh(), "Charmaine broke her arm.", { subjectIds: [CHARMAINE, BOB], model, contracts });
+  // Both people in scope (e.g. "we"): the fracture sentence names only Josephine.
+  const both = turn(fresh(), "Josephine broke her arm.", { subjectIds: [JOSEPHINE, BOB], model, contracts });
   assertNoInjuryFacts(both.state.subjects[BOB] ?? {}, "I (two subjects) Bob");
   assert.deepEqual(both.state.scenarios?.[BOB] ?? [], [], "I (two subjects): Bob has scenarios");
   assert.ok(!both.perContract.find(p => p.contract.ownerId === BOB)!.assessed.matches.length, "I (two subjects): Bob's benefits matched");
@@ -425,7 +425,7 @@ test("I. cross-member isolation: Charmaine's fracture never unlocks Bob's policy
 test("J. no amount from chat-only facts: the existing gates strip/refuse it", () => {
   // Household-asserted bill + declared-only ownership: the engine computes a
   // figure; enforceChatMonetarySafety alone must refuse it.
-  const declared = contract(CHARMAINE, DOC_C, "declared");
+  const declared = contract(JOSEPHINE, DOC_C, "declared");
   const facts: SubjectFacts = {
     eventType: { value: "accident", state: "known", quote: "An accident", recordedAt: NOW.toISOString(), source: "user" },
     injured: { value: true, state: "known", quote: "broke her arm", recordedAt: NOW.toISOString(), source: "system-derived" },
@@ -442,7 +442,7 @@ test("J. no amount from chat-only facts: the existing gates strip/refuse it", ()
     "J: enforceChatMonetarySafety let a household-asserted figure through: " + item.title + " " + item.amountText);
   // Evidence-owned contract with the same household bill: whatever the chat
   // gate decides, the live boundary must leave no event amount or total.
-  const owned = assessContractFromCatalog({ contract: contract(CHARMAINE, DOC_C), catalog: CATALOG, facts, traits, events: reportedClaimEvents(facts, traits) });
+  const owned = assessContractFromCatalog({ contract: contract(JOSEPHINE, DOC_C), catalog: CATALOG, facts, traits, events: reportedClaimEvents(facts, traits) });
   const answer = blankAnswer(); answer.mode = "claim_assessment";
   answer.claimItems = enforceChatMonetarySafety(structuredClone(owned.items), { householdId: "hh-synthetic" });
   answer.summary = "Potential payout identified so far: S$1,800."; answer.details = ["You can claim S$1,000 for the fracture."];
@@ -454,14 +454,14 @@ test("J. no amount from chat-only facts: the existing gates strip/refuse it", ()
 
 // =================================================================== extras
 test("X1. self-corrected report ('broke her arm last year? no wait, she didn't') creates no fracture", () => {
-  for (const msg of ["Charmaine broke her arm last year? no wait, she didn't", "Charmaine broke her arm last year. No wait, she didn't.",
-    "Charmaine broke her arm - actually no, she didn't break it, it was only bruised."]) {
+  for (const msg of ["Josephine broke her arm last year? no wait, she didn't", "Josephine broke her arm last year. No wait, she didn't.",
+    "Josephine broke her arm - actually no, she didn't break it, it was only bruised."]) {
     const r = turn(fresh(), msg);
     assertNoFracture(factsOf(r), "X1 '" + msg + "'");
   }
 });
-test("X2. 'Charmaine broke her left wrist': laterality preserved and used", () => {
-  const r = turn(fresh(), "Charmaine broke her left wrist.");
+test("X2. 'Josephine broke her left wrist': laterality preserved and used", () => {
+  const r = turn(fresh(), "Josephine broke her left wrist.");
   const f = factsOf(r);
   assert.equal(knownValue(f, "injuryKind"), "fracture");
   assert.equal(knownValue(f, "fractureBodyPart"), "left wrist", "X2 site " + JSON.stringify(knownValue(f, "fractureBodyPart")));
@@ -472,15 +472,15 @@ test("X2. 'Charmaine broke her left wrist': laterality preserved and used", () =
   assert.equal(compat(right, f).visible, false, "X2 right-wrist row visible for a left wrist");
   assert.equal(compat(left, f).visible, true, "X2 left-wrist row hidden");
   // Survives the accident answer and a vague model restatement.
-  const t2 = turn(r.state, "An accident.", { model: withModel({ intent: "follow_up", facts: [mf(CHARMAINE, "eventType", "accident", "An accident"), mf(CHARMAINE, "injurySide", "right", "An accident")] }) });
+  const t2 = turn(r.state, "An accident.", { model: withModel({ intent: "follow_up", facts: [mf(JOSEPHINE, "eventType", "accident", "An accident"), mf(JOSEPHINE, "injurySide", "right", "An accident")] }) });
   assert.equal(knownValue(factsOf(t2), "injurySide"), "left", "X2 side overwritten");
   assert.equal(knownValue(factsOf(t2), "fractureBodyPart"), "left wrist", "X2 site overwritten");
 });
 test("X3. fracture reported for a member recorded as deceased creates no injury claim", () => {
-  const dead: ConversationState = { intent: "claim", subjects: { [CHARMAINE]: {
-    death: { value: true, state: "known", quote: "Charmaine passed away", recordedAt: "2026-09-01T00:00:00.000Z", source: "user" },
-    eventType: { value: "death", state: "known", quote: "Charmaine passed away", recordedAt: "2026-09-01T00:00:00.000Z", source: "system-derived" } } }, scenarios: { [CHARMAINE]: [] } };
-  const r = turn(dead, "Charmaine broke her arm.");
+  const dead: ConversationState = { intent: "claim", subjects: { [JOSEPHINE]: {
+    death: { value: true, state: "known", quote: "Josephine passed away", recordedAt: "2026-09-01T00:00:00.000Z", source: "user" },
+    eventType: { value: "death", state: "known", quote: "Josephine passed away", recordedAt: "2026-09-01T00:00:00.000Z", source: "system-derived" } } }, scenarios: { [JOSEPHINE]: [] } };
+  const r = turn(dead, "Josephine broke her arm.");
   const f = factsOf(r);
   assert.equal(knownValue(f, "death"), true, "X3 death fact lost");
   assertNoFracture(f, "X3");
@@ -488,11 +488,11 @@ test("X3. fracture reported for a member recorded as deceased creates no injury 
   assert.ok(!r.categories.some(c => c.endsWith("accidental_injury")), "X3 injury category opened: " + JSON.stringify(r.categories));
 });
 test("X4. vague model restatement ('injured her arm') does not erase an established fracture", () => {
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const msg = "It was an accident and she injured her arm at the playground.";
-  const model = withModel({ intent: "follow_up", facts: [mf(CHARMAINE, "eventType", "accident", "It was an accident"),
-    mf(CHARMAINE, "injuryKind", "injured", "injured her arm"), mf(CHARMAINE, "injuries", "injured her arm", "injured her arm"),
-    mf(CHARMAINE, "fractureBodyPart", "arm", "injured her arm")] });
+  const model = withModel({ intent: "follow_up", facts: [mf(JOSEPHINE, "eventType", "accident", "It was an accident"),
+    mf(JOSEPHINE, "injuryKind", "injured", "injured her arm"), mf(JOSEPHINE, "injuries", "injured her arm", "injured her arm"),
+    mf(JOSEPHINE, "fractureBodyPart", "arm", "injured her arm")] });
   const t2 = turn(t1.state, msg, { model });
   const f = factsOf(t2);
   assert.equal(knownValue(f, "injuryKind"), "fracture", "X4 kind downgraded to " + knownValue(f, "injuryKind"));
@@ -501,14 +501,14 @@ test("X4. vague model restatement ('injured her arm') does not erase an establis
   assert.equal(t2.nextQuestion?.factKey, "eventLocation", "X4 next question " + t2.nextQuestion?.factKey);
 });
 test("X5. a sloppy model fact on a hypothetical ('Could this cover a broken arm?') does not become a fracture", () => {
-  const model = withModel({ intent: "claim", facts: [mf(CHARMAINE, "fractureBodyPart", "arm", "a broken arm"), mf(CHARMAINE, "injured", true, "a broken arm")],
-    scenarioCandidates: [{ subjectId: CHARMAINE, label: "Broken arm", family: "injury", traits: ["bodily_injury"], quote: "a broken arm" }] });
+  const model = withModel({ intent: "claim", facts: [mf(JOSEPHINE, "fractureBodyPart", "arm", "a broken arm"), mf(JOSEPHINE, "injured", true, "a broken arm")],
+    scenarioCandidates: [{ subjectId: JOSEPHINE, label: "Broken arm", family: "injury", traits: ["bodily_injury"], quote: "a broken arm" }] });
   const r = turn(fresh(), "Could this cover a broken arm?", { model });
   assertNoInjuryFacts(factsOf(r), "X5");
-  assert.deepEqual(r.state.scenarios?.[CHARMAINE] ?? [], [], "X5 scenario");
+  assert.deepEqual(r.state.scenarios?.[JOSEPHINE] ?? [], [], "X5 scenario");
 });
 test("X6. answering the location question advances to the date, one question at a time, never re-asking", () => {
-  const t1 = turn(fresh(), "Charmaine broke her arm.");
+  const t1 = turn(fresh(), "Josephine broke her arm.");
   const t2 = turn(t1.state, "An accident.", { model: accidentAnswer });
   const t3 = turn(t2.state, "Singapore", { model: withModel({ intent: "follow_up" }) });
   assert.equal(knownValue(factsOf(t3), "eventLocation"), "Singapore", "X6 location not recorded: " + JSON.stringify(factsOf(t3).eventLocation));

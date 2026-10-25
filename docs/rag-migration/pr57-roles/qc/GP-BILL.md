@@ -4,8 +4,8 @@
 | --- | --- | --- | --- | --- | --- |
 | Policy QC | verify the Developer's GP-bill reading; derive the expected answer | `720f5f5` (integration branch; fixture page text identical to C0/C1) | done | this file | DC's real library not read: this rules on the anonymised household only |
 
-Question (DC, live): "desmond tripped over the kerb and fell, his GP bill is $800, can he claim for this?" The reconstruction uses the anonymised
-fracture household (`scripts/fixtures/reliable-chat/fracture-conversation.ts`), where Daniel stands in for Desmond. The page text there is unchanged
+Question (DC, live): "raymond tripped over the kerb and fell, his GP bill is $800, can he claim for this?" The reconstruction uses the anonymised
+fracture household (`scripts/fixtures/reliable-chat/fracture-conversation.ts`), where Daniel stands in for Raymond. The page text there is unchanged
 from C0. `720f5f5` only adds `pageCount` (CERT 1, Product Summary 37, Benefit Summary unknown).
 
 ## The Developer's claims, checked against the pages

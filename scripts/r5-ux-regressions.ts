@@ -127,7 +127,7 @@ async function main() {
     assert.match(chat, /Reload this chat/);
     assert.ok(!/Reopen it before sending[^"]*Send it again/.test(chat));
     assert.match(chat, /rememberConversation\(data\.conversationId/);
-    assert.ok(!/Charmaine|endowment/.test(chat), "no other family's names or products in the starter prompts");
+    assert.ok(!/Josephine|endowment/.test(chat), "no other family's names or products in the starter prompts");
   });
   await test("household roster: names, no sole-owner Leave; dates in Singapore format", async () => {
     const page = read("app/household/page.tsx");

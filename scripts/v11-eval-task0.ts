@@ -3,7 +3,7 @@
  *
  * This script runs the checks that do not need a browser, in-process against the LOCAL database
  * with the deterministic model stand-in (same guards as scripts/v11-eval-run.ts):
- *   T0-1  "Charmaine broke her arm" must not produce an assessment or a permanent-loss schedule
+ *   T0-1  "Josephine broke her arm" must not produce an assessment or a permanent-loss schedule
  *   T0-2  a stored factual question answers fast (p95 <= 8 s; in-process, no provider latency)
  *   T0-3  a provider quota failure (429 insufficient_quota with an organisation id) is a clean,
  *         timely customer message with bounded provider calls and no provider text
@@ -45,7 +45,7 @@ async function main() {
   const user = randomUUID(); process.env.E2E_USER_A = user; process.env.E2E_USER_B = randomUUID(); process.env.DEV_ACCOUNT_ID = user;
   const household = await ensureDefaultHousehold(user, `${PREFIX}-Household-A`);
   const members: Record<string, string> = {};
-  for (const key of ["charmaine", "marcus"] as const) {
+  for (const key of ["josephine", "marcus"] as const) {
     members[key] = randomUUID();
     await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)`, [members[key], household, PEOPLE[key].fullName, PEOPLE[key].preferred, PEOPLE[key].relationship]);
   }
@@ -80,18 +80,18 @@ async function main() {
 
     // T0-1
     {
-      const r = await send(members.charmaine, "Charmaine broke her arm.", {});
+      const r = await send(members.josephine, "Josephine broke her arm.", {});
       const permanent = r.text.match(/(?<!not the same as )(?:loss of (?:an? )?arm|permanent(?:ly)? (?:loss|disablement|disability)|amputation)/i);
       const amounts = (r.a.claimItems ?? []).filter((i: any) => i.amountText || typeof i.calculatedAmount === "number");
       const assessed = r.a.mode === "claim_assessment" || /assessment ready/i.test(r.text);
       const asksCause = /accident|illness/i.test(r.a.questions?.[0]?.text ?? "");
-      record({ id: "T0-1", defect: "\"Charmaine broke her arm\" produced an assessment and a permanent-loss schedule", pass: !permanent && !amounts.length && !assessed && asksCause,
+      record({ id: "T0-1", defect: "\"Josephine broke her arm\" produced an assessment and a permanent-loss schedule", pass: !permanent && !amounts.length && !assessed && asksCause,
         detail: `mode=${r.a.mode}; first question="${r.a.questions?.[0]?.text ?? "-"}"; permanent-loss text=${permanent?.[0] ?? "none"}; claim items with amounts=${amounts.length}`, evidence: r.text.slice(0, 800) });
     }
     // T0-2
     {
       const times: number[] = [];
-      for (let i = 0; i < 5; i++) times.push((await send(members.charmaine, "What is Charmaine's hospital room and board benefit?", {})).ms);
+      for (let i = 0; i < 5; i++) times.push((await send(members.josephine, "What is Josephine's hospital room and board benefit?", {})).ms);
       const sorted = [...times].sort((x, y) => x - y); const p95 = sorted[Math.ceil(0.95 * sorted.length) - 1];
       record({ id: "T0-2", defect: "a factual question took roughly 40 seconds", pass: p95 <= 8000, detail: `5 stored-fact answers in-process: ${times.join(", ")} ms (p95 ${p95} ms; target <= 8000). In-process with the stand-in: excludes network/provider latency -- the browser journey measures the page.` });
     }
@@ -114,16 +114,16 @@ async function main() {
     {
       const conv: { id?: string; rev?: number } = {};
       const script = V11_QUESTIONS.find((q) => q.id === "Q13")!.interview!.replies;
-      let r = await send(members.charmaine, "Charmaine broke her arm.", conv);
+      let r = await send(members.josephine, "Josephine broke her arm.", conv);
       for (let i = 0; i < 12; i++) {
         const q = r.a.questions?.[0] ?? r.a.factFinding?.find((p: any) => p.nextQuestions?.length)?.nextQuestions?.[0];
         if (!q) break;
         const reply = script.find((x) => new RegExp(x.match, "i").test(q.text))?.reply ?? "Not sure";
         const option = (q.options ?? []).find((o: string) => o.toLowerCase().startsWith(reply.toLowerCase()));
         const direct = r.a.questions?.[0] && q.type !== "date" && q.type !== "text";
-        r = await send(members.charmaine, direct && (option || !(q.options ?? []).length) ? (option ?? reply) : q.text.replace(/\?\s*$/, "") + ": " + (option ?? reply), conv);
+        r = await send(members.josephine, direct && (option || !(q.options ?? []).length) ? (option ?? reply) : q.text.replace(/\?\s*$/, "") + ": " + (option ?? reply), conv);
       }
-      const events = (await pool.query(`SELECT id,status,event_summary,event_type,facts FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2`, [household, members.charmaine])).rows;
+      const events = (await pool.query(`SELECT id,status,event_summary,event_type,facts FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2`, [household, members.josephine])).rows;
       const { GET: indicative } = await import("@/app/api/claims/[id]/indicative/route");
       let displayStatus: ((c: any) => any) | null = null;
       try { displayStatus = (await import("@/lib/claims/status" as string)).claimDisplayStatus ?? null; } catch { displayStatus = null; }

@@ -31,7 +31,7 @@ There is no phrase rule for "broken leg" or "transverse". No new architecture, m
 - **Grounded fallback** (`loop.ts` `groundedFallback`).
   - It runs only after the turn's one repair or nudge, and makes no extra model call.
   - It completes the reply from what the conversation already verified: statements established earlier, the person's printed amounts, and retrieved passages such as the hospital clause. Each is composed and gate-checked.
-  - It names a lookup that was never made ("I haven't yet read Desmond's own sum insured …").
+  - It names a lookup that was never made ("I haven't yet read Raymond's own sum insured …").
   - It re-asks the question when the reply does not visibly answer it, and records `trace.incomplete`.
 - **Readable comparison.**
   - A sentence may cite several calculation results (`result_ids`), so each bone is one line, for example "If it is the lower leg (tibia or fibula): S$18,000 if compound (open), or S$9,000 if simple (closed)".

@@ -32,7 +32,7 @@ async function main() {
       n++;
       const owner = fixedUuid("b9000000", n);
       const household = await h.createHousehold(fixedUuid("a9000000", n), owner, `SYNTHETIC-indicative-${n}`);
-      const member = await h.createMember(household, fixedUuid("d9000000", n), "Tan Yi Chuen Desmond");
+      const member = await h.createMember(household, fixedUuid("d9000000", n), "Tan Jia Ming Raymond");
       const claim = await h.createClaim(household, member, fixedUuid("e9000000", n), "diagnosis");
       await pool.query(`UPDATE claim_sessions SET facts=$2::jsonb WHERE id=$1`, [claim, JSON.stringify(ci.facts)]);
       const policies: { policyId: string; coverageId: string }[] = [];

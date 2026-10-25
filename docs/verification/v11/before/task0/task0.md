@@ -2,7 +2,7 @@
 
 | Check | Defect | Result | Detail |
 |---|---|---|---|
-| T0-1 | "Charmaine broke her arm" produced an assessment and a permanent-loss schedule | PASS | mode=fact_finding; first question="Was this caused by an accident, or an illness?"; permanent-loss text=none; claim items with amounts=0 |
+| T0-1 | "Josephine broke her arm" produced an assessment and a permanent-loss schedule | PASS | mode=fact_finding; first question="Was this caused by an accident, or an illness?"; permanent-loss text=none; claim items with amounts=0 |
 | T0-2 | a factual question took roughly 40 seconds | PASS | 5 stored-fact answers in-process: 33, 31, 19, 18, 30 ms (p95 33 ms; target <= 8000). In-process with the stand-in: excludes network/provider latency -- the browser journey measures the page. |
 | T0-3 | the endowment question exposed a raw OpenAI quota error and organisation identifier | PASS | HTTP 200 in 2026 ms; provider calls=1 (bound 3); provider text=none; leaks=none |
 | T0-4 | the claims list said "Assessment ready" while the detail page said "No estimate yet" | **FAIL** | list "Assessment ready" (claims page rule status==='complete') vs detail hasEstimate=false; event "Has a doctor said the injury will leave any lasting impairment: No" |

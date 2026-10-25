@@ -121,7 +121,7 @@ async function main() {
     await h.createHousehold(householdA, ownerA);
     await pool.query(`INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'member')`, [householdA, memberUserA]);
     await h.createHousehold(householdB, ownerB, "Other household");
-    const member = await h.createMember(householdA, fixedUuid("d9800000", 1), "Tan Yi Chuen Desmond");
+    const member = await h.createMember(householdA, fixedUuid("d9800000", 1), "Tan Jia Ming Raymond");
     const spouse = await h.createMember(householdA, fixedUuid("d9800000", 2), "Jordan Rivera", "spouse");
     const otherMember = await h.createMember(householdB, fixedUuid("d9800000", 3), "Other Person");
     const claim = await h.createClaim(householdA, member, fixedUuid("e9800000", 1), f.claimEventType);

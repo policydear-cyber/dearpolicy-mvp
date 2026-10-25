@@ -33,23 +33,23 @@ const CAUSE = "Blunt force trauma from a road traffic accident";
 const policeReport = {
   documentType: "police_report",
   payload: {
-    deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [],
+    deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [],
     dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE, mannerOfDeath: "accident",
     issuingAuthority: "SPF", documentReference: "REF-1", documentType: "police_report",
     pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE }], confidence: {},
   },
-  pages: [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Desmond. Date of death 2026-09-14. Cause of death: ${CAUSE}.` }],
+  pages: [{ pageNumber: 1, text: `Police report. Deceased: Tan Jia Ming Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE}.` }],
 };
 const DIAGNOSIS = "Malignant neoplasm of the colon, stage III";
 const specialistMemo = (documentType: string) => ({
   documentType,
   payload: {
     deceasedName: null, otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: null, mannerOfDeath: null,
-    patientName: "Tan Yi Chuen Desmond", exactDiagnosis: DIAGNOSIS, diagnosisDate: "2026-06-01", diseaseStage: "Stage III",
+    patientName: "Tan Jia Ming Raymond", exactDiagnosis: DIAGNOSIS, diagnosisDate: "2026-06-01", diseaseStage: "Stage III",
     issuingAuthority: "Mount Example Hospital", documentReference: "MEMO-7", documentType,
     pageCitations: [{ field: "exactDiagnosis", pageStart: 1, pageEnd: 1, excerpt: DIAGNOSIS }], confidence: {},
   },
-  pages: [{ pageNumber: 1, text: `Specialist memo. Patient: Tan Yi Chuen Desmond. Diagnosis: ${DIAGNOSIS}. Date of diagnosis 2026-06-01.` }],
+  pages: [{ pageNumber: 1, text: `Specialist memo. Patient: Tan Jia Ming Raymond. Diagnosis: ${DIAGNOSIS}. Date of diagnosis 2026-06-01.` }],
 });
 
 export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [

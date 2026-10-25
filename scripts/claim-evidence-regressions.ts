@@ -129,9 +129,9 @@ function runPureTests() {
     assert.equal(isValidEvidenceTransition("failed" as never, "processing" as never), true);
   });
 
-  const familyMember = { displayName: "Tan Yi Chuen Desmond", preferredName: "Desmond" };
+  const familyMember = { displayName: "Tan Jia Ming Raymond", preferredName: "Raymond" };
   const baseFields: ClaimEvidenceExtractedFields = {
-    deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }],
+    deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }],
     dateOfDeath: "2026-09-01", statedCauseOfDeath: "Blunt force trauma from a road traffic accident", mannerOfDeath: "accident",
     issuingAuthority: "Singapore Police Force", documentReference: "SPF/2026/00123", documentType: "police_report",
     pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Blunt force trauma from a road traffic accident" }],
@@ -153,7 +153,7 @@ function runPureTests() {
     assert.ok(r.conflicts.some((c) => c.code === "NAME_MISMATCH"));
   });
   test("identity: similar but not identical family-member names still confirm on strong overlap", () => {
-    const r = evaluateClaimEvidenceIdentity({ familyMember, fields: { ...baseFields, deceasedName: "Desmond Tan Yi Chuen" }, existingDeathDate: null, reusedDocuments: [], claimSessionId: "c1", familyMemberId: "m1" });
+    const r = evaluateClaimEvidenceIdentity({ familyMember, fields: { ...baseFields, deceasedName: "Raymond Tan Jia Ming" }, existingDeathDate: null, reusedDocuments: [], claimSessionId: "c1", familyMemberId: "m1" });
     assert.equal(r.status, "confirmed");
   });
   test("identity: missing identifiers alone forces needs_review even with a name match", () => {
@@ -411,7 +411,7 @@ async function runDatabaseTests() {
 
     const account = "10000000-0000-4000-8000-000000000001";
     const otherAccount = "10000000-0000-4000-8000-000000000099";
-    const desmond = "20000000-0000-4000-8000-000000000001";
+    const raymond = "20000000-0000-4000-8000-000000000001";
     const otherMember = "20000000-0000-4000-8000-000000000002";
     const claimA = "30000000-0000-4000-8000-000000000001";
     const claimB = "30000000-0000-4000-8000-000000000002";
@@ -421,15 +421,15 @@ async function runDatabaseTests() {
     const coverageB = "50000000-0000-4000-8000-0000000000b1";
 
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test'),($2,'Other')`, [account, otherAccount]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Desmond','Desmond','self'),($3,$2,'Other Member','Other','spouse')`, [desmond, account, otherMember]);
-    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, desmond, claimB]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
+    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, raymond, claimB]);
 
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
     for (const [policyId, groupNumber] of [[policyA, "G007500"], [policyB, "G007500"]] as const) {
       await pool.query(
         `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
          VALUES($1,$2,$3,'Singlife','Group Personal Accident',$4,'certificate',true,'ready','cert.pdf','k',90,'scan_clean')`,
-        [policyId, account, desmond, groupNumber],
+        [policyId, account, raymond, groupNumber],
       );
       for (const p of pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [account, policyId, p.page_number, p.text]);
     }
@@ -450,48 +450,48 @@ async function runDatabaseTests() {
     // of policyA's, depending on row ordering. policyB is exercised below
     // only through hand-constructed evidence, never through
     // confirmCauseDefinitionMatch, so it needs no policy_members link.
-    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyA, desmond, account]);
+    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyA, raymond, account]);
     await pool.query(
       `INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name)
        VALUES($1,$2,$3,$4,'Personal Accident',600000,'SGD',true,true,'Group Personal Accident'),
              ($5,$2,$6,$4,'Personal Accident',600000,'SGD',true,true,'Group Personal Accident')`,
-      [coverageA, account, policyA, desmond, coverageB, policyB],
+      [coverageA, account, policyA, raymond, coverageB, policyB],
     );
 
     await testAsync("createEvidenceDocument: duplicate upload for the same claim is idempotent", async () => {
-      const first = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "report.pdf", storageKey: "k1", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-1" });
+      const first = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "report.pdf", storageKey: "k1", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-1" });
       assert.equal(first.created, true);
-      const second = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "report.pdf", storageKey: "k1", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-1" });
+      const second = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "report.pdf", storageKey: "k1", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-1" });
       assert.equal(second.created, false);
       assert.equal(second.document.id, first.document.id);
     });
 
     await testAsync("cross-account access: a document cannot be read through another account's id", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "death_certificate", originalFilename: "dc.pdf", storageKey: "k2", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-2" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "death_certificate", originalFilename: "dc.pdf", storageKey: "k2", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-2" });
       assert.equal(await getEvidenceDocument(otherAccount, document.id), null);
       assert.equal(await getEvidenceDocument(account, document.id) !== null, true);
     });
 
     await testAsync("cross-family-member and cross-claim scoping: the full ownership chain is required, not just the id", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "coroners_report", originalFilename: "cor.pdf", storageKey: "k3", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-3" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "coroners_report", originalFilename: "cor.pdf", storageKey: "k3", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-3" });
       assert.equal(await getScopedEvidenceDocument({ accountId: account, familyMemberId: otherMember, claimSessionId: claimA, id: document.id }), null);
-      assert.equal(await getScopedEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimB, id: document.id }), null);
-      assert.notEqual(await getScopedEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, id: document.id }), null);
+      assert.equal(await getScopedEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimB, id: document.id }), null);
+      assert.notEqual(await getScopedEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, id: document.id }), null);
     });
 
     await testAsync("reused-evidence detection never looks outside the account, and flags reuse within it", async () => {
-      const first = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "reused.pdf", storageKey: "k4", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-reused" });
+      const first = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "reused.pdf", storageKey: "k4", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-reused" });
       assert.equal(first.created, true);
       // Same bytes, different claim, same account -- must be visible.
-      const sameAccountOtherClaim = await findReusedEvidenceAcrossScopes({ accountId: account, familyMemberId: desmond, claimSessionId: claimB, fileHash: "hash-reused" });
+      const sameAccountOtherClaim = await findReusedEvidenceAcrossScopes({ accountId: account, familyMemberId: raymond, claimSessionId: claimB, fileHash: "hash-reused" });
       assert.equal(sameAccountOtherClaim.length, 1);
       // Same bytes, different account entirely -- must never be visible.
-      const crossAccount = await findReusedEvidenceAcrossScopes({ accountId: otherAccount, familyMemberId: desmond, claimSessionId: claimA, fileHash: "hash-reused" });
+      const crossAccount = await findReusedEvidenceAcrossScopes({ accountId: otherAccount, familyMemberId: raymond, claimSessionId: claimA, fileHash: "hash-reused" });
       assert.equal(crossAccount.length, 0);
     });
 
     await testAsync("invalid transitions are rejected; duplicate/retried transitions are safe no-ops", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "t.pdf", storageKey: "k5", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-5" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "t.pdf", storageKey: "k5", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-5" });
       await assert.rejects(transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "matched" }));
       const moved = await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
       assert.notEqual(moved, null);
@@ -502,8 +502,8 @@ async function runDatabaseTests() {
     });
 
     await testAsync("extraction recording is idempotent per document version; retries never fork the row", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e.pdf", storageKey: "k6", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-6" });
-      const fields: ClaimEvidenceExtractedFields = { deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-01", statedCauseOfDeath: "Road traffic accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref-1", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Road traffic accident" }], confidence: {} };
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e.pdf", storageKey: "k6", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-6" });
+      const fields: ClaimEvidenceExtractedFields = { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-01", statedCauseOfDeath: "Road traffic accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref-1", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "Road traffic accident" }], confidence: {} };
       const first = await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-6", extractedFields: fields, extractionModel: "test-model", extractionProvider: "test", extractionVersion: "v1", identityConflicts: [] });
       const retried = await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-6", extractedFields: fields, extractionModel: "test-model", extractionProvider: "test", extractionVersion: "v1", identityConflicts: [] });
       assert.equal(first.id, retried.id);
@@ -512,7 +512,7 @@ async function runDatabaseTests() {
     });
 
     await testAsync("processClaimEvidence resuming an already-reviewed document is a silent no-op (retry/duplicate delivery safe)", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "resume.pdf", storageKey: "k7", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-7" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "resume.pdf", storageKey: "k7", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-7" });
       // Seeded directly at needs_review, bypassing the real extraction call --
       // this test is about idempotent resumption, not model output.
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
@@ -528,34 +528,34 @@ async function runDatabaseTests() {
     });
 
     await testAsync("audit-trail creation: every action is recorded and readable per claim", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "audit.pdf", storageKey: "k8", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-8" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "audit.pdf", storageKey: "k8", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-8" });
       await appendClaimEvidenceAudit(account, { actor: "household", action: "uploaded", evidenceDocumentId: document.id, claimSessionId: claimA });
       const rows = await listClaimEvidenceAudit(account, claimA);
       assert.ok(rows.some((r) => r.evidence_document_id === document.id && r.action === "uploaded"));
     });
 
     await testAsync("supersession: a corrected re-upload invalidates any match built from the old document", async () => {
-      const { document: oldDoc } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "old.pdf", storageKey: "k9a", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-9a" });
-      const match = await recordCauseDefinitionMatch({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: oldDoc.id, causeEvidence: { documentId: oldDoc.id }, definitionEvidence: { policyId: policyA }, result: "matches", reviewedBy: "Reviewer", reason: null });
+      const { document: oldDoc } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "old.pdf", storageKey: "k9a", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-9a" });
+      const match = await recordCauseDefinitionMatch({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: oldDoc.id, causeEvidence: { documentId: oldDoc.id }, definitionEvidence: { policyId: policyA }, result: "matches", reviewedBy: "Reviewer", reason: null });
       assert.equal(match.superseded_at, null);
-      const { document: newDoc } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "new.pdf", storageKey: "k9b", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-9b" });
+      const { document: newDoc } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "new.pdf", storageKey: "k9b", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-9b" });
       await supersedeEvidenceDocument({ accountId: account, oldId: oldDoc.id, newId: newDoc.id, reason: "Corrected re-upload." });
-      const active = await loadActiveCauseDefinitionMatches(account, desmond, claimA);
+      const active = await loadActiveCauseDefinitionMatches(account, raymond, claimA);
       assert.equal(active.some((m) => m.id === match.id), false);
     });
 
     await testAsync("recordCauseDefinitionMatch supersedes the prior active match for the same scope, never leaving two active", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "scope.pdf", storageKey: "k10", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-10" });
-      await recordCauseDefinitionMatch({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id, causeEvidence: {}, definitionEvidence: {}, result: "needs_review", reviewedBy: "R1", reason: null });
-      await recordCauseDefinitionMatch({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id, causeEvidence: {}, definitionEvidence: {}, result: "matches", reviewedBy: "R2", reason: null });
-      const active = await loadActiveCauseDefinitionMatches(account, desmond, claimA);
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "scope.pdf", storageKey: "k10", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-10" });
+      await recordCauseDefinitionMatch({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id, causeEvidence: {}, definitionEvidence: {}, result: "needs_review", reviewedBy: "R1", reason: null });
+      await recordCauseDefinitionMatch({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id, causeEvidence: {}, definitionEvidence: {}, result: "matches", reviewedBy: "R2", reason: null });
+      const active = await loadActiveCauseDefinitionMatches(account, raymond, claimA);
       const scoped = active.filter((m) => m.contract_id === policyA && m.coverage_id === coverageA);
       assert.equal(scoped.length, 1);
       assert.equal(scoped[0].result, "matches");
     });
 
     await testAsync("confirmCauseDefinitionMatch: rejects when the evidence document is not found under this scope (unauthorized review action)", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "wrongscope.pdf", storageKey: "k11", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-11" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "wrongscope.pdf", storageKey: "k11", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-11" });
       await assert.rejects(
         confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: otherMember, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
         ClaimEvidenceMatchError,
@@ -563,49 +563,49 @@ async function runDatabaseTests() {
     });
 
     await testAsync("confirmCauseDefinitionMatch: rejects confirming a match while the document has not finished processing", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "notready.pdf", storageKey: "k12", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-12" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "notready.pdf", storageKey: "k12", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-12" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
       await assert.rejects(
-        confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: desmond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
+        confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
         ClaimEvidenceMatchError,
       );
     });
 
     await testAsync("confirmCauseDefinitionMatch: rejects confirming a MATCH before identity is confirmed", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "idpending.pdf", storageKey: "k13", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-13" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "idpending.pdf", storageKey: "k13", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-13" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "quarantined", to: "processing" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "processing", to: "extracted", identityStatus: "needs_review" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "extracted", to: "needs_review" });
-      await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-13", extractedFields: { deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: "Accident", mannerOfDeath: "accident", issuingAuthority: null, documentReference: null, documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "test" }], confidence: {} }, extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [] });
+      await recordExtraction({ accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-13", extractedFields: { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: "Accident", mannerOfDeath: "accident", issuingAuthority: null, documentReference: null, documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: "test" }], confidence: {} }, extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [] });
       await assert.rejects(
-        confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: desmond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
+        confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" }),
         ClaimEvidenceMatchError,
       );
       // A non-"matches" result (still gathering review) is NOT gated on
       // identity confirmation -- only actually unlocking an amount is.
-      const deferred = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: desmond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "needs_review" });
+      const deferred = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "R", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "needs_review" });
       assert.equal(deferred.result, "needs_review");
     });
 
     await testAsync("confirmCauseDefinitionMatch end to end: a reviewed match without persisted model provenance fails closed for every policy", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e2e.pdf", storageKey: "k14", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-14" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e2e.pdf", storageKey: "k14", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-14" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "quarantined", to: "processing" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "processing", to: "extracted", identityStatus: "confirmed" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "extracted", to: "needs_review" });
       await recordExtraction({
         accountId: account, evidenceDocumentId: document.id, sourceDocumentVersion: "hash-14",
-        extractedFields: { deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-14", statedCauseOfDeath: "Motorbike accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: pages[0].page_number, pageEnd: pages[0].page_number, excerpt: pages[0].text.slice(0, 40) }], confidence: {} },
+        extractedFields: { deceasedName: "Tan Jia Ming Raymond", otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }], dateOfDeath: "2026-09-14", statedCauseOfDeath: "Motorbike accident", mannerOfDeath: "accident", issuingAuthority: "SPF", documentReference: "ref", documentType: "police_report", pageCitations: [{ field: "statedCauseOfDeath", pageStart: pages[0].page_number, pageEnd: pages[0].page_number, excerpt: pages[0].text.slice(0, 40) }], confidence: {} },
         extractionModel: "m", extractionProvider: "p", extractionVersion: "v1", identityConflicts: [],
       });
 
-      const match = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "Household reviewer", familyMemberId: desmond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" });
+      const match = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "Household reviewer", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: document.id, contractId: policyA, coverageId: coverageA, result: "matches" });
       assert.equal(match.result, "matches");
       const matchedDoc = await getEvidenceDocument(account, document.id);
       assert.equal(matchedDoc?.status, "matched");
 
-      const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimA);
+      const facts = await loadCauseDefinitionMatchesForFacts(account, raymond, claimA);
       // Decisions are identified per evidence document: earlier cases in this
       // suite left their own (still active) decisions on other documents.
       const forPolicyA = facts.find((m) => m.contractId === policyA && (m.causeEvidence as { documentId?: string }).documentId === document.id);
@@ -614,16 +614,16 @@ async function runDatabaseTests() {
       const definitionA = { policyId: policyA, chunkId: `page:${policyA}:5`, pageStart: 5, pageEnd: 5 };
       const definitionB = { policyId: policyB, chunkId: `page:${policyB}:5`, pageStart: 5, pageEnd: 5 };
       const sharedInput = {
-        familyMember: { id: desmond, confirmed: true }, claimEventId: claimA, deathConfirmed: true, dateOfDeath: "2026-09-14",
+        familyMember: { id: raymond, confirmed: true }, claimEventId: claimA, deathConfirmed: true, dateOfDeath: "2026-09-14",
         sumInsured: 600_000, currency: "SGD",
         formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definitionA },
-        ruleEvidence: definitionA, ownershipEvidence: { policyId: policyA, chunkId: `coverage:${coverageA}`, coverageId: coverageA, familyMemberId: desmond },
+        ruleEvidence: definitionA, ownershipEvidence: { policyId: policyA, chunkId: `coverage:${coverageA}`, coverageId: coverageA, familyMemberId: raymond },
       };
       const resultA = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyA, coverageId: coverageA }, accidentalDeathDefinitionEvidence: definitionA, causeDefinitionMatch: forPolicyA! });
       assert.equal(resultA.status, "blocked");
       if (resultA.status === "blocked") assert.equal(resultA.reasonCode, "EVIDENCE_PROVENANCE_MISSING");
 
-      const resultB = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyB, coverageId: coverageB }, ruleEvidence: definitionB, ownershipEvidence: { policyId: policyB, chunkId: `coverage:${coverageB}`, coverageId: coverageB, familyMemberId: desmond }, formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definitionB }, accidentalDeathDefinitionEvidence: definitionB, causeDefinitionMatch: forPolicyA! });
+      const resultB = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyB, coverageId: coverageB }, ruleEvidence: definitionB, ownershipEvidence: { policyId: policyB, chunkId: `coverage:${coverageB}`, coverageId: coverageB, familyMemberId: raymond }, formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definitionB }, accidentalDeathDefinitionEvidence: definitionB, causeDefinitionMatch: forPolicyA! });
       assert.equal(resultB.status, "blocked");
     });
 
@@ -631,7 +631,7 @@ async function runDatabaseTests() {
     // may be parsed, OCRed, embedded, indexed, or sent to a model") -----
 
     await testAsync("transitionEvidenceStatus persists the real scan_status column, not just the audit log", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "scanstatus.pdf", storageKey: "k-scanstatus", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-scanstatus" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "scanstatus.pdf", storageKey: "k-scanstatus", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-scanstatus" });
       assert.equal(document.scan_status, "pending_scan", "a freshly created document defaults to pending_scan");
       const moved = await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "scan_unavailable" });
       assert.equal(moved?.scan_status, "scan_unavailable", "scanStatus must be persisted to the queryable column, not only the audit log");
@@ -640,7 +640,7 @@ async function runDatabaseTests() {
     });
 
     await testAsync("quarantine gate: an unscanned/unavailable-scan document stays quarantined and processClaimEvidence is a safe no-op on it", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "unscanned.pdf", storageKey: "k-unscanned", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-unscanned" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "unscanned.pdf", storageKey: "k-unscanned", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-unscanned" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "scan_unavailable" });
       const auditForDoc = async () => (await listClaimEvidenceAudit(account, claimA)).filter((r) => r.evidence_document_id === document.id);
       const before = await auditForDoc();
@@ -666,7 +666,7 @@ async function runDatabaseTests() {
     });
 
     await testAsync("quarantine gate: a document whose scan is explicitly clean is allowed past quarantine", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "clean.pdf", storageKey: "k-clean-nonexistent", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-clean" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "clean.pdf", storageKey: "k-clean-nonexistent", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-clean" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
 
       // storageKey does not point at a real stored file in this suite, so
@@ -690,7 +690,7 @@ async function runDatabaseTests() {
     });
 
     await testAsync("an infected scan result is persisted to scan_status on the rejected transition too", async () => {
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "infected.pdf", storageKey: "k-infected", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-infected" });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId: claimA, documentType: "police_report", originalFilename: "infected.pdf", storageKey: "k-infected", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-infected" });
       const moved = await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "rejected", errorCode: "MALWARE_DETECTED", errorMessage: "flagged", scanStatus: "infected" });
       assert.equal(moved?.status, "rejected");
       assert.equal(moved?.scan_status, "infected", "an infected scan result must be persisted to scan_status, not only recorded in the audit log");

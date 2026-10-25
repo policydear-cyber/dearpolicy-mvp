@@ -484,18 +484,18 @@ async function runDatabaseTests() {
     const { createEvidenceDocument, recordCIDefinitionMatch, loadActiveCIDefinitionMatches } = await import("@/lib/claims/evidence/store");
 
     const account = "10000000-0000-4000-8000-000000000001";
-    const desmond = "20000000-0000-4000-8000-000000000001";
+    const raymond = "20000000-0000-4000-8000-000000000001";
     const claimA = "30000000-0000-4000-8000-000000000001";
     const claimB = "30000000-0000-4000-8000-000000000002";
     const policyA = "40000000-0000-4000-8000-0000000000a1";
 
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test')`, [account]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Desmond','Desmond','self')`, [desmond, account]);
-    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','diagnosis'),($4,$2,$3,'fact_finding','diagnosis')`, [claimA, account, desmond, claimB]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Jia Ming Raymond','Raymond','self')`, [raymond, account]);
+    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','diagnosis'),($4,$2,$3,'fact_finding','diagnosis')`, [claimA, account, raymond, claimB]);
     await pool.query(
       `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
        VALUES($1,$2,$3,'Singlife','Living Care','G007500','certificate',true,'ready','cert.pdf','k',90,'scan_clean')`,
-      [policyA, account, desmond],
+      [policyA, account, raymond],
     );
 
     await testAsync("ensureCriticalIllnessSchema is idempotent and creates the claim_ci_definition_matches table", async () => {
@@ -508,7 +508,7 @@ async function runDatabaseTests() {
     let docId = "";
     await testAsync("createEvidenceDocument accepts a medical evidence document type -- the widened CHECK constraint", async () => {
       const { document } = await createEvidenceDocument({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA,
         documentType: "medical_report", originalFilename: "report.pdf", storageKey: "k1",
         mimeType: "application/pdf", byteSize: 1024, fileHash: "hash-1",
       });
@@ -518,39 +518,39 @@ async function runDatabaseTests() {
 
     await testAsync("recordCIDefinitionMatch scopes superseding to the exact (benefit code, illness name) pair -- a Major Cancer match never supersedes an Early Stage match under the same claim", async () => {
       await recordCIDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-major", illnessName: "Major Cancer",
         // Recorded against the exact clause of makeCIRule() below.
     medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "matches", reviewedBy: "Household reviewer", reason: null,
       });
       await recordCIDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-early", illnessName: "Early Stage Critical Illness",
         // Recorded against the exact clause of makeCIRule() below.
     medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "needs_medical_review", reviewedBy: "Household reviewer", reason: null,
       });
-      const active = await loadActiveCIDefinitionMatches(account, desmond, claimA);
+      const active = await loadActiveCIDefinitionMatches(account, raymond, claimA);
       assert.equal(active.length, 2, "two distinct (benefit, illness) scopes must both remain active, not supersede one another");
     });
 
     await testAsync("a corrected review for the SAME (benefit code, illness name) scope supersedes the prior one, leaving exactly one active match for it", async () => {
       await recordCIDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-major", illnessName: "Major Cancer",
         // Recorded against the exact clause of makeCIRule() below.
     medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "does_not_match", reviewedBy: "Household reviewer", reason: "Corrected after re-review.",
       });
-      const active = await loadActiveCIDefinitionMatches(account, desmond, claimA);
+      const active = await loadActiveCIDefinitionMatches(account, raymond, claimA);
       const majorMatches = active.filter((m) => m.benefit_code === "ci-major" && m.illness_name === "Major Cancer");
       assert.equal(majorMatches.length, 1);
       assert.equal(majorMatches[0].result, "does_not_match");
     });
 
     await testAsync("a CI definition match never leaks into a different claim session", async () => {
-      const forOtherClaim = await loadActiveCIDefinitionMatches(account, desmond, claimB);
+      const forOtherClaim = await loadActiveCIDefinitionMatches(account, raymond, claimB);
       assert.equal(forOtherClaim.length, 0);
     });
   } finally {

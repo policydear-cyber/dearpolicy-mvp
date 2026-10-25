@@ -3,8 +3,8 @@
  * upload -> read -> extract -> cite -> link on synthetic documents
  * (e2e/support/v1-fixtures.ts).
  *
- *   D1 a document printing "Charmaine Tan" never linked to the profile
- *      "Charmaine", so chat (lib/rag/retrieve.ts joins policy_members) could
+ *   D1 a document printing "Josephine Tan" never linked to the profile
+ *      "Josephine", so chat (lib/rag/retrieve.ts joins policy_members) could
  *      not see it; the uploader's chosen profile was ignored for personal
  *      documents.
  *   D2 benefit rows printed "US$250,000" / "USD 500,000" / "RM 5,000" were
@@ -72,17 +72,17 @@ async function partA() {
     assert.equal(printedCurrencyCode("dollars"), null);
   });
   await t("D1: findFamilyMatch -- exact, unique partial, preferred name, never guesses", () => {
-    const fam = [{ id: "c", display_name: "Charmaine" }, { id: "m", display_name: "Marcus", preferred_name: "Marc Lim" }, { id: "b", display_name: "Bob Tan" }];
+    const fam = [{ id: "c", display_name: "Josephine" }, { id: "m", display_name: "Marcus", preferred_name: "Marc Lim" }, { id: "b", display_name: "Bob Tan" }];
     assert.deepEqual(findFamilyMatchWithKind("Bob Tan", fam), { member: fam[2], kind: "exact" });
     assert.deepEqual(findFamilyMatchWithKind("TAN BOB", fam), { member: fam[2], kind: "exact" }, "order-insensitive");
-    assert.deepEqual(findFamilyMatchWithKind("Charmaine Tan", fam), { member: fam[0], kind: "partial" });
+    assert.deepEqual(findFamilyMatchWithKind("Josephine Tan", fam), { member: fam[0], kind: "partial" });
     assert.equal(findFamilyMatch("Marc Lim", fam)?.id, "m", "preferred name counts");
     assert.equal(findFamilyMatch("Alice Wong", fam), null);
     assert.equal(findFamilyMatch("Tan", fam), null, "a profile needs ALL its words printed");
-    const twins = [{ id: "1", display_name: "Charmaine" }, { id: "2", display_name: "Charmaine Lee" }];
-    assert.equal(findFamilyMatch("Charmaine Lee", twins)?.id, "2", "an exact match beats a partial one");
-    assert.equal(findFamilyMatch("Charmaine Tan", [{ id: "1", display_name: "Charmaine" }, { id: "2", display_name: "Tan" }]), null, "two profiles fit: no guess");
-    assert.equal(findFamilyMatch("Charmaine Tan", [{ id: "1", display_name: "Charmaine" }, { id: "2", display_name: "Charmaine" }]), null, "duplicate names: no guess");
+    const twins = [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Josephine Lee" }];
+    assert.equal(findFamilyMatch("Josephine Lee", twins)?.id, "2", "an exact match beats a partial one");
+    assert.equal(findFamilyMatch("Josephine Tan", [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Tan" }]), null, "two profiles fit: no guess");
+    assert.equal(findFamilyMatch("Josephine Tan", [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Josephine" }]), null, "duplicate names: no guess");
   });
   await t("D3: docx XML -> table rows as tab cells, page breaks as pages, tab stops ignored", () => {
     const p = (x: string) => `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr><w:r><w:t xml:space="preserve">${x}</w:t></w:r></w:p>`;
@@ -140,8 +140,8 @@ async function partB() {
     await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'other')`, [id, account, name]);
     return id;
   };
-  const charmaine = await member(a, "Charmaine"), marcus = await member(a, "Marcus"), bob = await member(a, "Bob");
-  const charmaineB = await member(b, "Charmaine");
+  const josephine = await member(a, "Josephine"), marcus = await member(a, "Marcus"), bob = await member(a, "Bob");
+  const josephineB = await member(b, "Josephine");
   // Ledger rows are read with a model the stand-in does not implement; that
   // step fails softly and is not what these cases prove.
   const fixtures = await generateV1Fixtures({ include: "all" });
@@ -159,12 +159,12 @@ async function partB() {
   };
   const rows = async (sql: string, params: unknown[]) => (await pool.query(sql, params)).rows;
   try {
-    const accident = await ingest("accident-pdf", a, charmaine, true);
-    await t("D1: 'Charmaine Dptest…' links to profile 'Charmaine' (unique partial match), coverage stored", async () => {
+    const accident = await ingest("accident-pdf", a, josephine, true);
+    await t("D1: 'Josephine Dptest…' links to profile 'Josephine' (unique partial match), coverage stored", async () => {
       const links = await rows(`SELECT family_member_id,source,confidence::float c FROM policy_members WHERE policy_id=$1`, [accident]);
-      assert.deepEqual(links, [{ family_member_id: charmaine, source: "ai_name_match", c: 0.85 }]);
+      assert.deepEqual(links, [{ family_member_id: josephine, source: "ai_name_match", c: 0.85 }]);
       const cov = await rows(`SELECT family_member_id,amount::float amount,currency,source_page FROM policy_coverages WHERE policy_id=$1`, [accident]);
-      assert.deepEqual(cov, [{ family_member_id: charmaine, amount: 100000, currency: "SGD", source_page: 1 }]);
+      assert.deepEqual(cov, [{ family_member_id: josephine, amount: 100000, currency: "SGD", source_page: 1 }]);
     });
     await t("fracture benefit stored with printed currency and page citation", async () => {
       const r = await rows(`SELECT formula_kind,formula_value::float v,currency,source_page FROM policy_benefits WHERE policy_id=$1 AND benefit_name='Fracture of arm'`, [accident]);
@@ -221,16 +221,16 @@ async function partB() {
       const counts = await rows(`SELECT count(*)::int n FROM policy_benefits WHERE policy_id=$1`, [travel]);
       assert.equal(counts[0].n, 4, "all four printed travel benefits stored");
     });
-    // Uploaded to "Bob", but the document names Charmaine: the printed name
+    // Uploaded to "Bob", but the document names Josephine: the printed name
     // wins over the upload profile.
     const hinted = await ingest("hospital-pdf", a, bob, true);
     await t("D1: a name match wins over the upload profile", async () => {
       const links = await rows(`SELECT family_member_id,source,confidence::float c FROM policy_members WHERE policy_id=$1`, [hinted]);
-      assert.deepEqual(links, [{ family_member_id: charmaine, source: "ai_name_match", c: 0.85 }]);
+      assert.deepEqual(links, [{ family_member_id: josephine, source: "ai_name_match", c: 0.85 }]);
     });
     const rename = (id: string, name: string) => pool.query(`UPDATE family_members SET display_name=$1 WHERE id=$2`, [name, id]);
-    // From here "Charmaine Dptest…" fits no profile.
-    await rename(charmaine, "Someone Else");
+    // From here "Josephine Dptest…" fits no profile.
+    await rename(josephine, "Someone Else");
     const fallback = await ingest("accident-pdf", a, bob, true);
     await t("D1 fallback: unmatched single insured on a personal document + explicit upload profile -> upload_hint 0.70, flagged", async () => {
       const links = await rows(`SELECT family_member_id,source,confidence::float c FROM policy_members WHERE policy_id=$1`, [fallback]);
@@ -252,31 +252,31 @@ async function partB() {
       assert.deepEqual(await rows(`SELECT source FROM policy_members WHERE policy_id=$1`, [image]), []);
     });
     await t("D1: re-reading once the name matches replaces the upload_hint (no stale link)", async () => {
-      await rename(charmaine, "Charmaine");
+      await rename(josephine, "Josephine");
       const [p] = await rows(`SELECT storage_key FROM policies WHERE id=$1`, [fallback]);
       await processPolicy({ accountId: a, familyMemberId: bob, policyId: fallback, storageKey: p.storage_key, linkUploadMember: true });
-      assert.deepEqual(await rows(`SELECT family_member_id,source FROM policy_members WHERE policy_id=$1`, [fallback]), [{ family_member_id: charmaine, source: "ai_name_match" }]);
+      assert.deepEqual(await rows(`SELECT family_member_id,source FROM policy_members WHERE policy_id=$1`, [fallback]), [{ family_member_id: josephine, source: "ai_name_match" }]);
     });
-    const twin = await member(a, "Charmaine");
-    const ambiguous = await ingest("disability-pdf", a, charmaine, false);
+    const twin = await member(a, "Josephine");
+    const ambiguous = await ingest("disability-pdf", a, josephine, false);
     await t("D1: two profiles fit the printed name -> never guessed", async () => {
       assert.deepEqual(await rows(`SELECT family_member_id FROM policy_members WHERE policy_id=$1`, [ambiguous]), []);
     });
     await pool.query(`DELETE FROM family_members WHERE id=$1`, [twin]);
     const { certificatePdf } = await import("../e2e/support/ingestion-fixtures");
-    const pair = await certificatePdf({ label: "TwoCharmaines", policyNumber: `${PREFIX}-PAIR-1`, insuredNames: ["Charmaine Alpha", "Charmaine Beta"], amounts: [1000, 2000] });
-    const twoOnOne = await ingest("pair", a, charmaine, true, { name: `${PREFIX}-pair.pdf`, buffer: pair });
+    const pair = await certificatePdf({ label: "TwoJosephines", policyNumber: `${PREFIX}-PAIR-1`, insuredNames: ["Josephine Alpha", "Josephine Beta"], amounts: [1000, 2000] });
+    const twoOnOne = await ingest("pair", a, josephine, true, { name: `${PREFIX}-pair.pdf`, buffer: pair });
     await t("D1: two printed people partially matching the same profile -> neither is folded into it", async () => {
       assert.deepEqual(await rows(`SELECT family_member_id FROM policy_members WHERE policy_id=$1`, [twoOnOne]), []);
       assert.deepEqual(await rows(`SELECT family_member_id FROM policy_coverages WHERE policy_id=$1`, [twoOnOne]), []);
       const [p] = await rows(`SELECT needs_review,review_reason FROM policies WHERE id=$1`, [twoOnOne]);
       assert.equal(p.needs_review, true); assert.match(p.review_reason, /2 named insured people are not linked/);
     });
-    const isolated = await ingest("isolation-b-pdf", b, charmaineB, true);
-    await t("isolation: household B's Charmaine policy links only inside household B", async () => {
+    const isolated = await ingest("isolation-b-pdf", b, josephineB, true);
+    await t("isolation: household B's Josephine policy links only inside household B", async () => {
       const links = await rows(`SELECT family_member_id,account_id FROM policy_members WHERE policy_id=$1`, [isolated]);
-      assert.deepEqual(links, [{ family_member_id: charmaineB, account_id: b }]);
-      const leaked = await rows(`SELECT count(*)::int n FROM policy_members WHERE account_id=$1 AND family_member_id=$2`, [a, charmaineB]);
+      assert.deepEqual(links, [{ family_member_id: josephineB, account_id: b }]);
+      const leaked = await rows(`SELECT count(*)::int n FROM policy_members WHERE account_id=$1 AND family_member_id=$2`, [a, josephineB]);
       assert.equal(leaked[0].n, 0);
     });
     await t("ledger: a superseded document is no longer pending for the ledger", async () => {

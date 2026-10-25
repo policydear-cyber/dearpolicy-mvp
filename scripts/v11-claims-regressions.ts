@@ -45,7 +45,7 @@ delete process.env.PINECONE_API_KEY;
 const ACCOUNT = "00000000-0000-0000-0000-00000000c001";
 process.env.DEV_ACCOUNT_ID = ACCOUNT;
 const uuid = (n: number) => "30000000-0000-4000-8000-" + String(n).padStart(12, "0");
-const CHARMAINE = uuid(1), MARCUS = uuid(2), DESMOND = uuid(3), IVY = uuid(4);
+const JOSEPHINE = uuid(1), MARCUS = uuid(2), RAYMOND = uuid(3), IVY = uuid(4);
 const vec = "[" + Array.from({ length: 1024 }, (_, j) => (j === 0 ? 1 : 0)).join(",") + "]";
 
 type Row = { name: string; printed: string; kind: string; value: number | null; currency: string | null; traits: string[]; requires?: string[]; factKey?: string | null };
@@ -55,26 +55,26 @@ type Plan = { key: string; member: string; product: string; type: string; catego
 const r = (name: string, printed: string, kind: string, value: number | null, currency: string | null, traits: string[], requires: string[] = [], factKey: string | null = null): Row =>
   ({ name, printed, kind, value, currency, traits, requires, factKey });
 const PLANS: Plan[] = [
-  { key: "hospital", member: CHARMAINE, product: "HospitalShield", type: "Hospitalisation", category: "Hospitalisation", sum: { amount: 1000000, currency: "SGD" },
+  { key: "hospital", member: JOSEPHINE, product: "HospitalShield", type: "Hospitalisation", category: "Hospitalisation", sum: { amount: 1000000, currency: "SGD" },
     heading: "Schedule of Benefits - Hospital and Surgical", rows: [
       r("Daily room and board (1-bed private ward)", "S$800 per day, maximum 120 days", "daily", 800, "SGD", ["hospitalisation"], [], "hospitalNights"),
       r("Surgical fees", "Up to S$25,000 per surgery", "expense_cap", 25000, "SGD", ["hospitalisation", "medical_expense"]),
       r("Hospital cash", "S$100 per day of confinement", "daily", 100, "SGD", ["hospitalisation"], [], "hospitalNights")] },
-  { key: "accident", member: CHARMAINE, product: "AccidentGuard", type: "Personal Accident", category: "Personal Accident", sum: { amount: 100000, currency: "SGD" },
+  { key: "accident", member: JOSEPHINE, product: "AccidentGuard", type: "Personal Accident", category: "Personal Accident", sum: { amount: 100000, currency: "SGD" },
     heading: "Schedule of Benefits - Accident", rows: [
       r("Fracture of arm", "S$1,000", "fixed", 1000, "SGD", ["accident", "bodily_injury"], ["accident"]),
       r("Fracture of leg", "S$1,500", "fixed", 1500, "SGD", ["accident", "bodily_injury"], ["accident"]),
       r("Accident medical reimbursement", "Up to S$2,000 per accident", "expense_cap", 2000, "SGD", ["accident", "medical_expense"], ["accident"])] },
-  { key: "disability", member: CHARMAINE, product: "DisabilityCare", type: "Permanent Disability", category: "Total Permanent Disability", sum: { amount: 200000, currency: "SGD" },
+  { key: "disability", member: JOSEPHINE, product: "DisabilityCare", type: "Permanent Disability", category: "Total Permanent Disability", sum: { amount: 200000, currency: "SGD" },
     heading: "Schedule of Permanent Disablement (% of Sum Insured)", rows: [
       r("Total and permanent disability", "100% of Sum Insured", "sum_insured", 1, null, ["disability"]),
       r("Loss of arm at or above the elbow", "100% of Sum Insured", "sum_insured", 1, null, ["disability", "bodily_injury"])] },
-  { key: "ci", member: CHARMAINE, product: "CareShield CI", type: "Critical Illness", category: "Critical Illness", sum: { amount: 200000, currency: "SGD" },
+  { key: "ci", member: JOSEPHINE, product: "CareShield CI", type: "Critical Illness", category: "Critical Illness", sum: { amount: 200000, currency: "SGD" },
     heading: "Schedule of Benefits - Critical Illness", rows: [
       r("Major cancer", "100% of Sum Insured", "sum_insured", 1, null, ["illness", "diagnosis"])] },
-  { key: "life", member: DESMOND, product: "LifeSecure Term", type: "Term Life", category: "Death", sum: { amount: 500000, currency: "SGD" },
+  { key: "life", member: RAYMOND, product: "LifeSecure Term", type: "Term Life", category: "Death", sum: { amount: 500000, currency: "SGD" },
     heading: "Schedule of Benefits - Life", rows: [r("Death benefit", "100% of Sum Insured", "sum_insured", 1, null, ["death"], ["death"])] },
-  { key: "pa-desmond", member: DESMOND, product: "SafeRoad PA", type: "Personal Accident", category: "Personal Accident", sum: { amount: 300000, currency: "SGD" },
+  { key: "pa-raymond", member: RAYMOND, product: "SafeRoad PA", type: "Personal Accident", category: "Personal Accident", sum: { amount: 300000, currency: "SGD" },
     heading: "Schedule of Benefits - Accident", rows: [r("Accidental death", "100% of Sum Insured", "sum_insured", 1, null, ["death", "accident"], ["accident", "death"])] },
   { key: "travel", member: MARCUS, product: "WanderSafe", type: "Travel", category: "Travel", sum: null,
     heading: "Schedule of Benefits - Travel", rows: [
@@ -83,10 +83,10 @@ const PLANS: Plan[] = [
   // V1.1 eval Q14: an EXPIRED travel policy (no renewal since 2024-12-31) and a
   // current one, both with overseas accident medical cover that the ledger
   // matches to any accident -- the event date and place must rule them out.
-  { key: "travel-expired", member: CHARMAINE, product: "JetSure", type: "Travel", category: "Travel", sum: null, expiry: "2024-12-31",
+  { key: "travel-expired", member: JOSEPHINE, product: "JetSure", type: "Travel", category: "Travel", sum: null, expiry: "2024-12-31",
     heading: "Schedule of Benefits - Travel", rows: [
       r("Overseas accident medical expenses", "S$100,000", "expense_cap", 100000, "SGD", ["accident", "medical_expense", "bodily_injury"], ["accident"])] },
-  { key: "travel-current", member: CHARMAINE, product: "TripCare", type: "Travel", category: "Travel", sum: null,
+  { key: "travel-current", member: JOSEPHINE, product: "TripCare", type: "Travel", category: "Travel", sum: null,
     heading: "Schedule of Benefits - Travel", rows: [
       r("Overseas accident medical expenses", "S$150,000", "expense_cap", 150000, "SGD", ["accident", "medical_expense", "bodily_injury"], ["accident"]),
       r("Emergency medical evacuation", "S$500,000", "expense_cap", 500000, "SGD", ["accident", "bodily_injury", "medical_expense"])] },
@@ -131,14 +131,14 @@ async function main() {
 
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Claims household')", [ACCOUNT]);
   await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]);
-  for (const [id, name, preferred, rel] of [[CHARMAINE, "Ong Pei Lin Charmaine", "Charmaine", "spouse"], [MARCUS, "Marcus Lim Wei Jie", "Marcus", "self"],
-    [DESMOND, "Tan Yi Chuen Desmond", "Desmond", "parent"], [IVY, "Ivy Tan Mei Ling", "Ivy", "child"]] as const)
+  for (const [id, name, preferred, rel] of [[JOSEPHINE, "Ong Pei Lin Josephine", "Josephine", "spouse"], [MARCUS, "Marcus Lim Wei Jie", "Marcus", "self"],
+    [RAYMOND, "Tan Jia Ming Raymond", "Raymond", "parent"], [IVY, "Ivy Tan Mei Ling", "Ivy", "child"]] as const)
     await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)", [id, ACCOUNT, name, preferred, rel]);
   const docOf: Record<string, string> = {};
   let n = 100;
   for (const plan of PLANS) {
     const id = uuid(n++); docOf[plan.key] = id;
-    const person = plan.member === CHARMAINE ? "Ong Pei Lin Charmaine" : plan.member === DESMOND ? "Tan Yi Chuen Desmond" : "Marcus Lim Wei Jie";
+    const person = plan.member === JOSEPHINE ? "Ong Pei Lin Josephine" : plan.member === RAYMOND ? "Tan Jia Ming Raymond" : "Marcus Lim Wei Jie";
     const pages = [
       plan.product + " Policy Schedule Insured: " + person + " Policy number " + plan.key.toUpperCase() + "-1 Effective date 2024-01-01" + (plan.sum ? " Sum Insured S$" + plan.sum.amount.toLocaleString("en-US") : ""),
       plan.heading + " " + plan.rows.map((x) => x.name + " " + x.printed).join(" ") + " Page 2 of 2",
@@ -339,13 +339,13 @@ async function main() {
     if (!s.requestedDocuments.some((d) => /doctor|x-ray|medical report/i.test(d))) f.push("a fracture claim does not ask for the doctor's or X-ray report");
     const withEstimate = claimDisplayStatus({ ...fracture, hasEvidenceBackedEstimate: true });
     if (!withEstimate.hasEstimate || withEstimate.tone !== "ready") f.push("an evidence-backed estimate is not shown as ready");
-    const death = claimDisplayStatus({ id: uuid(9002), status: "fact_finding", event_type: "death", event_summary: "Death of Desmond", facts: { eventType: "death", death: true }, decision_packet: null, hasEvidenceBackedEstimate: false });
+    const death = claimDisplayStatus({ id: uuid(9002), status: "fact_finding", event_type: "death", event_summary: "Death of Raymond", facts: { eventType: "death", death: true }, decision_packet: null, hasEvidenceBackedEstimate: false });
     if (!death.requestedDocuments.some((d) => /death certificate/i.test(d))) f.push("a death claim does not ask for the death certificate");
     if (death.tone !== "info" && death.tone !== "waiting") f.push("an open death claim has tone " + death.tone);
     // The claim pack prints the same documents the list and detail ask for.
     const { claimPackContent } = await import("@/lib/claims/claim-pack");
     const { EMPTY_CLAIM_FACTS } = await import("@/lib/claims/types");
-    const pack = claimPackContent({ claimantName: "Charmaine", packet: { sessionId: fracture.id, eventSummary: "Charmaine: broken arm", knownFacts: [], missingFacts: [],
+    const pack = claimPackContent({ claimantName: "Josephine", packet: { sessionId: fracture.id, eventSummary: "Josephine: broken arm", knownFacts: [], missingFacts: [],
       facts: { ...EMPTY_CLAIM_FACTS, ...fracture.facts, injuries: ["broken arm"], uncertainFacts: [] } as any, relevantOwnedProducts: [], assessments: [], nextSteps: [], ready: true, claimCategory: "accidental_injury" } });
     const packDocs = (pack.sections.find((x) => /Documents to attach/.test(x.heading))?.lines ?? []).map((l) => l.replace(/^•\s*/, ""));
     for (const d of s.requestedDocuments) if (!packDocs.includes(d)) f.push("the claim pack does not list '" + d + "'");
@@ -361,15 +361,15 @@ async function main() {
     const { looksLikeInterviewReply } = await import("@/lib/claims/event-name");
     const { eventFitIssue } = await import("@/lib/claims/event-fit");
     const { recordClaim } = await import("@/lib/claims/record");
-    const person = { id: CHARMAINE, display_name: "Ong Pei Lin Charmaine", preferred_name: "Charmaine", relationship: "spouse" };
+    const person = { id: JOSEPHINE, display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" };
     // Eval "before": an event named "Has a doctor said the injury will leave any lasting impairment: No".
     for (const reply of ["Has a doctor said the injury will leave any lasting impairment: No", "An accident", "Not sure", "Singapore", "What treatment was given?", "2026-09-18", "Yes"]) {
       if (!looksLikeInterviewReply(reply)) f.push("not recognised as a reply: " + reply);
       const name = claimEventName(person, {}, null, reply);
-      if (name !== "Charmaine: claim check") f.push("claimEventName names an event after the reply '" + reply + "': " + name);
+      if (name !== "Josephine: claim check") f.push("claimEventName names an event after the reply '" + reply + "': " + name);
     }
-    for (const good of ["Charmaine: broken arm", "Death of Desmond", "Charmaine broke her arm", "Marcus: flight delay"]) if (looksLikeInterviewReply(good)) f.push("a proper event name is treated as a reply: " + good);
-    if (claimEventName(person, {}, null, "Charmaine broke her arm") !== "Charmaine broke her arm") f.push("the opening message no longer names an uncategorised event");
+    for (const good of ["Josephine: broken arm", "Death of Raymond", "Josephine broke her arm", "Marcus: flight delay"]) if (looksLikeInterviewReply(good)) f.push("a proper event name is treated as a reply: " + good);
+    if (claimEventName(person, {}, null, "Josephine broke her arm") !== "Josephine broke her arm") f.push("the opening message no longer names an uncategorised event");
     // recordClaim (every path that renames an event) keeps a proper name.
     const base = { accountId: ACCOUNT, familyMemberId: IVY, facts: {}, items: [], citations: [], knownFacts: [], missingFacts: [], complete: true, nextSteps: [], conversationId: null, claimCategory: "accidental_injury" };
     const first = await recordClaim({ ...base, eventSummary: "Ivy: broken leg" });
@@ -397,7 +397,7 @@ async function main() {
   }
 
   // ---------------- The conversations ----------------
-  await conversation("Injury: Charmaine broke her arm", CHARMAINE, "Charmaine broke her arm.",
+  await conversation("Injury: Josephine broke her arm", JOSEPHINE, "Josephine broke her arm.",
     { eventType: "An accident", eventLocation: "Singapore", eventDate: "2026-09-18", fractureConfirmed: "Yes", treatmentType: "Outpatient or clinic", surgery: "No", outOfPocket: "Not sure" },
     { benefits: [/Fracture of arm/], forbiddenBenefits: [/Loss of arm|permanent disab|Total and permanent/i, /Overseas|evacuation|JetSure|TripCare/i], documents: [/doctor|x-ray/i], forbiddenDocuments: [/death|coroner/i],
       labelledNotOffered: /Overseas|evacuation/i,
@@ -408,32 +408,32 @@ async function main() {
   // medical expenses" for an accident in Singapore. The ledger matches both
   // travel policies' overseas accident medical rows; neither may be offered
   // (expired / overseas-only), and each card that stays says why.
-  await conversation("Injury in Singapore with a hospital stay: no expired or overseas-only cover", CHARMAINE, "Charmaine fell and broke her leg.",
+  await conversation("Injury in Singapore with a hospital stay: no expired or overseas-only cover", JOSEPHINE, "Josephine fell and broke her leg.",
     { eventType: "An accident", eventLocation: "Singapore", eventDate: "2026-09-18", fractureConfirmed: "Yes", treatmentType: "Admitted to hospital", hospitalNights: "3", surgery: "No", outOfPocket: "Not sure" },
     { benefits: [/Fracture of leg/], forbiddenBenefits: [/Overseas|evacuation|JetSure|TripCare/i], labelledNotOffered: /Overseas|evacuation/i, documents: [/doctor|x-ray/i],
       forbiddenDocuments: [/death|coroner/i], eventName: /broken leg|broke her leg|fracture/i, maxQuestions: 10 });
   // Positive control: overseas, the CURRENT travel policy's overseas medical
   // cover is a possible benefit; the expired one still is not.
-  await conversation("Injury overseas with a hospital stay: current travel cover offered, expired not", CHARMAINE, "Charmaine fell and broke her leg on holiday.",
+  await conversation("Injury overseas with a hospital stay: current travel cover offered, expired not", JOSEPHINE, "Josephine fell and broke her leg on holiday.",
     { eventType: "An accident", eventLocation: "Overseas", eventDate: "2026-09-18", fractureConfirmed: "Yes", treatmentType: "Admitted to hospital", hospitalNights: "3", surgery: "No", outOfPocket: "Not sure" },
     { benefits: [/Fracture of leg/, /TripCare — Overseas accident medical/], forbiddenBenefits: [/JetSure/i], documents: [/doctor|x-ray/i],
       forbiddenDocuments: [/death|coroner/i], eventName: /broken leg|broke her leg|fracture/i, maxQuestions: 10 });
-  await conversation("Death: Desmond died in a road accident", DESMOND, "Desmond died in a road accident on 2026-09-12.",
+  await conversation("Death: Raymond died in a road accident", RAYMOND, "Raymond died in a road accident on 2026-09-12.",
     { accidentCircumstances: "He was hit by a car while crossing the road", eventLocation: "Singapore" },
     { benefits: [/Death benefit/i, /Accidental death/i], definition: /accidental-death definition/i, documents: [/death certificate/i, /police or coroner/i], eventName: /death|died/i, repeat: "What can we claim?" });
-  await conversation("Death (natural cause): Desmond passed away from a heart attack", DESMOND, "Desmond passed away from a heart attack on 2026-09-20.",
+  await conversation("Death (natural cause): Raymond passed away from a heart attack", RAYMOND, "Raymond passed away from a heart attack on 2026-09-20.",
     { causeOfDeath: "Heart attack", accidentCircumstances: "He collapsed at home", eventLocation: "Singapore", accidentalDeath: "No" },
     { benefits: [/Death benefit/i], forbiddenBenefits: [/SafeRoad PA — Accidental death/i], documents: [/death certificate/i], eventName: /death/i });
   // No date in the opening: the first reply is "On what date was it diagnosed:
   // 2026-09-01" -- the chat's own question words must not be read as a
   // person's name (e2e stage 03: "Which family member does this concern?").
-  await conversation("Critical illness: Charmaine diagnosed with breast cancer", CHARMAINE, "Charmaine was diagnosed with stage 2 breast cancer.",
+  await conversation("Critical illness: Josephine diagnosed with breast cancer", JOSEPHINE, "Josephine was diagnosed with stage 2 breast cancer.",
     { diagnosisDate: "2026-09-01", diagnosedBySpecialist: "Yes", survivedSurvivalPeriod: "Yes" },
     { benefits: [/Major cancer/i], definition: /definition/i, documents: [/specialist/i], forbiddenDocuments: [/death certificate/i], eventName: /breast cancer|diagnos/i });
-  await conversation("Disability: Charmaine unable to work", CHARMAINE, "Charmaine is unable to work since a stroke on 2026-03-01.",
+  await conversation("Disability: Josephine unable to work", JOSEPHINE, "Josephine is unable to work since a stroke on 2026-03-01.",
     { disabilityCause: "A stroke", unableToWork: "Any work", disabilityContinuousMonths: "7" },
     { benefits: [/Total and permanent disability/i], forbiddenBenefits: [/Loss of arm/i], definition: /definition/i, documents: [/disability assessment|doctor/i], eventName: /disab|unable to work|stroke/i });
-  await conversation("Hospitalisation and medical reimbursement: Charmaine admitted", CHARMAINE, "Charmaine was admitted to hospital on 2026-09-15 with pneumonia.",
+  await conversation("Hospitalisation and medical reimbursement: Josephine admitted", JOSEPHINE, "Josephine was admitted to hospital on 2026-09-15 with pneumonia.",
     { admissionDate: "2026-09-15", dischargeDate: "2026-09-19", hospitalName: "Mount Elizabeth Hospital", otherInsurancePaid: "No", hospitalNights: "4", hospitalised: "Yes" },
     { benefits: [/room and board|Hospital cash/i], documents: [/discharge summary/i, /bill/i], forbiddenDocuments: [/death certificate/i], eventName: /hospital|admitted|pneumonia/i });
   await conversation("Travel: Marcus's flight delayed", MARCUS, "My flight to Tokyo was delayed 8 hours on 2026-09-05.",
@@ -445,7 +445,7 @@ async function main() {
   {
     const f: string[] = [], transcript: string[] = [];
     try {
-      for (const [member, ask] of [[MARCUS, "How much can I claim?"], [CHARMAINE, "How much can Charmaine claim?"]] as const) {
+      for (const [member, ask] of [[MARCUS, "How much can I claim?"], [JOSEPHINE, "How much can Josephine claim?"]] as const) {
         const { answer: a } = await send(ask, member, {});
         transcript.push("> " + ask, "< [" + a.mode + "] " + a.summary.slice(0, 200) + (a.questions[0] ? "  ? " + a.questions[0].text : ""));
         if (/didn['’]t find|did not find|not stated/i.test(a.summary)) f.push("'" + ask + "' was treated as a policy topic: " + a.summary.slice(0, 160));

@@ -161,7 +161,7 @@ async function chatCases() {
     const state: ConversationState = { intent: "policy_question", subjects: { a: {} },
       scenarios: { a: [{ label: "death", family: "death", traits: ["death", "accident"] }] } } as unknown as ConversationState;
     const answer = { mode: "answer", summary: "", details: [], claimItems: [], nextSteps: [], questions: [], missingFacts: [] } as unknown as ChatAnswer;
-    await applyFactFinding(answer, state, [{ id: "a", display_name: "A" }], { question: "Desmond died in a car accident, what can be claimed?" });
+    await applyFactFinding(answer, state, [{ id: "a", display_name: "A" }], { question: "Raymond died in a car accident, what can be claimed?" });
     const plans = answer.factFinding ?? [];
     assert.equal(plans[0]?.category, "accidental_death");
     assert.ok(plans[0].nextQuestions.length > 0, "the deciding questions are asked");

@@ -25,7 +25,7 @@ sessions `v11before1` (journey/; screenshots kept outside the repo at /home/user
 - Q07 positive control: group life death benefit S$150,000 not stated ("an amount that is only shown after claim evidence has been reviewed"); question treated as a what-if claim.
 - Q10 unsupported assertion: expired JetSure (2024-12-31) benefits presented without saying it expired.
 - Q14 unsupported assertion: the fracture interview's final answer offers the expired overseas JetSure "Overseas medical expenses" for an accident in Singapore; "reader could not be reached" in the answer.
-- Q16 blocked gap: "How much can she claim?" answered "DearPolicy didn't find How much can she claim in the parts of Charmaine's policies read so far (13 of 23 pages)".
+- Q16 blocked gap: "How much can she claim?" answered "DearPolicy didn't find How much can she claim in the parts of Josephine's policies read so far (13 of 23 pages)".
 - Q17 fact finding (API): the claims list says "Assessment ready" while the claim has no estimate; the claim event is named after an interview reply ("Has a doctor said the injury will leave any lasting impairment: No").
 - Q19 positive control: baggage delay S$200 / 6 h, max S$1,000 not stated (listed without amount).
 - Q21 unsupported assertion + blocked gap: TermGuard shows only US$350,000 (p2) and never the conflicting S$300,000 (p1); no conflict explained.
@@ -37,7 +37,7 @@ sessions `v11before1` (journey/; screenshots kept outside the repo at /home/user
 
 | Check | Before |
 |---|---|
-| T0-1 "Charmaine broke her arm" premature assessment / permanent loss | PASS (asks accident vs illness first; no amount; no permanent loss) |
+| T0-1 "Josephine broke her arm" premature assessment / permanent loss | PASS (asks accident vs illness first; no amount; no permanent loss) |
 | T0-2 factual question ~40 s | PASS in-process (p95 33 ms); page: factual p50 2.1 s, p95 4.2 s, max 7.9 s |
 | T0-3 raw quota error + org id | PASS (clean "reading service is busy" message in 2.0 s, 1 provider call) |
 | T0-4 list "Assessment ready" vs detail "No estimate yet" | **FAIL** (reproduced in-process and on the pages) |

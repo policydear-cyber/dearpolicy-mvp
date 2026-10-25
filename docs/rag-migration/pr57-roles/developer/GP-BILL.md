@@ -1,6 +1,6 @@
 # Developer: DC's live GP-bill answer (20 Oct 2026), trace and reconstruction
 
-Reported: DC's screenshot from production (main `4956588`, C0) for "desmond tripped over the kerb and fell, his GP bill is
+Reported: DC's screenshot from production (main `4956588`, C0) for "raymond tripped over the kerb and fell, his GP bill is
 $800, can he claim for this?". The answer said the facts back, then "I couldn't confirm an answer to that from your
 documents", then "I haven't yet looked up what your documents pay for the bill you mentioned (“his GP bill is $800”), so that
 is still open", then a contact step for the insurer about the group scheme.

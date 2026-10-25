@@ -4,77 +4,77 @@
   "perQuestion": [
     {
       "qid": "Q01",
-      "text": "What policies does Charmaine have?",
+      "text": "What policies does Josephine have?",
       "ok": true,
       "gates": [],
       "ms": 137
     },
     {
       "qid": "Q02",
-      "text": "What is Charmaine's hospital room and board benefit?",
+      "text": "What is Josephine's hospital room and board benefit?",
       "ok": true,
       "gates": [],
       "ms": 76
     },
     {
       "qid": "Q03",
-      "text": "Does Charmaine have a fracture benefit?",
+      "text": "Does Josephine have a fracture benefit?",
       "ok": true,
       "gates": [],
       "ms": 34
     },
     {
       "qid": "Q04",
-      "text": "What is the waiting period for critical illness on Charmaine's CritiCare plan?",
+      "text": "What is the waiting period for critical illness on Josephine's CritiCare plan?",
       "ok": true,
       "gates": [],
       "ms": 29
     },
     {
       "qid": "Q05",
-      "text": "Does Charmaine's hospital plan cover dental treatment?",
+      "text": "Does Josephine's hospital plan cover dental treatment?",
       "ok": true,
       "gates": [],
       "ms": 31
     },
     {
       "qid": "Q06",
-      "text": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?",
+      "text": "If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?",
       "ok": true,
       "gates": [],
       "ms": 24
     },
     {
       "qid": "Q07",
-      "text": "What does Charmaine's group life policy pay if she dies?",
+      "text": "What does Josephine's group life policy pay if she dies?",
       "ok": true,
       "gates": [],
       "ms": 32
     },
     {
       "qid": "Q08",
-      "text": "What is Charmaine covered for if she dies in an accident?",
+      "text": "What is Josephine covered for if she dies in an accident?",
       "ok": true,
       "gates": [],
       "ms": 63
     },
     {
       "qid": "Q09",
-      "text": "What is Charmaine's maternity coverage?",
+      "text": "What is Josephine's maternity coverage?",
       "ok": true,
       "gates": [],
       "ms": 78
     },
     {
       "qid": "Q10",
-      "text": "Does Charmaine have travel insurance?",
+      "text": "Does Josephine have travel insurance?",
       "ok": true,
       "gates": [],
       "ms": 25
     },
     {
       "qid": "Q11",
-      "text": "Charmaine broke her arm.",
+      "text": "Josephine broke her arm.",
       "ok": true,
       "gates": [],
       "ms": 55
@@ -193,7 +193,7 @@
     },
     {
       "qid": "Q28",
-      "text": "Does Charmaine have a fracture benefit?",
+      "text": "Does Josephine have a fracture benefit?",
       "ok": true,
       "gates": [],
       "ms": 17
