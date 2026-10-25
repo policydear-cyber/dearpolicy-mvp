@@ -8,7 +8,7 @@ import type { ModelAnswer } from "./prompt";
 
 // Words that make it a question about cover, a claim, a treatment or the insurer, never about the app (Critic R185-1).
 // "Left" is not here: "questions left this month" is the app's own (TE P118-3); "limit left" still has "limit".
-const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|singlife|aia|prudential|manulife|fwd|great eastern|income|aviva|tokio|policy|policies|rider|riders|insured|assured|pays?|paid|reimburs\w*|outpatient|inpatient|dental|physio\w*|clinic|panel|doctor|specialist|scan|mri|x-?ray|surgery|operation|ward(?:ed)?|treatment|therapy|accident|illness|cancer|critical|disability|tpd|death|die|dies|died|medisave|shield|deductible|co-?insurance|remaining|balance|estate|agent|gp|polyclinic|tcm|maternity|visits?|consultations?|medic\w*)\b/i;
+const ABOUT_COVER = /\b(?:claim|claims|benefit|benefits|cover|covered|coverage|insurer|nominee|beneficiar(?:y|ies)|premium|hospital|limit|payout|surrender|insurance|insurers?|assurance|policy|policies|rider|riders|insured|assured|pays?|paid|reimburs\w*|outpatient|inpatient|dental|physio\w*|clinic|panel|doctor|specialist|scan|mri|x-?ray|surgery|operation|ward(?:ed)?|treatment|therapy|accident|illness|cancer|critical|disability|tpd|death|die|dies|died|medisave|shield|deductible|co-?insurance|remaining|balance|estate|agent|gp|polyclinic|tcm|maternity|visits?|consultations?|medic\w*)\b/i;
 const APP = String.raw`(?:dear\s*policy|this\s+(?:app|website|site|service)|the\s+app|you\s+guys)`;
 
 type Help = { id: string; test: RegExp; policyWords?: boolean; answer: Omit<ModelAnswer, "statements" | "question"> };
@@ -83,9 +83,13 @@ const HELPS: Help[] = [
   },
 ];
 
-/** The fixed answer for a question about DearPolicy itself, or null for anything else. Only the message counts. */
-export function appHelp(message: string): { id: string; answer: ModelAnswer } | null {
-  const cover = ABOUT_COVER.test(message), coverBesidesPolicy = ABOUT_COVER.test(message.replace(/\bpolic(?:y|ies)\b/gi, " "));
+/** The fixed answer for a question about DearPolicy itself, or null for anything else. Only the message counts, with the
+ * names of the household's own insurers and products (`own`, from its documents): no insurer is named in the code, so a
+ * household with any insurer, anywhere, is read the same way ("is my data safe with <its insurer>" is about cover). */
+export function appHelp(message: string, own: string[] = []): { id: string; answer: ModelAnswer } | null {
+  const words = new Set(own.flatMap((n) => n.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 3 && !/^(?:insurance|assurance|life|general|limited|ltd|plan|policy|the|and)$/.test(w)));
+  const named = message.toLowerCase().split(/[^a-z0-9]+/).some((w) => words.has(w));
+  const cover = named || ABOUT_COVER.test(message), coverBesidesPolicy = named || ABOUT_COVER.test(message.replace(/\bpolic(?:y|ies)\b/gi, " "));
   const help = HELPS.find((h) => !(h.policyWords ? coverBesidesPolicy : cover) && h.test.test(message));
   return help ? { id: help.id, answer: { ...help.answer, nextSteps: [...help.answer.nextSteps], statements: [], question: null } } : null;
 }
