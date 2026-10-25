@@ -29,10 +29,13 @@ export function categoryOfBenefit(benefit: string): string | null {
     .replace(/\([^)]*\b(?:not|excluded?|excluding|except)\b[^)]*\)/gi, " ")
     .replace(/\b(?:not\s+(?:payable|covered|paid)|excluding|except(?:\s+for)?|other\s+than)\b[^,;)]*/gi, " ")
     .replace(/\b(?:illness|sickness|disease)\w*\s+(?:is\s+|are\s+)?(?:excluded|not\s+covered)\b/gi, " ");
-  // An accident uplift counts only on a plain death benefit: "Double Indemnity Accidental Death Benefit" stays accident-only
-  // (Critic R229). "Death (including death due to injury)" covers every cause.
-  const uplift = /^\s*death(?:\s+benefit)?\b/i.test(paid) && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
-  const anyCause = (uplift || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b|\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid))
+  // An accident uplift or an "including accident" clause counts only on a plain death benefit: "Double Indemnity Accidental
+  // Death Benefit" and "Accidental Death Benefit (including injury on public transport)" stay accident-only (Critic R229,
+  // R230). "Death (including death due to injury)" covers every cause.
+  const plainDeath = /^\s*death(?:\s+benefit)?\b/i.test(paid);
+  const uplift = plainDeath && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const including = plainDeath && /\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid);
+  const anyCause = (uplift || including || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid))
     && !/\bpersonal\s+accident\b/i.test(benefit);
   return NAMES.find(([name, re]) => re.test(name === "Personal Accident" ? paid : benefit) && !(name === "Personal Accident" && anyCause))?.[0] ?? null;
 }
