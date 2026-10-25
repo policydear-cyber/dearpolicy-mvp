@@ -9,6 +9,7 @@
 import { normalizePersonName } from "@/lib/insurance";
 import { nameOnPage, otherLife } from "./lives";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
+import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -32,10 +33,12 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
  * "Instalment Premium (Life Assured 2)") is about part of the premium or another life, so it is never used (Critic R108-2,
  * TE #97). */
+/** A premium line's figure, in any currency, and everything after it. */
+const PREMIUM_FIGURE_ON = new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?.*$`);
 const PLAIN_PREMIUM = /^(?:(?:total|annual|yearly|monthly|quarterly|half[\s-]yearly|modal|instalment|installment)\s+)?(?:premium|instalment|installment)(?:\s+(?:paid|payable|amount))?$/i;
 const premiumLineLabel = (line: string, value: number) => {
   const at = [...line.matchAll(/\d[\d,]*(?:\.\d+)?/g)].find((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
-  return at ? line.slice(0, at.index).replace(/(?:S\$|US\$|SGD|USD|\$)\s*$/i, "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
+  return at ? line.slice(0, at.index).replace(new RegExp(String.raw`${MONEY_SIGN}\s*$`, "i"), "").replace(/[\t:]+/g, " ").replace(/\s+/g, " ").trim() : null;
 };
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
@@ -112,25 +115,33 @@ const squashed = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const MONEY_IN = /(?:s\$|us\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/g;
+/** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
+ * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
+ * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
+ * RM 200,000 cap that the same row in S$ refuses). */
+/** NFKC without footnote marks: a superscript after a figure ("S$400,000¹") is never part of it (TE round 3). */
+const plainText = (s: string) => s.replace(/[\u00B9\u00B2\u00B3\u2070-\u2079]/g, "").normalize("NFKC");
+function moneyIn(row: string): { value: number; index: number; length: number }[] {
+  return anyMoneyFigures(plainText(row).replace(/\s+/g, " ").trim());
+}
 /** The one money figure a percentage row's own words cap it at: printed right after a cap word, and the only money figure in
  * the row. Null otherwise. */
 function capInRow(row: string): number | null {
-  const text = flat(row), found = [...text.matchAll(MONEY_IN)];
-  const values = new Set(found.map((m) => Number(m[1].replace(/,/g, ""))));
+  const text = flat(plainText(row)), found = moneyIn(row);
+  const values = new Set(found.map((m) => m.value));
   if (values.size !== 1 || !found.length) return null;
   // A cap for some insured persons only ("Child: limited to S$50,000", "maximum S$200,000 above age 70") is not the row's
   // (Critic R169-1).
   if (/\b(?:child(?:ren)?|juveniles?|minors?|adults?|age[ds]?|years?\s+old|spouses?|dependants?|elderly|above|below|over|under)\b/.test(text)) return null;
-  const before = text.slice(Math.max(0, found[0].index! - 70), found[0].index!);
-  const after = text.slice(found[0].index! + found[0][0].length, found[0].index! + found[0][0].length + 30);
+  const before = text.slice(Math.max(0, found[0].index - 70), found[0].index);
+  const after = text.slice(found[0].index + found[0].length, found[0].index + found[0].length + 30);
   // An excess ("subject to an excess not exceeding S$100") is not a cap, and a cap for each day or item ("up to S$200 per
   // day") is not the row's whole amount (TE pr113 A2, A11).
   if (/\b(?:excess|deductible|co-?pay\w*|co-?insurance)\b/.test(before)) return null;
   if (/^\s*(?:(?:per|a|an|each|every|for\s+(?:each|every)|\/)\s*(?:day|week|month|year|night|hour|visit|session|item|article|tooth|treatment)\b|daily\b)/.test(after)) return null;
   return /(?:\bup\s+to|\bmax(?:imum)?(?:\s+amount)?(?:\s+of)?|\bcapped\s+at|\bnot\s+(?:to\s+)?exceed(?:ing)?|\blimited\s+to)\b[^%\d]{0,60}$/.test(before) ? [...values][0] : null;
 }
-const otherMoneyThan = (row: string, cap: number) => [...flat(row).matchAll(MONEY_IN)].some((m) => Number(m[1].replace(/,/g, "")) !== cap);
+const otherMoneyThan = (row: string, cap: number) => moneyIn(row).some((m) => m.value !== cap);
 // Signs that a line is another row: an item marker ("(b)", "ii.", "3)"), its own percentage, an upper-case label with a
 // figure, or tab-separated cells (Critic R96-1, R98-1, R99).
 const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
@@ -139,7 +150,9 @@ const ITEM_MARKER = /^[ \t]*\(?(?:[a-z]{1,3}|[ivx]{1,5}|\d{1,3})[.)]\s/i;
 const CONNECTIVE = /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|min(?:imum)?|limit(?:ed)?|not\s+(?:to\s+)?exceed(?:ing)?|capped)\b/i;
 const TAB_CELLS = /\S\t+\S/;
 const PERCENT = /\d\s*%/;
-const LABEL_FIGURE = /^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:S\$|US\$|SGD|\$)\s?\d/;
+/** A cell with a percentage or a money figure in any currency. */
+const FIGURE_IN_CELL = new RegExp(String.raw`\d\s*%|${ANY_MONEY_FIGURE}`, "u");
+const LABEL_FIGURE = new RegExp(String.raw`^[ \t,;:]*[A-Za-z][A-Za-z'&/ -]*?\s(?:${ANY_MONEY_FIGURE})`, "u");
 /** How many lines below the row are looked at for a cap that was not joined to it. */
 const LINES_BELOW = 3;
 /** The row as printed, and the text near it whose cap words withhold the row's amount unless a cap is tied to the row.
@@ -195,7 +208,7 @@ function rowSegment(pageText: string, start: number, end: number): { text: strin
 // A line below that plainly starts another row has its own limit, not this row's: an item marker or its own percentage
 // ("Wrist 20% up to S$5,000"), tab cells with a figure ("•\tAmbulance Cost*\tUp to S$500"), or an upper-case label with
 // a figure. A lower-case line ("which is payable up to S$50,000") may be this row's limit (Critic R99-1, TE L12-L14).
-const otherRow = (l: string) => (TAB_CELLS.test(l) && /\d\s*%|(?:S\$|US\$|SGD|\$)\s?\d/.test(l))
+const otherRow = (l: string) => (TAB_CELLS.test(l) && FIGURE_IN_CELL.test(l))
   || ITEM_MARKER.test(l) || PERCENT.test(l) || (/^[ \t]*[A-Z]/.test(l) && LABEL_FIGURE.test(l) && !NEAR_CAP.test(l));
 /** Cap words near a row, including a bare "limit" ("Per accident limit S$50,000", Critic R100). An upper-case line with
  * a figure and these words may go on with the row's own cap ("Payable up to S$50,000 per accident"). */
@@ -266,7 +279,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const at = find(str(c.premiumQuote), source.page);
       const said = at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;
       // One plain premium line on the page: two (one per life, or per policy on a combined schedule) cannot be told apart.
-      const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
+      const plainLines = pageText(source.page).split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, "").replace(/\s+/g, " ").trim()));
       if (at && at.page === source.page && said && PLAIN_PREMIUM.test(said) && plainLines.length === 1 && !otherLife(pageText(source.page), person, doc.people ?? [])) { premiumSource = at; premiumLabel = said; }
       else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
     }
@@ -288,9 +301,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     seen.add(key);
     if (out.covers.some((o) => o.page === c.page && normalizePersonName(o.person) === normalizePersonName(c.person) && o.premium != null)) continue;
     const text = pageText(c.page);
-    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(/(?:S\$|US\$|SGD|USD|\$)?\s*\d[\d,]*(?:\.\d+)?.*$/, "").replace(/\s+/g, " ").trim()));
+    const lines = text.split("\n").filter((l) => /\d/.test(l) && PLAIN_PREMIUM.test(l.replace(/[\t:]+/g, " ").replace(PREMIUM_FIGURE_ON, "").replace(/\s+/g, " ").trim()));
     if (lines.length !== 1 || otherLife(text, c.person, doc.people ?? [])) continue;
-    const amount = /^[^\d]*?(?:S\$|US\$|SGD|USD|\$)?\s*(\d[\d,]*(?:\.\d+)?)/.exec(lines[0]);
+    const amount = new RegExp(String.raw`^[^\d]*?${MONEY_SIGN}?\s*(\d[\d,]*(?:\.\d+)?)`).exec(lines[0]);
     const premium = amount ? Number(amount[1].replace(/,/g, "")) : NaN;
     if (!Number.isFinite(premium) || premium <= 0) continue;
     const at = find(lines[0].trim(), c.page);
@@ -312,7 +325,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     if (!/^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/im.test(pageText(page))) continue;
     c.premiumNote = "the page prints a different premium for the first policy year";
     const lines = pageText(page).split("\n").filter((l) => /^[ \t]*first[ \t]+(?:policy[ \t]+)?year\b[^\n]*\bpremium/i.test(l));
-    const m = lines.length === 1 ? /^[ \t]*(first[ \t]+(?:policy[ \t]+)?year[^\d\n]*?\bpremium)[ \t*]*[:\t][ \t]*(?:S\$|US\$|SGD|USD|\$)?[ \t]*(\d[\d,]*\.\d{2})[ \t]*$/i.exec(lines[0]) : null;
+    const m = lines.length === 1 ? new RegExp(String.raw`^[ \t]*(first[ \t]+(?:policy[ \t]+)?year[^\d\n]*?\bpremium)[ \t*]*[:\t][ \t]*${MONEY_SIGN}?[ \t]*(\d[\d,]*\.\d{2})[ \t]*$`, "i").exec(lines[0]) : null;
     const at = m ? find(lines[0].trim(), page) : null;
     if (!m || !at || at.page !== page || otherLife(pageText(page), c.person, doc.people ?? [])) continue;
     c.firstYearPremium = Number(m[2].replace(/,/g, "")); c.firstYearSource = at; c.firstYearLabel = m[1].replace(/\s+/g, " ").trim();
@@ -366,7 +379,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       const tied = s && claimed != null && s.page === source.page && printsNumber(s.excerpt, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
-      const otherMoney = [...flat(row).matchAll(/(?:s\$|us\$|sgd|\$)\s?(\d[\d,]*(?:\.\d+)?)/g)].some((m) => Number(m[1].replace(/,/g, "")) !== claimed);
+      const otherMoney = moneyIn(row).some((m) => m.value !== claimed);
       // "Whichever" with any other number near the row ("or 500 per day, whichever is lower") is a second limit (Critic R103-1).
       // A leading item number ("1. Hip 75%") is the row's own.
       const otherWhichever = /\bwhichever\b/i.test(`${row}\n${near}`)

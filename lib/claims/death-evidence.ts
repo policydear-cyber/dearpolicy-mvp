@@ -189,15 +189,13 @@ export function resolveDeathEvidence(coverages: OwnedCoverage[], rows: DeathWord
   for (const coverage of coverages) {
     const product = canonicalProduct(coverage.productName) || productFromCategory(coverage.category);
     if (!["group term life", "group personal accident"].includes(product)) continue;
-    if (groupNumber(coverage.groupPolicyNumber) !== "G007500") {
-      gaps.push({ coverageId: coverage.id, reasonCode: "GROUP_MISMATCH", reason: "I could not verify matching death-benefit wording for the group stated on this person's personal certificate.", nextStep: "Add the policy wording or benefit summary issued for this cover." });
-      continue;
-    }
     const insurer = canonicalDeathInsurer(coverage.insurer);
     const wantedGroup = groupNumber(coverage.groupPolicyNumber);
     const sameGroupAndInsurer = (pages: DeathWordingPage[]) => {
       const sameInsurer = insurer != null && insurer === documentInsurer(pages);
-      const sameGroup = documentGroup(pages) === wantedGroup;
+      // A cover with no group number (an individual policy) is matched only to its own document, never to another
+      // document that also prints no group number.
+      const sameGroup = wantedGroup != null && documentGroup(pages) === wantedGroup;
       return sameGroup && sameInsurer;
     };
 

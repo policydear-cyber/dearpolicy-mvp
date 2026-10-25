@@ -61,10 +61,18 @@ function statedCode(text:string):string|null{
   const code=normalizeCurrencyCode(q,"");
   return /^[A-Z]{3}$/.test(code)?code:null;
 }
-/** Markers explicitCurrency() does not know: RM, HK$, A$/AU$, SG$, NZ$, C$/CA$.
+/** Markers explicitCurrency() does not know: RM, ₹, ₱, ฿, ₩, ₫, Rp, NT$, HK$, A$/AU$, SG$, NZ$, C$/CA$.
  * A bare "$" is deliberately NOT a currency -- it stays null. */
 function printedMarker(text:string):string|null{
   if(/(?:^|[^A-Za-z])RM\s?\d/.test(text))return "MYR";
+  // Signs of one currency only (TE #145 India parity). "Rs" is left out: rupees of several countries print it.
+  if(/₹\s?\d/.test(text))return "INR";
+  if(/₱\s?\d/.test(text))return "PHP";
+  if(/฿\s?\d/.test(text))return "THB";
+  if(/₩\s?\d/.test(text))return "KRW";
+  if(/₫|\d\s?₫/.test(text))return "VND";
+  if(/(?:^|[^A-Za-z])Rp\.?\s?\d/.test(text))return "IDR";
+  if(/\bNT\$/.test(text))return "TWD";
   if(/\bHK\$/i.test(text))return "HKD";
   if(/\bAU?\$/.test(text))return "AUD";
   if(/\bSG\$/i.test(text))return "SGD";

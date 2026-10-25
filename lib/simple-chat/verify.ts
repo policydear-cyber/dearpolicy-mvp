@@ -24,6 +24,7 @@
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { MONEY_SIGN } from "@/lib/format/currency";
 import { documentId, pageList, unreadable, type Household, type HouseholdDocument } from "./library";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
@@ -253,11 +254,11 @@ function rowBase(pageText: string, rowOffset: number): { value: number; raw: str
   const above = pageText.slice(0, row.start);
   type Head = { at: number; base: { value: number; raw: string } | "sum_insured" | null };
   const heads: Head[] = [];
-  for (const re of [/%\s*of\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi, /\blimit\s*:?\s*((?:S\$|SGD|US\$|\$)\s?\d[\d,]*(?:\.\d+)?)/gi])
+  for (const re of [new RegExp(String.raw`%\s*of\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi"), new RegExp(String.raw`\blimit\s*:?\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi")])
     for (const m of above.matchAll(re)) heads.push({ at: m.index ?? 0, base: { value: valueOf(m[1]), raw: m[1] } });
   for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
   // "percentage of Comatose State Sum Insured", "% of the Benefit Amount": a base this check cannot know.
-  for (const m of above.matchAll(/(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!(?:S\$|SGD|US\$|\$))([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b/gi)) heads.push({ at: m.index ?? 0, base: null });
+  for (const m of above.matchAll(new RegExp(String.raw`(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!${MONEY_SIGN})([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b`, "gi"))) heads.push({ at: m.index ?? 0, base: null });
   const nearest = heads.sort((a, b) => b.at - a.at)[0];
   const whole = rowWithContinuation(pageText, rowOffset);
   if (CAPPED.test(whole)) return null;
@@ -322,7 +323,7 @@ function headingsOf(pageText: string): { line: number; cover: string }[] {
   return pageText.split("\n").flatMap((l, i) => { const letters = l.replace(/[^A-Za-z]/g, ""); const c = letters.length >= 8 && letters === letters.toUpperCase() ? coverName(l) : null; return c ? [{ line: i, cover: c }] : []; });
 }
 /** Whether a line is a section heading: "BENEFIT 2: GROUP PERSONAL ACCIDENT", an all-capital title ("OUTPATIENT MEDICARE
- * POLICY", "DISABILITY INCOME"), or a standalone line naming a cover. A scheme title line ("MINDEF & MHA GROUP INSURANCE
+ * POLICY", "DISABILITY INCOME"), or a standalone line naming a cover. A scheme title line ("HARBOUR STAFF GROUP INSURANCE
  * VOLUNTARY SCHEME") names the whole document, not a section. */
 function sectionHeading(line: string, covers: Set<string>): string | null {
   const c = coverName(line);
@@ -343,7 +344,7 @@ function sectionOf(doc: HouseholdDocument, page: number, offset: number, covers:
   }
   return last;
 }
-/** A product summary that opens with the scheme's title instead of the product's ("MINDEF & MHA GROUP INSURANCE VOLUNTARY
+/** A product summary that opens with the scheme's title instead of the product's ("HARBOUR STAFF GROUP INSURANCE VOLUNTARY
  * SCHEME", "(GROUP POLICY NO: G00750)", "The Group Term Life Insurance provides coverage ...", release-set H1) starts
  * the section of the one cover its next lines name; the longest name wins ("living care plus" over "living care"). */
 function schemeSection(line: string, next: string[], covers: Set<string>): string | null {
@@ -432,7 +433,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
  * name ("Comprehensive Critical" / "Illness Benefit"). */
 const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
 const RIDER_PART = /\b(?:with|riders?|plus|supplementary|add-?ons?)\b|[+&]/i;
-const SA_CELL = /^(?:S\$|SGD|US\$|\$)?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$/;
+const SA_CELL = new RegExp(String.raw`^${MONEY_SIGN}?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$`);
 function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
   const cells = lines[i].split("\t").map((c) => c.trim());
   if (cells.length < 2 || !/[A-Za-z]/.test(cells[0]) || /\d/.test(cells[0])) return null;
@@ -511,7 +512,7 @@ function quotedLineIsWhole(bf: Found, wording: Found, household: Household, pers
   // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
   // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
   // make it another benefit's amount, so it is refused (TE #103 A10c).
-  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(/(?:S\$|SGD|US\$|USD|\$)?\s*\d[\d,]*(?:\.\d+)?/gi, " ").replace(/\b(?:SGD|USD)\b/gi, " ");
+  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?`, "gi"), " ").replace(new RegExp(String.raw`(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)(?![A-Za-z])`, "gi"), " ");
   if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return false;
   return true;
 }

@@ -14,6 +14,7 @@
  * without an amount, with the reason; totals are per currency and never
  * added across currencies.
  */
+import { claimTableFor } from "./table-load";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { confirmedOwnedCoverages } from "@/lib/coverage/facts";
@@ -96,10 +97,12 @@ export async function computeIndicativeEstimate(accountId: string, claimSessionI
   const medicalEvidence = facts.eventType === "hospitalisation" ? await loadMedicalEvidence(accountId, memberId, coverages) : { cashRules: [], reimbursementRules: [], planProvisions: [], gaps: [], pages: [] };
   const travelEvidence = (facts.eventType === "death" || facts.eventType === "hospitalisation") && coverages.some((c) => c.category === "Travel")
     ? await loadTravelEvidence(accountId, memberId, coverages) : empty;
-  const raw = facts.eventType === "death" ? assessClaim(facts, coverages, deathEvidence.rules, deathEvidence.gaps, claimSessionId, [], [], undefined, undefined, travelEvidence)
-    : facts.eventType === "diagnosis" ? assessClaim(facts, coverages, [], [], claimSessionId, ciEvidence.rules, ciEvidence.gaps)
-    : facts.eventType === "hospitalisation" ? assessClaim(facts, coverages, [], [], claimSessionId, [], [], medicalEvidence, undefined, travelEvidence)
-    : facts.eventType === "disability" ? assessClaim(facts, coverages, [], [], claimSessionId, [], [], undefined, disabilityEvidence)
+  const table = await claimTableFor(accountId, memberId);
+  const raw = facts.eventType === "death" ? assessClaim(facts, coverages, deathEvidence.rules, deathEvidence.gaps, claimSessionId, [], [], undefined, undefined, travelEvidence, table)
+    : facts.eventType === "diagnosis" ? assessClaim(facts, coverages, [], [], claimSessionId, ciEvidence.rules, ciEvidence.gaps, undefined, undefined, undefined, table)
+    : facts.eventType === "hospitalisation" ? assessClaim(facts, coverages, [], [], claimSessionId, [], [], medicalEvidence, undefined, travelEvidence, table)
+    : facts.eventType === "disability" ? assessClaim(facts, coverages, [], [], claimSessionId, [], [], undefined, disabilityEvidence, undefined, table)
+    : facts.eventType === "accident" ? assessClaim(facts, coverages, [], [], claimSessionId, [], [], undefined, undefined, undefined, table)
     : [];
   const assessments = enforceMonetarySafety(raw, facts, coverages, { householdId: accountId, resourceId: claimSessionId });
   const composition = composeClaim({

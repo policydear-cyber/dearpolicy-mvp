@@ -1,4 +1,5 @@
 import { isCalendarDate } from "./day-count";
+import { MONEY_SIGN } from "@/lib/format/currency";
 export type ClaimPerson = { id: string; display_name: string; preferred_name: string | null; relationship: string };
 export type ClaimPersonResolution =
   | { status: "resolved"; person: ClaimPerson; explicit: boolean }
@@ -547,7 +548,7 @@ export const CODE_HEADER = /^(?:no\.?|item(?:\s*no\.?)?|#|s\/?n|ref\.?|code|clau
 export const CATEGORY_HEADER = /^(?:category|insured(?: person)?|class(?: of insured)?|cover type|person(?: covered)?|relationship|member(?: type)?|applies to|for)$/i;
 /** The benefit's own name in a table row's cells: the first cell that is neither an item code nor a figure. */
 export function rowLabelOf(cells: string[]): string {
-  const i = cells.findIndex((c) => !isRowCode(c) && !/^(?:S\$|SGD|US\$|\$)?\s?\d[\d,]*(?:\.\d+)?\b/.test(c.trim()));
+  const i = cells.findIndex((c) => !isRowCode(c) && !new RegExp(String.raw`^${MONEY_SIGN}?\s?\d[\d,]*(?:\.\d+)?\b`).test(c.trim()));
   return i >= 0 ? cells[i] : cells[0] ?? "";
 }
 
