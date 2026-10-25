@@ -6875,3 +6875,7 @@ Ran here: npm ci and `next build` (pass), coverage:table-test 22/0, plus a tsx p
   return [[...texts][0], shown].filter(Boolean).join(" · ");
   ```
   The expected live strings are unchanged: Desmond's kept S$ row has no conditions, and the dropped bare row's extra condition is an exclusion. Add a regression for this case. With that, READY.
+
+## R240 — #147 d942627: READY
+
+- The R239 change went in as written: when the condition wording differs, the tile shows the shared limits. A regression covers two rows that both print "Max 6" where one also has an exclusion. With R238 and R239, a tile figure can no longer lose a fromDay, maxDays, qualifier or limiting condition, and it never takes another cover's terms (a bare $ restatement counts only on the same cover). I ran next build on 0330ab1. The delta since then touches only lib/coverage/table-figures.ts, plain TS with no new imports.
