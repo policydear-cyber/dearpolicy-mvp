@@ -14,6 +14,7 @@
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
     "benefit-table:chat-test": "node --import tsx scripts/benefit-table/chat-test.ts",
     "benefit-table:headline-test": "node --import tsx scripts/benefit-table/headline-test.ts",
+    "coverage:table-test": "node --import tsx scripts/coverage-table-figures-regressions.ts",
     "ai:anthropic-post-test": "node --import tsx scripts/ai/anthropic-post-test.ts",
     "ai:model-preset-test": "node --import tsx scripts/ai/model-preset-test.ts",
     "benefit-table:read": "node --import tsx scripts/benefit-table/read.ts",

@@ -9,30 +9,11 @@ import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { summarisePremiums } from "@/lib/policies/premium-summary";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
+import { categoryRows, tableDisplay, wordingDescribes } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=60;
-
-function canonicalProduct(value:string|null|undefined){
-  const v=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-  if(/group term life|\bgtl\b/.test(v))return "group term life";
-  if(/group personal accident|\bgpa\b/.test(v))return "group personal accident";
-  if(/living care plus/.test(v))return "living care plus";
-  if(/\bliving care\b/.test(v))return "living care";
-  if(/disability income/.test(v))return "disability income";
-  if(/outpatient medicare/.test(v))return "outpatient medicare";
-  return v;
-}
-function productFromCategory(category:string){
-  if(category==="Death"||category==="Total Permanent Disability"||category==="Hospital Cash")return "group term life";
-  if(category==="Personal Accident")return "group personal accident";
-  if(category==="Critical Illness")return "living care";
-  if(category==="Early Critical Illness")return "living care plus";
-  if(category==="Disability Income")return "disability income";
-  if(category==="Outpatient")return "outpatient medicare";
-  return "";
-}
 
 export async function GET(request:NextRequest){
  try{
@@ -62,13 +43,12 @@ export async function GET(request:NextRequest){
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
   const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
-  type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;ownedProduct:string;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
+  type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
-    const ownedProduct=canonicalProduct(row.coverage_product_name)||productFromCategory(category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];
-    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:normalizeCurrencyCode(row.currency,"SGD"),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,ownedProduct,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
+    list.push({category,amount:row.amount==null?null:Number(row.amount),currency:normalizeCurrencyCode(row.currency,"SGD"),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at});
     byPolicyCategory.set(key,list);
   }
   const selected:Chosen[]=[]; const conflictCategories=new Set<string>();
@@ -76,29 +56,39 @@ export async function GET(request:NextRequest){
     list.sort((a,b)=>b.authority-a.authority+((b.effectiveDate?Date.parse(b.effectiveDate):Date.parse(b.createdAt))-(a.effectiveDate?Date.parse(a.effectiveDate):Date.parse(a.createdAt)))/1e15);
     const top=list[0]; selected.push(top); const sameAuthority=list.filter(x=>x.authority===top.authority); const amounts=new Set(sameAuthority.map(x=>x.amount).filter(x=>x!=null)); if(amounts.size>1)conflictCategories.add(top.category);
   }
-  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean}>();
+  const coverageMap=new Map<string,{total:number|null;currency:string;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean}>();
   for(const row of selected){
     const cur=coverageMap.get(row.category)??{total:null,currency:row.currency,count:0,policyNames:[],displayAmount:null,derived:false};
     if(row.amount!=null)cur.total=(cur.total??0)+row.amount; cur.count+=1; if(row.productName&&!cur.policyNames.includes(row.productName))cur.policyNames.push(row.productName); coverageMap.set(row.category,cur);
   }
 
-  // Reference wording can expand an OWNED product into its included benefits.
-  // It never creates ownership on its own.
+  // The person's benefit table (the same rows the Family page and the chat use): a category its rows name shows the
+  // figure the document prints for it, and a category nothing else confirms is covered by those rows. Nothing here is
+  // tied to one scheme, product or insurer. Read from stored readings only: no model call.
+  try{
+    const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
+    if(await benefitTableLive(accountId)){
+      const { tableFor }=await import("@/lib/benefit-table/service");
+      const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
+      for(const category of COVERAGE_CATEGORIES){
+        const rows=categoryRows(category,person?.rows??[]); if(!rows.length)continue;
+        const cur=coverageMap.get(category); const display=tableDisplay(rows);
+        if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
+        else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
+      }
+    }
+  }catch(error){console.warn("Benefit table unavailable for the dashboard:",error instanceof Error?error.message:error);}
+
+  // Reference wording can expand an OWNED product into its included benefits. It never creates ownership on its own,
+  // and it never supplies an amount: the wording's figure is shown only where the person's benefit table prints it.
   const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
-  const ownedByProduct=new Map<string,Chosen[]>();
-  for(const row of selected){if(!row.ownedProduct)continue;const list=ownedByProduct.get(row.ownedProduct)??[];list.push(row);ownedByProduct.set(row.ownedProduct,list);}
   for(const ref of refs.rows){
     const category=normalizeCoverageCategory(ref.category); if(coverageMap.has(category))continue;
-    const product=canonicalProduct(ref.product_name)||productFromCategory(category); const owners=ownedByProduct.get(product); if(!owners?.length)continue;
-    const owner=owners.find(x=>(x.groupPolicyNumber&&ref.group_policy_number?x.groupPolicyNumber===ref.group_policy_number:true)&&(x.insurer&&ref.insurer?x.insurer.toLowerCase()===ref.insurer.toLowerCase():true))??null; if(!owner)continue; let amount:number|null=null; let displayAmount:string|null=null;
-    if(category==="Total Permanent Disability"&&product==="group term life"){
-      const death=owners.find(x=>x.category==="Death"&&x.amount!=null)??selected.find(x=>x.ownedProduct===product&&x.category==="Death"&&x.amount!=null); amount=death?.amount??null;
-    }
-    if(category==="Hospital Cash"&&product==="group term life"&&owners.some(x=>x.groupPolicyNumber==="G007500"||ref.group_policy_number==="G007500")) displayAmount="S$30/day from day 11 · max 30 days";
-    const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:amount,currency:owner.currency,count:1,policyNames:[policyName],displayAmount,derived:true});
+    const owner=selected.find(x=>wordingDescribes(x,{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}))??null; if(!owner)continue;
+    const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false};});
 
   // Every premium component (plan and rider under one policy number), with
   // the MediSave portion added back where the evidence prints it, and the
