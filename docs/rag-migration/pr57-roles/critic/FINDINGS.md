@@ -6794,3 +6794,17 @@ Free review: delta read only.
 - #142: plainDeath now guards both uplift and including, exactly as R230 wrote. A regression covers "Accidental Death Benefit (including injury on public transport)", which goes to PA, and "Death (including death due to injury)" still goes to Death. READY.
 - #144: only merges in the A commit; table-benefits.ts is unchanged. READY.
 - #145 f9d040e was READY at R230. The coming A merge needs only a delta glance.
+
+## R232 — #142 cff9102, #144 8efb7a8, #145 a14a15e: READY (lows on #142)
+
+Free review: delta read plus a tsx probe of categoryOfBenefit on 20 names.
+
+- #142: causeOf is an allow-list that defaults to accident only, so an accident-only rider never lands on the Death or TPD tile. That is the right direction. These go right:
+  - to PA: "Double Indemnity Accidental Death Benefit", "Accidental Death (including injury abroad)", "Accidental death or dismemberment";
+  - to Death: "Death (including death due to injury)", "Death benefit, doubled for accidental death", "Non-accidental death", "Death from causes other than accident", "Death (accident or illness)";
+  - to TPD: "TPD due to sickness or injury".
+  - Low, any-cause rows mislabelled as PA (shown on the PA tile, missing from Death):
+    - (a) ACCIDENT_ONLY wins over ANY_CAUSE, and its "only" can sit anywhere on the line. So "Death due to illness or accident, payable only once" and "Death benefit (any cause); accidental death benefit payable only to age 70" go to PA. Tie "only/solely/exclusively" to the accident word, e.g. `\b(?:only|solely|exclusively)\s+(?:\w+\s+){0,3}?(?:by\s+|from\s+|due\s+to\s+)?(?:an?\s+)?${ACC}|\b${ACC}\s+(?:\w+\s+){0,1}(?:only|solely|exclusively)\b`.
+    - (b) Phrasings the allow-list doesn't know: "natural causes or accident", "accidental or otherwise", "2x for accidental death", "200% if accidental".
+- #144: merge only. READY.
+- #145: a bare R after or/and/to/max, plus a second pass once any rand figure is found, catches "up to R100,000 or R900" (two values, so the cap is refused). An extra "R1" label in such a text only withholds an amount. Superscripts are stripped the same way in moneyIn and capInRow, so the indexes still line up. READY.
