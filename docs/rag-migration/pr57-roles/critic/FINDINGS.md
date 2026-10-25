@@ -6649,3 +6649,17 @@ Free review: code read only. I did not run the DB suite.
 ## R223 — #117 32791a2: READY
 
 - A person word right after the possessive (including plurals, and partner or partners) now gives false before any name is matched. This catches products and insurers whose names start with a relative's word. Accepted cost: those names ask who is meant, which fails safe.
+
+## R224 — #141 c1c5e59 (one shape for document questions): READY
+
+Free review: code read only.
+
+- Mixed answers (a per-person point plus per-file points) are handled right:
+  - A file is skipped from the groups only when every person it is linked to already has a libraryList line. libraryList lists every current file linked to that person, so nothing listed is lost.
+  - Files read in part, unreadable, unlinked, or uploaded for someone else still get their own sentence even when the person was listed. That repeats the file, but it carries news the list doesn't.
+- The splice keeps every non-file point in order and puts the grouped lines where the first file point stood. fromRecord skips only the library-claim check, so server text built from the record isn't held to that record again.
+- Low:
+  - (a) The group key is linkedPeople in stored order, so files linked to A and B and to B and A make two groups. Sort the names before joining.
+  - (b) A joint file (A and B) with only A listed is listed again under "Linked to A and B". It's a repeat, not wrong.
+  - (c) Grouped lines still pass through withoutMoney. FILE_NAME protects names ending in .pdf etc., but a product label carrying a figure would now drop the whole group sentence instead of one file's line. Treat fromRecord like serverWords for `said` too: `const said = serverWords.has(t) || fromRecord.has(t) ? t : …`.
+  - (d) Each grouped entry copies filePoints[0].s, including its `document` id. If any renderer links a card from s.document when found is null, every group would point at the first file. I saw no such use, but it is worth a glance.
