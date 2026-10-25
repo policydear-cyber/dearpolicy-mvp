@@ -6625,3 +6625,7 @@ Free review: code read only. I did not run the DB suite.
   - the label exception works for all three image variants;
   - the R211 continuation, header and heading cases still mask or leave the page unchecked.
 - Accepted cost: footers under prose, or under a row ending in a small whole number, add R217-1 noise ("read in part"). Nothing wrong is stored.
+
+## R220 — #138 1554411: READY
+
+- "Private" is dropped only before Limited or Ltd. Probes: "AIA Singapore Private Limited" = "AIA Singapore Pte Ltd" = aiasingapore, "Private Health Mutual" stays privatehealthmutual, a bare "Private" stays private, the Singlife aliases are unchanged, and "Aviva Ltd" gives aviva.
