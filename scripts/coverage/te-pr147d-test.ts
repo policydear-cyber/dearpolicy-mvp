@@ -1,4 +1,4 @@
-/** Test engineer, PR #147 round 4 at 34f5a8a: travel cover known from the cover's own names, rows left out only within a
+/** Test engineer, PR #147 round 4/5 at 34f5a8a / ee1e2f9: travel cover known from the cover's own names, rows left out only within a
  * cover. Made-up SG, MY and UK households. Synthetic only; no model, no database.
  *   node --import tsx scripts/coverage/te-pr147d-test.ts */
 import { categoryRows, tableDisplay, tileRows } from "@/lib/coverage/table-figures";
@@ -40,6 +40,16 @@ for (const [m, cur, rate, sum] of [["SG", "SGD", 40, 300000], ["MY", "MYR", 100,
   t(`${m} W1 a waiver-only cover never decides the tile`, !!w1 && w1.endsWith(sum.toLocaleString("en-US")), cash(w1));
   const w2 = tile("Total Permanent Disability", [lump("a", "Kestrel Life", "TPD Benefit", sum), lump("b", "Kestrel Group", `TPD paid in instalments where the sum payable exceeds ${cur} 200,000`, 200000)]);
   t(`${m} W2 another cover's threshold clause row: no single figure`, w2 == null, cash(w2), true);
+  // P7-P9 (ee1e2f9): a standing cover with a travel-like name AND one row that pays abroad (an assistance rider), beside another
+  // cover with a different figure: no single figure.
+  for (const [id, product] of [["P7", "Travelers Term Life Plan"], ["P8", "Travelife Care Hospital Plan"], ["P9", "Journey Health Shield"], ["P10", "Life Journey Plan"], ["P11", "Holiday Plan Saver"], ["P12", "Journey Assurance Whole Life"]] as const) {
+    const hc = tile("Hospital Cash", [daily("a", product, "Hospital Cash Benefit", rate * 2), daily("a", product, "Daily hospital cash while overseas (double rate)", rate * 4),
+      daily("b", "Kestrel Health", "Hospital Cash Benefit", rate)]);
+    t(`${m} ${id} standing '${product}' with an overseas double-rate row, beside another cover's lower rate: no single figure`, hc == null, cash(hc));
+  }
+  // V3 a real travel cover whose product is a group scheme name but whose cover name says travel: never decides.
+  const v3 = tile("Hospital Cash", [daily("a", "Kestrel Health", "Hospital Cash Benefit", rate), { ...daily("t", "Harbour Staff Group Insurance", "Daily hospital cash while overseas", rate * 3), cover: "Business Travel" } as K]);
+  t(`${m} V3 a group scheme's business travel cover never decides the tile`, !!v3 && v3.includes(`${rate} a day`), cash(v3), true);
   // D: identical conditions that differ only in case or a full stop: no figure (safe side; note).
   const d1 = tile("Hospital Cash", [daily("a", "Kestrel Health", "Hospital Cash Benefit", rate, { conditions: ["Max 6 claims per year"] }), daily("a", "Kestrel Health", "Daily Hospital Cash", rate, { conditions: ["max 6 claims per year."] })]);
   t(`${m} D1 the same limit worded with other case/punctuation: the figure shows with it`, !!d1 && /6 claims/i.test(d1), cash(d1), true);

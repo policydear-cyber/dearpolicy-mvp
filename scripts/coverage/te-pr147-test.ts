@@ -22,6 +22,7 @@ const row = (coverKey: string, benefit: string, o: Partial<SummaryRow> = {}): K 
 /** What the Home tile shows for the category (app/api/dashboard/route.ts). */
 const tile = (category: string, rows: K[]) => tableDisplay(tileRows(categoryRows(category, rows)));
 
+const TRAVEL = "Kestrel Single Trip Travel Insurance";
 const MARKETS = [
   { m: "SG", cur: "SGD", sign: "S$", rate: 40, sum: 300000 },
   { m: "MY", cur: "MYR", sign: "MYR ", rate: 100, sum: 250000 },
@@ -42,8 +43,11 @@ for (const { m, cur, rate, sum } of MARKETS) {
     tpd("gtl", sum),
     row("gtl", `Total and permanent disability: paid in instalments where the sum payable is above ${cur} 200,000`, { figure: { kind: "printed", amount: 200000, currency: cur, unit: "lump_sum" } }),
     row("life", "Waiver of premium on total and permanent disability", { pays: "words", figure: { kind: "none", why: "no figure printed" } }),
-    daily("trip", "Daily hospital cash while overseas", rate * 3, cur, { fromDay: 1, maxDays: 30 }),
-    row("trip", "Total and permanent disability", { section: "Personal accident", figure: { kind: "printed", amount: 50000, currency: cur, unit: "lump_sum" } }),
+    // Grader correction (TE, ee1e2f9): the travel cover was named only "trip"; it now carries a realistic travel name. Original
+    // grade kept: J1 passed on 0330ab1-34f5a8a with the bare name. Reason: travel is now decided from two signals, and a cover
+    // named only "trip" is not a realistic travel policy name.
+    { ...daily("trip", "Daily hospital cash while overseas", rate * 3, cur, { fromDay: 1, maxDays: 30 }), product: TRAVEL, cover: TRAVEL } as K,
+    { ...row("trip", "Total and permanent disability", { section: "Personal accident", figure: { kind: "printed", amount: 50000, currency: cur, unit: "lump_sum" } }), product: TRAVEL, cover: TRAVEL } as K,
   ];
   const hc = tile("Hospital Cash", home), td = tile("Total Permanent Disability", home);
   t(`${m} J1 the Hospital Cash tile shows the standing cover's rate with its currency`, !!hc && new RegExp(`^(?:S\\$|MYR |GBP |£)${rate} a day · from day 3 · up to 60 days`).test(hc) && !hc.includes("not stated"), cash(hc));

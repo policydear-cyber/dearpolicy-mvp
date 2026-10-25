@@ -240,6 +240,8 @@ test("only a fact about a row's own cover leaves it out: a clause or waiver of t
   const travel = on("t", "Daily hospital cash while overseas", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
   assert.equal(tile("Hospital Cash", [travel, on("b", "Hospital Cash Benefit", 40)]), "S$40 a day");
   assert.equal(tile("Hospital Cash", [travel]), "S$80 a day");
+  // A travel-named cover with a home row as well is standing cover: no figure beside another cover's rate (TE P147-6 round 2).
+  assert.equal(tile("Hospital Cash", [travel, { ...travel, benefit: "Hospital Cash Benefit" }, on("b", "Hospital Cash Benefit", 40)]), null);
   // Two signals are needed: a travel name and a row that pays only abroad. An employer's or product's travel-like word,
   // or a travel name whose rows here pay at home too, keeps the cover in (TE P147-6, Critic R243).
   for (const [market, cur] of [["SG", "SGD"], ["MY", "MYR"], ["UK", "GBP"]] as const)

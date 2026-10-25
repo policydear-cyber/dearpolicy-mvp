@@ -92,7 +92,8 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
 }
 
 /** Travel cover needs two signals together (TE P147-6): the cover's own product, cover or plan name says travel insurance
- * ("Travel insurance", "Single Trip", "Annual Multi-Trip"), and one of its rows here pays only abroad ("while overseas").
+ * ("Travel insurance", "Single Trip", "Annual Multi-Trip"), and EVERY one of its rows here pays only abroad ("while overseas"):
+ * a cover with any home row is standing cover (TE P147-6 round 2).
  * A product name with a travel-like word alone ("Life Journey Saver", "Sunny Holidays Group Insurance") is standing cover,
  * and one benefit's wording alone never makes a cover travel. When unsure the cover stays in, and the tile gives no figure. */
 const TRAVEL_NAME = /\b(?:travel\w*|holiday|journey|trip)\s+(?:insurance|cover|protection|plan|policy|guard|assurance)\b|\b(?:single|annual|multi)[\s-]*trips?\b/i;
@@ -122,7 +123,7 @@ export function tileRows<T extends CoverRow>(rows: T[]): T[] {
   for (const r of rows) { const k = r.coverKey ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
   const kept = [...covers.values()].map((list) => {
     const own = list.filter((r) => !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
-    return { list: own.length ? own : list, travel: list.some(travelName) && list.some((r) => ABROAD_ROW.test(r.benefit)),
+    return { list: own.length ? own : list, travel: list.some(travelName) && list.every((r) => ABROAD_ROW.test(r.benefit)),
       waiverOnly: list.every((r) => WAIVER.test(r.benefit)) };
   });
   const paying = kept.filter((c) => !c.waiverOnly);
