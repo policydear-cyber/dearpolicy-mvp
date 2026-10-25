@@ -6541,3 +6541,29 @@ Free review: diff read, `canonicalInsurer` probed against the old alias rule.
 - Low: LEGAL_FORM misses "private", "pvt", "sdn", "pty", "gmbh" and "se", so "AIA Singapore Private Limited" and "AIA Singapore Pte Ltd" still differ, as they did before. No regression; add them for other markets.
 - Medium, still open (R207-3): scripts and e2e still hold 738 lines with the owner household's first names, including a full name at scripts/claim-evidence-regressions.ts:134, :506 and :599. DC's rule says tests use made-up names. Needs its own PR if it isn't planned already.
 - G007500 hard-coding (ci-evidence.ts:214, death-evidence.ts:192, dashboard route:97) is left for its own plan, as stated.
+
+## R213 — #140 9657d16 (reading starts at once, Try again): NOT READY (one small fix)
+
+Free review: code read only. I did not run the DB suite.
+
+- **Double runs: none found.** startJobNow uses the same claimNextJob CAS (`FOR UPDATE SKIP LOCKED`, queued/failed_retryable only, `available_at <= now()`, not cancel_requested), now filtered by idempotency key. The drain, the daily run and start-now can race on one row, but only one claims it; the losers get "empty" (shown as not_claimable). Lease, heartbeat, retries and dead-lettering are unchanged.
+- **Lease clash with the drain: none.** A leased row is never claimable, and only recoverExpiredLeases (run by runJobBatch) touches an expired lease.
+- **Try again on a leased job: 409, as intended.** livePolicyJob is true for `processing` with a live lease, so the reprocess route throws AlreadyProcessing (route.ts:123, 409). The same is true for failed_retryable inside its backoff.
+- **R213-1 (medium): Try again on an expired lease does not start anything.** This is the likely stall: a run killed at 300 s, or a crashed instance. The row stays `processing` with `lease_expires_at < now()`, so livePolicyJob is false and the page offers Try again. Then:
+  - enqueuePolicyProcessing does nothing (the row is neither terminal nor conflict-free);
+  - startJobNow returns not_claimable (the status is processing);
+  - the drain scheduled at the top of the route moves the row to failed_retryable with a backoff, so the page goes back to "Reading this document…" until a later poll-driven drain claims it.
+  The button says it starts reading and it doesn't. Fix in the reprocess route, stalled path, after the policies UPDATE:
+  ```ts
+  await recoverExpiredLeases(pool); // expired lease -> failed_retryable, or dead_letter at max attempts (which enqueue then revives)
+  await enqueuePolicyProcessing({...});
+  // Try again means now: a retry delay the person is asking to skip is skipped.
+  await query(`UPDATE background_jobs SET available_at=now(), updated_at=now()
+    WHERE job_type=$1 AND idempotency_key=$2 AND status='failed_retryable' AND NOT cancel_requested`, [POLICY_PROCESSING_JOB_TYPE, body.policyId]);
+  await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId });
+  ```
+  Add a test: a processing row with an expired lease, then Try again, gives "succeeded" and runs once.
+- **R213-2 (low-medium): a 150 s claim budget against 300 s maxDuration.** A job claimed at 149 s has 151 s before Vercel kills it. PW9 already ran past 60 s, so a second long document can be killed mid-read, paying again for the calls it already made. Checkpoints and the hosted_ocr cache soften this. Now that start-now gives every document its own start, keep the runner budget at about maxDuration minus the longest expected reading (100-120 s).
+- Low: up to 3 start-now runs plus 1 drain per instance read side by side. The household cap is checked per call, so parallel reads can overshoot it by a few calls' worth, and DC's household has about US$12 left.
+- Low: Try again on an existing queued row keeps that row's payload, so a PDF password typed with Try again is ignored. Pass it through in an UPDATE of payload for a queued row.
+- Low: when start-now is "busy" (3 in flight), Try again shows "Starting…" while nothing starts. The page then shows stalled again after 10 minutes, which is honest.
