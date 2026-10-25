@@ -1669,13 +1669,22 @@ test("\"my husband\" is settled only by a title the documents print before that 
     return { ...h, documents: h.documents.map((d, i) => i === h.documents.length - 1 ? { ...d, insurer, productName } : d) };
   };
   assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich"]), "the household's own insurer");
-  assert.ok(spouseMeant(insured("Example Assurance", "CareFirst Health"), ["my wife's CareFirst plan"]), "the household's own product");
+  assert.ok(spouseMeant(insured("Example Assurance", "CareFirst Health"), ["my wife's CareFirst Health plan"]), "the household's own product, by its whole name");
+  assert.equal(spouseMeant(insured("Example Assurance", "CareFirst Health"), ["my wife's CareFirst plan"]), null, "part of a product name settles nothing: the chat asks who");
+  assert.equal(spouseMeant(insured("Example Assurance", "Family Protect Plan"), ["my husband's family claim"]), null, "a product's first word is ordinary English");
   assert.equal(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Allianz"]), null, "an insurer this household has no document from settles nothing");
   // A product's words that name a person or their family never make a possessive the spouse's own (Critic R207-1, TE P117-4).
   for (const [product, said] of [["Family Care Plan", "my wife's family has cancer history, covered?"], ["Family Protect Plan", "my husband's family got history of stroke"],
     ["Mother & Child Care", "my wife's mother warded, can claim?"], ["Kids First Savings", "my husband's kids from before, covered?"], ["Kids First Savings", "my husband's first wife"]])
     assert.equal(spouseMeant(insured("Example Assurance", product), [said]), null, `${product}: ${said}`);
-  assert.ok(spouseMeant(insured("Example Assurance", "Family Care Plan"), ["my wife's Care plan"]), "the product's other words still count");
+  assert.ok(spouseMeant(insured("Example Assurance", "Family Care Plan"), ["my wife's Family Care Plan claim"]), "the product's whole name counts");
+  // No single word of a product name counts on its own: they are ordinary English (TE P117-5).
+  for (const [insurer, product, said] of [["Example Assurance", "Domestic Helper Insurance", "my wife's domestic helper was hospitalised"], ["Example Life", "Elderly Care Plan", "my husband's elderly father has cancer"],
+    ["Example General", "Group Employee Benefits", "my husband's employee got injured"], ["Example Life", "Caregiver Rider", "my wife's caregiver hurt her back"],
+    ["Example General", "Business Partner Cover", "my husband's business partner died"], ["Great Example", "Term Plan", "my husband's great aunt has cancer"]])
+    assert.equal(spouseMeant(insured(insurer, product), [said]), null, said);
+  assert.ok(spouseMeant(insured("Great Example", "Term Plan"), ["my husband's Great Example policy"]), "a whole insurer name counts");
+  assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich, does it pay?"]), "an insurer's first word, then a clause");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
   // Only for a household set up as one couple (self and spouse).
