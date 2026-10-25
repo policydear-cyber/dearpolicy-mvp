@@ -6879,3 +6879,26 @@ Ran here: npm ci and `next build` (pass), coverage:table-test 22/0, plus a tsx p
 ## R240 — #147 d942627: READY
 
 - The R239 change went in as written: when the condition wording differs, the tile shows the shared limits. A regression covers two rows that both print "Max 6" where one also has an exclusion. With R238 and R239, a tile figure can no longer lose a fromDay, maxDays, qualifier or limiting condition, and it never takes another cover's terms (a bare $ restatement counts only on the same cover). I ran next build on 0330ab1. The delta since then touches only lib/coverage/table-figures.ts, plain TS with no new imports.
+
+## R241 — #147 9d62193 (every condition is a limit unless plainly eligibility): NOT READY (one high)
+
+Free review: I ran ELIGIBILITY, CHANGES_AMOUNT, TRIP_ONLY and ALSO_ABROAD, extracted from the head, on made-up conditions. I accept that my R238 keyword LIMIT rule was the wrong design (TE P147-5). The inverted rule is the right shape, but its eligibility side is still too broad.
+
+- High, the full amount shows (the same class as P147-5). The `excluding/excludes` and `no/not … payable/covered` alternatives accept any clause, and CHANGES_AMOUNT is still a deny-list. These amount-changing conditions are IGNORED, so the tile keeps the full figure:
+  - "Excluding amounts paid under the early critical illness benefit" (an accelerated deduction)
+  - "Not payable in excess of the actual charges incurred"
+  - "No benefit is payable for the portion exceeding reasonable charges"
+  - "Excluding any amount reimbursed by other insurers"
+  - "No benefit payable to the extent covered by another policy"
+  - "Admitted as an inpatient; the benefit is net of any government subsidy"
+  - "Continuous confinement; payable as a proportion of the sum insured"
+  - "Confined continuously; payable at the ward-class rate"
+  - "Not payable where another benefit under this policy has been paid"
+  - "Excludes any bonus"
+  Fix: an eligibility condition may not mention money or another benefit at all. Add to CHANGES_AMOUNT:
+  ```ts
+  |\b(?:amounts?|sums?|portion|proportion\w*|exceed\w*|excess|net\s+of|reimburs\w*|subsid\w*|already\s+paid|paid\s+under|in\s+addition|rates?|bonus\w*|values?|charges?|costs?|expenses?|pro[\s-]?rat\w*|shared?|aggregate|combined|offset|balance|remaining|salary|income|earnings)\b|\b(?:other|another)\s+(?:insurer\w*|insurance|polic\w*|benefits?|plans?)\b
+  ```
+  Better still, narrow the two broad alternatives to cause clauses, e.g. `^\s*(?:no|not)\b[^.]*\b(?:payable|covered)\s+(?:for|if|when|where\s+the\s+(?:insured|life)|due\s+to|arising|caused|resulting|in\s+respect\s+of\s+(?!amounts?))`. With both, the fixes stay on the safe side: anything unplaced gives Covered. "No benefit for self-inflicted injuries", "Excluding pregnancy", "Hospitalised as an inpatient" and "Not payable if the insured is outside Singapore" stay harmless, so the live J1 case keeps its figure.
+- Low (Q3): ALSO_ABROAD's bare `and` turns trip rows into standing cover. "Daily hospital cash while overseas and travelling" and "Hospital cash when you travel and are admitted abroad" become STANDING. Accept and/or only after a home word: `(?:at\s+home|locally|in\s+[A-Z]\w+)\s+(?:and|or)\s+(?:overseas|abroad)`, plus the including/also/as-well-as forms.
+- CLAUSE now needs threshold wording, so "Daily Hospital Cash S$80 per day" stays a benefit. Correct.
