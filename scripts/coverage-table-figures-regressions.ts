@@ -123,17 +123,19 @@ const tile = (category: string, rows: SummaryRow[]) => tableDisplay(tileRows(cat
 for (const [market, cur, rate, sum, travelCap] of [["SG", "SGD", 30, 1000000, 5000], ["MY", "MYR", 80, 500000, 20000], ["UK", "GBP", 25, 250000, 3000]] as const) {
   const daily = (benefit: string, conditions: string[], o: Partial<SummaryRow> = {}) => row(benefit, { pays: "per_day",
     figure: { kind: "printed", amount: rate, currency: cur, unit: "per_day" }, fromDay: 11, maxDays: 30, conditions, ...o });
-  const household = [
-    daily("Daily Hospital Cash Benefit", ["continuous hospital stay"], { section: "Group Term Life" }),
-    daily("D. Daily Hospital Cash Benefit", ["no benefit for self-inflicted injury or pregnancy", "insured in hospital as an inpatient"], { section: "BENEFIT 1: GROUP TERM LIFE" }),
-    daily("Hospital Cash Benefit", [], { section: "Group Term Life" }),
-    row("Total and Permanent Disability Benefit (TPD)", { pays: "percent", section: "Group Term Life",
+  const scheme = { coverKey: "gtl", product: "Group Insurance Scheme", cover: "Group Term Life" };
+  const trip = { coverKey: "trip", product: "Travel insurance", cover: "Single Trip" };
+  const household: SummaryRow[] = [
+    daily("Daily Hospital Cash Benefit", ["continuous hospital stay"], { section: "Group Term Life", ...scheme }),
+    daily("D. Daily Hospital Cash Benefit", ["no benefit for self-inflicted injury or pregnancy", "insured in hospital as an inpatient"], { section: "BENEFIT 1: GROUP TERM LIFE", ...scheme }),
+    daily("Hospital Cash Benefit", [], { section: "Group Term Life", ...scheme }),
+    row("Total and Permanent Disability Benefit (TPD)", { pays: "percent", section: "Group Term Life", ...scheme,
       figure: { kind: "worked_out", amount: sum, currency: cur, how: "100% of the sum insured", capped: false }, percent: 100, base: sum }),
-    row(`Total and permanent disability: lump sum where sum payable is above ${cur} 200,000`, { section: "Group Term Life",
+    row(`Total and permanent disability: lump sum where sum payable is above ${cur} 200,000`, { section: "Group Term Life", ...scheme,
       figure: { kind: "printed", amount: 200000, currency: cur, unit: "lump_sum" } }),
-    row("Daily hospital cash while overseas", { pays: "up_to", section: "Protecting you and your health",
+    row("Daily hospital cash while overseas", { pays: "up_to", section: "Protecting you and your health", ...trip,
       figure: { kind: "printed", amount: travelCap, currency: cur, unit: "up_to" } }),
-    row("Total and permanent disability", { pays: "percent", section: "Personal accident",
+    row("Total and permanent disability", { pays: "percent", section: "Personal accident", ...trip,
       figure: { kind: "worked_out", amount: 150000, currency: cur, how: "100% of the sum insured", capped: false }, percent: 100, base: 150000 }),
   ];
   test(`${market}: a scheme read from two documents and a travel wording keep the tiles' figures (live 31357e4)`, () => {
@@ -215,17 +217,27 @@ test("every condition is a limit unless it is plainly eligibility wording that c
     assert.equal(pair(c), null, c);
 });
 
-test("a name with its own figure is a benefit unless it states a threshold; 'including while overseas' is standing cover (TE P147-2, P147-3)", () => {
-  const named = (benefit: string, amount: number) => keyed(benefit, row(benefit, { pays: "per_day", figure: { kind: "printed", amount, currency: "SGD", unit: "per_day" } }));
-  assert.equal(tileRows([named("Daily Hospital Cash S$80 per day", 80), named("Hospital Cash Benefit", 40)]).length, 2);
-  for (const b of ["TPD: lump sum where the sum payable is above S$200,000", "TPD paid in instalments if the amount exceeds MYR 100,000", "Benefit for claims of £5,000 or less"])
-    assert.equal(tileRows([named(b, 1), named("Total and Permanent Disability", 2)]).length, 1, b);
-  for (const b of ["Daily Hospital Cash, including while overseas", "Hospital Income, also while abroad", "Hospital cash at home and overseas"])
-    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 2, b);
-  for (const b of ["Hospital cash in Singapore and overseas", "Hospital income in Malaysia or abroad"])
-    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 2, b);
-  for (const b of ["Daily hospital cash while overseas", "Hospital allowance during the trip", "Hospital cash while you are travelling", "Hospital cash while overseas and travelling"])
-    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 1, b);
+test("only a fact about a row's own cover leaves it out: a clause or waiver of the same cover, a whole travel cover (TE round 5)", () => {
+  const on = (coverKey: string, benefit: string, amount: number, o: Partial<SummaryRow> & { product?: string; cover?: string } = {}) =>
+    ({ ...row(benefit, { pays: "per_day", figure: { kind: "printed", amount, currency: "SGD", unit: "per_day" } }), coverKey, product: coverKey, ...o });
+  // A threshold clause of the same cover is left out; another cover's row never is, whatever its name says.
+  for (const b of ["TPD: lump sum where the sum payable is above S$200,000", "TPD paid in instalments if the amount exceeds MYR 100,000", "Benefit for claims of £5,000 or less"]) {
+    assert.equal(tileRows([on("a", b, 1), on("a", "Total and Permanent Disability", 2)]).length, 1, b);
+    assert.equal(tileRows([on("b", b, 1), on("a", "Total and Permanent Disability", 2)]).length, 2, b);
+  }
+  // A guaranteed minimum is the benefit, never a clause.
+  for (const b of ["Death benefit of at least S$300,000", "TPD benefit: not less than S$300,000", "TPD, no less than MYR 300,000"])
+    assert.equal(tileRows([on("a", b, 1), on("a", "Total and Permanent Disability", 2)]).length, 2, b);
+  // Trip wording on a standing cover is compared like any other row.
+  for (const b of ["Daily hospital cash while overseas", "Daily Hospital Cash, including while overseas", "Daily hospital cash while overseas or at home", "Hospital cash during the trip"])
+    assert.equal(tile("Hospital Cash", [on("a", b, 80), on("b", "Hospital Cash Benefit", 40)]), null, b);
+  // A whole travel cover is left out beside a standing one; alone, its own rows are the tile's rows.
+  const travel = on("t", "Hospital Cash Benefit", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
+  assert.equal(tile("Hospital Cash", [travel, on("b", "Hospital Cash Benefit", 40)]), "S$40 a day");
+  assert.equal(tile("Hospital Cash", [travel]), "S$80 a day");
+  // A cover whose rows here are all waivers pays nothing for the category.
+  const waiver = on("w", "Waiver of premium on disability", 0, { pays: "words", figure: { kind: "none", why: "no figure" } });
+  assert.equal(tileRows([waiver, on("b", "Hospital Cash Benefit", 40)]).length, 1);
 });
 
 test("a waiver of premium and a travel accident row never decide the TPD tile; another cover with no figure still does (live 31357e4)", () => {

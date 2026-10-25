@@ -91,29 +91,38 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
     && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
 }
 
-/** Pays only during a trip abroad ("Daily hospital cash while overseas"): travel cover, not the person's standing cover.
- * A name that also pays at home ("including while overseas", "also abroad") is standing cover (TE P147-3). */
-const TRIP_ONLY = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey)\b|\boverseas\s+(?:only|travel)\b/i;
-const ALSO_ABROAD = /\b(?:including|incl\.?|also|as\s+well\s+as|even)\s+(?:\w+\s+){0,2}?(?:(?:while|whilst|when)\s+)?(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:at\s+home|locally|home)\s+(?:and|or|and\s*\/\s*or|&)\s+(?:(?:while|when)\s+)?(?:overseas|abroad)\b/i;
-// "and/or overseas" only after a home place ("in Singapore and overseas"): "while overseas and travelling" stays trip-only (Critic R241).
-const HOME_AND_ABROAD = /\bin\s+[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?\s+(?:and|or|and\s*\/\s*or|&)\s+(?:(?:while|when)\s+)?(?:overseas|abroad)\b/;
-const tripOnly = (benefit: string) => TRIP_ONLY.test(benefit) && !ALSO_ABROAD.test(benefit) && !HOME_AND_ABROAD.test(benefit);
+/** Travel cover, known from the cover itself (its product, cover or plan name: "Travel insurance", "Single Trip"), never
+ * from one benefit's wording: a benefit worded like a trip ("while overseas or at home") is compared like any other
+ * (TE round 5: wording rules that drop rows turn a missed phrasing into a wrong figure). */
+const TRAVEL_COVER = /\b(?:travel\w*|trips?|journeys?|holidays?)\b/i;
 /** A part of a benefit's payment terms, not its amount: a name that states a threshold with its own money figure ("paid
- * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A benefit named with its own
- * figure ("Daily Hospital Cash 80 dollars per day") is a benefit, not a clause (TE P147-2). */
+ * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A guaranteed minimum ("at least",
+ * "not less than") is the benefit, not a clause (TE P147-2, round 5 C1-C4). */
 const FIGURE = String.raw`(?:${MONEY_SIGN}\s?\d|\d[\d,]*\s?(?:${MONEY_SIGN}))`;
-const THRESHOLD = String.raw`\b(?:above|below|over|under|exceed\w*|more\s+than|less\s+than|at\s+least|not\s+more\s+than)`;
+const THRESHOLD = String.raw`(?<!\b(?:not|no|at)\s+)\b(?:above|below|over|under|exceed\w*|more\s+than|less\s+than)`;
 const CLAUSE = new RegExp(String.raw`${THRESHOLD}\s+(?:\w+\s+){0,2}?${FIGURE}|${FIGURE}[\d,.]*\s+(?:or\s+(?:less|more|above|below|under|over))\b`, "i");
-/** The rows a Home tile takes its figure from: the category's rows without trip-only rows, threshold clauses and premium
- * waivers, when any other row is left (a person with travel cover only still sees its rows). The Coverage page keeps every
- * row. */
-export function tileRows<T extends SummaryRow>(rows: T[]): T[] {
-  const standing = rows.filter((r) => !tripOnly(r.benefit) && !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
-  return standing.length ? standing : rows;
-}
-/** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out, so it never decides a
- * tile's figure ("Waiver of premium on total and permanent disability benefit"). */
+/** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out ("Waiver of premium
+ * on total and permanent disability benefit"). */
 const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
+
+type CoverRow = SummaryRow & { coverKey?: string; product?: string; cover?: string; plan?: string | null };
+/** The rows a Home tile takes its figure from. A row is left out of the comparison only for a fact about its own cover:
+ *  - a threshold clause or a waiver of premium, when another row of the SAME cover is left to give its figure;
+ *  - a whole travel cover, or a cover whose rows here are all waivers, when another cover is left.
+ * Another cover's row is never left out for its wording, so a phrasing no rule knows gives "Covered", never a wrong
+ * figure (TE round 5). A person with travel cover only still sees its rows. The Coverage page keeps every row. */
+export function tileRows<T extends CoverRow>(rows: T[]): T[] {
+  const covers = new Map<string, T[]>();
+  for (const r of rows) { const k = r.coverKey ?? ""; covers.set(k, [...(covers.get(k) ?? []), r]); }
+  const kept = [...covers.values()].map((list) => {
+    const own = list.filter((r) => !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
+    return { list: own.length ? own : list, travel: list.some((r) => TRAVEL_COVER.test([r.product, r.cover, r.plan].filter(Boolean).join(" "))),
+      waiverOnly: list.every((r) => WAIVER.test(r.benefit)) };
+  });
+  const paying = kept.filter((c) => !c.waiverOnly);
+  const standing = (paying.length ? paying : kept).filter((c) => !c.travel);
+  return (standing.length ? standing : paying.length ? paying : kept).flatMap((c) => c.list);
+}
 
 /** Every condition is taken to change what is paid, and so must be the same on every row of a tile, unless it has one of
  * two plain eligibility shapes (Critic R241: an allow-list, never a list of amount words to refuse):
@@ -129,7 +138,7 @@ const NOT_A_CAUSE = /\d|%|\b(?:amounts?|sums?|paid|pay\w*|charges?|charged|costs
 const STANDING_WORDS = new Set(["the", "a", "an", "as", "in", "on", "of", "to", "be", "is", "must", "while", "only", "insured", "person", "life", "assured",
   "hospital", "inpatient", "in-patient", "admitted", "admission", "confined", "hospitalised", "hospitalized", "continuous", "consecutive", "stay",
   "advice", "registered", "doctor", "medical", "practitioner", "medically", "necessary", "subject", "terms", "conditions", "provisions",
-  "this", "policy", "cover", "plan", "force", "and"]);
+  "this", "policy", "cover", "plan", "force", "and", "confinement"]);
 function isEligibility(c: string): boolean {
   const head = c.match(CAUSE_HEAD);
   if (head) { const cause = c.slice(head[0].length).trim(); return cause.length > 0 && !NOT_A_CAUSE.test(cause); }
