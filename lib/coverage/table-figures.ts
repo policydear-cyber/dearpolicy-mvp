@@ -142,7 +142,8 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
   const texts = new Set(rows.map(figure));
   if (texts.size !== 1 || [...texts][0] == null || new Set(rows.map(limits)).size > 1) return null;
   const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
-  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : ""].filter(Boolean).join(" · ");
+  // Differing wording still shows the limits, which every row prints alike (Critic R239).
+  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : limits(rows[0])].filter(Boolean).join(" · ");
 }
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);

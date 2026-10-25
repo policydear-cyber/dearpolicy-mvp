@@ -187,6 +187,9 @@ test("a limit printed only as a condition must agree across rows; it is never dr
   // The same limit on both: shown with it; a non-limiting wording difference does not block.
   assert.equal(tableDisplay([keyed("a", perDay(30, "SGD", { conditions: max6 })), keyed("a", perDay(30, null, { conditions: [...max6, "not for self-inflicted injury"] }))]),
     "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");
+  // Two stated rows with the same limit and different other wording: the limit is still shown (Critic R239).
+  assert.equal(tableDisplay([keyed("a", perDay(30, "SGD", { conditions: max6 })), keyed("b", perDay(30, "SGD", { conditions: ["as an inpatient", ...max6] }))]),
+    "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");
   for (const c of ["once per life", "limited to the first admission", "per confinement", "only in Singapore", "up to S$500 a year"])
     assert.equal(tableDisplay([keyed("a", perDay(30, "SGD")), keyed("a", perDay(30, "SGD", { conditions: [c] }))]), null, c);
 });
