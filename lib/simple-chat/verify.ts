@@ -1157,7 +1157,7 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 /** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
- * ("output_202601010900001.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 28 Sept 2026"), with the
+ * ("scan_20260101090000.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 1 Jan 2026"), with the
  * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
  * file is kept as it is. */
 // A file that could not be read keeps its file name: nothing read says what it is.
