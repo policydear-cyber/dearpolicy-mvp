@@ -4,7 +4,7 @@
  *   npm run coverage:table-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { categoryOfBenefit, categoryRows, tableDisplay, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryOfBenefit, categoryRows, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
 import type { SummaryRow } from "@/lib/benefit-table/headline";
 
 let passed = 0;
@@ -114,6 +114,94 @@ test("a projection, a not-covered row and a row with no amount never give a figu
 test("a percentage row shows the amount worked out from the printed base", () => {
   const rows = [row("Total and Permanent Disability", { figure: { kind: "worked_out", amount: 400000, currency: "SGD", how: "100% of S$400,000", capped: false }, percent: 100, base: 400000 })];
   assert.equal(tableDisplay(categoryRows("Total Permanent Disability", rows)), "S$400,000");
+});
+
+// Live 31357e4: a scheme printed in two documents, plus a travel policy's wording, cleared both tiles' figures. Each
+// household holds a standing scheme (summary and certificate word the conditions differently), a payment-term clause row,
+// and a travel wording with a trip-only daily cash and a disability row under its personal accident section.
+const tile = (category: string, rows: SummaryRow[]) => tableDisplay(tileRows(categoryRows(category, rows)));
+for (const [market, cur, rate, sum, travelCap] of [["SG", "SGD", 30, 1000000, 5000], ["MY", "MYR", 80, 500000, 20000], ["UK", "GBP", 25, 250000, 3000]] as const) {
+  const daily = (benefit: string, conditions: string[], o: Partial<SummaryRow> = {}) => row(benefit, { pays: "per_day",
+    figure: { kind: "printed", amount: rate, currency: cur, unit: "per_day" }, fromDay: 11, maxDays: 30, conditions, ...o });
+  const household = [
+    daily("Daily Hospital Cash Benefit", ["continuous hospital stay"], { section: "Group Term Life" }),
+    daily("D. Daily Hospital Cash Benefit", ["stay of more than 10 days", "insured in hospital as an inpatient"], { section: "BENEFIT 1: GROUP TERM LIFE" }),
+    daily("Hospital Cash Benefit", [], { section: "Group Term Life" }),
+    row("Total and Permanent Disability Benefit (TPD)", { pays: "percent", section: "Group Term Life",
+      figure: { kind: "worked_out", amount: sum, currency: cur, how: "100% of the sum insured", capped: false }, percent: 100, base: sum }),
+    row(`Total and permanent disability: lump sum where sum payable is above ${cur} 200,000`, { section: "Group Term Life",
+      figure: { kind: "printed", amount: 200000, currency: cur, unit: "lump_sum" } }),
+    row("Daily hospital cash while overseas", { pays: "up_to", section: "Protecting you and your health",
+      figure: { kind: "printed", amount: travelCap, currency: cur, unit: "up_to" } }),
+    row("Total and permanent disability", { pays: "percent", section: "Personal accident",
+      figure: { kind: "worked_out", amount: 150000, currency: cur, how: "100% of the sum insured", capped: false }, percent: 100, base: 150000 }),
+  ];
+  test(`${market}: a scheme read from two documents and a travel wording keep the tiles' figures (live 31357e4)`, () => {
+    assert.match(tile("Hospital Cash", household) ?? "", new RegExp(`^${cur === "SGD" ? "S\\$" : cur + " "}${rate} a day · from day 11 · up to 30 days$`));
+    assert.match(tile("Total Permanent Disability", household) ?? "", new RegExp(`${sum.toLocaleString("en-US")}$`));
+    // The travel disability row is accident cover; the Coverage page still lists the trip's daily cash and the clause.
+    assert.equal(categoryOfBenefit("Total and permanent disability", "Personal accident"), "Personal Accident");
+    assert.equal(categoryRows("Hospital Cash", household).length, 4);
+    assert.equal(categoryRows("Total Permanent Disability", household).length, 2);
+  });
+  test(`${market}: a missing amount stays no amount, never a neighbour's`, () => {
+    // Two standing covers with different rates: no single figure.
+    assert.equal(tile("Hospital Cash", [...household, daily("Hospital Income", [], { figure: { kind: "printed", amount: rate * 2, currency: cur, unit: "per_day" } })]), null);
+    // A standing row that gives no figure: no figure, though another row prints one.
+    assert.equal(tile("Total Permanent Disability", [...household, row("Total and Permanent Disability", { pays: "words", figure: { kind: "none", why: "see the policy" } })]), null);
+    // Different days are different figures.
+    assert.equal(tile("Hospital Cash", [...household, daily("Daily Hospital Cash Benefit", [], { fromDay: 4 })]), null);
+    // Travel cover only: its rows are the tile's rows.
+    assert.equal(tile("Hospital Cash", household.filter((r) => /overseas/.test(r.benefit))), tableDisplay(categoryRows("Hospital Cash", household.filter((r) => /overseas/.test(r.benefit)))));
+  });
+}
+
+// Live 31357e4 (read-only prod rows): one cover's certificate prints "$30" with no currency beside its summary's "S$30";
+// a travel disability row with no figure sits under "Personal accident"; a waiver of premium prints no figure.
+type Keyed = SummaryRow & { coverKey: string };
+const keyed = (coverKey: string, r: SummaryRow): Keyed => ({ ...r, coverKey });
+const perDay = (amount: number, currency: string | null, o: Partial<SummaryRow> = {}) => row("Daily Hospital Cash Benefit", { pays: "per_day",
+  figure: { kind: "printed", amount, currency, unit: "per_day" }, fromDay: 11, maxDays: 30, ...o });
+test("a bare sign restating the same cover's figure does not block it; it is never read as a currency (live 31357e4)", () => {
+  const scheme = [keyed("gtl", perDay(30, "SGD")), keyed("gtl", perDay(30, null, { conditions: ["no benefit for self-inflicted injury"] }))];
+  assert.equal(tableDisplay(scheme), "S$30 a day · from day 11 · up to 30 days");
+  // Another cover's bare-sign row is not the same benefit: no figure.
+  assert.equal(tableDisplay([scheme[0], keyed("other", perDay(30, null))]), null);
+  // A different amount, or different days, on the bare-sign row: no figure.
+  assert.equal(tableDisplay([scheme[0], keyed("gtl", perDay(35, null))]), null);
+  assert.equal(tableDisplay([scheme[0], keyed("gtl", perDay(30, null, { maxDays: 40 }))]), null);
+  // Only bare-sign rows: shown as printed, with the currency not stated, never as S$.
+  assert.match(tableDisplay([keyed("gtl", perDay(30, null))]) ?? "", /^\$30 \(currency not stated\) a day/);
+  // A row whose currency is printed is never dropped for a bare-sign row.
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "MYR")), keyed("gtl", perDay(30, "SGD"))]), null);
+});
+
+test("a waiver of premium and a travel accident row never decide the TPD tile; another cover with no figure still does (live 31357e4)", () => {
+  const tpd = keyed("gtl", row("Total and Permanent Disability Benefit (TPD)", { pays: "percent",
+    figure: { kind: "worked_out", amount: 1000000, currency: "SGD", how: "100% of the sum insured", capped: false }, percent: 100, base: 1000000 }));
+  const travel = keyed("trip", row("Total and permanent disability", { pays: "percent", section: "Personal accident", figure: { kind: "none", why: "base not stated" } }));
+  const waiver = keyed("life", row("Waiver of premium on total and permanent disability benefit", { pays: "words", figure: { kind: "none", why: "no figure printed" } }));
+  const other = keyed("whole-life", row("Total and Permanent Disability Benefit", { pays: "words", figure: { kind: "none", why: "the higher of two values" } }));
+  assert.equal(tile("Total Permanent Disability", [tpd, travel]), "S$1,000,000");
+  assert.equal(tile("Total Permanent Disability", [tpd, waiver, waiver]), "S$1,000,000");
+  // A second TPD cover whose amount the page does not state: the tile cannot give one total, so it says Covered.
+  assert.equal(tile("Total Permanent Disability", [tpd, waiver, other]), null);
+  // The waiver stays listed on the Coverage page.
+  assert.equal(categoryRows("Total Permanent Disability", [tpd, waiver]).length, 2);
+});
+
+test("a death or disability row under an accident section is personal accident; a section that only mentions one is not", () => {
+  for (const s of ["Personal accident", "BENEFIT 2: GROUP PERSONAL ACCIDENT", "Accidental Benefits", "Section 3: Accident cover"])
+    assert.equal(categoryOfBenefit("Total and permanent disability", s), "Personal Accident", s);
+  for (const s of ["Group Term Life", "Death and Accidental Death Benefits", "Accident and Sickness", "Life cover", null])
+    assert.equal(categoryOfBenefit("Total and permanent disability", s), "Total Permanent Disability", String(s));
+  assert.equal(categoryOfBenefit("Daily Hospital Cash", "Personal accident"), "Hospital Cash");
+});
+
+test("conditions every row prints alike are shown; differing ones are left to the Coverage page", () => {
+  const a = row("Hospital Income", { pays: "per_day", figure: { kind: "printed", amount: 50, currency: "AUD", unit: "per_day" }, conditions: ["after 2 nights"] });
+  assert.equal(tableDisplay([a, { ...a }]), "AUD 50 a day · after 2 nights");
+  assert.equal(tableDisplay([a, { ...a, conditions: [] }]), "AUD 50 a day");
 });
 
 const owned = (productName: string | null, groupPolicyNumber: string | null = null, insurer: string | null = null) => ({ productName, groupPolicyNumber, insurer });

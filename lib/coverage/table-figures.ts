@@ -2,6 +2,7 @@
  * figure to show for it. Pure, and for any household: it reads only the benefit names and figures the person's own
  * documents print, never a scheme, product or insurer named in code. A category no row names stays as before. */
 import { rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { MONEY_SIGN } from "@/lib/format/currency";
 import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 /** Benefit names, as policies in any market print them, for each category. Early critical illness is tested before
@@ -65,9 +66,19 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   return "accident";
 }
 
-/** The one category a benefit name belongs to, or null. A name matching several takes the first in NAMES. */
-export function categoryOfBenefit(benefit: string): string | null {
-  return NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
+/** A section that is accident cover as a whole: "Personal accident", or one that starts with accident words ("Accidental
+ * Benefits"). A section that only mentions an accident ("Death and Accidental Death") is not. */
+const ACCIDENT_SECTION = new RegExp(String.raw`\bpersonal\s+accident\b|^\W*(?:(?:benefit|section|part)\s+\w+\W+)?(?:the\s+)?${ACC}`, "i");
+
+/** The one category a benefit name belongs to, or null. A name matching several takes the first in NAMES. A death or
+ * disability row printed under an accident section ("Personal accident", "Group Personal Accident") is accident cover
+ * whatever its own name says: a travel policy's "Total and permanent disability" under "Personal accident" pays only on an
+ * accident (live 31357e4: it joined the TPD tile and cleared its figure). */
+export function categoryOfBenefit(benefit: string, section?: string | null): string | null {
+  const category = NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && causeOf(benefit) !== "accident"))?.[0] ?? null;
+  if ((category === "Death" || category === "Total Permanent Disability") && section && ACCIDENT_SECTION.test(section)
+    && causeOf(section) === "accident") return "Personal Accident";
+  return category;
 }
 
 /** A premium the person pays, never a benefit (chat.ts's PREMIUM_ROW). */
@@ -76,20 +87,55 @@ const PREMIUM = /^(?!.*\b(?:waiv|return|refund)\w*).*\bpremiums?\b/i;
  * surrender value ("Death benefit fund value"), a premium, or a row the document marks not covered (Critic R225). */
 export function categoryRows<T extends SummaryRow>(category: string, rows: T[]): T[] {
   return rows.filter((r) => r.figure.kind !== "projected" && r.figure.kind !== "value" && r.pays !== "value" && r.pays !== "not_covered"
-    && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit) === category);
+    && !PREMIUM.test(r.benefit) && categoryOfBenefit(r.benefit, r.section) === category);
 }
 
-/** The text for a tile: the row's short figure and its days and conditions ("MYR 80 a day · from day 4 · up to 60
- * days"). Null when the rows print different figures (two plans, or a table by age): the tile then says Covered, and the
+/** Pays only during a trip abroad ("Daily hospital cash while overseas"): travel cover, not the person's standing cover. */
+const TRIP_ONLY = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey)\b|\boverseas\s+(?:only|travel)\b/i;
+/** A part of a benefit's payment terms, not its amount: a name that prints its own money figure ("lump sum where the sum
+ * payable is above 200,000 dollars" as printed with its sign) states a threshold, never what the benefit pays. */
+const CLAUSE = new RegExp(String.raw`${MONEY_SIGN}\s?\d|\d[\d,]*\s?(?:${MONEY_SIGN})`, "i");
+/** The rows a Home tile takes its figure from: the category's rows without trip-only rows and payment-term clauses, when
+ * any other row is left (a person with travel cover only still sees its rows). The Coverage page keeps every row. */
+export function tileRows<T extends SummaryRow>(rows: T[]): T[] {
+  const standing = rows.filter((r) => !TRIP_ONLY.test(r.benefit) && !CLAUSE.test(r.benefit) && !WAIVER.test(r.benefit));
+  return standing.length ? standing : rows;
+}
+/** A waiver of premium: the person stops paying on a disability or illness, but it pays nothing out, so it never decides a
+ * tile's figure ("Waiver of premium on total and permanent disability benefit"). */
+const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
+
+type Money = { amount: number; currency: string | null; unit?: string; period?: unknown };
+const moneyOf = (r: SummaryRow): Money | null => "amount" in r.figure ? r.figure as Money : null;
+/** Another document of the same cover printing the same figure with its currency, where this row's page prints a bare
+ * sign (a bare-sign figure beside the same figure with its currency, for one cover): the row says nothing the other does not. Only the
+ * same cover, kind, amount, unit, days and qualifier count; a bare sign is never read as a currency, and it is never
+ * matched to another cover's row (live 31357e4). */
+function restatedWithCurrency(r: SummaryRow & { coverKey?: string }, rows: (SummaryRow & { coverKey?: string })[]): boolean {
+  const a = moneyOf(r);
+  if (!a || a.currency != null || !r.coverKey) return false;
+  return rows.some((s) => {
+    const b = moneyOf(s);
+    return s !== r && !!b && b.currency != null && s.coverKey === r.coverKey && s.figure.kind === r.figure.kind && b.amount === a.amount
+      && b.unit === a.unit && JSON.stringify(b.period ?? null) === JSON.stringify(a.period ?? null)
+      && s.fromDay === r.fromDay && s.maxDays === r.maxDays && s.qualifier === r.qualifier && s.pays === r.pays;
+  });
+}
+
+/** The text for a tile: the row's short figure and its days ("MYR 80 a day · from day 4 · up to 60 days"), with its
+ * conditions when every row prints the same ones. Rows agree on the figure, who it is for and its days; the conditions
+ * are not compared, because two documents of one scheme word them differently (live 31357e4). A row that only restates
+ * another document's figure for the same cover without its currency is left out (restatedWithCurrency). Null when the rows print
+ * different figures (two plans, or a table by age), or a row gives no figure: the tile then says Covered, and the
  * Coverage page lists each row with its own figure. */
-export function tableDisplay(rows: SummaryRow[]): string | null {
-  const texts = new Set(rows.map((r) => {
-    const s = shortFigure(r);
-    if (r.figure.kind === "none" && r.pays !== "as_charged") return null;
-    return [s.text, rowDetail(r)].filter(Boolean).join(" · ");
-  }));
-  if (texts.size !== 1) return null;
-  return [...texts][0];
+export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): string | null {
+  const rows = all.filter((r) => !restatedWithCurrency(r, all));
+  const figure = (r: SummaryRow) => r.figure.kind === "none" && r.pays !== "as_charged" ? null
+    : [shortFigure(r).text, rowDetail({ ...r, conditions: [] })].filter(Boolean).join(" · ");
+  const texts = new Set(rows.map(figure));
+  if (texts.size !== 1 || [...texts][0] == null) return null;
+  const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
+  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : ""].filter(Boolean).join(" · ");
 }
 
 const GENERIC = new Set(["insurance", "plan", "policy", "cover", "coverage", "scheme", "benefit", "benefits", "the", "of", "and"]);
