@@ -115,9 +115,16 @@ function groupPolicyNumber(text: string) {
 }
 
 
+/** A group scheme's own title, as its first page prints it on a line of its own ("<Scheme name> Group Insurance", "...
+ * Group Insurance Scheme"), for any employer or insurer. Null when there is none: no product name is guessed. */
 function inferProductName(text: string) {
-  if (/MINDEF\s*&\s*MHA\s+Group Insurance/i.test(text)) return "MINDEF & MHA Group Insurance";
-  return null;
+  const title = text.split("\n").slice(0, 15).map((l) => l.trim().replace(/\s+/g, " "))
+    .find((l) => l.length <= 80 && /^[A-Za-z0-9][A-Za-z0-9&'.,() -]*\bgroup\s+insurance(?:\s+scheme)?$/i.test(l)
+      // A heading about the scheme ("Certificate of Group Insurance", "Important notice about your Group Insurance") is not its
+      // name (Critic R226).
+      && !/^(?:certificate|important|notice|summary|about|your|the|this|schedule|welcome|guide|claims?|how)\b/i.test(l)
+      && !/\b(?:of|your|about|to|for)\s+(?:the\s+)?group\s+insurance/i.test(l));
+  return title ?? null;
 }
 
 /** Round 5: what plain code can read when the reading service failed on a
