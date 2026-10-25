@@ -106,14 +106,14 @@ async function main() {
     assert.match(libraryFact(h, whole), /was read\./);
     // A file whose name says nothing is named by what the app takes it to be, with the file name after it; two such files
     // of the same kind are told apart by the day each was uploaded (overnight run 23 Oct, N195, N282).
-    const plain = { ...whole, productName: null, insurer: "FWD", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };
-    const files = [{ ...plain, name: "output_202609281146053.pdf" }, { ...plain, name: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", uploadedAt: "2026-10-20T03:00:00Z" }];
+    const plain = { ...whole, productName: null, insurer: "Example Insurance", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };
+    const files = [{ ...plain, name: "output_202601010900001.pdf" }, { ...plain, name: "0a1b2c3d-0000-4000-8000-00000000abcd.pdf", uploadedAt: "2026-10-20T03:00:00Z" }];
     const two = { ...h, documents: files };
-    assert.match(libraryFact(two, files[0]), /^FWD endorsement \(uploaded 28 Sept 2026\) \(output_202609281146053\.pdf\) was read\./);
-    assert.match(libraryFact(two, files[1]), /^FWD endorsement \(uploaded 20 Oct 2026\) \(817d6e8b-874f-4527-a45d-05e03adaf14c\.pdf\) was read\./);
-    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^FWD endorsement \(output_202609281146053\.pdf\) was read\./);
+    assert.match(libraryFact(two, files[0]), /^Example Insurance endorsement \(uploaded 28 Sept 2026\) \(output_202601010900001\.pdf\) was read\./);
+    assert.match(libraryFact(two, files[1]), /^Example Insurance endorsement \(uploaded 20 Oct 2026\) \(0a1b2c3d-0000-4000-8000-00000000abcd\.pdf\) was read\./);
+    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^Example Insurance endorsement \(output_202601010900001\.pdf\) was read\./);
     // A name a person gave the file stays as it is.
-    assert.match(libraryFact(h, { ...plain, name: "Desmond travel.pdf" }), /^Desmond travel\.pdf was read\./);
+    assert.match(libraryFact(h, { ...plain, name: "Lim travel.pdf" }), /^Lim travel\.pdf was read\./);
   });
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
