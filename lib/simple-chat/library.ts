@@ -141,9 +141,11 @@ export const PAGES_NOTE = "Only the pages the benefit table's rows come from, an
 
 const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
 /** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
- * the documents print with that kind of title ("Mr Lim Wei Ming, Alex") while the other is never printed with it. A
+ * the documents print with that kind of title ("Mr Lim Ah Kow") while the other is never printed with it. A
  * title counts only before all of that member's own name words. Never read from a name itself. Null otherwise
- * (stress run 23 Oct, S048: "my husband" was asked about as "Wei Ming's or Mei Ling's?"). */
+ * (stress run 23 Oct, S048: "my husband" was asked about as "which of you two?"). Nothing here knows any household: it reads
+ * the relationships each household sets for its members and the titles its own documents print, and asks when they do not
+ * settle it. */
 export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
   const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
   if (!asked) return null;
