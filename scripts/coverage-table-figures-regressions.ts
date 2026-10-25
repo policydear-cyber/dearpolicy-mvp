@@ -55,7 +55,7 @@ test("accident only is the default; any cause needs a phrase that says so (TE P1
     "Death benefit (accidental death only, including injury at work)", "Death Benefit - Accidental, double indemnity",
     "Death benefit (accidental death only), doubled on public transport", "Death Benefit (Accident only) - twice the sum insured"])
     assert.equal(categoryOfBenefit(b), "Personal Accident", b);
-  for (const b of ["Death other than by accident", "Death from causes other than accident", "Death due to sickness or accident"]) assert.equal(categoryOfBenefit(b), "Death", b);
+  for (const b of ["Death other than by accident", "Death from causes other than accident", "Death due to sickness or accident", "Death (non-accidental)"]) assert.equal(categoryOfBenefit(b), "Death", b);
 });
 
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
