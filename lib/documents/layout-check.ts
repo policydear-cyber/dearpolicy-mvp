@@ -205,18 +205,30 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   // figures of all such lines, in printed order: unless the image reading prints the same ones in the same order on its own
   // lines that pair nothing, none of them is used. That covers a value the image prints with another figure, beside its
   // label, on its own line, in another order, or not at all (TE P139-1, A26-A31, N8).
-  // The page's own number is left out: image readers often drop a footer, or print it elsewhere (Critic R215-1).
-  const pageNo = (l: string) => /page|of/i.test(l) || (pageNumber != null && Number(l.trim()) === pageNumber);
-  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) && !pageNo(l) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
-  // Except as a value under its label alone ("Hospital cash per day" over "3" on page 3): kept only when the image reading
-  // prints the same label over the same number (TE A28, A30).
+  // The page's own number pairs nothing, but a lone number equal to it may be a value whose label is above it
+  // ("Hospital cash per day (max 30 days)" over "3" on page 3, TE A28, A30, A36). Such a value, under a line that ends in
+  // words, is kept only when the image reading prints the same line over the same number. Otherwise the page's own number
+  // is left out of the comparison when it is the first or last line, or the other reading prints it alone too: image
+  // readers often drop a footer, or print it elsewhere (Critic R215-1, R189-1). Mid-page, with no lone page number in the
+  // other reading, it is compared like any lone value (TE A38).
   const above = (ls: string[], i: number) => ls.slice(0, i).reverse().find((l) => l.trim())?.trim() ?? "";
+  const pageNo = (l: string) => /page|of/i.test(l) || (pageNumber != null && Number(l.trim()) === pageNumber);
+  const valueUnder = (ls: string[], i: number) => {
+    if (pageNumber == null || Number(ls[i].trim()) !== pageNumber) return false;
+    const last = lineTokens(above(ls, i)).at(-1);
+    return typeof last === "string" && !isDate(last);
+  };
+  const edge = (ls: string[], i: number) => { const filled = ls.map((l, j) => (l.trim() ? j : -1)).filter((j) => j >= 0); return i === filled[0] || i === filled.at(-1); };
+  const hasLonePage = (ls: string[], skip: Set<number>) => [...skip].some((i) => pageNo(ls[i]));
+  const left = (ls: string[], i: number, otherHasLone: boolean) => pageNo(ls[i]) && (valueUnder(ls, i) || /page|of/i.test(ls[i]) || edge(ls, i) || otherHasLone);
+  const imageHasLone = hasLonePage(imageLinesAll, skipImage), textHasLone = hasLonePage(lines, skipText);
+  const loneFigures = (ls: string[], skip: Set<number>, otherHasLone: boolean) => ls.flatMap((l, i) => (skip.has(i) && !left(ls, i, otherHasLone) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
   skipText.forEach((i) => {
-    if (pageNumber == null || Number(lines[i].trim()) !== pageNumber || !LABEL_ONLY(above(lines, i))) return;
+    if (!valueUnder(lines, i)) return;
     const label = lineTokens(above(lines, i)), value = lineTokens(lines[i]);
     if (!imageLinesAll.some((l, j) => sameLine(lineTokens(l), value) && sameLine(lineTokens(above(imageLinesAll, j)), label))) spread.add(i);
   });
-  const loneText = loneFigures(lines, skipText), loneImage = loneFigures(imageLinesAll, skipImage);
+  const loneText = loneFigures(lines, skipText, imageHasLone), loneImage = loneFigures(imageLinesAll, skipImage, textHasLone);
   if (!sameLine(loneText, loneImage)) skipText.forEach((i) => { if (figureLine(lineTokens(lines[i]))) spread.add(i); });
   if (kind === null && spread.size) {
     kind = !sameFigures(a, b) ? "figures differ" : "pairing differs";

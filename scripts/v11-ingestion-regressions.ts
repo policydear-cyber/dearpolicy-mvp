@@ -311,6 +311,10 @@ async function partA() {
       assert.doesNotMatch(p.text.split("\n").slice(1).join("\n"), /\d/, t);
       assert.match(p.text, /^Death Benefit\t100,000\.00\n/, t);
     }
+    // A value equal to the page number under a label that prints a figure, or mid-page, is still compared (TE A36, A38).
+    for (const [t, i, n] of [["Death Benefit\t100,000.00\nHospital cash per day (max 30 days)\n3", "Death Benefit 100,000.00\nHospital cash per day (max 30 days)", 3],
+      ["Death Benefit\t100,000.00\nPersons covered (age 0-17)\n2\nNotes apply", "Death Benefit 100,000.00\nPersons covered (age 0-17)\nNotes apply", 2]] as const)
+      assert.equal((await page(t, i, n)).partChecked, true, t);
     // A page number only the text layer prints costs nothing: image readers often drop a footer (Critic R215-1).
     for (const footer of ["3", "Page 3 of 12"]) {
       const t = `Your Schedule\nSum Assured 100,000.00\nPremium 181.44\n${footer}`;
