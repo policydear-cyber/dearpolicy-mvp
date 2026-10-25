@@ -6616,3 +6616,12 @@ Free review: code read only. I did not run the DB suite.
 - Accepted cost: part of a product name gives no match, so the chat asks who is meant. This fails safe (it asks rather than picking a person).
 - Low, harmless: an insurer whose first word is ordinary English counts when that word stands alone ("my wife's income." with Income Insurance). It still resolves to the spouse, who is the subject anyway.
 - On #139 R217-1: the builder is right that my prose rule misses the probe line (no full stop, under 60 characters). Leaving it for later is fine, since it fails safe.
+
+## R219 — #139 e1852f6: READY
+
+- P139-3 (TE A40) is closed. A lone page number at the edge is left out only when nothing is printed above it, or the row above ends in a comma-grouped or two-decimal amount. Anything else is compared, which fails safe.
+- My probes are unchanged:
+  - R215-1 ("Premium 181.44" over "3", the image dropping it) agrees with the text unchanged;
+  - the label exception works for all three image variants;
+  - the R211 continuation, header and heading cases still mask or leave the page unchecked.
+- Accepted cost: footers under prose, or under a row ending in a small whole number, add R217-1 noise ("read in part"). Nothing wrong is stored.
