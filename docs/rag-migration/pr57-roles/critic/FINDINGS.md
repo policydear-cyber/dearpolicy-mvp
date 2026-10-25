@@ -6745,3 +6745,31 @@ Free review: delta read only. The builder's next build and 15-set replay (0 chan
 
 - The delta is 6 run-record files (s47 live-1, live-2 and live-4, conv and run JSON, 48 lines each way). Only calculation ids change: kc85c31c5d6 becomes k46fc3b9ba9, and k7c2fc04d5c becomes k1283bcfe55. Each map key, calcId and result_id changes together, and neither old id is left anywhere in the tree.
 - No Yi Chuen, Desmond or Charmaine is left. The builder reports scenario-replay 22/22, matching main.
+
+## R229 — #142 bef4fba, #144 3d52bc1, #145 f578e12
+
+Free review: delta read plus tsx probes of categoryOfBenefit, anyMoneyFigures and moneyFiguresIn (pg stubbed).
+
+### #142: one medium, caused by my R227 suggestion
+
+- Medium: the builder's reason for leaving out "additional" applies to "double" as well. Probe results:
+  - "Double Indemnity Accidental Death Benefit" goes to Death.
+  - "Accidental Death (double for public transport)" goes to Death.
+  Both are accident-only riders, now on the Death tile. Count the uplift words only when the name opens with a plain death benefit:
+  ```ts
+  const uplift = /^\s*death(?:\s+benefit)?\b/i.test(paid) && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const anyCause = (/\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid) || uplift) && !/\bpersonal\s+accident\b/i.test(benefit);
+  ```
+  With this, "Death benefit; doubled for accidental death" still goes to Death, and the two riders go to Personal Accident.
+- Low: "Death from causes other than accident" goes to Personal Accident. The "other than" strip removes the words that make it not accident-only, but the PA regex still tests the full name. Test the PA regex on `paid`, or treat `other\s+than\s+accident` as any-cause.
+- Low: "Death (including death due to injury)" goes to Personal Accident. Rare.
+- Checked: "Additional Accidental Death Benefit" goes to PA, "Accidental Death (death from illness is not covered)" to PA, and "Death due to illness or accident" to Death.
+
+### #144: READY
+
+- otherSide stops "lower jaw" matching the "Upper jaw" row, and a row that prints both side words still matches. The only-coverage fallback now also needs the table to show one cover on that document.
+
+### #145: READY (one low)
+
+- FIGURE now has `(?<![A-Za-z])(RM)`. Probe: "claim FORM 2", "TERM 1" and "PLATFORM 3" give no money in either moneyFiguresIn or anyMoneyFigures. The NZ$ alias is in. The title filter refuses heading lines. ₹, USD-after-figure and RM caps are seen.
+- Low, fails safe (hides): ANY_SIGN's bare `R` reads "Rider R1: up to S$50,000" as [1, 50000] and "Class R 2 up to S$500" as [2, 500], so a cap is refused. Require a thousands group for a bare R (rand), e.g. `R\s?\d{1,3}(?:[ ,]\d{3})+`, or drop it.
