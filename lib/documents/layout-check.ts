@@ -121,7 +121,8 @@ function pairingNothing(t: string, pageNumber?: number): Set<number> {
 
 /** What an unconfirmed figure is shown as: the line keeps its words, and the reader is told the amount was not checked. */
 export const NOT_CHECKED = "[amount not checked]";
-const ANY_FIGURE = new RegExp(String.raw`(?:US\$|S\$|\$)?(?:` + DATE + String.raw`|\d[\d,]*(?:\.\d+)?%?)`, "gi");
+// A figure never ends in a comma: the sentence's own comma after it stays.
+const ANY_FIGURE = new RegExp(String.raw`(?:US\$|S\$|\$)?(?:` + DATE + String.raw`|\d(?:[\d,]*\d)?(?:\.\d+)?%?)`, "gi");
 const notChecked = (line: string) => unglue(line).replace(ANY_FIGURE, NOT_CHECKED);
 
 /** One figure as the history keeps it: its kind and where it sits on the page, never its digits or the words beside it. */
@@ -160,7 +161,15 @@ const described = (xs: Seen[]) => (xs.length ? `${xs.length} (${tally(xs.map((x)
 export function checkLines(textReading: string, imageReading: string, pageNumber?: number):
   { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
-  const pool = imageReading.split("\n").map((l, i) => (skipImage.has(i) ? [] : lineTokens(l))).filter(figureLine);
+  const imageLinesAll = imageReading.split("\n");
+  // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
+  // readings print. Headings only one reading prints are passed over (Critic R211-3).
+  const headingsOf = (ls: string[]) => ls.map((l) => lineTokens(l)).map((t) => (t.length && !figureLine(t) ? t.join(" ") : null));
+  const textHeads = headingsOf(lines), imageHeads = headingsOf(imageLinesAll);
+  const shared = new Set(textHeads.filter((h) => h && imageHeads.includes(h)));
+  const under = (heads: (string | null)[]) => { let h = ""; return heads.map((x) => (x && shared.has(x) ? (h = x) : h)); };
+  const textUnder = under(textHeads), imageUnder = under(imageHeads);
+  const pool = imageLinesAll.map((l, i) => ({ t: skipImage.has(i) ? [] : lineTokens(l), h: imageUnder[i] })).filter((o) => figureLine(o.t));
   const imageLines = pool.length;
   const unconfirmed: number[] = [];
   let figureLines = 0, noLabel = -1, why = "";
@@ -169,22 +178,39 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
-    const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o)) : -1;
+    const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
     why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
   });
-  if (!why && pool.length) why = `the text reading does not print ${figuresOf(pool[0]).join(", ")} beside "${labelOf(pool[0])}" in that order`;
+  if (!why && pool.length) why = `the text reading does not print ${figuresOf(pool[0].t).join(", ")} beside "${labelOf(pool[0].t)}" in that order`;
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
   const kind: DisagreeKind | null = !b.length ? "image prints no figures" : !unconfirmed.length && !pool.length ? null
     : !sameFigures(a, b) ? "figures differ" : noLabel >= 0 ? "figure line with no label" : "pairing differs";
+  // A masked line takes its row and table with it (Critic R211-1, R211-2): a continuation ("or up to S$50,000, whichever
+  // is lesser") read without the row's own figure would stand as the row's whole limit, and a masked row that starts a
+  // run of tab-cell rows is their column header, without which no figure under it can be tied to its plan or age.
+  // A continuation starts lower-case or with a connective or cap word (the same words lib/benefit-table/check.ts joins).
+  const continues = (l: string) => /^[ \t,;:(]*[a-z]/.test(l) || /^[ \t,;:(]*(?:or|and|up\s+to|subject|whichever|max(?:imum)?|min(?:imum)?|limit(?:ed)?|capped|not\s+(?:to\s+)?exceed(?:ing)?)\b/i.test(l);
+  const cells = (l: string) => l.split("\t").filter((c) => c.trim()).length;
+  const isFig = (i: number) => !skipText.has(i) && figureLine(lineTokens(lines[i]));
+  const spread = new Set(unconfirmed);
+  for (const i of unconfirmed) {
+    for (let j = i + 1; j < lines.length && continues(lines[j]); j++) if (isFig(j)) spread.add(j);
+    for (let j = i; j > 0 && continues(lines[j]); j--) if (isFig(j - 1)) spread.add(j - 1);
+    if (cells(lines[i]) >= 3) for (let j = i + 1; j < lines.length && cells(lines[j]) === cells(lines[i]); j++) if (isFig(j)) spread.add(j);
+  }
+  // An image figure line no text line matched may belong to a line the check skipped: a lone date or a lone number under
+  // its label ("Expiry date" over "30/09/2027", image "Expiry date 30/09/2028"). Those lines are never compared, so with
+  // such a leftover they are not checked either (TE P139-1).
+  if (pool.length) skipText.forEach((i) => { if (figureLine(lineTokens(lines[i]))) spread.add(i); });
+  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
-  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${figureLines - unconfirmed.length} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
+  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
   if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log };
-  const confirmed = figureLines - unconfirmed.length;
-  const text = !unconfirmed.length ? textReading : confirmed ? lines.map((l, i) => (unconfirmed.includes(i) ? notChecked(l) : l)).join("\n") : null;
+  const text = !spread.size ? textReading : confirmed ? lines.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
   return { agree: kind === null, kind, why, text, log };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text

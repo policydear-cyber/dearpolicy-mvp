@@ -276,6 +276,34 @@ async function partA() {
     const { numbersIn } = await import("@/lib/benefit-table/check");
     assert.deepEqual(numbersIn(misread.text.split("\n").at(-1)!), []);
   });
+  await t("E1: a line the check cannot confirm takes its continuation, its table and its skipped lines with it, and lines match only under the same heading (Critic R211, TE P139-1)", async () => {
+    const { crossCheckPages, NOT_CHECKED } = await import("@/lib/documents/layout-check");
+    const page = async (t: string, i: string, n = 3) => (await crossCheckPages<{ pageNumber: number; text: string; unchecked?: boolean; partChecked?: boolean }>([{ pageNumber: n, text: t }], [n], async () => [{ pageNumber: n, text: i, extractionMethod: "ocr" }]))[0];
+    // A continuation read without its row's own figure would stand as the row's whole limit (R211-1).
+    const cont = await page("Hospital cash S$150 per day\nor up to S$50,000, whichever is lesser\nAmbulance S$500", "Hospital cash S$180 per day\nor up to S$50,000, whichever is lesser\nAmbulance S$500");
+    assert.equal(cont.partChecked, true);
+    assert.doesNotMatch(cont.text, /50,000|150/);
+    assert.equal(cont.text.split("\n")[1], `or up to ${NOT_CHECKED}, whichever is lesser`);
+    assert.match(cont.text, /Ambulance S\$500/);
+    // A misread column header: no figure under it can be tied to its plan (R211-2).
+    const table = await page("Benefit\tPlan 1\tPlan 2\tPlan 3\nRoom and board per day\t150\t250\t400\nSurgical limit\t5,000\t8,000\t12,000\nPremium\t181.44",
+      "Benefit Plan 1 Plan 2 Plan 8\nRoom and board per day 150 250 400\nSurgical limit 5,000 8,000 12,000\nPremium 181.44");
+    assert.equal(table.partChecked, true);
+    assert.doesNotMatch(table.text, /250|8,000|12,000/);
+    assert.match(table.text, /Premium\t181\.44/);
+    // The same line under swapped headings is not the same line (R211-3).
+    const heads = await page("Plan A\nDeath benefit 100,000\nPlan B\nDeath benefit 200,000", "Plan A\nDeath benefit 200,000\nPlan B\nDeath benefit 100,000");
+    assert.equal(heads.unchecked, true);
+    // A value on its own line under its label, which the image prints with another value, is not stored as checked (TE P139-1).
+    assert.equal((await page("Expiry date\n30/09/2027", "Expiry date 30/09/2028")).unchecked, true);
+    assert.equal((await page("Commencement date\nExpiry date\n01/10/2026\n30/09/2027", "Commencement date 30/09/2027\nExpiry date 01/10/2026")).unchecked, true);
+    const lone = await page("Death Benefit\t100,000.00\nHospital cash per day\n3", "Death Benefit 100,000.00\nHospital cash per day 8");
+    assert.equal(lone.partChecked, true);
+    assert.equal(lone.text.split("\n").at(-1), NOT_CHECKED);
+    assert.match(lone.text, /Death Benefit\t100,000\.00/);
+    // A page number the image prints too still pairs nothing, and the page agrees.
+    assert.equal((await page("Death Benefit\t100,000.00\n3", "Death Benefit 100,000.00\n3")).text, "Death Benefit\t100,000.00\n3");
+  });
   await t("E1: the page image reader's reply is read even with a raw TAB or line break in a page, or a sentence before it (Prudential readings, 24 Oct)", async () => {
     const { parseTranscription, acceptTranscribedPages } = await import("@/lib/documents/ocr-hosted");
     const pagesOf = (reply: string) => acceptTranscribedPages([3, 4], (parseTranscription(reply) as { pages?: unknown } | null)?.pages).map((p) => [p.pageNumber, p.text]);

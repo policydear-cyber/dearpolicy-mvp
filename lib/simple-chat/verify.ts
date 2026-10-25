@@ -1167,7 +1167,9 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   const label = labelFor(household, d);
   const named = label === d.name ? d.name : `${label} (${d.name})`;
   const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.`
-    : d.uncheckedPages?.length ? `${named} was read in part: ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.`
+    : d.uncheckedPages?.length || d.partCheckedPages?.length ? `${named} was read in part:${d.uncheckedPages?.length ? ` ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.` : ""}`
+      // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
+      + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
     : `${named} was read.`;
   const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
   return `${read}${linked}${d.uploadedFor ? ` It was uploaded for ${baseName(d.uploadedFor)}.` : ""}`;
