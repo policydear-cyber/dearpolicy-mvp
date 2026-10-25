@@ -14,7 +14,8 @@ import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { deletePolicyFile, savePolicyFile } from "@/lib/storage";
-import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
+import { enqueuePolicyProcessing, POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
+import { scheduleJobStart } from "@/lib/jobs/request-drain";
 import { probeImageDecodes, validateDocumentUpload } from "@/lib/documents/formats";
 import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
 import { pool } from "@/lib/db/client";
@@ -175,6 +176,8 @@ export async function acceptPolicyUpload(args: {
     pdfPassword: args.pdfPassword || undefined,
     linkUploadMember: args.explicitFamilyMember,
   });
+  // This document starts now, not when a drain or the daily run gets to it (lib/jobs/request-drain.ts).
+  scheduleJobStart(POLICY_PROCESSING_JOB_TYPE, policyId);
 
   void recordEvent({
     name: "upload.policy.queued",

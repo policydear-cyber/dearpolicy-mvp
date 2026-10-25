@@ -28,10 +28,12 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pool } from "@/lib/db/client";
 import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
-import { enqueueJob } from "@/lib/jobs/queue";
+import { enqueueJob, recoverExpiredLeases } from "@/lib/jobs/queue";
 import { claimAndProcessOne, runWorkerLoop } from "@/lib/jobs/worker-runtime";
 import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
-import { drainOnce, resetRequestDrainStateForTests, scheduleRequestDrain, REQUEST_DRAIN_MAX_JOBS, REQUEST_DRAIN_MIN_INTERVAL_MS } from "@/lib/jobs/request-drain";
+import { drainOnce, resetRequestDrainStateForTests, resetStartNowStateForTests, scheduleRequestDrain, startJobNow, START_NOW_MAX_IN_FLIGHT, REQUEST_DRAIN_MAX_JOBS, REQUEST_DRAIN_MIN_INTERVAL_MS } from "@/lib/jobs/request-drain";
+import { DEFAULT_JOB_RUNNER_CLAIM_BUDGET_MS } from "@/lib/jobs/cron-runner";
+import { livePolicyJob, makePolicyJobDueNow, UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 
@@ -415,6 +417,100 @@ async function main() {
       const drain = readFileSync(path.resolve("lib/jobs/request-drain.ts"), "utf8");
       assert.match(drain, /runJobBatch\(\{ jobTypes, maxJobs: REQUEST_DRAIN_MAX_JOBS, claimBudgetMs: REQUEST_DRAIN_CLAIM_BUDGET_MS/);
       assert.doesNotMatch(drain, /request\.|searchParams|headers\(/, "the caller must not be able to influence the drain");
+    });
+
+    // ---- 25 Oct: the job a household asked for starts at once, not behind a drain in flight (a document sat queued a day).
+    await testAsync("start now: while a drain is busy with one long document, the next document's job starts and finishes; both run once", async () => {
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      resetRequestDrainStateForTests(); resetStartNowStateForTests(); tick();
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "doc-long" });
+      let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+      let started!: () => void; const startedP = new Promise<void>((r) => { started = r; });
+      const order: string[] = [];
+      const types = [{ jobType: rdType, process: async (job: { idempotency_key: string }) => { order.push(job.idempotency_key); if (job.idempotency_key === "doc-long") { started(); await gate; } } }];
+      const drainP = drainOnce({ jobTypes: types as never, now, env: NO_ENV });
+      await startedP;
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "doc-next" });
+      tick();
+      assert.deepEqual(await drainOnce({ jobTypes: types as never, now, env: NO_ENV }), { ran: false, reason: "in_flight" }, "the drain alone would leave it queued");
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "doc-next", jobTypes: types as never, env: NO_ENV }), "succeeded");
+      assert.equal((await jobRow(rdType, "doc-next"))?.status, "succeeded");
+      release(); await drainP;
+      assert.equal((await jobRow(rdType, "doc-long"))?.status, "succeeded");
+      assert.deepEqual(order, ["doc-long", "doc-next"], "each ran exactly once");
+    });
+
+    await testAsync("start now: only the named job; one already running, done or waiting out a retry delay is not claimed; capped per instance; off with the flag", async () => {
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      resetStartNowStateForTests();
+      const seen: string[] = [];
+      const types = [{ jobType: rdType, process: async (job: { idempotency_key: string }) => { seen.push(job.idempotency_key); } }];
+      for (const k of ["older", "mine"]) await enqueueJob(pool, { jobType: rdType, idempotencyKey: k });
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "mine", jobTypes: types as never, env: NO_ENV }), "succeeded");
+      assert.deepEqual(seen, ["mine"], "never the older job of another document");
+      assert.equal((await jobRow(rdType, "older"))?.status, "queued");
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "mine", jobTypes: types as never, env: NO_ENV }), "not_claimable", "a finished job is not run again");
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "later", availableAt: new Date(Date.now() + 60 * 60_000) });
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "later", jobTypes: types as never, env: NO_ENV }), "not_claimable", "a retry delay is respected");
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "older", jobTypes: types as never, env: { JOB_DRAIN_ON_REQUEST: "false" } as unknown as NodeJS.ProcessEnv }), "disabled");
+      let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+      const slow = [{ jobType: rdType, process: async () => { await gate; } }];
+      const held: Promise<unknown>[] = [];
+      for (let i = 0; i < START_NOW_MAX_IN_FLIGHT; i++) { await enqueueJob(pool, { jobType: rdType, idempotencyKey: `held-${i}` }); held.push(startJobNow({ jobType: rdType, idempotencyKey: `held-${i}`, jobTypes: slow as never, env: NO_ENV })); }
+      await new Promise((r) => setTimeout(r, 50));
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "older", jobTypes: types as never, env: NO_ENV }), "busy");
+      release(); await Promise.all(held);
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "older", jobTypes: types as never, env: NO_ENV }), "succeeded");
+    });
+
+    await testAsync("stalled: a queued job nothing has claimed for 10 minutes no longer counts as live; a leased job or one waiting out a retry always does", async () => {
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      for (const k of ["fresh", "unclaimed", "leased", "backoff", "lapsed"]) await enqueueJob(pool, { jobType: rdType, idempotencyKey: k });
+      await pool.query(`UPDATE background_jobs SET available_at = now() - make_interval(mins => $2 + 1) WHERE job_type=$1 AND idempotency_key IN ('unclaimed','leased','lapsed')`, [rdType, UNCLAIMED_STALL_MINUTES]);
+      await pool.query(`UPDATE background_jobs SET status='processing', lease_owner='w', lease_expires_at = now() + interval '5 minutes' WHERE job_type=$1 AND idempotency_key='leased'`, [rdType]);
+      await pool.query(`UPDATE background_jobs SET status='failed_retryable', available_at = now() + interval '3 minutes' WHERE job_type=$1 AND idempotency_key='backoff'`, [rdType]);
+      await pool.query(`UPDATE background_jobs SET status='processing', lease_owner='w', lease_expires_at = now() - interval '1 minute' WHERE job_type=$1 AND idempotency_key='lapsed'`, [rdType]);
+      const live = (await pool.query<{ idempotency_key: string }>(`SELECT idempotency_key FROM background_jobs j WHERE j.job_type=$1 AND ${livePolicyJob("j", "$2")} ORDER BY idempotency_key`, [rdType, UNCLAIMED_STALL_MINUTES])).rows.map((r) => r.idempotency_key);
+      assert.deepEqual(live, ["backoff", "fresh", "leased"]);
+    });
+
+    await testAsync("Try again: a job whose lease lapsed, one out of attempts and one waiting out a retry delay each start at once and run once; a cancelled job is not made due (Critic R213-1)", async () => {
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      resetStartNowStateForTests();
+      const seen: string[] = [];
+      const types = [{ jobType: rdType, process: async (job: { idempotency_key: string }) => { seen.push(job.idempotency_key); } }];
+      for (const k of ["lapsed", "spent", "waiting", "cancelling"]) await enqueueJob(pool, { jobType: rdType, idempotencyKey: k });
+      await pool.query(`UPDATE background_jobs SET status='processing', lease_owner='w', lease_expires_at = now() - interval '1 minute', attempt_count=1 WHERE job_type=$1 AND idempotency_key='lapsed'`, [rdType]);
+      await pool.query(`UPDATE background_jobs SET status='processing', lease_owner='w', lease_expires_at = now() - interval '1 minute', attempt_count=max_attempts WHERE job_type=$1 AND idempotency_key='spent'`, [rdType]);
+      await pool.query(`UPDATE background_jobs SET status='failed_retryable', available_at = now() + interval '3 minutes', attempt_count=1 WHERE job_type=$1 AND idempotency_key IN ('waiting','cancelling')`, [rdType]);
+      await pool.query(`UPDATE background_jobs SET cancel_requested=true WHERE job_type=$1 AND idempotency_key='cancelling'`, [rdType]);
+      // Without the recovery, the lapsed job is still 'processing' and nothing is claimable.
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "lapsed", jobTypes: types as never, env: NO_ENV }), "not_claimable");
+      for (const k of ["lapsed", "spent", "waiting"]) {
+        await recoverExpiredLeases(pool);
+        await enqueueJob(pool, { jobType: rdType, idempotencyKey: k, resurrectTerminal: true });
+        await makePolicyJobDueNow(k, rdType);
+        assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: k, jobTypes: types as never, env: NO_ENV }), "succeeded", k);
+      }
+      assert.deepEqual(seen, ["lapsed", "spent", "waiting"], "each ran exactly once");
+      await makePolicyJobDueNow("cancelling", rdType);
+      assert.equal(await startJobNow({ jobType: rdType, idempotencyKey: "cancelling", jobTypes: types as never, env: NO_ENV }), "not_claimable");
+    });
+
+    await testAsync("wiring: upload and Read again start their own job after enqueueing it; the runner claims for 110 s of its 300 s; a stalled document offers Try again, never 'will keep trying'", async () => {
+      const accept = readFileSync(path.resolve("app/api/policies/upload/accept.ts"), "utf8");
+      assert.ok(accept.indexOf("await enqueuePolicyProcessing(") >= 0 && accept.indexOf("scheduleJobStart(POLICY_PROCESSING_JOB_TYPE, policyId)") > accept.indexOf("await enqueuePolicyProcessing("));
+      const reprocess = readFileSync(path.resolve("app/api/policies/reprocess/route.ts"), "utf8");
+      assert.ok(reprocess.indexOf("await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId })") > reprocess.indexOf("await enqueuePolicyProcessing({"));
+      const at = (x: string) => { const i = reprocess.indexOf(x); assert.ok(i >= 0, x); return i; };
+      assert.ok(at("if (stalled) await recoverExpiredLeases(pool);") < at("await enqueuePolicyProcessing({") && at("await enqueuePolicyProcessing({") < at("if (stalled) await makePolicyJobDueNow(body.policyId);")
+        && at("if (stalled) await makePolicyJobDueNow(body.policyId);") < at("await startJobNow({"), "Try again recovers, enqueues, makes the job due, then starts it");
+      for (const r of ["app/api/policies/route.ts", "app/api/policies/reprocess/route.ts"]) assert.match(readFileSync(path.resolve(r), "utf8"), /livePolicyJob\("j", "\$\d"\)/, r);
+      assert.equal(DEFAULT_JOB_RUNNER_CLAIM_BUDGET_MS, 110_000);
+      assert.match(readFileSync(path.resolve("app/api/internal/jobs/run/route.ts"), "utf8"), /export const maxDuration = 300;/);
+      const page = readFileSync(path.resolve("app/policies/page.tsx"), "utf8");
+      assert.doesNotMatch(page, /will keep trying on its own/);
+      assert.match(page, /policy\.processing_stalled\s*\n?\s*\? <><small>Reading has not started\.[^]*?retryReading\(policy\)[^]*?"Try again"/);
     });
   } finally {
     pool.query = originalQuery;

@@ -453,7 +453,10 @@ export default function PoliciesPage() {
           {processing && <div className="document-progress" aria-live="polite">
             <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : "Reading this document…"}</strong></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(4, pct)}%` }}/></div>
-            <small>{policy.processing_stalled ? "DearPolicy will keep trying on its own. Nothing is lost, and you do not need to upload it again." : "You can keep using the app while this finishes."}</small>
+            {/* Stalled means nothing is reading it now: say so and offer to start it, never "will keep trying" (25 Oct). */}
+            {policy.processing_stalled
+              ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div></>
+              : <small>You can keep using the app while this finishes.</small>}
           </div>}
 
           {!processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
