@@ -229,12 +229,9 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   return { people, unmatchedCovers: unmatched, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks };
 }
 
-/** "a month" for a period the reading names ("half_year": "a half year"); "for every three-hour delay" for a block a plan
- * table prints in words (lib/benefit-table/chat planTableRows). */
-export function periodWords(period: string | null | undefined): string {
-  const p = period ?? "period";
-  return /\s/.test(p) ? `for every ${p}` : `a ${p.replace("_", " ")}`;
-}
+// In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
+import { periodWords } from "./headline";
+export { periodWords };
 
 export function figureText(f: Figure): string {
   if (f.kind === "none") return `no amount (${f.why})`;
