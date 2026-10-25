@@ -6836,3 +6836,12 @@ Free review: tsx probe of categoryOfBenefit on 48 names (R232/R233 set plus roun
 ## R235 — #142 b113b93: READY (#144 3b18e52, #145 298c402 merges only, READY)
 
 - The R234 lead check went in word for word. Re-ran the 48-name probe plus 6 exclusion cases with no brackets. All four R234 probes now go to Personal Accident. "Non-accidental death", "Death, other than by accident" and "Accidental and Sickness Death Benefit" go to Death, and every R232/R233/round-4 name gives the same tile as before. The three lows are left as is; they fail toward PA, and I accept that.
+
+## R236 — #142 5f354fb: READY (#144 8871cf3, #145 d4007e7 merges only, READY)
+
+- The 42 names from R232 to R235 give identical output (diffed). Both round-5 cases ("…not payable for illness or injury caused by war", "…; sickness or injury from war excluded") and all six no-bracket exclusions go to PA. Pairs at the start ("Injury or illness death benefit", "Sickness and Accident Death Benefit") and pairs right after the death words go to Death.
+- Low, fails toward PA (an any-cause row is missing from Death or TPD): PAIR_AFTER_DEATH misses:
+  - "Death benefit for illness or accident" ("for" is not in the preposition list);
+  - "Total Permanent Disability due to illness or accident" (it needs "total and permanent");
+  - "Death or TPD by illness or accident" (a compound head).
+  Suggest adding `for`, `total\s+(?:(?:and|&)\s+)?permanent`, and an optional `(?:death|tpd)\s+(?:or|and|&|/)\s+` before the death words.
