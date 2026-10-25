@@ -1677,7 +1677,7 @@ test("\"my husband\" is settled only by a title the documents print before that 
   for (const [product, said] of [["Family Care Plan", "my wife's family has cancer history, covered?"], ["Family Protect Plan", "my husband's family got history of stroke"],
     ["Mother & Child Care", "my wife's mother warded, can claim?"], ["Kids First Savings", "my husband's kids from before, covered?"], ["Kids First Savings", "my husband's first wife"]])
     assert.equal(spouseMeant(insured("Example Assurance", product), [said]), null, `${product}: ${said}`);
-  assert.ok(spouseMeant(insured("Example Assurance", "Family Care Plan"), ["my wife's Family Care Plan claim"]), "the product's whole name counts");
+  assert.ok(spouseMeant(insured("Example Assurance", "Home Care Plan"), ["my wife's Home Care Plan claim"]), "the product's whole name counts");
   // No single word of a product name counts on its own: they are ordinary English (TE P117-5).
   for (const [insurer, product, said] of [["Example Assurance", "Domestic Helper Insurance", "my wife's domestic helper was hospitalised"], ["Example Life", "Elderly Care Plan", "my husband's elderly father has cancer"],
     ["Example General", "Group Employee Benefits", "my husband's employee got injured"], ["Example Life", "Caregiver Rider", "my wife's caregiver hurt her back"],
@@ -1692,9 +1692,13 @@ test("\"my husband\" is settled only by a title the documents print before that 
   // An insurer counts by its own name in full, without the words that only say what it is or where (TE P117-7).
   for (const said of ["my husband's friends medical bills are high", "my husband's friends hospital stay"])
     assert.equal(spouseMeant(insured("Friends Provident International", "Term Plan"), [said]), null, said);
-  for (const [insurer, said] of [["Friends Provident International", "my husband's Friends Provident policy"], ["Family Life Insurance Company", "my husband's Family Life policy"],
+  for (const [insurer, said] of [["Kestrel Provident International", "my husband's Kestrel Provident policy"], ["Great Example Life Insurance", "my husband's Great Example policy"],
     ["AIA Singapore Private Limited", "my husband's AIA plan"], ["Zurich Life Insurance Company Ltd", "hubby's Zurich"]])
     assert.ok(spouseMeant(insured(insurer, "Term Plan"), [said]), `${insurer}: ${said}`);
+  // A word for a person right after the possessive is about that person, whatever cover shares it: such a name asks who (TE P117-8).
+  for (const [insurer, product, said] of [["Example Assurance", "Family", "my wife's family medical history"], ["Partners Life", "Term Plan", "my husband's partners hospital bill"],
+    ["Friends Provident International", "Term Plan", "my husband's Friends Provident policy"], ["Family Life Insurance Company", "Term Plan", "my husband's Family Life policy"]])
+    assert.equal(spouseMeant(insured(insurer, product), [said]), null, said);
   assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich, does it pay?"]), "an insurer's first word, then a clause");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");

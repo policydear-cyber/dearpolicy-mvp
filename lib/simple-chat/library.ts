@@ -170,6 +170,9 @@ function insurerCore(name: string): string[] {
  * to P117-7). */
 function coverAfter(rest: string, cover: { insurers: string[][]; products: string[][] }): boolean {
   const said = words(rest.match(/^[^.,;:!?()]*/)?.[0] ?? "");
+  // A word for a person right after the possessive is about that person, whatever cover shares the word ("my wife's
+  // family medical history" with a product named "Family", TE P117-8). A name that starts with one asks who is meant.
+  if (said[0] && (personWord(said[0]) || /^partners?$/.test(said[0]))) return false;
   const then = (n: number) => said.length === n || HIS_OR_HERS.test(said[n]);
   return [...cover.insurers, ...cover.products].some((p) => p.every((w, i) => said[i] === w) && then(p.length));
 }
