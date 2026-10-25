@@ -6865,3 +6865,13 @@ Ran here: npm ci and `next build` (pass), coverage:table-test 22/0, plus a tsx p
   The expected strings are unchanged by this. The bare row's extra condition is a self-inflicted-injury/maternity exclusion, with no digit or limit word, so it still drops. Add the two probes above as regressions.
 - Waivers, trip-only and clause rows (Q2): left out only when another row remains; the Coverage page keeps them. Correct.
 - Accident sections (Q3): "TPD" under "Personal accident" goes to PA; under "Accident and Sickness Benefits" it stays TPD; "Death" under "Death and Accidental Death" stays Death. Low: an explicit any-cause row under an accident section ("Death benefit (any cause)" under "Accident Benefits") goes to PA. Skip the section rule when the row's own name matches ANY_CAUSE.
+
+## R239 — #147 069e483: one small fix left
+
+- LIMIT is now compared in both restatedWithCurrency and tableDisplay, and an ANY_CAUSE name keeps its category under an accident section. Both R238 findings are fixed. I accept that a numeric non-limit condition now blocks an otherwise matching figure: it fails safe and is tested.
+- Medium, the same class of bug, one step on: the limits must agree, but the display still shows conditions only when the whole condition lists are identical. Two rows that both print "Max 6 claims per policy year", where one also prints an exclusion, pass the limits check. Their condition lists differ, so the tile shows the figure without "Max 6 claims". Fix: when the lists differ, show the agreed limits:
+  ```ts
+  const shown = conditions.size === 1 ? [...conditions][0] : limits(rows[0]);
+  return [[...texts][0], shown].filter(Boolean).join(" · ");
+  ```
+  The expected live strings are unchanged: Desmond's kept S$ row has no conditions, and the dropped bare row's extra condition is an exclusion. Add a regression for this case. With that, READY.
