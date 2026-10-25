@@ -26,7 +26,8 @@ const ILL = String.raw`(?:illness(?:es)?|sickness(?:es)?|diseases?|natural\s+cau
 // ("Death due to illness or accident, payable only once"; Critic R232).
 const ACCIDENT_ONLY = new RegExp(String.raw`\b(?:only|solely|exclusively)\s+(?:(?:by|from|due\s+to|for|on|if|in\s+case\s+of|caused\s+by)\s+)?(?:an?\s+)?${ACC}|\b${ACC}(?:\s+[a-z]+){0,2}\s+(?:only|solely|exclusively)\b|\bunless\s+(?:\w+\s+){0,3}(?:an?\s+)?${ACC}|\bnot\s+(?:\w+\s+){1,2}except\s+(?:for\s+|by\s+)?(?:an?\s+)?${ACC}`, "i");
 const ILLNESS_ONLY = new RegExp(String.raw`\bnon-?\s?accident\w*|\b(?:other\s+than|except(?:\s+for)?|excluding)\s+(?:by\s+|for\s+|through\s+)?(?:an?\s+)?${ACC}`, "i");
-const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ACC}|\b${ACC}\s*(?:or|and|/|&)\s*(?:an?\s+)?${ILL}|\b${ACC}\s+or\s+otherwise\b`, "i");
+const PAIR = String.raw`\s*(?:or|and|and\s*/\s*or|/|&)\s*(?:(?:by|from|due\s+to)\s+)?(?:an?\s+)?`;
+const ANY_CAUSE = new RegExp(String.raw`\b(?:any|all)\s+causes?\b|\b${ILL}${PAIR}${ACC}|\b${ACC}${PAIR}${ILL}|\b${ACC}\s+or\s+otherwise\b|\bnatural${PAIR}accident\w*|\baccident\w*${PAIR}natural\b`, "i");
 const PLAIN_DEATH = /^\s*death(?:\s+benefit)?\b/i;
 const UPLIFT_FOR_ACCIDENT = new RegExp(String.raw`(?:\b(?:doubl\w*|twice|uplift\w*)|\b\d+(?:\.\d+)?\s?(?:x|times)|\b\d{3}\s?%)\s+(?:for|on|if|upon|in\s+case\s+of)\s+(?:an?\s+)?accident\w*(?:\s+death)?\b`, "i");
 const INCLUDING_ACCIDENT = new RegExp(String.raw`\bincluding\s+(?:death\s+)?(?:due\s+to\s+|from\s+|by\s+|caused\s+by\s+)?(?:an?\s+)?${ACC}`, "i");
@@ -34,9 +35,17 @@ const INCLUDING_ACCIDENT = new RegExp(String.raw`\bincluding\s+(?:death\s+)?(?:d
 /** What a death or disability name with an accident or injury word pays for. The default is accident only: any cause needs
  * a phrase that says so ("any cause", "illness or accident", a plain death benefit "doubled for accidental death" or
  * "including death due to injury"), and "other than accident" pays illness only. A name the rules cannot place stays
- * accident only, so it never pays a death from illness (TE P144-6, round 3: an allow-list, not a list of exclusions). */
+ * accident only, so it never pays a death from illness (TE P144-6, round 3: an allow-list, not a list of exclusions).
+ * The head of the name (before the first bracket, dash, comma, semicolon or colon) decides first: "Accidental Death
+ * (excluding injury from war)" is accident cover whatever its exclusions say (TE round 4). */
 function causeOf(benefit: string): "accident" | "any" | "illness" {
-  if (/\bpersonal\s+accident\b/i.test(benefit) || ACCIDENT_ONLY.test(benefit)) return "accident";
+  if (/\bpersonal\s+accident\b/i.test(benefit)) return "accident";
+  const head = benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
+  if (ACCIDENT_ONLY.test(head)) return "accident";
+  if (ILLNESS_ONLY.test(head)) return "illness";
+  if (ANY_CAUSE.test(head)) return "any";
+  if (new RegExp(String.raw`\b${ACC}`, "i").test(head)) return "accident";
+  if (ACCIDENT_ONLY.test(benefit)) return "accident";
   if (ILLNESS_ONLY.test(benefit)) return "illness";
   if (ANY_CAUSE.test(benefit)) return "any";
   if (PLAIN_DEATH.test(benefit) && (UPLIFT_FOR_ACCIDENT.test(benefit) || INCLUDING_ACCIDENT.test(benefit))) return "any";

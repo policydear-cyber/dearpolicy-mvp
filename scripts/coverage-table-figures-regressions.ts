@@ -60,6 +60,16 @@ test("accident only is the default; any cause needs a phrase that says so (TE P1
     "Death from natural causes or accident", "Death benefit, accidental or otherwise", "Death benefit (2x for accidental death)", "Death benefit, 200% if accidental"]) assert.equal(categoryOfBenefit(b), "Death", b);
 });
 
+test("the head of the name decides: an accident benefit's exclusions never make it any cause (TE round 4)", () => {
+  for (const b of ["Accidental Death (excluding injury from war)", "Accidental Death, except for injury from extreme sports",
+    "Accidental Death Benefit - excluding accidents on aircraft", "Accidental Death (other than injury caused by war)",
+    "Death by Accident (except accidents while intoxicated)", "Accidental TPD (excluding injuries from contact sports)",
+    "Accidental Death (not payable for illness or injury caused by war)", "Accidental Death; sickness or injury from riots excluded"])
+    assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+  for (const b of ["Death (other than by accident)", "Death from causes other than accident", "Death (any cause)", "Death by accident or by illness",
+    "Death due to Illness and/or Accident", "Death - natural or accidental"]) assert.equal(categoryOfBenefit(b), "Death", b);
+});
+
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
   for (const n of ["Death due to Accident", "Death by Accident", "Accidental Death Benefit", "TPD due to accident", "Accidental Total and Permanent Disability", "Accidental Dismemberment"])
     assert.equal(categoryOfBenefit(n), "Personal Accident", n);
