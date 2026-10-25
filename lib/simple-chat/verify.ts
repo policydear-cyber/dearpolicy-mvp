@@ -1191,10 +1191,13 @@ export function libraryGroups(household: Household, docs: HouseholdDocument[], l
   const named = (d: HouseholdDocument) => { const label = labelFor(household, d); return label === d.name ? d.name : `${label} (${d.name})`; };
   const groups = new Map<string, HouseholdDocument[]>(), out: string[] = [];
   for (const d of docs) {
+    // A file a newer upload replaced is not listed, as libraryList leaves it out (TE N2).
+    if (d.supersededAt) continue;
     if (!readInFull(d) || !d.linkedPeople.length || uploadedApart(d)) continue;
-    const people = d.linkedPeople.map(baseName);
+    // The same people in any stored order are one group (Critic R224a, TE N1).
+    const people = [...new Set(d.linkedPeople.map(baseName))].sort((a, b) => a.localeCompare(b));
     if (people.every((p) => listed.has(p))) continue;
-    const key = people.join(" and ");
+    const key = people.length > 2 ? `${people.slice(0, -1).join(", ")} and ${people.at(-1)}` : people.join(" and ");
     groups.set(key, [...(groups.get(key) ?? []), d]);
   }
   for (const [people, ds] of groups) out.push(`Linked to ${people}${ds.length > 1 ? `, ${ds.length} documents, all read` : ", read"}: ${ds.map(named).join("; ")}.`);
@@ -1415,7 +1418,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     for (const t of texts) fromRecord.add(t);
     const at = checked.indexOf(filePoints[0]);
     const after = checked.slice(at).filter((c) => c.libraryDoc == null);
-    checked.splice(at, checked.length - at, ...texts.map((text) => ({ ...filePoints[0], s: { ...filePoints[0].s, text } })), ...after);
+    // A grouped line is the library's record: it cites no page and no one file (Critic R224d).
+    checked.splice(at, checked.length - at, ...texts.map((text) => ({ ...filePoints[0], found: null, s: { ...filePoints[0].s, text, document: null } })), ...after);
   }
   // A bill set against a limit is never also said to be uncovered for the same person, and one bill gets one card.
   const carded = new Set<string>();
@@ -1481,7 +1485,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    const said = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    // The library's own record is never cut by the money filter: a product label with a figure would drop the whole group
+    // line (Critic R224c).
+    const said = serverWords.has(c.s.text) || fromRecord.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
     let text = serverWords.has(c.s.text) || fromRecord.has(c.s.text) ? said : library(said, true);
     // A point the library's record or the premium rule leaves out is not shown at all.
     if (said && !text && !c.amount) return;

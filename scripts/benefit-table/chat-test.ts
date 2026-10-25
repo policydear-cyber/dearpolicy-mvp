@@ -7,7 +7,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type Family
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { type ChatRow, amountsFromRows, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -1730,6 +1730,16 @@ test("for a question about the documents, a point about one person's files is th
     ["No document is linked to Lim Xiao Ming in DearPolicy."]);
   // Not a question about the documents: an unquoted point is left out as before.
   assert.deepEqual(ask([{ text: "Lim Ah Kow has 2 documents.", person: "Lim Ah Kow" }], "how much for a broken wrist"), []);
+});
+
+test("library groups: the same people in any order are one group, and a replaced file is not listed (Critic R224, TE N1 N2)", () => {
+  const d = (name: string, people: string[], o: Record<string, unknown> = {}) => ({ ...doc(`id-${name}`, name, [{ page: 1, text: "x" }]), linkedPeople: people, ...o });
+  const docs = [d("A.pdf", ["Lim Ah Kow", "Tan Mei Ling"]), d("B.pdf", ["Tan Mei Ling", "Lim Ah Kow"]), d("Old.pdf", ["Lim Ah Kow", "Tan Mei Ling"], { supersededAt: "2026-09-02" })];
+  const house = { ...HOUSE, documents: docs } as Household;
+  const lines = libraryGroups(house, docs as Household["documents"]);
+  assert.equal(lines.length, 1, lines.join(" | "));
+  assert.match(lines[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read/);
+  assert.doesNotMatch(lines[0], /Old\.pdf/);
 });
 
 async function atest(name: string, fn: () => Promise<void>) {
