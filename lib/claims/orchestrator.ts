@@ -61,7 +61,7 @@ function coverageListSummary(coverages:OwnedCoverage[], products:string[]) {
 function missingLabel(questionId:string){
   if(questionId==="death_date")return "Date of death";
   if(questionId==="cause_of_death")return "Cause of death";
-  if(questionId==="racing_authority_sanctioned")return "MINDEF/MHA sanction for racing";
+  if(questionId==="racing_authority_sanctioned")return "Sanction for the racing, as the wording's exception requires";
   const map:Record<string,string>={event_type:"What happened",event_date:"Event date",diagnosis_date:"Diagnosis date",injured:"Injuries",fracture_body_part:"Fracture site",ambulance_used:"Ambulance use",ambulance_bill:"Ambulance bill",hospitalised:"Hospital admission",hospital_nights:"Length of stay",hospital_bill:"Hospital bill",out_of_pocket:"Out-of-pocket amount",permanent_impairment:"Permanent impairment",competitive_racing:"Racing/competition circumstance",diagnosis:"Diagnosis",medical_report:"Medical report"};
   return map[questionId]??questionId;
 }

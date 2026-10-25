@@ -64,6 +64,12 @@ export function normalizeCurrencyCode(value: string | null | undefined, fallback
   return fallback;
 }
 
+/** A money sign or code printed before a figure, in any market: "S$", "US$", "RM", "£", "€", "MYR", "GBP", or a bare "$".
+ * A regular-expression source (no flags of its own, safe under /i): a code or "RM" is never part of a word ("FORM 2" is
+ * not RM 2). Use it wherever a check asks "is a money figure printed here?", so a page in ringgit or pounds is checked
+ * as one in Singapore dollars is (benefit-table parity test, 25 Oct). */
+export const MONEY_SIGN = String.raw`(?:(?<![A-Za-z])(?:S|SG|US|HK|A|AU|NZ)\$|(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP|RM)(?![A-Za-z])|[€£]|\$)`;
+
 export const CURRENCY_NOT_STATED = "(currency unknown)";
 const plainNumber = (amount: number) => amount.toLocaleString("en-SG", { maximumFractionDigits: Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2 });
 

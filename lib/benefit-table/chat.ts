@@ -14,6 +14,7 @@ import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
+import { MONEY_SIGN, statedCurrencyCode } from "@/lib/format/currency";
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -81,7 +82,7 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
 
 /** A plan table's cell: a money figure, or words printed in place of one. */
 // A footnote mark after a figure ("S$2,000*") is the cell's own (TE pr113 P7).
-const PLAN_CELL = /^(?:(?:S\$|US\$|SGD\s?|\$)\s?\d[\d,]*(?:\.\d+)?|not\s+covered|not\s+applicable|covered|unlimited)[*^†#]*$/i;
+const PLAN_CELL = new RegExp(String.raw`^(?:${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?|not\s+covered|not\s+applicable|covered|unlimited)[*^†#]*$`, "i");
 const OPTIONAL = /\b(?:optional|add-?ons?|riders?)\b/i;
 const SUB_LIMIT = /^(?:sub-?\s?limit|overall\s+limit)\b/i;
 /** Rows a plan table prints that the reading left out, for each person's plan: a line that prints exactly one cell per plan
@@ -137,7 +138,7 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
           if (theirs.some((o) => o.source.page === page.page && keys.some((key) => plain(o.benefit).includes(key)))) continue;
           const [, sign, figure] = block.cells[k];
           // A bare "$" names no currency: never borrowed from another row (Critic R186-1).
-          const currency = /^us\$/i.test(sign) ? "USD" : /^(?:s\$|sgd)/i.test(sign) ? "SGD" : null;
+          const currency = statedCurrencyCode(sign);
           blocks.push({ ...template, benefit: block.name, pays: "per_period", conditions: [], fromDay: null, maxDays: null, qualifier: null,
             figure: { kind: "printed", amount: Number(figure.replace(/,/g, "")), currency, unit: "per_period", period: block.periods[k] },
             source: { ...template.source, page: page.page, excerpt: lines.slice(i - 1, i + 2).join("\n") }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
@@ -169,10 +170,10 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         if (sub && (!parent || /family/i.test(own))) continue;
         const name = sub ? `${parent}: ${own}` : own;
         if (/^(?:adult|child|children|overall)\b/i.test(own) && !sub) { parent = null; continue; }
-        const money = /^(S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)[*^†#]*$/i.exec(cell);
+        const money = new RegExp(String.raw`^(${MONEY_SIGN})\s?(\d[\d,]*(?:\.\d+)?)[*^†#]*$`, "i").exec(cell);
         const notCovered = /^not\s+(?:covered|applicable)[*^†#]*$/i.test(cell);
         // The cell's own currency: "US$10,000" is US$ whatever the row it is read beside (TE pr113 P3).
-        const currency = !money ? null : /^us\$/i.test(money[1]) ? "USD" : /^(?:s\$|sgd)/i.test(money[1]) ? "SGD" : template.figure.currency;
+        const currency = !money ? null : statedCurrencyCode(money[1]) ?? template.figure.currency;
         if (!money && !notCovered) continue;
         // A footnote mark is a qualifier: the cell gives a row only when the page prints that footnote and it names no group,
         // limit or share ("* Reduced to 50% for insured persons aged 70 and above", "^ Limited to S$25,000 for children"), and
@@ -195,7 +196,7 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
   return [...out, ...blocks];
 }
 
-const BLOCK_FIGURE = /^(S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$/i;
+const BLOCK_FIGURE = new RegExp(String.raw`^(${MONEY_SIGN})\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$`, "i");
 const BLOCK_LENGTH = /^(?:[a-z]+|\d+)[- ]hours?(?:\s+(?:of\s+)?delay)?$/i;
 /** A plan table's per-block cells wrapped over two lines under the benefit's name (overnight run 23 Oct, N106, N107):
  *   Travel delay
@@ -212,7 +213,7 @@ function perBlock(above: string | undefined, figures: string[], lengths: string[
   // between do not end the block (TE P120-1, P120-2).
   const after = (next ?? "").trim();
   if (after && (/^[a-z]/.test(after) || /^(?:up\s+to|max(?:imum)?|subject|capped|limit|overall|total|aggregate|per\s+(?:trip|journey|period))\b/i.test(after)
-    || (after.match(/(?:S\$|US\$|SGD|\$)\s?\d/g) ?? []).length >= columns)) return null;
+    || (after.match(new RegExp(String.raw`${MONEY_SIGN}\s?\d`, "g")) ?? []).length >= columns)) return null;
   const cells = figures.map((c) => BLOCK_FIGURE.exec(c));
   if (cells.some((c) => !c)) return null;
   const [label, ...periods] = lengths;
@@ -243,7 +244,7 @@ const siblings = (row: ChatRow, rows: ChatRow[]) => rows.filter((o) => o !== row
   && o.source.documentId !== row.source.documentId && o.qualifier === row.qualifier && sameBenefit(o.benefit, row.benefit));
 const lesserOf = (excerpt: string) => /\bwhichever\s+is\s+(?:the\s+)?(?:lesser|lower|less)\b|\b(?:the\s+)?(?:lesser|lower)\s+of\b/i.test(excerpt);
 
-/** The words a cover is named by on an answer card: the full product, cover and plan, as printed ("MINDEF & MHA GROUP
+/** The words a cover is named by on an answer card: the full product, cover and plan, as printed ("HARBOUR STAFF GROUP
  * INSURANCE SCHEME (GROUP POLICY NO. G000123), GROUP TERM LIFE(POLICY NO.1234567)"). */
 const fullCover = (r: Pick<TableRow, "product" | "cover" | "plan">) => [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(", ");
 const COVER_KIND = /\b(?:life|death|accident\w*|illness\w*|critical|disab\w*|tpd|hospital\w*|medical|medicare|health|surg\w*|ward|cancer|travel|income|care|term|endowment|annuity|savings|retirement|motor|car|home|property|shield|rider|benefit)\b/i;
@@ -976,7 +977,7 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
 /** What a printed figure is counted per, as its quote prints it right after the figure: "S$5,000 per child (up to 2
  * children)" gives "per child (up to 2 children)". Null when nothing follows. */
 function perUnit(excerpt: string, amount: number): string | null {
-  for (const m of excerpt.matchAll(/(?:S\$|US\$|SGD|\$)?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:each\s+)?(per\s+(?:child|children|person|insured(?:\s+person)?|life|member|dependant|family|claim|visit|trip|event|accident|incident|injury|bone|fracture|policy\s+year|year|disability|confinement|admission)\b(?:\s*\((?:up\s+to|maximum|max\.?|subject\s+to)[^)]{1,40}\))?(?:,?\s*subject\s+to\s+a\s+maximum\s+of\s+\w+\s+\w+)?)/gi))
+  for (const m of excerpt.matchAll(new RegExp(String.raw`${MONEY_SIGN}?\s?(\d[\d,]*(?:\.\d+)?)\s*(?:each\s+)?(per\s+(?:child|children|person|insured(?:\s+person)?|life|member|dependant|family|claim|visit|trip|event|accident|incident|injury|bone|fracture|policy\s+year|year|disability|confinement|admission)\b(?:\s*\((?:up\s+to|maximum|max\.?|subject\s+to)[^)]{1,40}\))?(?:,?\s*subject\s+to\s+a\s+maximum\s+of\s+\w+\s+\w+)?)`, "gi")))
     if (Math.abs(Number(m[1].replace(/,/g, "")) - amount) < 0.005) return m[2].replace(/\s+/g, " ").trim();
   return null;
 }

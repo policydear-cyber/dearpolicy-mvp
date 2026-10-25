@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MONEY_SIGN } from "@/lib/format/currency";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { dearPolicyCoreRules } from "@/lib/ai/core-rules";
 import { EMPTY_CLAIM_FACTS, type ClaimFacts, type ClaimQuestion } from "./types";
@@ -41,8 +42,8 @@ function moneyNear(text: string, words: string[]) {
   // Outside a targeted money question, require either a currency marker or an
   // explicit bill/cost/charge phrase next to the amount.
   const patterns = [
-    new RegExp(String.raw`(?:${escaped})[^\n]{0,35}?(?:S\$|SGD|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)`, "i"),
-    new RegExp(String.raw`(?:S\$|SGD|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)[^\n]{0,25}?(?:${escaped})`, "i"),
+    new RegExp(String.raw`(?:${escaped})[^\n]{0,35}?${MONEY_SIGN}\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)`, "i"),
+    new RegExp(String.raw`${MONEY_SIGN}\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)[^\n]{0,25}?(?:${escaped})`, "i"),
     new RegExp(String.raw`(?:${escaped})[^\n]{0,20}?(?:bill|cost|charge|fee|paid)[^\n]{0,12}?([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)`, "i"),
   ];
   for (const pattern of patterns) {
@@ -70,8 +71,8 @@ function affirmedDeath(text: string) {
 }
 
 function targetedMoney(text: string) {
-  const match = text.match(/(?:S\$|SGD|\$)\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)/i)
-    ?? text.trim().match(/^(?:(?:yes|it was|the bill was|cost|around|about)\s*[, :]?\s*)?(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|SGD)?[.!]?$/i);
+  const match = text.match(new RegExp(String.raw`${MONEY_SIGN}\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)`, "i"))
+    ?? text.trim().match(/^(?:(?:yes|it was|the bill was|cost|around|about)\s*[, :]?\s*)?(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|ringgit|pounds?|euros?|SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)?[.!]?$/i);
   return match ? Number(match[1].replace(/,/g, "")) : null;
 }
 
@@ -161,7 +162,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   const noRacing = /\b(?:not racing|no racing|wasn'?t racing|not competitive racing|ordinary road|normal road)\b/i.test(text);
   if (/\b(?:racing|race|competition)\b/i.test(text) && !/not sure|unsure|unknown|don'?t know|do not know/i.test(text)) out.competitiveRacing = !noRacing;
   if (noRacing) out.competitiveRacing = false;
-  const sanctioned = text.match(/\b(?:sanctioned|approved|authori[sz]ed)\s+by\s+(?:the\s+)?(?:Authority|MINDEF|MHA|SAF)\b/i);
+  const sanctioned = text.match(/\b(?:sanctioned|approved|authori[sz]ed)\s+by\s+(?:the\s+)?(?:Authority|authorities|organi[sz]ers?|federation|association|governing\s+body|ministry|MINDEF|MHA|SAF)\b/i);
   if (sanctioned && !/not sure|unsure|unknown|don'?t know|do not know/i.test(text)) {
     out.racingAuthoritySanctioned = !/\b(?:not|never|wasn'?t|weren'?t)\s*$/i.test(text.slice(Math.max(0, sanctioned.index! - 25), sanctioned.index));
   }
@@ -389,7 +390,7 @@ export function factsToLabels(facts: ClaimFacts) {
   if (facts.permanentImpairment === true) labels.push("Permanent impairment reported");
   if (facts.competitiveRacing === true) labels.push("Competitive racing involved");
   if (facts.competitiveRacing === false) labels.push("No competitive racing reported");
-  if (facts.racingAuthoritySanctioned === true) labels.push("Racing sanctioned by MINDEF/MHA (reported)");
-  if (facts.racingAuthoritySanctioned === false) labels.push("Racing not sanctioned by MINDEF/MHA (reported)");
+  if (facts.racingAuthoritySanctioned === true) labels.push("Racing sanctioned as the wording's exception requires (reported)");
+  if (facts.racingAuthoritySanctioned === false) labels.push("Racing not sanctioned as the wording's exception requires (reported)");
   return [...new Set(labels)];
 }

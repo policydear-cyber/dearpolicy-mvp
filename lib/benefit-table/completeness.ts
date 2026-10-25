@@ -6,8 +6,9 @@
  * read again on its own, and the new rows are added. This looks only at the page text, never at what kind of insurance it
  * is, and a re-read that finds nothing new changes nothing. */
 import type { CheckedReading, SourceDoc } from "./check";
+import { MONEY_SIGN } from "@/lib/format/currency";
 
-const FIGURE = /\d+(?:\.\d+)?\s?%|(?:S\$|SGD|US\$|USD|RM|HK\$|\$)\s?\d[\d,]*/i;
+const FIGURE = new RegExp(String.raw`\d+(?:\.\d+)?\s?%|${MONEY_SIGN}\s?\d[\d,]*`, "i");
 export const MIN_FIGURE_LINES = 4;
 
 export function figureLines(text: string): number {
