@@ -22,8 +22,11 @@ type Purpose = "fracture" | "ambulance" | "recuperation" | "hospital cash" | "de
 const TITLE: Record<Purpose, string> = { fracture: "Fracture benefit", ambulance: "Ambulance benefit", recuperation: "Recuperation benefit", "hospital cash": "Hospital cash",
   death: "Death benefit", "critical illness": "Critical illness benefit", disability: "Total and permanent disability benefit" };
 
-const SIDE = new Set(["left", "right", "both", "the", "and", "of", "bone", "broken", "fracture", "fractured", "simple", "compound"]);
-/** The words of a reported body part that name it ("left wrist" -> wrist; "thigh bone" -> thigh). */
+const SIDE = new Set(["left", "right", "both", "the", "and", "of", "bone", "bones", "broken", "fracture", "fractured", "simple", "compound",
+  "upper", "lower", "front", "back", "inner", "outer", "minor", "major", "hairline", "small", "partial", "complete", "my", "his", "her", "their"]);
+/** The words of a reported body part that name it ("left wrist" -> wrist; "thigh bone" -> thigh). Every one must be in the
+ * row's name: "upper arm" is never the "Upper jaw" row, and "neck of femur" never the "Neck (cervical vertebrae)" row
+ * (Critic R225, TE P144-1). */
 const partWords = (part: string) => part.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !SIDE.has(w)).map((w) => w.replace(/s$/, ""));
 
 /** Which purpose a row serves for this event, or null. */
@@ -32,7 +35,7 @@ function purposeOf(row: TableRow, facts: ClaimFacts): Purpose | null {
   if (row.figure.kind === "projected" || row.pays === "not_covered") return null;
   if (facts.eventType === "accident" && facts.fractureBodyPart && /fractur/i.test(name)) {
     const words = partWords(facts.fractureBodyPart);
-    if (words.length && words.some((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit))) return "fracture";
+    if (words.length && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit))) return "fracture";
   }
   if (facts.eventType === "accident" && facts.ambulanceUsed === true && /\bambulance\b/i.test(row.benefit)) return "ambulance";
   if (facts.eventType === "accident" && facts.hospitalised === true && /\b(?:recuperat|convalesc)/i.test(row.benefit)) return "recuperation";
@@ -50,17 +53,17 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 const currencyOf = (row: TableRow) => ("currency" in row.figure ? row.figure.currency : null) ?? null;
 const printedText = (row: TableRow) => [shortFigure(row).text, rowDetail(row)].filter(Boolean).join(" · ");
 
-/** The person's verified cover the row is paid under: the cover's own document and product name, then its document,
- * then the same product name. */
+/** The person's verified cover the row is paid under: on the row's own cover's document, the coverage with the row's
+ * product or cover name, or the document's only coverage. Never another document's coverage with the same name, and never
+ * another cover on a schedule of several (an accident cover's row is not paid by the life cover beside it; TE P144-4). */
 function coverageFor(row: TableRow, table: ClaimTable, coverages: OwnedCoverage[]): OwnedCoverage | null {
   const cover = table.covers.find((c) => c.coverKey === row.coverKey);
   const doc = cover?.source.documentId;
+  if (doc == null) return null;
   const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
   const named = (c: OwnedCoverage) => same(c.productName, row.product) || same(c.productName, row.cover);
-  return coverages.find((c) => doc != null && c.policyId === doc && named(c))
-    ?? coverages.find((c) => doc != null && c.policyId === doc)
-    ?? coverages.find(named)
-    ?? null;
+  const onDoc = coverages.filter((c) => c.policyId === doc);
+  return onDoc.find(named) ?? (onDoc.length === 1 ? onDoc[0] : null);
 }
 
 function itemFor(purpose: Purpose, rows: TableRow[], facts: ClaimFacts, table: ClaimTable, coverages: OwnedCoverage[]): ClaimAssessmentItem {
@@ -123,6 +126,8 @@ function itemFor(purpose: Purpose, rows: TableRow[], facts: ClaimFacts, table: C
 /** The items with the person's benefit-table items for the event added. A purpose an evidence-checked item already
  * assesses (a hospital cash from the wording's own rules, a critical-illness item, a death item with an outcome) is left
  * to it. A death item that only said the wording was missing is replaced by the table's item for the same cover. */
+const DEATH_IDS = new Set(["gtl-death", "gpa-accidental-death", "travel-accidental-death"]);
+
 export function withTableBenefits(facts: ClaimFacts, coverages: OwnedCoverage[], table: ClaimTable, existing: ClaimAssessmentItem[]): ClaimAssessmentItem[] {
   const groups = new Map<string, { purpose: Purpose; rows: TableRow[] }>();
   for (const row of table.rows) {
@@ -131,15 +136,24 @@ export function withTableBenefits(facts: ClaimFacts, coverages: OwnedCoverage[],
     const key = `${purpose}\u0000${row.coverKey}`;
     groups.set(key, { purpose, rows: [...(groups.get(key)?.rows ?? []), row] });
   }
-  const covered = (p: Purpose) => existing.some((i) => p === "hospital cash" ? /hospital\s+cash|daily\s+cash/i.test(i.title)
-    : p === "critical illness" ? i.id.startsWith("ci-") : p === "disability" ? i.id === "tpd-lump-sum" : p === "death" ? false : new RegExp(p, "i").test(i.title));
+  // An evidence-checked item for the same cover (or one not tied to a cover) already assesses the purpose. Any daily cash
+  // from the wording's rules (hospital, ICU) counts for hospital cash, so a table row is never paid beside it (TE P144-3);
+  // cover A's item never hides cover B's row (Critic R225).
+  const covered = (p: Purpose, coverageId: string | undefined) => existing.some((i) => (i.coverageId == null || coverageId == null || i.coverageId === coverageId)
+    && (p === "hospital cash" ? /\b(?:cash|allowance|income)\b/i.test(i.title) || /^med-.*cash/.test(i.id)
+      : p === "critical illness" ? i.id.startsWith("ci-") : p === "disability" ? i.id === "tpd-lump-sum" : p === "death" ? false : new RegExp(p, "i").test(i.title)));
   let items = [...existing];
   for (const g of groups.values()) {
-    if (covered(g.purpose)) continue;
     const item = itemFor(g.purpose, g.rows, facts, table, coverages);
-    if (g.purpose === "death" && item.coverageId) {
-      const same = items.filter((i) => i.coverageId === item.coverageId && i.id === "gtl-death");
-      if (same.some((i) => i.status !== "needs_document")) continue;
+    if (covered(g.purpose, item.coverageId)) continue;
+    if (g.purpose === "death") {
+      // Every death item the rules make (a life cover's, an accident's, a trip's) for this cover: the table's is never a
+      // second death payment (Critic R225).
+      const deaths = items.filter((i) => DEATH_IDS.has(i.id));
+      if (item.coverageId == null && deaths.length) continue;
+      const same = deaths.filter((i) => i.coverageId === item.coverageId);
+      // One not tied to a cover may be this cover's: it stands, and the table adds nothing beside an outcome.
+      if ([...same, ...deaths.filter((i) => i.coverageId == null)].some((i) => i.status !== "needs_document")) continue;
       items = items.filter((i) => !same.includes(i));
     }
     items.push(item);
