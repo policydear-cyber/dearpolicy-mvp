@@ -105,6 +105,8 @@ async function main() {
     const whole = { ...h.documents[0], uncheckedPages: [] };
     assert.doesNotMatch(renderLibrary({ ...h, documents: [whole] }), /reading_status/);
     assert.match(libraryFact(h, whole), /was read\./);
+    // A page checked line by line is named too: only its unconfirmed amounts are left out (Critic R211-4).
+    assert.match(libraryFact(h, { ...whole, partCheckedPages: [3] }), /was read in part: Some amounts on page 3 couldn't be checked against the page image, so they are not used\./);
     // A file whose name says nothing is named by what the app takes it to be, with the file name after it; two such files
     // of the same kind are told apart by the day each was uploaded (overnight run 23 Oct, N195, N282).
     const plain = { ...whole, productName: null, insurer: "Example Insurance", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };

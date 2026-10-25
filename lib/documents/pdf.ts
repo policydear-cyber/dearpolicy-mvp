@@ -29,6 +29,12 @@ export type PdfPage = {
   unchecked?: boolean;
   /** Why the two readings of an unchecked page did not agree: kept for the processing history only, never as page text. */
   uncheckedWhy?: string;
+  /** Some of the page's figure lines were confirmed by the image reading and some were not: the confirmed lines are kept
+   * word for word, and the others keep their words with each figure shown as "[amount not checked]". */
+  partChecked?: boolean;
+  /** What kind of difference the two readings had (counts, shapes and positions of the figures, never a figure or a
+   * word): kept for the processing history only. */
+  checkLog?: string;
   /** Round 10: the page was photographed or scanned sideways or upside down
    * and was read after turning it by this many degrees (clockwise). */
   turnedBy?: number;
