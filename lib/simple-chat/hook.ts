@@ -264,7 +264,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const loadMs = started - loadStarted;
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
   // A question about DearPolicy itself gets its fixed answer, with no model call (lib/simple-chat/app-help).
-  const help = appHelp(message);
+  const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
   if (help) reply = { json: help.answer, stopReason: null, model: `app-help:${help.id}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   else try {
     // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
