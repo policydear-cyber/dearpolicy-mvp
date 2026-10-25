@@ -198,13 +198,20 @@ test("every condition is a limit unless it is plainly eligibility wording that c
   const pair = (c: string) => tableDisplay([keyed("a", perDay(30, "SGD")), keyed("a", perDay(30, "SGD", { conditions: [c] }))]);
   // Eligibility only: the figure shows.
   for (const c of ["inpatient only", "continuous stay", "No benefit is payable for self-inflicted injury or pregnancy", "excluding pre-existing conditions",
+    "excluding pregnancy", "Not payable if caused by war or riot", "Excludes self-inflicted injury", "insured in hospital as an inpatient",
+    "No Benefit shall be payable for hospitalisation directly or indirectly due to self-inflicted injuries (including due to suicide/ attempted suicide) and/or pregnancy/ maternity reason.",
     "while this policy is in force", "admitted on the advice of a doctor", "subject to the policy terms", "must be medically necessary"])
     assert.equal(pair(c), "S$30 a day · from day 11 · up to 30 days", c);
   // Anything that may change the amount, or that the rules cannot place: no figure.
   for (const c of ["reduced by half after age sixty-five", "less any amount already paid under the critical illness benefit",
     "the higher of this amount or the account value", "the lower of this amount or five times annual salary", "until the policy anniversary at age seventy",
     "Max 6 claims per policy year", "payable once per life", "only one claim per admission", "inpatient only, capped at the ward rate",
-    "no benefit after the first sixty days", "paid to the policyowner's estate", "minus any outstanding loan"])
+    "no benefit after the first sixty days", "paid to the policyowner's estate", "minus any outstanding loan",
+    // Critic R241: exclusion or not-payable wording that changes the amount is a limit.
+    "Excluding amounts paid under the early critical illness benefit", "Not payable in excess of the actual charges incurred",
+    "The portion exceeding reasonable charges is not covered", "Excluding any amount reimbursed by other insurers",
+    "Not payable to the extent covered by another policy", "Payable net of any government subsidy", "Payable as a proportion of the sum insured",
+    "Payable at the ward-class rate", "Not payable where another benefit under this policy has been paid", "Excludes any bonus"])
     assert.equal(pair(c), null, c);
 });
 
@@ -215,7 +222,9 @@ test("a name with its own figure is a benefit unless it states a threshold; 'inc
     assert.equal(tileRows([named(b, 1), named("Total and Permanent Disability", 2)]).length, 1, b);
   for (const b of ["Daily Hospital Cash, including while overseas", "Hospital Income, also while abroad", "Hospital cash at home and overseas"])
     assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 2, b);
-  for (const b of ["Daily hospital cash while overseas", "Hospital allowance during the trip", "Hospital cash while you are travelling"])
+  for (const b of ["Hospital cash in Singapore and overseas", "Hospital income in Malaysia or abroad"])
+    assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 2, b);
+  for (const b of ["Daily hospital cash while overseas", "Hospital allowance during the trip", "Hospital cash while you are travelling", "Hospital cash while overseas and travelling"])
     assert.equal(tileRows([named(b, 80), named("Hospital Cash Benefit", 40)]).length, 1, b);
 });
 

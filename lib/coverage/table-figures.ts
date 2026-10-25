@@ -94,8 +94,10 @@ export function categoryRows<T extends SummaryRow>(category: string, rows: T[]):
 /** Pays only during a trip abroad ("Daily hospital cash while overseas"): travel cover, not the person's standing cover.
  * A name that also pays at home ("including while overseas", "also abroad") is standing cover (TE P147-3). */
 const TRIP_ONLY = /\b(?:while|whilst|when)\s+(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:during|on)\s+(?:the|your|a)\s+(?:trip|journey)\b|\boverseas\s+(?:only|travel)\b/i;
-const ALSO_ABROAD = /\b(?:including|incl\.?|also|as\s+well\s+as|and|even)\s+(?:\w+\s+){0,2}?(?:(?:while|whilst|when)\s+)?(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b/i;
-const tripOnly = (benefit: string) => TRIP_ONLY.test(benefit) && !ALSO_ABROAD.test(benefit);
+const ALSO_ABROAD = /\b(?:including|incl\.?|also|as\s+well\s+as|even)\s+(?:\w+\s+){0,2}?(?:(?:while|whilst|when)\s+)?(?:you\s+are\s+)?(?:overseas|abroad|travel\w*)\b|\b(?:at\s+home|locally|home)\s+(?:and|or|and\s*\/\s*or|&)\s+(?:(?:while|when)\s+)?(?:overseas|abroad)\b/i;
+// "and/or overseas" only after a home place ("in Singapore and overseas"): "while overseas and travelling" stays trip-only (Critic R241).
+const HOME_AND_ABROAD = /\bin\s+[A-Z][\w-]*(?:\s+[A-Z][\w-]*)?\s+(?:and|or|and\s*\/\s*or|&)\s+(?:(?:while|when)\s+)?(?:overseas|abroad)\b/;
+const tripOnly = (benefit: string) => TRIP_ONLY.test(benefit) && !ALSO_ABROAD.test(benefit) && !HOME_AND_ABROAD.test(benefit);
 /** A part of a benefit's payment terms, not its amount: a name that states a threshold with its own money figure ("paid
  * in instalments where the sum payable is above 200,000 dollars", printed with its sign). A benefit named with its own
  * figure ("Daily Hospital Cash 80 dollars per day") is a benefit, not a clause (TE P147-2). */
@@ -113,13 +115,28 @@ export function tileRows<T extends SummaryRow>(rows: T[]): T[] {
  * tile's figure ("Waiver of premium on total and permanent disability benefit"). */
 const WAIVER = /\bwaiv\w*\s+(?:of\s+)?(?:future\s+)?premiums?\b|\bpremiums?\s+waiv/i;
 
-/** Every condition is taken to change what is paid, and so must be the same on every row of a tile, unless it is plainly
- * who or what is eligible (an exclusion, an inpatient or continuous stay, while the policy is in force) and names nothing
- * that changes an amount (Critic R238, TE P147-5: "reduced by half after age sixty-five", "the higher of this amount or
- * the account value" are limits). A condition the rules cannot place is a limit: the tile then gives no figure. */
-const ELIGIBILITY = /^\s*(?:(?:no|not|nothing)\b.*\b(?:payable|paid|covered|cover|benefits?)\b|.*\b(?:excluding|excludes?|exclusions?|does\s+not\s+(?:cover|apply))\b|.*\b(?:in-?\s?patient|hospitali[sz]ed|admitted|continuous(?:ly)?|consecutive|confined)\b|.*\bwhile\s+(?:this|the)\s+(?:policy|cover|plan)\s+is\s+in\s+force\b|.*\bsubject\s+to\s+(?:the\s+)?(?:policy\s+)?(?:terms|conditions|provisions)\b|.*\bmedically\s+necessary\b)/i;
-const CHANGES_AMOUNT = /\d|%|\b(?:higher|lower|greater|lesser|less|minus|deduct\w*|reduc\w*|half|halv\w*|after\s+age|until|before\s+age|percent|max(?:imum)?|min(?:imum)?|up\s+to|limit\w*|caps?|capped|once|twice|double\w*|times|multipl\w*|plus|instead|refund\w*|after|beyond|within|first|last|days?|nights?|weeks?|months?|years?|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life|lifetime|disability|illness))\b|\bonly\s+(?:one|two|three|a|an|each|every|in\s+the\s+first)\b/i;
-const isLimit = (c: string) => !ELIGIBILITY.test(c) || CHANGES_AMOUNT.test(c);
+/** Every condition is taken to change what is paid, and so must be the same on every row of a tile, unless it has one of
+ * two plain eligibility shapes (Critic R241: an allow-list, never a list of amount words to refuse):
+ *  - a cause it is not paid for: "No benefit is payable for / if / due to / arising from / caused by <cause>",
+ *    "Excluding <cause>", where the cause names no amount, payment, charge, benefit, policy, insurer, number or period;
+ *  - a stay or standing wording made only of plain words ("inpatient only", "continuous hospital stay", "admitted on the
+ *    advice of a doctor", "while this policy is in force", "subject to the policy terms", "medically necessary").
+ * Anything else ("Excluding amounts paid under ...", "Not payable in excess of the actual charges", "payable at the
+ * ward-class rate", "reduced by half after age sixty-five") is a limit: the tile then gives no figure unless every row
+ * prints it (Critic R238, TE P147-5). */
+const CAUSE_HEAD = /^\s*(?:(?:no\s+benefits?|nothing|no\s+cover)(?:\s+(?:shall|will)\s+be|\s+is)?(?:\s+(?:payable|paid|covered))?|(?:the\s+benefit\s+is\s+)?not\s+(?:payable|paid|covered)|excluding|excludes?|except\s+for|exclusions?\s*:)\s+(?:(?:for|if|due\s+to|arising\s+(?:from|out\s+of)|caused\s+by|resulting\s+from|in\s+respect\s+of|on\s+account\s+of|from)\s+)?/i;
+const NOT_A_CAUSE = /\d|%|\b(?:amounts?|sums?|paid|pay\w*|charges?|charged|costs?|expenses?|fees?|bonus\w*|benefits?|insur\w*|insurers?|polic\w*|plans?|subsid\w*|reimburs\w*|refund\w*|portion|proportion|share|rates?|class|net|excess|exceed\w*|limit\w*|max\w*|min\w*|caps?|capped|higher|lower|greater|less|more|than|reduc\w*|deduct\w*|minus|half|times|once|twice|until|after|before|ages?|days?|weeks?|months?|years?|period|first|other|another|already|extent|whichever|instead|only|any|where|unless|except)\b/i;
+const STANDING_WORDS = new Set(["the", "a", "an", "as", "in", "on", "of", "to", "be", "is", "must", "while", "only", "insured", "person", "life", "assured",
+  "hospital", "inpatient", "in-patient", "admitted", "admission", "confined", "hospitalised", "hospitalized", "continuous", "consecutive", "stay",
+  "advice", "registered", "doctor", "medical", "practitioner", "medically", "necessary", "subject", "terms", "conditions", "provisions",
+  "this", "policy", "cover", "plan", "force", "and"]);
+function isEligibility(c: string): boolean {
+  const head = c.match(CAUSE_HEAD);
+  if (head) { const cause = c.slice(head[0].length).trim(); return cause.length > 0 && !NOT_A_CAUSE.test(cause); }
+  const words = c.toLowerCase().replace(/[.,;:()]/g, " ").split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.every((w) => STANDING_WORDS.has(w));
+}
+const isLimit = (c: string) => !isEligibility(c);
 const limits = (r: SummaryRow) => r.conditions.filter(isLimit).sort().join(" · ");
 
 type Money = { amount: number; currency: string | null; unit?: string; period?: unknown };
