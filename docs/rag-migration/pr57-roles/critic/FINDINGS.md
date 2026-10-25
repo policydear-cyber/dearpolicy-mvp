@@ -6788,3 +6788,9 @@ Free review: delta read only.
   const anyCause = (uplift || including || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(paid)) && !/\bpersonal\s+accident\b/i.test(benefit);
   ```
   "Death (including death due to injury)" still goes to Death. Testing the PA regex on `paid` is right: "Death from causes other than accident" goes to Death. Otherwise READY.
+
+## R231 — #142 09eef59, #144 ca6eb02: READY
+
+- #142: plainDeath now guards both uplift and including, exactly as R230 wrote. A regression covers "Accidental Death Benefit (including injury on public transport)", which goes to PA, and "Death (including death due to injury)" still goes to Death. READY.
+- #144: only merges in the A commit; table-benefits.ts is unchanged. READY.
+- #145 f9d040e was READY at R230. The coming A merge needs only a delta glance.
