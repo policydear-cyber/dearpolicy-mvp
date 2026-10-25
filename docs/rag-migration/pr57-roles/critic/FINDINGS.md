@@ -6663,3 +6663,46 @@ Free review: code read only.
   - (b) A joint file (A and B) with only A listed is listed again under "Linked to A and B". It's a repeat, not wrong.
   - (c) Grouped lines still pass through withoutMoney. FILE_NAME protects names ending in .pdf etc., but a product label carrying a figure would now drop the whole group sentence instead of one file's line. Treat fromRecord like serverWords for `said` too: `const said = serverWords.has(t) || fromRecord.has(t) ? t : …`.
   - (d) Each grouped entry copies filePoints[0].s, including its `document` id. If any renderer links a card from s.document when found is null, every group would point at the first file. I saw no such use, but it is worth a glance.
+
+## R225 — #142 fe0bf2b, #144 69e8070, #143 405874c (G007500 removal, name cleanup)
+
+Free review: code read and git grep only.
+
+### #142 (table figures label tiles): READY after one medium fix
+
+- Medium: `categoryRows` drops only projected and not_covered rows. A `pays === "value"` row (fund, surrender or account value) whose name carries "death" can label the Death tile with a fund value. Add `r.pays !== "value"` (and the R204 premium-only test) to the filter.
+- Low: the tile currency falls back to SGD when the figure has none (`normalizeCurrencyCode(..., "SGD")`). A bare $ does not establish currency; show no currency instead.
+- Low: `wordingDescribes` compares insurers by plain lowercase; use `canonicalInsurer` (#138) so "AIA Singapore Private Limited" and "AIA Singapore" agree.
+- Low: a combined "Death or TPD" row goes to TPD only. Low, fails safe: word-for-word product names may drop a derived wording category.
+
+### #144 (claim items from the benefit table): NOT READY (one high, two medium)
+
+- High, wrong amount: `purposeOf` matches the body part with `some` over part words, and positional words are not in SIDE. "upper arm" matches an "Upper jaw" fracture row, "lower leg" matches "Lower jaw". Fix:
+  ```ts
+  const SIDE = new Set([...existing, "upper", "lower", "front", "back", "inner", "outer", "top", "bottom", "middle", "base"]);
+  // in purposeOf:
+  words.length > 0 && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit))
+  ```
+- Medium, double count: the death dedupe only looks at `i.id === "gtl-death"`. death-evidence.ts:241 also builds `gpa-accidental-death`, and travel-rules.ts:177 builds `travel-accidental-death`. A GPA death row for a cover that already has a checked `gpa-accidental-death` item adds a second death item with an amount. With `item.coverageId` null there is no dedupe at all. Fix:
+  ```ts
+  const DEATH_IDS = new Set(["gtl-death", "gpa-accidental-death", "travel-accidental-death"]);
+  if (g.purpose === "death") {
+    if (!item.coverageId) continue; // no verified cover: leave death to the evidence path
+    const same = items.filter((i) => i.coverageId === item.coverageId && DEATH_IDS.has(i.id));
+    if (same.some((i) => i.status !== "needs_document")) continue;
+    items = items.filter((i) => !same.includes(i));
+  }
+  ```
+- Medium, wrong cover: `coverageFor`'s second fallback takes any coverage on the same document. On a multi-cover schedule (GTL + GPA) a GPA row with an unmatched name maps to the GTL coverage, passes the money gate with GTL's effective date, and (with the death dedupe) can replace GTL's own item. Fix: use the same-document fallback only when that document holds exactly one coverage:
+  ```ts
+  const onDoc = doc == null ? [] : coverages.filter((c) => c.policyId === doc);
+  return onDoc.find(named) ?? (onDoc.length === 1 ? onDoc[0] : undefined) ?? coverages.find(named) ?? null;
+  ```
+- Low-medium, hides a benefit: `covered()` for fracture, ambulance and recuperation tests titles across all items, not per cover. An evidence item for cover A hides cover B's table item. Compare `i.coverageId` with the group's cover once coverageFor is fixed.
+- Good: CI and TPD never get an amount; a lump sum needs a currency; several figures give "cannot"; hospital cash uses only the printed fromDay and maxDays.
+
+### #143 (made-up names in fixtures and records): NOT READY (one high)
+
+- High, private record: only the English first name was swapped. The real surname and given name remain: "Tan Yi Chuen Raymond" (was "Tan Yi Chuen Desmond") in 20 files under scripts/ (claim-*-regressions, evidence-*, v11-*, fixtures/reviewer-benefit-wording.ts, system-database-regressions.ts and others). Replace the whole name with a made-up one, e.g. "Lim Wei Jie Raymond" / "Raymond Lim Wei Jie", and keep the swapped-order variant in claim-evidence-regressions.ts:156 consistent.
+- Checked clean: no Desmond or Charmaine left (case-insensitive); the change is a pure rename (5,870 lines each way); no PDF or extracted-text fixture changed, so no fixture text disagrees with its test; NRIC-shaped strings left (S1234567A/D, T1234567J, S7712345J, S9100227Z) are synthetic test values.
+- Note: the docs/rag-migration/live run records now show names the live model never printed. Fine for privacy; the old names stay in git history (DC's open item).
