@@ -6567,3 +6567,12 @@ Free review: code read only. I did not run the DB suite.
 - Low: up to 3 start-now runs plus 1 drain per instance read side by side. The household cap is checked per call, so parallel reads can overshoot it by a few calls' worth, and DC's household has about US$12 left.
 - Low: Try again on an existing queued row keeps that row's payload, so a PDF password typed with Try again is ignored. Pass it through in an UPDATE of payload for a queued row.
 - Low: when start-now is "busy" (3 in flight), Try again shows "Starting…" while nothing starts. The page then shows stalled again after 10 minutes, which is honest.
+
+## R214 — re-review of #139 f0faa3b, #140 6b6f16d, #117 7401aa7, #136 3887506, #138 99696b5: all READY
+
+- **#139 f0faa3b READY.** The R211 patch is in as written. My three probes now give: the continuation masked with the row ("or up to [amount not checked], whichever is lesser", comma kept), and the header and heading cases fully unchecked. The PW9 shapes are unchanged. P139-1 (skipped lone date or value masked when an image figure line is left over) is right: the confirmed count excludes skipped lines, and a page with only skipped lines masked is part-checked with kind non-null. R211-4: libraryFact now says "read in part" for part-checked pages. The branch also carries #135/#137 (build fix, cache pricing), already reviewed in R208/R210.
+- **#140 6b6f16d READY.** On a stalled Try again: recoverExpiredLeases, then enqueue (revives dead_letter), then makePolicyJobDueNow (failed_retryable and not cancel_requested only; never a leased or cancelling job), then startJobNow. R213-1 is closed. The budget is 110 s, leaving about 190 s for the last job claimed. Lows in R213 stand (parallel reads against the household cap, the payload password on an existing queued row).
+- **#117 7401aa7 READY.** ownCoverWords drops NOT_THEM_AFTER words (family, side, parents, ...) and PERSON_WORD (husband, wife, first, former, late, kids, ...), so a "Family Care Plan" or "Family First" product no longer makes "my wife's family" her cover. R207-1 is closed.
+- **#136 3887506 READY.** style-test uses made-up file, person and insurer names. The verify.ts real file names (R209-1 lines 1112, 1563) are fixed in #138, so merge #138 with or before #136.
+- **#138 99696b5 READY.** Sdn, Pty, Pvt, Private and GmbH are legal forms, with a test. SE is left out on purpose.
+- Merge order I'd suggest: #138, #136, #117, #139, #140 (#139 and #140 both carry #135/#137, so whichever merges second may need a main merge).
