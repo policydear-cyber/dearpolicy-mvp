@@ -10,6 +10,7 @@ import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT } from "../../lib/simple-cha
 import type { ModelAnswer, ModelStatement } from "../../lib/simple-chat/prompt";
 import { ALTERNATIVES_NOTE, LEFT_OUT_AMOUNT, libraryFact, locateQuote, matchMember, readModelAnswer, statesMoney, verifyAnswer } from "../../lib/simple-chat/verify";
 import { runSimpleChat } from "../../lib/simple-chat/hook";
+import { appHelp } from "../../lib/simple-chat/app-help";
 import { replayModel, runSet } from "./app-run";
 import type { ChatContext } from "../../lib/chat/workflow";
 import { guardChatAnswer } from "../../lib/chat/output-guard";
@@ -257,6 +258,44 @@ async function main() {
     assert.ok(!call.library.includes("someone-else"));
     const state = saved[0].state as { simpleChat: { turns: { usage: { input: number; cached: number } }[] } };
     assert.deepEqual(state.simpleChat.turns[0].usage, { input: 62600, output: 400, cached: 0 });
+  });
+
+  await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
+    const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change charmaine's name to Charmaine Ong", "rename"],
+      ["who else can see my documents", "who-sees"], ["is my data safe", "safe"], ["how much has my household used this month", "usage"], ["what does it cost to use dearpolicy", "cost"],
+      ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"], ["update my wife's name", "rename"], ["plan usage", "usage"],
+      ["how many questions have I used this month", "usage"],
+      // TE P118-3, Critic R188-3.
+      ["how many questions do I have left this month", "usage"], ["How much does DearPolicy cost?", "cost"], ["how much does this app cost per month", "cost"], ["is it free to use", "cost"],
+      ["how secure is DearPolicy", "safe"], ["how to delete dearpolicy account", "delete"], ["who can see my policies", "who-sees"], ["delete everything", "delete"],
+      ["how much did I use this month", "usage"], ["how much have I used dearpolicy", "usage"],
+      ["is it safe to upload my policy here", "safe"], ["rename my son", "rename"], ["how many questions can I ask this month", "usage"]];
+    for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
+    // Questions about cover, a claim or the insurer stay with the model, however they are worded.
+    for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
+      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy",
+      // Critic R185-1.
+      "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan is used up for physio",
+      "do I pay anything to use it at a panel clinic", "who can access the policy documents if I die", "change my name on the policy", "update my son's name on the rider",
+      // TE P118-1/2, Critic R188-1/2: cover questions, one thing in the household, and how to use the app.
+      "how many GP visits can I use this month", "can I use the polyclinic this month", "can I still use my TCM visits this month", "how much have I used for my maternity this month",
+      "how much does a GP visit cost with you guys", "how do I remove household member Ah Kow", "remove the household helper from my list", "remove my profile photo",
+      "terminate the household member access for my maid", "remove the data for my son", "How do I use DearPolicy?", "can I use this app on my phone", "can I use the app for my parents",
+      // Critic R190-1: only the message is read, so "is it free" may be a follow-up about a treatment.
+      "is it free", "is this free?", "is this treatment free",
+      // TE P118-4: a treatment's own count.
+      "how many dialysis sessions can I use this month", "how many chiropractor visits can I use this month", "how many acupuncture sessions can I use this month",
+      "how much optical can I use this month", "how many vaccinations can I use this month", "how many chemo sessions can I use this month"])
+      assert.equal(appHelp(q), null, q);
+    const model = stub(c2);
+    const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];
+    const result = await runSimpleChat({ ...context(), request: { ...context().request, question: "delete my account", submittedQuestion: "delete my account" } } as ChatContext, {}, {
+      model, household: async () => HOUSE, history: async () => [], save: (async (a: { answer: { bottomLine?: string } }) => { saved.push(a); }) as never,
+    });
+    assert.equal(model.calls.length, 0);
+    assert.match(result.answer.summary, /Household > Delete this household\. It cannot be undone\./);
+    assert.equal(saved.length, 1);
+    assert.equal((result.answer as { statements?: unknown[] }).statements?.length ?? 0, 0);
   });
 
   await check("chat turn refuses a library read for another household", async () => {
