@@ -146,9 +146,12 @@ const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wi
 // list (Critic R190-2). No insurer or product is named here: the household's own documents add theirs ("my husband's
 // Manulife", "my wife's PRUShield"), so any household, with any insurer anywhere, is read the same way.
 const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|own|bill|bills)$/i;
-/** The words of the household's own insurers and products ("manulife", "prushield"), each 2 letters or more. */
+/** The words of the household's own insurers and products ("manulife", "prushield"), each 2 letters or more. A word that
+ * names a person or their place in a family never counts, whatever product prints it: "my wife's family has cancer
+ * history" is about her family, even with a "Family Care Plan" in the library (Critic R207-1, TE P117-4). */
+const PERSON_WORD = /^(?:husband|hubby|wife|wifey|first|second|former|late|new|kids|children|baby|babies|helper|maid|elder|junior|senior)$/i;
 const ownCoverWords = (household: Household) => new Set(household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""])
-  .flatMap((n) => n.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 2));
+  .flatMap((n) => n.toLowerCase().split(/[^a-z0-9]+/)).filter((w) => w.length >= 2 && !NOT_THEM_AFTER.test(w) && !PERSON_WORD.test(w)));
 // Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
 // before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a
 // list of other people's words is never complete (Critic R184-1).

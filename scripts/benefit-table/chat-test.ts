@@ -1671,6 +1671,11 @@ test("\"my husband\" is settled only by a title the documents print before that 
   assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich"]), "the household's own insurer");
   assert.ok(spouseMeant(insured("Example Assurance", "CareFirst Health"), ["my wife's CareFirst plan"]), "the household's own product");
   assert.equal(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Allianz"]), null, "an insurer this household has no document from settles nothing");
+  // A product's words that name a person or their family never make a possessive the spouse's own (Critic R207-1, TE P117-4).
+  for (const [product, said] of [["Family Care Plan", "my wife's family has cancer history, covered?"], ["Family Protect Plan", "my husband's family got history of stroke"],
+    ["Mother & Child Care", "my wife's mother warded, can claim?"], ["Kids First Savings", "my husband's kids from before, covered?"], ["Kids First Savings", "my husband's first wife"]])
+    assert.equal(spouseMeant(insured("Example Assurance", product), [said]), null, `${product}: ${said}`);
+  assert.ok(spouseMeant(insured("Example Assurance", "Family Care Plan"), ["my wife's Care plan"]), "the product's other words still count");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
   // Only for a household set up as one couple (self and spouse).
