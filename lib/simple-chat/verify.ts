@@ -1156,9 +1156,15 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
  * unless it also asks what was uploaded or linked (TE #104 L9). */
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
+/** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
+ * ("output_202609281146053.pdf", a hash), what the app takes it to be ("FWD endorsement, uploaded 28 Sept 2026"), with the
+ * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
+ * file is kept as it is. */
+// A file that could not be read keeps its file name: nothing read says what it is.
+const labelFor = (household: Household, d: HouseholdDocument) => d.productName?.trim() || (!personalFileName(d.name) && !unreadable(d)) ? docLabel(household, d) : d.name;
 export function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
-  const label = d.productName?.trim() ? docLabel(household, d) : d.name;
+  const label = labelFor(household, d);
   const named = label === d.name ? d.name : `${label} (${d.name})`;
   const read = unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.`
     : d.uncheckedPages?.length ? `${named} was read in part: ${pageList(d.uncheckedPages)} couldn't be checked against the page image, so no amounts from ${d.uncheckedPages.length === 1 ? "it are" : "them are"} used.`
@@ -1173,7 +1179,7 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
 function libraryList(household: Household, person: string): string {
   const docs = household.documents.filter((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person));
   if (!docs.length) return `No document is linked to ${person} in DearPolicy.`;
-  const named = (d: HouseholdDocument) => { const label = d.productName?.trim() ? docLabel(household, d) : d.name; return label === d.name ? d.name : `${label} (${d.name})`; };
+  const named = (d: HouseholdDocument) => { const label = labelFor(household, d); return label === d.name ? d.name : `${label} (${d.name})`; };
   return `${person} has ${docs.length} document${docs.length === 1 ? "" : "s"} linked in DearPolicy: ${docs.map(named).join("; ")}.`;
 }
 
