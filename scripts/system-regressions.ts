@@ -1544,6 +1544,40 @@ export function runSystemRegressions(){
     const injuryTo="Accidental Death If you become legally liable for accidental death or bodily injury to other people S$500,000";
     assert.equal(rowSupported({...labelled,quote:injuryTo},injuryTo),false,"liable ... to other people is still liability cover");
   });
+  test("A benefit printed as not applying is not a ledger row (24 Oct journeys: Home and vehicle on Family)",()=>{
+    const page="Section 9 Home Guard  Not Applicable\nSection 10 Rental Vehicle Excess  S$500\nGolf Equipment\tN.A.\nHijack: Nil\nPet Care  -\nTerrorism  NA\n"+
+      "Hospital Cash  S$200 per day\nWaiting period: Nil\nAccidental Death  -  S$100,000\nMobile phone  not covered\nFracture of the thumb is not covered.";
+    const stated=(benefitName:string,quote:string)=>({planName:"Travel Business",sourcePage:1,benefitName,detail:benefitName,eventType:"other" as const,paysKind:"stated" as const,amount:null,quote});
+    for(const [b,q] of [["Home Guard","Section 9 Home Guard  Not Applicable"],["Golf Equipment","Golf Equipment\tN.A."],["Hijack","Hijack: Nil"],["Pet Care","Pet Care  -"],
+      ["Terrorism","Terrorism  NA"],["Mobile phone","Mobile phone  not covered"]])
+      assert.equal(rowSupported(stated(b,q),page),false,`${b}: printed as not applying`);
+    // Controls: a figure, a "Nil" on another line of the row's quote, and a dash before a figure are kept.
+    assert.equal(rowSupported({...stated("Rental Vehicle Excess","Section 10 Rental Vehicle Excess  S$500"),paysKind:"reimbursement_cap" as const,amount:500},page),true,"a printed figure is kept");
+    assert.equal(rowSupported({...stated("Hospital Cash","Hospital Cash  S$200 per day\nWaiting period: Nil"),eventType:"hospital_daily_cash" as const,paysKind:"per_day" as const,amount:200},page),true,
+      "another line's Nil is not the row's cell");
+    assert.equal(rowSupported({...stated("Accidental Death","Accidental Death  -  S$100,000"),eventType:"accidental_death" as const,paysKind:"lump_sum" as const,amount:100000},page),true,
+      "a dash before a figure is a separator");
+    // Critic R200-1, TE P125-1: another label's "Nil" on the row's own line is not the row's cell.
+    const keep=(benefitName:string,quote:string,o:Record<string,unknown>={})=>assert.equal(rowSupported({...stated(benefitName,quote),...o} as Parameters<typeof rowSupported>[0],quote),true,`${benefitName}: kept (${quote})`);
+    keep("Hospital cash","Hospital cash  S$100 per day  Waiting period: Nil",{eventType:"hospital_daily_cash",paysKind:"per_day",amount:100});
+    keep("Accidental death","Accidental death\tS$100,000\tDeductible: Nil",{eventType:"accidental_death",paysKind:"lump_sum",amount:100000});
+    keep("Outpatient","Outpatient\tS$1,000\tCo-payment: Nil");
+    keep("Emergency dental","Emergency dental  S$500  Excess: Nil  Sub-limit: -");
+    keep("Medical expenses overseas","Medical expenses overseas  S$200,000  -");
+    keep("Terrorism","Terrorism  Covered  Hijack  Nil");
+    keep("Overseas Medical Expenses","Overseas Medical Expenses  S$500,000  Excess: Nil");
+    keep("Fracture","Fracture  S$5,000\nFracture of the thumb is not covered.");
+    keep("Hospital Cash","Hospital Cash  S$200 per day; outpatient treatment not covered");
+    keep("Home Guard","Home Guard\tS$500\tN.A.");
+    keep("Pet care","Pet care - boarding  S$50 per day");
+    keep("Flight delay","Flight delay  S$100 per 6 hours  Baggage delay  Nil");
+    keep("Travel delay","Travel delay\tS$100\tTrip delay\tNot Applicable");
+    // Single-space and other wordings of a benefit that does not apply (TE P125-2).
+    for(const [b,q] of [["Golf Equipment","Golf Equipment N.A."],["Hijack","Hijack Nil"],["Pet Care","Pet Care -"],["Hijack","Hijack  Nil."],["Pet Care","Pet Care  -*"],
+      ["Home Guard","Home Guard  Not Applicable*"],["Loss of income","Loss of income  Not Payable"],["Loss of income","Loss of income  Excluded"],["Loss of income","Loss of income  No cover"],
+      ["Loss of income","Loss of income  ✗"],["Loss of income","Loss of income  NA"],["Golf equipment","Golf equipment: N/A"]])
+      assert.equal(rowSupported(stated(b,q),q),false,`${b}: printed as not applying (${q})`);
+  });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under
     // one group policy number, but the certificate reading attaches them to
