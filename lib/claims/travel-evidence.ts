@@ -44,6 +44,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimEvidence } from "./types";
+import { canonicalInsurer } from "@/lib/policies/insurer-name";
 
 export type TravelBenefitCode = "travel-medical-expenses" | "travel-accidental-death";
 
@@ -85,7 +86,7 @@ type Page = { page_number: number; text: string };
 const REFERENCE_ROLES = new Set(["policy_wording", "product_summary", "benefit_guide", "benefit_summary", "rider"]);
 
 function documentInsurer(pages: TravelWordingPage[]) {
-  return pages[0].insurer ? pages[0].insurer.toLowerCase().replace(/[^a-z0-9]+/g, "") : null;
+  return canonicalInsurer(pages[0].insurer);
 }
 
 const MONEY_PATTERN = /(?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*([\d,]+(?:\.\d+)?)/i;
@@ -218,7 +219,7 @@ export function resolveTravelEvidence(coverages: OwnedCoverage[], rows: TravelWo
   const gaps: TravelEvidenceGap[] = [];
 
   for (const coverage of byPolicy.values()) {
-    const insurer = coverage.insurer ? coverage.insurer.toLowerCase().replace(/[^a-z0-9]+/g, "") : null;
+    const insurer = canonicalInsurer(coverage.insurer);
     const sameInsurer = (pages: TravelWordingPage[]) => insurer != null && insurer === documentInsurer(pages);
 
     const ownDocument = allDocuments.filter((pages) => pages[0].policy_id === coverage.policyId);

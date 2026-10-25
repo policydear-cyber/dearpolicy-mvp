@@ -853,7 +853,7 @@ function withoutOrphans(all: string[], leaveOut: (s: string) => boolean, dropped
   // A sentence that states a condition ("It is paid only if ...") is kept: what it asks for still holds (Critic R140-2).
   return all.filter((s) => { const out = leaveOut(s) || (last && LEANS_ON_PREVIOUS.test(s.trim()) && !STATES_CONDITION.test(s)); if (out) dropped.push(s); last = out; return !out; }).join(" ").trim();
 }
-/** A file name is never money ("output_2026.pdf", release-set E1, E2). */
+/** A file name is never money ("scan_2026.pdf", release-set E1, E2). */
 const FILE_NAME = /[^\s$,()“”"']+\.(?:pdf|png|jpe?g|heic|webp|gif|tiff?|docx?|xlsx?)\b/gi;
 /** Numbers the household's documents print as an identifier (release-set A1, B1, H8): a phone number ("6827 8000",
  * "+65 6820 8888"), a code with letters ("G00750"), or a bare number of six or more digits ("1234567"). A number in the
@@ -900,7 +900,7 @@ function proseRead(household: Household): (s: string) => string {
     const kinds = ids.get(idKey(m));
     const kind = idKind(m, whole.slice(Math.max(0, at - 40), at));
     // A bare number with no label in the answer is read past only when the documents print it as plain number too, or when
-    // the sentence calls it by the label the documents print it under ("the cover's own policy number ... is 3037850",
+    // the sentence calls it by the label the documents print it under ("the cover's own policy number ... is 1234567",
     // release-set H8).
     const named = kind === "number" && [...(kinds ?? [])].some((k) => /^(?:policy|certificate|claim)$/.test(k) && new RegExp(String.raw`\b${k}\s*(?:no\.?|number|#)`, "i").test(whole));
     return kinds && (kinds.has(kind) || named) ? " " : m;
@@ -1109,7 +1109,7 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
 /** A document as the household knows it: its product name, with the file name when two documents share one. */
 /** A document as the household would name it: its product, told apart from another file of the same product by the
  * file's own name when a person chose it ("Product Summary"), or else by what kind of document it is. A name a machine
- * gave the file ("817d6e8b-....pdf", "output_202609281146053.pdf") is never shown as a source. Two documents that would
+ * gave the file ("0a1b2c3d-....pdf", "scan_20260101090000.pdf") is never shown as a source. Two documents that would
  * still read the same are told apart by their upload date, and then by their order (TE #102). */
 function docLabel(household: Household, d: HouseholdDocument): string {
   const base = (x: HouseholdDocument) => {
@@ -1157,7 +1157,7 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 /** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
- * ("output_202609281146053.pdf", a hash), what the app takes it to be ("FWD endorsement, uploaded 28 Sept 2026"), with the
+ * ("scan_20260101090000.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 1 Jan 2026"), with the
  * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
  * file is kept as it is. */
 // A file that could not be read keeps its file name: nothing read says what it is.
@@ -1174,7 +1174,7 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
 }
 
 /** A person's documents, as the library records them, in the server's words: for a question about the documents, a point
- * the model wrote about whose files are whose ("Desmond has 8 documents linked: ...") has no page to quote (stress run
+ * the model wrote about whose files are whose ("Wei Ming has 8 documents linked: ...") has no page to quote (stress run
  * 23 Oct, S070: "here is each adult's list" with nothing listed). */
 function libraryList(household: Household, person: string): string {
   const docs = household.documents.filter((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person));
@@ -1191,8 +1191,8 @@ function libraryCount(household: Household): string {
 
 /** A sentence that only says amounts are separate: "They are not a total.", "These are different benefits, not a total;
  * the insurer decides which applies." Anything with a number, a time limit or a condition is more than that. */
-/** The household members a sentence names, by the words of each one's name that no other member's name has ("Desmond",
- * "Charmaine"). */
+/** The household members a sentence names, by the words of each one's name that no other member's name has ("Wei Ming",
+ * "Mei Ling"). */
 export function membersNamedIn(household: Household, text: string): string[] {
   const people = household.members.map((m) => baseName(m.name));
   const words = (n: string) => n.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
@@ -1217,7 +1217,7 @@ function docNames(d: HouseholdDocument): string[] {
 /** "The insurer decides which premium applies", "Singlife decides if they differ", "the one to rely on": said of premiums, never
  * of a printed rule such as a premium waiver ("waived if the insurer determines you are disabled", Critic R131-3). */
 const PREMIUM_DECIDES = (x: string) => /\bpremiums?\b/i.test(x) && /\b(?:decides?|will\s+decide|determines?)\s+(?:which|what)\b|\b(?:decides?|will\s+decide|determines?)\s+(?:if|whether)\s+(?:they|the\s+\w+(?:\s+\w+)?)\s+(?:differ|appl(?:y|ies))\b|\bwhich\s+(?:premium|figure|amount|one)\s+applies\b|\bto\s+rely\s+on\b/i.test(x);
-/** "Two are linked to both Desmond and Charmaine", "3 of them are linked to Desmond only": a count of the documents linked
+/** "Two are linked to both Wei Ming and Mei Ling", "3 of them are linked to Wei Ming only": a count of the documents linked
  * to the people it names (live run 23 Oct, E1). */
 const LINKED_COUNT = new RegExp(String.raw`\b(${COUNT_WORDS.join("|")}|\d{1,2})\s+(?:(?:of\s+(?:them|these|those)|(?:uploaded\s+)?(?:documents?|files?))\s+)?(?:are|is|were|was)\s+linked\s+(only\s+)?to\s+(?:both\s+)?([^.;,]*)`, "i");
 /** Who the documents are linked to, counted from the library's record, in the server's words. */
@@ -1346,7 +1346,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // A point about a file itself (whether it could be read, whom it is linked to) has no words on any page to quote: it
         // is stated from the library's own record of that file instead, in the server's words (release-set E2, E3).
         const di = Number.isFinite(preferred) ? (preferred as number) : -1;
-        // When the question is about the documents themselves ("show me Charmaine's documents"), any unquoted point about one
+        // When the question is about the documents themselves ("show me Mei Ling's documents"), any unquoted point about one
         // file is said the same way (release-set E4).
         if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || aboutLibrary(written[0] ?? ""))) {
           if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
@@ -1560,7 +1560,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     // The prose carries no figures; the live monetary boundary (lib/chat/monetary-boundary.ts) holds it to that on save and reopen.
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: [],
   };
-  // The household's own file names the answer says ("5e58ea7d-….pdf", "output_202609281146053.pdf"), from the library record:
+  // The household's own file names the answer says ("0a1b2c3d-….pdf", "scan_20260101090000.pdf"), from the library record:
   // the output guard keeps them, so a bottom line naming one is never replaced by "Sorry, I couldn't put that answer
   // together" (overnight run 23 Oct, N186, N187).
   const said = [bottomLine, ...nextSteps, ...statements.map((x) => x.text)].join("\n");

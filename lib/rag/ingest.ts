@@ -482,7 +482,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // A page whose table text came out scrambled (labels before values, figures glued together) is read again from its
     // image, and its figures are used only when the two readings agree (lib/documents/layout-check.ts). A page they do
     // not agree on stays searchable, but no amount is read from it, and the document says it was read in part
-    // (Charmaine's new documents, 24 Oct: Prudential schedules).
+    // (a household's new documents, 24 Oct: Prudential schedules).
     // Each page given is read again from its image; a page the two readings do not agree on is marked unchecked, and
     // only its lines with no amount are kept as its text, for the database, search and every reader alike.
     const crossCheck = async (numbers: number[]) => {
@@ -692,9 +692,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Names the household said are not in its family ("Not in my family"): never linked by upload profile, never flagged.
     const dismissed = await dismissedNameKeys(args.accountId, args.policyId);
     const uploadProfileLinks: string[] = [];
-    // A partial match ("Charmaine" for "Charmaine Tan") only stands when no
+    // A partial match ("Mei Ling" for "Mei Ling Tan") only stands when no
     // other person printed on this document lands on the same profile: two
-    // printed Charmaines are never both folded into one profile.
+    // printed Mei Lings are never both folded into one profile.
     const matches = extraction.insuredPeople.map((person) => findFamilyMatchWithKind(person.name, family));
     const hitsPerMember = new Map<string, number>();
     for (const found of matches) if (found) hitsPerMember.set(found.member.id, (hitsPerMember.get(found.member.id) ?? 0) + 1);

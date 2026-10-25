@@ -283,7 +283,7 @@ export function amountAbsenceContradiction(text: string, subjectId: string | nul
  * another member's row, never counts. The product scope of a wording passage cited in the answer (a paragraph benefit)
  * comes from that document's own section headings, never from its title.
  */
-/** A row's printed benefit label as a reader expects it ("GROUP LIVING CARE(POLICY NO. 3037850)" -> "Group Living Care"). */
+/** A row's printed benefit label as a reader expects it ("GROUP LIVING CARE(POLICY NO. 1234567)" -> "Group Living Care"). */
 export function listedBenefitLabel(raw: string): string {
   const s = raw.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
   return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s;

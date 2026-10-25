@@ -324,7 +324,7 @@ export function namesASpecificInjury(benefitName:string){
 /** One deterministic decision: can this row answer the injury that THIS
  * person reported?
  *
- * "Charmaine broke her arm" used to surface "Loss of arm (at shoulder ...)":
+ * "Mei Ling broke her arm" used to surface "Loss of arm (at shoulder ...)":
  * both responded to an accident, both named an arm, and the kind of injury was
  * only compared after the row was already a candidate -- and not at all when
  * the facts said only "injured arm". A schedule pays for the injury that
@@ -1031,8 +1031,8 @@ function toBenefit(row:BenefitRow):CatalogBenefit{
  * A certificate prints one row per person per plan: an identity number, a name,
  * a plan, an amount. The table parser reads those rows like any other table, so
  * they were stored as benefits whose NAME is a masked NRIC and a person -- and
- * a row called "S****195A Ong Pei Lin Charmaine GROUP PERSONAL ACCIDENT (POLICY
- * NO. 3037850)" carrying S$1,000,000 was then matched to a claim by the word
+ * a row called "S****123A Lim Mei Ling GROUP PERSONAL ACCIDENT (POLICY
+ * NO. 1234567)" carrying S$1,000,000 was then matched to a claim by the word
  * "accident" in it, and paid.
  *
  * Those amounts belong in the coverage ledger, where they already are. A rule
@@ -1044,7 +1044,7 @@ export function looksLikeCoverageLine(benefitName:string){
   const name=(benefitName??"").trim();
   if(!name)return true;
   if(/\bpolic(?:y|ies)\s*(?:no|number)\b/i.test(name))return true;
-  // A masked identity number ("S****048I") or a full one.
+  // A masked identity number ("S****567D") or a full one.
   if(/[A-Z]\s*\*{2,}\s*\d{2,}\s*[A-Z]/i.test(name))return true;
   if(/\b[STFGM]\d{7}[A-Z]\b/i.test(name))return true;
   return false;

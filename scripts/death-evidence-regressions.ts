@@ -46,6 +46,17 @@ export async function runDeathEvidenceRegressions() {
     assert.notEqual(canonicalDeathInsurer("Aviva"),"singlife");
     assert.equal(resolveDeathEvidence(covers,rows.map(r=>({...r,insurer:"Another insurer"}))).rules.length,0);
   });
+  test("An insurer in any market is one insurer however its legal form is printed, and two insurers stay two",()=>{
+    for(const name of ["Zurich Insurance Company Ltd","ZURICH INSURANCE COMPANY LIMITED","Zurich Insurance Co."])assert.equal(canonicalDeathInsurer(name),"zurichinsurance");
+    assert.equal(canonicalDeathInsurer("CareFirst, Inc."),canonicalDeathInsurer("CareFirst"));
+    for(const name of ["Example Assurance Sdn. Bhd.","Example Assurance Pty Ltd","Example Assurance Private Limited","Example Assurance Pvt. Ltd.","Example Assurance GmbH"])assert.equal(canonicalDeathInsurer(name),"exampleassurance",name);
+    assert.notEqual(canonicalDeathInsurer("Private Health Mutual Ltd"),canonicalDeathInsurer("Health Mutual Ltd"));
+    assert.equal(canonicalDeathInsurer("Allianz SE"),"allianzse");
+    assert.notEqual(canonicalDeathInsurer("AIA Life"),canonicalDeathInsurer("AIA General"));
+    assert.notEqual(canonicalDeathInsurer("Zurich Life Insurance"),canonicalDeathInsurer("Zurich Insurance"));
+    assert.equal(canonicalDeathInsurer("Ltd"),"ltd");
+    assert.equal(canonicalDeathInsurer("  "),null);
+  });
   test("Missing insurer metadata can use the explicit legal issuer printed in the PDF",()=>{
     assert.equal(resolveDeathEvidence(covers,rows.map(r=>({...r,insurer:null}))).rules.length,2);
   });

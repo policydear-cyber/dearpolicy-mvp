@@ -1,7 +1,7 @@
 /**
  * V1.1 Task 2 + Task 5: the single answer path for ordinary policy questions.
  *
- * "What is Charmaine's death cover?", "Does my plan pay hospital cash?",
+ * "What is Mei Ling's death cover?", "Does my plan pay hospital cash?",
  * "What premium do I pay?" are answered from the facts stored when the
  * documents were read -- the right person's current documents only -- as
  * structured Assertions, each verified against its cited passage, page,

@@ -120,10 +120,10 @@ export default function FamilyPage() {
 
       <section className="profile-add-panel">
         <form onSubmit={add} className="profile-add-grid">
-          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tan Yi Chuen, Desmond" required /></div>
+          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lim Wei Ming, Alex" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
           <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Desmond" /></div>
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Alex" /></div>
           <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}

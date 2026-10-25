@@ -110,7 +110,7 @@ const listRel = (ps: Person[]) => ps.length <= 1 ? ps.map(relLabel).join("") : p
 const listOf = (ps: Person[]) => ps.length <= 1 ? ps.map(label).join("") : ps.slice(0, -1).map(label).join(", ") + " or " + label(ps[ps.length - 1]);
 const RELATION_NOUN: Record<RelationClass, string> = { self: "you", spouse: "spouse", child: "child", step_child: "stepchild", child_in_law: "child-in-law", parent: "parent", step_parent: "step-parent", parent_in_law: "parent-in-law", sibling: "sibling", sibling_in_law: "sibling-in-law", grandparent: "grandparent", grandchild: "grandchild", helper: "helper", dependant: "dependant", other: "household member" };
 const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/[\p{L}]+/gu) ?? []).filter((w) => w.length >= 2);
-/** Edit distance with adjacent transpositions ("charmiane" -> "charmaine" is 1). */
+/** Edit distance with adjacent transpositions ("meilign" -> "meiling" is 1). */
 function typoDistance(a: string, b: string): number {
   const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
   for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
@@ -222,7 +222,7 @@ export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: 
     return { status: "unknown", reason: `no household member is recorded as your ${rel.word}`, question: `I don't have your ${rel.word} in the household. Who do you mean?` };
   }
   if (byName.length === 1) return { status: "ok", person: byName[0], via: "name" };
-  // No exact name: one household member whose name the mention misspells ("Charmiane" for Charmaine) is that member;
+  // No exact name: one household member whose name the mention misspells ("Mei Lign" for Mei Ling) is that member;
   // a slip that fits more than one member is asked about.
   if (!byName.length && words.length) {
     const spelt = people.filter((p) => { const own = [...nameWords(p.name), ...nameWords(p.preferredName ?? "")]; return words.some((w) => own.some((n) => misspelt(w, n))); });

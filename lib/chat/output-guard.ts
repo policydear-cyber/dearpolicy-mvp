@@ -147,7 +147,7 @@ function guardInPlace(answer: ChatAnswer) {
   // when the guard leaves nothing, so a name the guard took out is never shown beside the fallback (TE P121-2).
   const held = answer as ChatAnswer & { bottomLine?: string | null };
   if (typeof held.bottomLine === "string") held.bottomLine = summary && summary.trim() ? guardText(held.bottomLine, names) || answer.summary : answer.summary;
-  // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
+  // A next step may name the household's own file too ("Open scan_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
     q.text = guardText(q.text) ?? scrub(q.text);

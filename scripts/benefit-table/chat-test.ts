@@ -1479,10 +1479,10 @@ test("claim deadlines: days said as 'yesterday' or 'N days ago' get their dates 
 });
 
 test("an NRIC or FIN is masked as the certificate prints it, everywhere in the answer (overnight run 23 Oct, N291, N292)", () => {
-  const a = { summary: "His NRIC is S8912048I.", statements: [{ text: "The schedule prints S8912048I", quote: "Identity Number : S8912048I" }], nextSteps: ["Quote T1234567J when you call."] };
+  const a = { summary: "His NRIC is S1234567D.", statements: [{ text: "The schedule prints S1234567D", quote: "Identity Number : S1234567D" }], nextSteps: ["Quote T1234567J when you call."] };
   maskIdentityNumbers(a);
-  assert.equal(a.summary, "His NRIC is S****048I.");
-  assert.equal(a.statements[0].quote, "Identity Number : S****048I");
+  assert.equal(a.summary, "His NRIC is S****567D.");
+  assert.equal(a.statements[0].quote, "Identity Number : S****567D");
   assert.equal(a.nextSteps[0], "Quote T****567J when you call.");
   // Policy numbers and amounts are not identity numbers.
   const b = { summary: "Policy 3037850, S$1,000,000, G007500, A12345678B." };

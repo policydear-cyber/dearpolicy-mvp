@@ -159,7 +159,7 @@ export function datesSaidNote(message: string, now: Date, windows: number[] = []
   return said.length ? `(Days the household named: ${said.join("; ")}.) ` : "";
 }
 
-/** An NRIC or FIN ("S8912048I") is shown the way the household's own certificate prints it, "S****048I": in every word of the
+/** An NRIC or FIN ("S1234567D") is shown the way the household's own certificate prints it, "S****567D": in every word of the
  * answer, whatever was asked (overnight run 23 Oct, N291, N292). */
 const IDENTITY_NUMBER = /\b([STFGM])\d{4}(\d{3}[A-Z])\b/g;
 export function maskIdentityNumbers<T>(value: T): T {

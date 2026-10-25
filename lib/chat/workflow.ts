@@ -2217,7 +2217,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       }));
       answer.policyReview=reviews;
       const staleContracts=contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent");
-      // "If Desmond dies in an accident, how much is the payout?" names the
+      // "If Wei Ming dies in an accident, how much is the payout?" names the
       // whole portfolio and gets labelled as an inventory question. It is a
       // what-if about a payout, and the inventory table is not an answer to it.
       const askedNow=state.activeQuery??request.question;

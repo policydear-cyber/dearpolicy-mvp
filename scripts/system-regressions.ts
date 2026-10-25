@@ -1613,8 +1613,8 @@ export function runSystemRegressions(){
     // person per plan, the table parser read those rows like any other table,
     // and a row NAMED after a person and an identity number was then matched
     // to a death claim by the word "accident" in it, and paid.
-    assert.equal(looksLikeCoverageLine("S****195A Ong Pei Lin Charmaine GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)"),true);
-    assert.equal(looksLikeCoverageLine("S****048I Tan Yi Chuen, Desmond"),true);
+    assert.equal(looksLikeCoverageLine("S****123A Lim Mei Ling GROUP PERSONAL ACCIDENT(POLICY NO. 1234567)"),true);
+    assert.equal(looksLikeCoverageLine("S****567D Lim Wei Ming, Alex"),true);
     assert.equal(looksLikeCoverageLine("GROUP LIVING CARE (POLICY NO. 3037850)"),true);
     assert.equal(looksLikeCoverageLine("S1234567A"),true);
     assert.equal(looksLikeCoverageLine("   "),true);
