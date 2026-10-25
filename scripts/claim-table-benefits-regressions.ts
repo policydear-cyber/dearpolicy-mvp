@@ -111,6 +111,31 @@ test("a death paid only on an accident is never paid for a death from illness (T
   assert.equal(items.some((i) => i.id.startsWith("table-death") && i.calculatedAmount), false);
 });
 
+test("a row naming the opposite side is another part: lower jaw is never the Upper jaw row (TE P144-5)", () => {
+  const frac = (b: string, n: number) => tableRow("k", "Harbour Accident Shield", b, printed(n, "lump_sum", "MYR"), { section: "Fractures" });
+  const paid = (part: string, rows: ReturnType<typeof tableRow>[]) => run(facts({ eventType: "accident", fractureBodyPart: part }), [cover({})], rows)
+    .filter((i) => i.id.startsWith("table-fracture")).map((i) => i.calculatedAmount);
+  assert.deepEqual(paid("lower jaw", [frac("Upper jaw", 3000)]), []);
+  assert.deepEqual(paid("upper arm", [frac("Lower arm (forearm)", 2000)]), []);
+  assert.deepEqual(paid("lower jaw", [frac("Upper jaw", 3000), frac("Lower jaw", 5000)]), [5000]);
+  assert.deepEqual(paid("front teeth", [frac("Teeth (back)", 500)]), []);
+});
+
+test("an illness death is never paid from an accident-only row however it is worded (TE P144-6)", () => {
+  const life = cover({ id: "c6", category: "Death", currency: "AUD", productName: "Wattle Life Cover", evidenceText: "A$400,000" });
+  for (const b of ["Accidental Death (death from illness or disease is not covered)", "Death due to Injury", "Accidental Death - not payable for sickness"]) {
+    const items = run(facts({ eventType: "death", death: true, deathDate: "2026-09-01" }), [life], [tableRow("w", "Wattle Life Cover", b, printed(800000, "lump_sum", "AUD"))], [personCover("w", "Wattle Life Cover")]);
+    assert.equal(items.some((i) => i.id.startsWith("table-death") && i.calculatedAmount), false, b);
+  }
+});
+
+test("on a schedule of two covers, a row is never paid under the other cover's coverage (TE P144-7)", () => {
+  const acc = cover({ id: "d0", category: "Personal Accident", currency: "AUD", productName: "Wattle Accident Cover", evidenceText: "A$800,000" });
+  const rows = [tableRow("w", "Wattle Life Cover", "Death Benefit", printed(400000, "lump_sum", "AUD"))];
+  const items = run(facts({ eventType: "death", death: true, deathDate: "2026-09-01" }), [acc], rows, [personCover("w", "Wattle Life Cover"), personCover("a", "Wattle Accident Cover")]);
+  assert.equal(items.some((i) => i.coverageId === "d0" && (i.calculatedAmount ?? 0) > 0), false);
+});
+
 const item = (o: Partial<ClaimAssessmentItem>): ClaimAssessmentItem => ({ id: "x", title: "x", status: "potentially_applicable", amountText: null, reason: "", conditions: [], ...o } as ClaimAssessmentItem);
 test("a daily cash item from the wording's rules is never paid again from the table (TE P144-3)", () => {
   const rows = [tableRow("k", "Harbour Accident Shield", "ICU Daily Cash", printed(500, "per_day", "INR"), { fromDay: 1, maxDays: 30 })];
