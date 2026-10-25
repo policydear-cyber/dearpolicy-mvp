@@ -33,6 +33,15 @@ test("benefit names in three markets go to their category", () => {
   assert.equal(categoryOfBenefit("Funeral expenses"), null);
 });
 
+test("an illness the name excludes is not a cause it pays; injury is accident; an accident uplift keeps the Death tile (TE P144-6, Critic R227)", () => {
+  for (const b of ["Accidental Death (death from illness or disease is not covered)", "Death due to Injury", "Accidental Death - not payable for sickness",
+    "Accidental TPD (sickness excluded)", "TPD due to Injury", "Kematian akibat Kemalangan / Death due to Injury"]) assert.equal(categoryOfBenefit(b), "Personal Accident", b);
+  assert.equal(categoryOfBenefit("Death from any cause, including accident"), "Death");
+  assert.equal(categoryOfBenefit("Death benefit; doubled for accidental death"), "Death");
+  assert.equal(categoryOfBenefit("TPD (illness or accident)"), "Total Permanent Disability");
+  assert.equal(categoryOfBenefit("Death (excluding suicide in the first year)"), "Death");
+});
+
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
   for (const n of ["Death due to Accident", "Death by Accident", "Accidental Death Benefit", "TPD due to accident", "Accidental Total and Permanent Disability", "Accidental Dismemberment"])
     assert.equal(categoryOfBenefit(n), "Personal Accident", n);
