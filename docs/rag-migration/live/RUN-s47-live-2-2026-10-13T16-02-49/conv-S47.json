@@ -3941,10 +3941,10 @@
                 "e15"
               ]
             },
-            "kc85c31c5d6": {
+            "k46fc3b9ba9": {
               "kind": "conditional_illustration",
               "turn": 5,
-              "calcId": "kc85c31c5d6",
+              "calcId": "k46fc3b9ba9",
               "benefit": "Fracture of lower leg (tibia or fibula)",
               "factKeys": [],
               "policyId": "7c000000-0000-4000-8000-000000000103",
@@ -5173,7 +5173,7 @@
                     },
                     {
                       "text": "Given the reported tibia fracture and closed-fracture description, the calculator gives a conditional illustration of S$9,000, subject to the insurer’s medical assessment that the diagnosis meets the policy’s definition.",
-                      "result_id": "kc85c31c5d6",
+                      "result_id": "k46fc3b9ba9",
                       "subject_id": "7c000000-0000-4000-8000-000000000001"
                     }
                   ],
@@ -5212,7 +5212,7 @@
                     },
                     {
                       "text": "If the insurer’s medical assessment confirms the reported tibia fracture meets the policy definition, the indicative illustration is S$9,000 for a simple (closed) fracture.",
-                      "result_id": "kc85c31c5d6",
+                      "result_id": "k46fc3b9ba9",
                       "subject_id": "7c000000-0000-4000-8000-000000000001"
                     }
                   ],
@@ -8049,7 +8049,7 @@
           "knownFacts": [],
           "calculations": [
             {
-              "id": "kc85c31c5d6",
+              "id": "k46fc3b9ba9",
               "kind": "conditional_illustration",
               "steps": [
                 {
@@ -8431,7 +8431,7 @@
                   },
                   {
                     "text": "Given the reported tibia fracture and closed-fracture description, the calculator gives a conditional illustration of S$9,000, subject to the insurer’s medical assessment that the diagnosis meets the policy’s definition.",
-                    "result_id": "kc85c31c5d6",
+                    "result_id": "k46fc3b9ba9",
                     "subject_id": "7c000000-0000-4000-8000-000000000001"
                   }
                 ],
@@ -8470,7 +8470,7 @@
                   },
                   {
                     "text": "If the insurer’s medical assessment confirms the reported tibia fracture meets the policy definition, the indicative illustration is S$9,000 for a simple (closed) fracture.",
-                    "result_id": "kc85c31c5d6",
+                    "result_id": "k46fc3b9ba9",
                     "subject_id": "7c000000-0000-4000-8000-000000000001"
                   }
                 ],
@@ -9086,10 +9086,10 @@
             "e15"
           ]
         },
-        "kc85c31c5d6": {
+        "k46fc3b9ba9": {
           "kind": "conditional_illustration",
           "turn": 5,
-          "calcId": "kc85c31c5d6",
+          "calcId": "k46fc3b9ba9",
           "benefit": "Fracture of lower leg (tibia or fibula)",
           "factKeys": [],
           "policyId": "7c000000-0000-4000-8000-000000000103",
@@ -10033,7 +10033,7 @@
                 },
                 {
                   "text": "Given the reported tibia fracture and closed-fracture description, the calculator gives a conditional illustration of S$9,000, subject to the insurer’s medical assessment that the diagnosis meets the policy’s definition.",
-                  "result_id": "kc85c31c5d6",
+                  "result_id": "k46fc3b9ba9",
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 }
               ],
@@ -10072,7 +10072,7 @@
                 },
                 {
                   "text": "If the insurer’s medical assessment confirms the reported tibia fracture meets the policy definition, the indicative illustration is S$9,000 for a simple (closed) fracture.",
-                  "result_id": "kc85c31c5d6",
+                  "result_id": "k46fc3b9ba9",
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 }
               ],
@@ -11048,7 +11048,7 @@
         ],
         "calculations": [
           {
-            "id": "kc85c31c5d6",
+            "id": "k46fc3b9ba9",
             "kind": "conditional_illustration",
             "steps": [
               {

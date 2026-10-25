@@ -4278,7 +4278,7 @@
                     {
                       "text": "For a simple (closed) fracture, 50% of the listed percentage applies, and fracture benefits require X-ray confirmation; on those reported facts, the conditional illustration is S$9,000, subject to the insurer’s medical assessment of whether the diagnosis meets the policy definition.",
                       "benefit": "Fracture of lower leg (tibia or fibula)",
-                      "result_id": "kc85c31c5d6",
+                      "result_id": "k46fc3b9ba9",
                       "value_ids": [
                         "v5"
                       ],
@@ -7528,7 +7528,7 @@
                   {
                     "text": "For a simple (closed) fracture, 50% of the listed percentage applies, and fracture benefits require X-ray confirmation; on those reported facts, the conditional illustration is S$9,000, subject to the insurer’s medical assessment of whether the diagnosis meets the policy definition.",
                     "benefit": "Fracture of lower leg (tibia or fibula)",
-                    "result_id": "kc85c31c5d6",
+                    "result_id": "k46fc3b9ba9",
                     "value_ids": [
                       "v5"
                     ],
@@ -8934,7 +8934,7 @@
                 {
                   "text": "For a simple (closed) fracture, 50% of the listed percentage applies, and fracture benefits require X-ray confirmation; on those reported facts, the conditional illustration is S$9,000, subject to the insurer’s medical assessment of whether the diagnosis meets the policy definition.",
                   "benefit": "Fracture of lower leg (tibia or fibula)",
-                  "result_id": "kc85c31c5d6",
+                  "result_id": "k46fc3b9ba9",
                   "value_ids": [
                     "v5"
                   ],
