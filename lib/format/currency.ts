@@ -78,12 +78,18 @@ export const MONEY_SIGN = String.raw`(?:(?<![A-Za-z])(?:S|SG|US|HK|A|AU|NZ)\$|(?
  * and "PLATFORM 3" are not money (Critic R226). Groups: 1 is the figure before a sign, 2 the figure after one. */
 const ISO_CODES = "SGD|USD|EUR|GBP|JPY|CNY|RMB|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|NTD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|MMK|KHR|LAK";
 const ANY_SIGN = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|\p{Sc}|(?<![A-Za-z])(?:RM|Rs\.?|Rp\.?)(?![A-Za-z])|(?<![A-Za-z])(?:${ISO_CODES})(?![A-Za-z]))`;
-// A bare "R" (rand) is read only before a figure with a thousands group: "Rider R1" and "Class R 2" are labels (Critic R229).
-export const ANY_MONEY_FIGURE = String.raw`${ANY_SIGN}\s?(\d[\d,]*(?:\.\d+)?)|(?<![\d.,])(\d[\d,]*(?:\.\d+)?)\s?(?:\p{Sc}|(?:${ISO_CODES})(?![A-Za-z]))|(?<![A-Za-z])R\s?(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?)(?![\d])`;
+// A bare "R" (rand) is read before a figure with a thousands group, after "or", "and", "up to" or "max", and anywhere in a
+// text that already prints such an R amount ("up to R100,000 or R900"); "Rider R1" and "Class R 2" are labels (Critic
+// R229, TE P145-4).
+export const ANY_MONEY_FIGURE = String.raw`${ANY_SIGN}\s?(\d[\d,]*(?:\.\d+)?)|(?<![\d.,])(\d[\d,]*(?:\.\d+)?)\s?(?:\p{Sc}|(?:${ISO_CODES})(?![A-Za-z]))|(?<![A-Za-z])R\s?(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?)(?![\d])|(?<=\b(?:or|and|to|max(?:imum)?)\s+)R\s?(\d[\d,]*(?:\.\d+)?)`;
 /** Every money figure of a text in any currency, with where it starts and how long it is (see ANY_MONEY_FIGURE). */
 export function anyMoneyFigures(text: string): { value: number; index: number; length: number }[] {
-  return [...(text ?? "").matchAll(new RegExp(ANY_MONEY_FIGURE, "gu"))].map((m) => ({ value: Number((m[1] ?? m[2] ?? m[3]).replace(/[, ]/g, "")), index: m.index!, length: m[0].length }))
-    .filter((f) => Number.isFinite(f.value));
+  const found = [...(text ?? "").matchAll(new RegExp(ANY_MONEY_FIGURE, "gu"))];
+  const out = found.map((m) => ({ value: Number((m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/[, ]/g, "")), index: m.index!, length: m[0].length }));
+  if (found.some((m) => m[3] != null || m[4] != null))
+    for (const m of (text ?? "").matchAll(/(?<![A-Za-z])R\s?(\d[\d,]*(?:\.\d+)?)/gu))
+      if (!out.some((f) => m.index! < f.index + f.length && f.index < m.index! + m[0].length)) out.push({ value: Number(m[1].replace(/,/g, "")), index: m.index!, length: m[0].length });
+  return out.filter((f) => Number.isFinite(f.value)).sort((a, b) => a.index - b.index);
 }
 
 export const CURRENCY_NOT_STATED = "(currency unknown)";

@@ -119,13 +119,15 @@ const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
  * RM 200,000 cap that the same row in S$ refuses). */
+/** NFKC without footnote marks: a superscript after a figure ("S$400,000¹") is never part of it (TE round 3). */
+const plainText = (s: string) => s.replace(/[\u00B9\u00B2\u00B3\u2070-\u2079]/g, "").normalize("NFKC");
 function moneyIn(row: string): { value: number; index: number; length: number }[] {
-  return anyMoneyFigures(row.normalize("NFKC").replace(/\s+/g, " ").trim());
+  return anyMoneyFigures(plainText(row).replace(/\s+/g, " ").trim());
 }
 /** The one money figure a percentage row's own words cap it at: printed right after a cap word, and the only money figure in
  * the row. Null otherwise. */
 function capInRow(row: string): number | null {
-  const text = flat(row.normalize("NFKC")), found = moneyIn(row);
+  const text = flat(plainText(row)), found = moneyIn(row);
   const values = new Set(found.map((m) => m.value));
   if (values.size !== 1 || !found.length) return null;
   // A cap for some insured persons only ("Child: limited to S$50,000", "maximum S$200,000 above age 70") is not the row's

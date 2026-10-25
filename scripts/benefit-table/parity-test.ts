@@ -286,6 +286,9 @@ test("a cap printed with a second limit is refused in every currency, and words 
   for (const sign of ["₹", "Rs.", "Rp", "฿", "RMB ", "NT$", "₩", "VND ", "C$", "CAD ", "ZAR ", "R ", "¥", "NZ$"])
     assert.equal(read(`Accidental Death\t200% of Sum Insured up to ${sign}500,000 or ${sign}250,000 for juveniles`, 500000, `up to ${sign}500,000`), null, sign);
   assert.equal(read("Accidental Death\t200% of Sum Insured up to 500,000 EUR or 250,000 EUR for juveniles", 500000, "up to 500,000 EUR"), null, "a code after the figure");
+  for (const t of ["up to R100,000 or R900 for juveniles", "up to R100 000 or R 900 for juveniles"])
+    assert.equal(read(`Accidental Death\t200% of Sum Insured ${t}`, 100000, t.split(" or ")[0]), null, t);
+  assert.equal(read("Accidental Death\t200% of Sum Insured up to S$400,000\u00b9", 400000, "up to S$400,000"), 400000, "a footnote mark is not a second figure");
   for (const words of ["(submit claim FORM 2)", "(TERM 5 applies)", "(PLATFORM 3)", "(ARM 2 excluded)", "(see Rider R1)", "(Class R 2)"])
     assert.equal(read(`Accidental Death\t200% of Sum Insured up to S$400,000 ${words}`, 400000, "up to S$400,000"), 400000, words);
 });
