@@ -46,6 +46,7 @@ test("an illness the name excludes is not a cause it pays; injury is accident; a
   assert.equal(categoryOfBenefit("Additional Accidental Death Benefit"), "Personal Accident");
   assert.equal(categoryOfBenefit("Death from causes other than accident"), "Death");
   assert.equal(categoryOfBenefit("Death (including death due to injury)"), "Death");
+  assert.equal(categoryOfBenefit("Accidental Death Benefit (including injury on public transport)"), "Personal Accident");
 });
 
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
