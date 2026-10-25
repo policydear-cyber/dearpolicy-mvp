@@ -6845,3 +6845,23 @@ Free review: tsx probe of categoryOfBenefit on 48 names (R232/R233 set plus roun
   - "Total Permanent Disability due to illness or accident" (it needs "total and permanent");
   - "Death or TPD by illness or accident" (a compound head).
   Suggest adding `for`, `total\s+(?:(?:and|&)\s+)?permanent`, and an optional `(?:death|tpd)\s+(?:or|and|&|/)\s+` before the death words.
+
+## R238 — #147 0330ab1 (Home tile figures on 31357e4): NOT READY (one medium)
+
+Ran here: npm ci and `next build` (pass), coverage:table-test 22/0, plus a tsx probe with a made-up household (Harbour Staff Scheme). The prod rows file was read only for its shape and is not quoted here.
+
+- Expected results reproduce. S$30 a day (from day 11, up to 30 days) plus the same figure with a bare $ on the same cover, plus a travel "while overseas" row, gives "S$30 a day · from day 11 · up to 30 days". Travel-only cover still shows its own figure.
+- Bare $ (Q1): restatedWithCurrency drops a bare-$ row only for the same coverKey, kind, amount, unit, period, fromDay, maxDays, qualifier and pays. A bare row on another cover gives null (Covered), and a bare row with a different fromDay gives null. Correct.
+- Medium, a limit is lost (Q4). Days and qualifier are compared, but conditions are not, so a limit printed only as a condition disappears from the tile. Probe:
+  - The S$ row plus a bare-$ restatement carrying "Max 6 claims per policy year": the restatement is dropped, so the tile reads "S$30 a day · from day 11 · up to 30 days" with no claim limit.
+  - Two covers, both S$30 from day 11, one with "Max 6 claims per policy year": the conditions differ, so they are dropped, giving the same text with no limit.
+  Fix: compare the limiting conditions and ignore only wording such as exclusions:
+  ```ts
+  const LIMIT = /\d|\b(?:max(?:imum)?|up\s+to|limit\w*|only|once|per\s+(?:policy\s+)?(?:year|claim|event|admission|confinement|life))\b/i;
+  const limits = (r: SummaryRow) => r.conditions.filter((c) => LIMIT.test(c)).sort().join(" · ");
+  // restatedWithCurrency: also require limits(s) === limits(r)
+  // tableDisplay: if (new Set(rows.map(limits)).size > 1) return null;  // Covered; the Coverage page lists each row
+  ```
+  The expected strings are unchanged by this. The bare row's extra condition is a self-inflicted-injury/maternity exclusion, with no digit or limit word, so it still drops. Add the two probes above as regressions.
+- Waivers, trip-only and clause rows (Q2): left out only when another row remains; the Coverage page keeps them. Correct.
+- Accident sections (Q3): "TPD" under "Personal accident" goes to PA; under "Accident and Sickness Benefits" it stays TPD; "Death" under "Death and Accidental Death" stays Death. Low: an explicit any-cause row under an accident section ("Death benefit (any cause)" under "Accident Benefits") goes to PA. Skip the section rule when the row's own name matches ANY_CAUSE.
