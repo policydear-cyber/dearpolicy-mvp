@@ -311,6 +311,13 @@ async function partA() {
       assert.doesNotMatch(p.text.split("\n").slice(1).join("\n"), /\d/, t);
       assert.match(p.text, /^Death Benefit\t100,000\.00\n/, t);
     }
+    // A page number only the text layer prints costs nothing: image readers often drop a footer (Critic R215-1).
+    for (const footer of ["3", "Page 3 of 12"]) {
+      const t = `Your Schedule\nSum Assured 100,000.00\nPremium 181.44\n${footer}`;
+      assert.equal((await page(t, "Your Schedule\nSum Assured 100,000.00\nPremium 181.44")).text, t, footer);
+      const { checkLines } = await import("@/lib/documents/layout-check");
+      assert.equal(checkLines(t, "Your Schedule\nSum Assured 100,000.00\nPremium 181.44", 3).agree, true, footer);
+    }
     // A page number the image prints too still pairs nothing, and the page agrees.
     assert.equal((await page("Death Benefit\t100,000.00\n3", "Death Benefit 100,000.00\n3")).text, "Death Benefit\t100,000.00\n3");
   });

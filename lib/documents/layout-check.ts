@@ -205,7 +205,17 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   // figures of all such lines, in printed order: unless the image reading prints the same ones in the same order on its own
   // lines that pair nothing, none of them is used. That covers a value the image prints with another figure, beside its
   // label, on its own line, in another order, or not at all (TE P139-1, A26-A31, N8).
-  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
+  // The page's own number is left out: image readers often drop a footer, or print it elsewhere (Critic R215-1).
+  const pageNo = (l: string) => /page|of/i.test(l) || (pageNumber != null && Number(l.trim()) === pageNumber);
+  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) && !pageNo(l) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
+  // Except as a value under its label alone ("Hospital cash per day" over "3" on page 3): kept only when the image reading
+  // prints the same label over the same number (TE A28, A30).
+  const above = (ls: string[], i: number) => ls.slice(0, i).reverse().find((l) => l.trim())?.trim() ?? "";
+  skipText.forEach((i) => {
+    if (pageNumber == null || Number(lines[i].trim()) !== pageNumber || !LABEL_ONLY(above(lines, i))) return;
+    const label = lineTokens(above(lines, i)), value = lineTokens(lines[i]);
+    if (!imageLinesAll.some((l, j) => sameLine(lineTokens(l), value) && sameLine(lineTokens(above(imageLinesAll, j)), label))) spread.add(i);
+  });
   const loneText = loneFigures(lines, skipText), loneImage = loneFigures(imageLinesAll, skipImage);
   if (!sameLine(loneText, loneImage)) skipText.forEach((i) => { if (figureLine(lineTokens(lines[i]))) spread.add(i); });
   if (kind === null && spread.size) {
