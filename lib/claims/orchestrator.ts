@@ -1,7 +1,8 @@
 import { query } from "@/lib/db/client";
-import { confirmedOwnedCoverages, canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
+import { confirmedOwnedCoverages, type OwnedCoverage } from "@/lib/coverage/facts";
 import { extractClaimFacts, factsToLabels } from "./facts";
-import { assessClaim, claimNextSteps, nextClaimQuestion, relevantOwnedProducts } from "./rules";
+import { assessClaim, claimNextSteps, coverKeyOf, nextClaimQuestion, relevantOwnedProducts } from "./rules";
+import { claimTableFor } from "./table-load";
 import { createClaimSession, getClaimSession, saveClaimSession } from "./session";
 import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
 import { enforceMonetarySafety } from "./monetary-gate";
@@ -39,7 +40,7 @@ function eventSummary(facts: ClaimFacts) {
 function relevantCoverageNames(coverages:OwnedCoverage[], products:string[]) {
   const names:string[]=[];
   for(const product of products){
-    const row=coverages.find(c=>(canonicalProduct(c.productName)||productFromCategory(c.category))===product);
+    const row=coverages.find(c=>coverKeyOf(c)===product);
     const label=row?.productName ?? row?.category ?? product;
     if(label&&!names.includes(label))names.push(label);
   }
@@ -49,7 +50,7 @@ function relevantCoverageNames(coverages:OwnedCoverage[], products:string[]) {
 function coverageListSummary(coverages:OwnedCoverage[], products:string[]) {
   const parts:string[]=[];
   for(const product of products){
-    const row=coverages.find(c=>(canonicalProduct(c.productName)||productFromCategory(c.category))===product);
+    const row=coverages.find(c=>coverKeyOf(c)===product);
     if(!row)continue;
     const amount=row.amount!=null?` · ${formatMoney(row.amount,row.currency)}`:"";
     parts.push(`${row.productName??row.category}${amount}`);
@@ -225,25 +226,26 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   const travelEvidence=(facts.eventType === "hospitalisation" || facts.eventType === "death") && coverages.some(c=>c.category==="Travel")
     ? await loadTravelEvidence(args.accountId,args.familyMemberId,coverages)
     : {rules:[],gaps:[],pages:[]};
+  const table=await claimTableFor(args.accountId,args.familyMemberId);
   const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules,medicalEvidence,disabilityEvidence,travelEvidence);
-  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id,[],[],undefined,undefined,travelEvidence) : null;
+  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id,[],[],undefined,undefined,travelEvidence,table) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages,{householdId:args.accountId,resourceId:session.id}) : null;
   // Additive: the same deterministic pipeline, reused for a "diagnosis"
   // event's critical-illness benefits -- never a parallel claim system.
   // See lib/claims/ci-rules.ts for why this never touches the death path.
-  const rawDiagnosisAssessments=facts.eventType === "diagnosis" ? assessClaim(facts,coverages,[],[],session.id,ciEvidence.rules,ciEvidence.gaps) : null;
+  const rawDiagnosisAssessments=facts.eventType === "diagnosis" ? assessClaim(facts,coverages,[],[],session.id,ciEvidence.rules,ciEvidence.gaps,undefined,undefined,undefined,table) : null;
   const diagnosisAssessments=rawDiagnosisAssessments ? enforceMonetarySafety(rawDiagnosisAssessments,facts,coverages,{householdId:args.accountId,resourceId:session.id}) : null;
   // Additive: the same deterministic pipeline, reused for a "hospitalisation"
   // event's medical-claim benefits (hospital cash, ICU cash, and
   // reimbursement-type benefits) -- never a parallel claim system. See
   // lib/claims/medical-rules.ts for why this never touches the death/CI path.
-  const rawHospitalisationAssessments=facts.eventType === "hospitalisation" ? assessClaim(facts,coverages,[],[],session.id,[],[],medicalEvidence,undefined,travelEvidence) : null;
+  const rawHospitalisationAssessments=facts.eventType === "hospitalisation" ? assessClaim(facts,coverages,[],[],session.id,[],[],medicalEvidence,undefined,travelEvidence,table) : null;
   const hospitalisationAssessments=rawHospitalisationAssessments ? enforceMonetarySafety(rawHospitalisationAssessments,facts,coverages,{householdId:args.accountId,resourceId:session.id}) : null;
   // Additive: the same deterministic pipeline, reused for a "disability"
   // event's TPD/schedule-of-injuries/disability-income benefits -- never a
   // parallel claim system. See lib/claims/disability-rules.ts for why this
   // never touches the death/CI/medical path.
-  const rawDisabilityAssessments=facts.eventType === "disability" ? assessClaim(facts,coverages,[],[],session.id,[],[],undefined,disabilityEvidence) : null;
+  const rawDisabilityAssessments=facts.eventType === "disability" ? assessClaim(facts,coverages,[],[],session.id,[],[],undefined,disabilityEvidence,undefined,table) : null;
   const disabilityAssessments=rawDisabilityAssessments ? enforceMonetarySafety(rawDisabilityAssessments,facts,coverages,{householdId:args.accountId,resourceId:session.id}) : null;
   // The ONLY place a death claim's benefits are selected, composed, capped
   // and totalled -- see lib/claims/composition/engine.ts's own doc comment.
@@ -326,7 +328,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     return answer;
   }
 
-  const assessments=deathAssessments??diagnosisAssessments??hospitalisationAssessments??disabilityAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages,{householdId:args.accountId,resourceId:session.id});
+  const assessments=deathAssessments??diagnosisAssessments??hospitalisationAssessments??disabilityAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id,[],[],undefined,undefined,undefined,table),facts,coverages,{householdId:args.accountId,resourceId:session.id});
   const citations=await assessmentCitations(args.accountId,args.familyMemberId,assessments,coverages);
   const nextSteps=claimNextSteps(facts,assessments);
   if(!currentness.verified)nextSteps.push("Upload the latest renewal notice or premium receipt if available so DearPolicy can verify current policy status separately from coverage ownership.");
