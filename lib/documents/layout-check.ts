@@ -186,7 +186,7 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   });
   if (!why && pool.length) why = `the text reading does not print ${figuresOf(pool[0].t).join(", ")} beside "${labelOf(pool[0].t)}" in that order`;
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
-  const kind: DisagreeKind | null = !b.length ? "image prints no figures" : !unconfirmed.length && !pool.length ? null
+  let kind: DisagreeKind | null = !b.length ? "image prints no figures" : !unconfirmed.length && !pool.length ? null
     : !sameFigures(a, b) ? "figures differ" : noLabel >= 0 ? "figure line with no label" : "pairing differs";
   // A masked line takes its row and table with it (Critic R211-1, R211-2): a continuation ("or up to S$50,000, whichever
   // is lesser") read without the row's own figure would stand as the row's whole limit, and a masked row that starts a
@@ -201,10 +201,17 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
     for (let j = i; j > 0 && continues(lines[j]); j--) if (isFig(j - 1)) spread.add(j - 1);
     if (cells(lines[i]) >= 3) for (let j = i + 1; j < lines.length && cells(lines[j]) === cells(lines[i]); j++) if (isFig(j)) spread.add(j);
   }
-  // An image figure line no text line matched may belong to a line the check skipped: a lone date or a lone number under
-  // its label ("Expiry date" over "30/09/2027", image "Expiry date 30/09/2028"). Those lines are never compared, so with
-  // such a leftover they are not checked either (TE P139-1).
-  if (pool.length) skipText.forEach((i) => { if (figureLine(lineTokens(lines[i]))) spread.add(i); });
+  // A lone date or a lone number under its label ("Expiry date" over "30/09/2027") pairs nothing, so it is checked as the
+  // figures of all such lines, in printed order: unless the image reading prints the same ones in the same order on its own
+  // lines that pair nothing, none of them is used. That covers a value the image prints with another figure, beside its
+  // label, on its own line, in another order, or not at all (TE P139-1, A26-A31, N8).
+  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
+  const loneText = loneFigures(lines, skipText), loneImage = loneFigures(imageLinesAll, skipImage);
+  if (!sameLine(loneText, loneImage)) skipText.forEach((i) => { if (figureLine(lineTokens(lines[i]))) spread.add(i); });
+  if (kind === null && spread.size) {
+    kind = !sameFigures(a, b) ? "figures differ" : "pairing differs";
+    why = "the lines that print a date or a number alone do not print the same ones in the same order";
+  }
   const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `

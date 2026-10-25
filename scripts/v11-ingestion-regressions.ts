@@ -301,6 +301,16 @@ async function partA() {
     assert.equal(lone.partChecked, true);
     assert.equal(lone.text.split("\n").at(-1), NOT_CHECKED);
     assert.match(lone.text, /Death Benefit\t100,000\.00/);
+    // The same when the image prints the value on its own line too, drops it, or prints lone dates in another order (TE A29-A31, N8).
+    for (const [t, i] of [["Death Benefit\t100,000.00\nExpiry date\n30/09/2027", "Death Benefit 100,000.00\nExpiry date\n30/09/2028"],
+      ["Death Benefit\t100,000.00\nHospital cash per day\n3", "Death Benefit 100,000.00\nHospital cash per day"],
+      ["Death Benefit\t100,000.00\nExpiry date\n30/09/2027", "Death Benefit 100,000.00\nExpiry date"],
+      ["Death Benefit\t100,000.00\nCommencement date\nExpiry date\n01/10/2026\n30/09/2027", "Death Benefit 100,000.00\nCommencement date\nExpiry date\n30/09/2027\n01/10/2026"]]) {
+      const p = await page(t, i);
+      assert.equal(p.partChecked, true, t);
+      assert.doesNotMatch(p.text.split("\n").slice(1).join("\n"), /\d/, t);
+      assert.match(p.text, /^Death Benefit\t100,000\.00\n/, t);
+    }
     // A page number the image prints too still pairs nothing, and the page agrees.
     assert.equal((await page("Death Benefit\t100,000.00\n3", "Death Benefit 100,000.00\n3")).text, "Death Benefit\t100,000.00\n3");
   });
