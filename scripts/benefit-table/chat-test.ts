@@ -1660,8 +1660,17 @@ test("\"my husband\" is settled only by a title the documents print before that 
     assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), [t]), null, t);
   // The spouse's own possessive is about the spouse (TE P117-2).
   for (const t of ["my husband's policy", "my wife's claim got rejected", "my hubby's hospital bill", "husband's cover for cancer", "my wife's hospital plan", "husband's claim how",
-    "hubby's AIA", "is this my husband's?", "my wife's Prudential plan", "my husband kena fracture"])
+    "is this my husband's?", "my husband kena fracture"])
     assert.ok(spouseMeant(titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Tan Mei Ling,"), [t]), t);
+  // An insurer or product counts when it is one of this household's own: nothing names any insurer in the code, so any
+  // household anywhere is read the same way (DC, 25 Oct: built for every account, not one).
+  const insured = (insurer: string, productName: string): Household => {
+    const h = titled("Life Assured : Mr Lim Ah Kow\nDear Mrs Tan Mei Ling,");
+    return { ...h, documents: h.documents.map((d, i) => i === h.documents.length - 1 ? { ...d, insurer, productName } : d) };
+  };
+  assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich"]), "the household's own insurer");
+  assert.ok(spouseMeant(insured("Example Assurance", "CareFirst Health"), ["my wife's CareFirst plan"]), "the household's own product");
+  assert.equal(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Allianz"]), null, "an insurer this household has no document from settles nothing");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
   // Only for a household set up as one couple (self and spouse).
