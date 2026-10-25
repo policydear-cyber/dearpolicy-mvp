@@ -220,6 +220,27 @@ async function partA() {
     assert.deepEqual(pagesOf("Here is the transcription:\n```json\n" + valid + "\n```\nLet me know if you need more."), want);
     // A quote escaped inside the text stays a quote; a raw TAB outside a string is left to JSON.
     assert.deepEqual(pagesOf('{"pages":[{"pageNumber":3,\t"text":"He said \\"yes\\"\there"}]}'), [[3, 'He said "yes"\there']]);
+    // A reader that numbers the small PDF's own pages 1..n is mapped by position; anything else is read by number.
+    const got = (requested: number[], pages: unknown[]) => acceptTranscribedPages(requested, pages).map((p) => [p.pageNumber, p.text]);
+    assert.deepEqual(got([3, 4], [{ pageNumber: 1, text: "a" }, { pageNumber: 2, text: "b" }]), [[3, "a"], [4, "b"]]);
+    assert.deepEqual(got([3], [{ pageNumber: 1, text: "a" }]), [[3, "a"]]);
+    assert.deepEqual(got([3, 4], [{ pageNumber: 2, text: "b" }, { pageNumber: 1, text: "a" }]), [[4, "b"], [3, "a"]]);
+    assert.deepEqual(got([3, 4], [{ pageNumber: 1, text: "a" }, { pageNumber: 5, text: "b" }]), [], "not exactly 1..n: nothing is guessed");
+    // A shifted reply (chaos ocr_wrong_page) gives nothing: page 3's text is never kept as page 4 (TE P116-2).
+    assert.deepEqual(got([3, 4], [{ pageNumber: 4, text: "x" }, { pageNumber: 5, text: "y" }]), [], "a shifted reply is not read by number");
+    assert.deepEqual(got([3, 4], [{ pageNumber: 2, text: "x" }, { pageNumber: 3, text: "y" }]), []);
+    assert.deepEqual(got([3, 4], [{ pageNumber: 3, text: "a" }]), [[3, "a"]], "a reply missing a page keeps the page it gave");
+    // A requested page among 1..n is still mapped by position (TE P116-1).
+    assert.deepEqual(got([2, 3], [{ pageNumber: 1, text: "two" }, { pageNumber: 2, text: "three" }]), [[2, "two"], [3, "three"]]);
+    assert.deepEqual(got([2, 9, 10], [{ pageNumber: 1, text: "a" }, { pageNumber: 2, text: "b" }, { pageNumber: 3, text: "c" }]), [[2, "a"], [9, "b"], [10, "c"]]);
+    assert.deepEqual(got([1, 3], [{ pageNumber: 1, text: "a" }, { pageNumber: 2, text: "b" }]), [[1, "a"], [3, "b"]]);
+    assert.deepEqual(got([2, 3], [{ pageNumber: 2, text: "two" }, { pageNumber: 3, text: "three" }]), [[2, "two"], [3, "three"]], "the original numbers are read as they are");
+    assert.deepEqual(got([3, 4], [{ pageNumber: 1, text: "x" }, { pageNumber: 3, text: "a" }, { pageNumber: 4, text: "b" }]), [[3, "a"], [4, "b"]], "chaos ocr_extra_page");
+    assert.deepEqual(got([1, 2], [{ pageNumber: 1, text: "a" }, { pageNumber: 2, text: "b" }]), [[1, "a"], [2, "b"]]);
+    assert.deepEqual(got([3, 4], [{ pageNumber: 1, text: "a" }, { pageNumber: 1, text: "b" }]), [], "a number given twice is not a position");
+    // Other key names and a page given as a list of lines.
+    assert.deepEqual(got([3], [{ page_number: 3, text: ["Benefit\tSum", "Death\t100,000.00"] }]), [[3, "Benefit\tSum\nDeath\t100,000.00"]]);
+    assert.deepEqual(got([3], [{ page: 3, text: "a" }]), [[3, "a"]]);
     // A reply that is not a transcription gives nothing.
     for (const broken of ["", "I cannot read this page.", '{"pages":[{"pageNumber":3,"text":"cut off', "{not json}"]) assert.equal(parseTranscription(broken), null, broken);
   });
