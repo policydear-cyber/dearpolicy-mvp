@@ -4,6 +4,7 @@ import { query } from "@/lib/db/client";
 import { recordUsage } from "@/lib/ai/ledger";
 import type { ModelChoice } from "@/lib/ai/providers";
 import { benefitTableEnabled, benefitTableModel } from "./flag";
+import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel } from "./model";
 import { readDocument, relink, tableReady, type Db, type OnUsage } from "./service";
 
@@ -15,10 +16,12 @@ export async function benefitTableLive(accountId: string): Promise<boolean> {
   return tableReady(appDb).catch(() => false);
 }
 
-/** Priced at the configured model (the reply may name a dated version the price table does not list). */
+/** Priced at the configured model (the reply may name a dated version the price table does not list). Cache reads and
+ * writes are booked the way the simple chat books them (ledgerUsage), so the ledger counts every prompt token. */
 function usage(accountId: string, choice: ModelChoice): OnUsage {
   return (_what, reply) => recordUsage({ accountId, role: "reading", choice,
-    input: reply.input, output: reply.output, durationMs: reply.ms, ok: reply.json != null });
+    ...ledgerUsage({ input: reply.input, output: reply.output, cacheRead: reply.cacheRead ?? 0, cacheWrite: reply.cacheWrite ?? 0 }),
+    durationMs: reply.ms, ok: reply.json != null });
 }
 
 /** On upload and on Read again: reads the document into the table, then re-links the household's sections to covers. */

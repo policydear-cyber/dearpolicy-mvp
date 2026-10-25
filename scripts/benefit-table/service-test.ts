@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseAmount } from "@/lib/benefit-table/amount";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
-import type { TableCall, TableModel, TableReply } from "@/lib/benefit-table/model";
+import { anthropicTableModel, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
+import { ledgerUsage } from "@/lib/simple-chat/model";
 import { MAX_PAGE_REREADS, TableInputError, readDocument, relink, setConfirmation, setLink, tableFor, tableReady, type Db } from "@/lib/benefit-table/service";
 import { benefitTableEnabled } from "@/lib/benefit-table/flag";
 
@@ -302,6 +303,25 @@ async function main() {
     assert.doesNotMatch(src, />\s*(?:Confirm|Correct|Undo)\s*</);
     assert.doesNotMatch(src, /Belongs to/);
     assert.match(src, /\/api\/benefit-table\/report/);
+  });
+
+  // Prompt caching (25 Oct 2026): the reading prompt is a cached prefix, the document stays after it, and the reply carries
+  // the cache tokens so the ledger can book every prompt token.
+  await test("the reading prompt is sent as a cached prefix and cache tokens come back", async () => {
+    let sent: { system?: { text: string; cache_control?: unknown }[]; messages?: { content: string }[] } = {};
+    const client = { messages: { stream(p: unknown) {
+      sent = p as typeof sent;
+      return { finalMessage: async () => ({ content: [{ type: "text", text: "{}" }], stop_reason: "end_turn", model: "m",
+        usage: { input_tokens: 900, output_tokens: 10, cache_read_input_tokens: 1400, cache_creation_input_tokens: 0 } }) };
+    } } };
+    const model = anthropicTableModel({ provider: "anthropic", model: "claude-sonnet-5-5" }, client);
+    const reply = await model.call({ system: "PROMPT", user: "DOCUMENT", schema: {}, maxTokens: 10 });
+    assert.deepEqual(sent.system, [{ type: "text", text: "PROMPT", cache_control: { type: "ephemeral", ttl: "5m" } }]);
+    assert.equal(sent.messages?.[0].content, "DOCUMENT", "the household's document is not in the cached prefix");
+    assert.equal(reply.input, 900);
+    assert.equal(reply.cacheRead, 1400);
+    assert.equal(reply.cacheWrite, 0);
+    assert.deepEqual(ledgerUsage({ input: 900, output: 10, cacheRead: 1400, cacheWrite: 200 }), { input: 2550, output: 10, cached: 1400 });
   });
 
   console.log(`benefit-table service: ${passed} passed, ${failures.length} failed`);
