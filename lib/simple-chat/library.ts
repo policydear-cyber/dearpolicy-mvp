@@ -139,6 +139,64 @@ export function renderLibrary(household: Household, pagesSent?: Set<string>): st
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 
+// A possessive is the spouse's own ("my husband's policy") unless the next word makes it someone else (TE P117-2).
+// The next word is looked at, not taken, so "my husband's first wife" is not read past (Critic R190-3).
+const SPOUSE_WORD = /(?:^|[^\w'’-])(?:([\w'’-]+)\s+)?(husband|hubby|wifey|wife)(['’]s)?(?![\w'’-])(?=(?:\s+([\w'’-]+))?)/gi;
+// After a possessive, only the spouse's own cover counts: an allow-list, since relatives and helpers are never a complete
+// list (Critic R190-2). No insurer or product is named here: the household's own documents add theirs ("my husband's
+// Manulife", "my wife's PRUShield"), so any household, with any insurer anywhere, is read the same way.
+const HIS_OR_HERS = /^(?:policy|policies|plan|plans|cover|coverage|claim|claims|insurance|insurances|rider|riders|shield|card|benefits?|premiums?|documents?|certificate|schedule|ilp|endowment|annuity|hospital|medical|health|life|ci|tpd|own|bill|bills)$/i;
+/** The household's own insurers and products, each as its words: a product by its whole name ("carefirst health"), an
+ * insurer by its own name, without the words that only say what it is or where ("Zurich Life Insurance Company Ltd" is
+ * "zurich", "Friends Provident International" is "friends provident", "AIA Singapore Private Limited" is "aia"). An own
+ * name that would be one ordinary word for a person keeps its next word ("Family Life Insurance" is "family life"). */
+const ownCover = (household: Household) => ({
+  insurers: household.documents.map((d) => insurerCore(d.insurer ?? "")).filter((p) => p.length),
+  products: household.documents.map((d) => words(d.productName ?? "")).filter((p) => p.length),
+});
+const words = (n: string) => n.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+const NOT_OWN_NAME = /^(?:ltd|limited|pte|pvt|private|sdn|bhd|berhad|pty|gmbh|plc|inc|incorporated|llc|co|company|corp|corporation|sa|ag|nv|se|the|insurance|insurer|assurance|reinsurance|general|life|international|group|holdings|financial|services|singapore|malaysia|hong|kong|asia|pacific|uk|usa|us|india|indonesia|philippines|thailand|vietnam|china|australia|canada|europe)$/;
+const personWord = (w: string) => NOT_THEM_AFTER.test(w) || NOT_THEM_AFTER.test(w.replace(/s$/, ""));
+function insurerCore(name: string): string[] {
+  const all = words(name), own = all.filter((w) => !NOT_OWN_NAME.test(w));
+  if (own.length !== 1 || !personWord(own[0])) return own.length ? own : all;
+  const at = all.indexOf(own[0]);
+  return all.slice(at, at + 2);
+}
+/** After a possessive, the household's own cover: a whole product name or an insurer's own name, then the clause's end or
+ * a cover word ("my wife's Family Care Plan claim", "hubby's Zurich", "my husband's AXA policy"). No single word of a
+ * name counts on its own: names are ordinary English ("Domestic Helper Insurance", "Friends Provident"), so "my wife's
+ * domestic helper" is about the helper, "my husband's friends medical bills" about his friends (Critic R207-1, TE P117-4
+ * to P117-7). */
+function coverAfter(rest: string, cover: { insurers: string[][]; products: string[][] }): boolean {
+  const said = words(rest.match(/^[^.,;:!?()]*/)?.[0] ?? "");
+  // A word for a person right after the possessive is about that person, whatever cover shares the word ("my wife's
+  // family medical history" with a product named "Family", TE P117-8). A name that starts with one asks who is meant.
+  if (said[0] && (personWord(said[0]) || /^partners?$/.test(said[0]))) return false;
+  const then = (n: number) => said.length === n || HIS_OR_HERS.test(said[n]);
+  return [...cover.insurers, ...cover.products].some((p) => p.every((w, i) => said[i] === w) && then(p.length));
+}
+// Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
+// before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a
+// list of other people's words is never complete (Critic R184-1).
+const MINE_BEFORE = /^(?:my|me|mine|if|when|and|but|so|cos|coz|because|then|lah|ah|eh|wah|hi|hello|pls|please)$/i;
+// "husband of my colleague", "husband mother", "husband side": about someone else.
+const NOT_THEM_AFTER = /^(?:of|mother|mum|mom|mummy|mommy|ma|father|dad|daddy|papa|pa|mama|brother|bro|sister|sis|son|daughter|child|kid|grand\w*|side|family|parents?|in-laws?|boss|friend|colleague|cousin|ex)$/i;
+/** The first "husband" or "wife" in a message that means the person's own spouse: "my husband", or the word alone as people
+ * type it ("husband kena fracture leg", "hubby got cancer"; overnight run 23 Oct, N224, N226). Never someone else's
+ * ("her husband", "my sis husband", "husband of my colleague"), a possessive about someone else ("my husband's mum": the
+ * question is not about him), or "husband and wife" (a pair, not a person). */
+function spouseSaid(text: string, cover = { insurers: [] as string[][], products: [] as string[][] }): { kind: "husband" | "wife"; word: string } | null {
+  if (/\b(?:husband|wife)\s*(?:and|or|&|\/|-and-)\s*(?:husband|wife)\b/i.test(text)) return null;
+  for (const x of text.matchAll(SPOUSE_WORD)) {
+    if (x[1] && !MINE_BEFORE.test(x[1])) continue;
+    if (x[3] ? x[4] && !HIS_OR_HERS.test(x[4]) && !coverAfter(text.slice(x.index! + x[0].length), cover) : x[4] && NOT_THEM_AFTER.test(x[4])) continue;
+    const word = x[2].toLowerCase();
+    return { kind: /^h/.test(word) ? "husband" : "wife", word: x[1]?.toLowerCase() === "my" ? `my ${word}` : word };
+  }
+  return null;
+}
+
 const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
 /** Who "my husband" or "my wife" is, when the household settles it: of the two members set up as self and spouse, the one
  * the documents print with that kind of title ("Mr Lim Ah Kow") while the other is never printed with it. A
@@ -147,8 +205,10 @@ const MALE_TITLE = /^mr$/i, FEMALE_TITLE = /^(?:mrs|ms|mdm|miss|madam)$/i;
  * the relationships each household sets for its members and the titles its own documents print, and asks when they do not
  * settle it. */
 export function spouseMeant(household: Household, said: string[]): { word: string; member: string; printed: string } | null {
-  const asked = said.map((t) => /\bmy\s+(husband|wife)\b/i.exec(t)?.[1]?.toLowerCase()).find(Boolean);
-  if (!asked) return null;
+  const cover = ownCover(household);
+  const heard = said.map((t) => spouseSaid(t, cover)).find(Boolean);
+  if (!heard) return null;
+  const asked = heard.kind;
   const couple = household.members.filter((m) => m.relationship === "self" || m.relationship === "spouse");
   if (couple.length !== 2 || new Set(couple.map((m) => m.relationship)).size !== 2) return null;
   const base = (n: string) => n.replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -172,5 +232,5 @@ export function spouseMeant(household: Household, said: string[]): { word: strin
   // A member also printed with the other kind of title ("Mrs Lim Wei Ming", a wife under her husband's name) settles nothing.
   const fits = couple.map((m) => ({ m, all: titles(m) })).map(({ m, all }) => ({ m, hits: all.some((t) => other.test(t.title)) ? [] : all.filter((t) => want.test(t.title)) }));
   const yes = fits.filter((f) => f.hits.length);
-  return yes.length === 1 ? { word: `my ${asked}`, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
+  return yes.length === 1 ? { word: heard.word, member: base(yes[0].m.name), printed: yes[0].hits[0].printed } : null;
 }
