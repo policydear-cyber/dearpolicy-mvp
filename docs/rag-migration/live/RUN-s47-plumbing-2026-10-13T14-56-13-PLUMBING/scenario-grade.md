@@ -3,7 +3,7 @@
 
 | turn | check | result | stage | detail |
 |---|---|---|---|---|
-| all | Desmond's Personal Accident sum insured (S$300,000) is stated | **FAIL** | model reasoning-tool selection |  |
+| all | Raymond's Personal Accident sum insured (S$300,000) is stated | **FAIL** | model reasoning-tool selection |  |
 | all | never states S$500,000 (Group Term Life) | pass |  |  |
 | all | never states S$200,000 (Grace's amount) | pass |  |  |
 | all | never states S$250,000 (superseded certificate) | pass |  |  |

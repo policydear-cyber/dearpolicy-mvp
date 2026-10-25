@@ -34,7 +34,7 @@ export const BOOKLET_ACCOUNT = BOOKLET.ACCOUNT;
 export const ACTUAL_ACCOUNT = ACTUAL.ACCOUNT;
 export const DEATH_ACCOUNT = DJR.ACCOUNT;
 export const S47: Scenario = { id: "S47", title: "PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times", why: "actual-model reproduction of the reported conversation", turns: [
-  "Desmond broke his leg.",
+  "Raymond broke his leg.",
   "He fell down the stairs.",
   "Yes, confirmed with an X-ray. He was also warded for two nights.",
   "Transverse fracture.",
@@ -247,7 +247,7 @@ export async function seedScenario(which: "scenario" | "stress" | "binding" | "b
     }
     await pool.query("DELETE FROM accounts WHERE id = $1::uuid AND name LIKE 'SYNTHETIC-DPTEST-%'", [acct]);
   }
-  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : which === "booklet" ? "SYNTHETIC-DPTEST-booklet Household Lee (Daniel)" : which === "actuallib" ? "SYNTHETIC-DPTEST-actuallib Household Lee (Daniel)" : which === "deathjourney" ? "SYNTHETIC-DPTEST-deathjourney Household Lee (Daniel)" : "SYNTHETIC-DPTEST-scenario Household Lim (Desmond)", `SYNTHETIC-DPTEST-${which} other household`]);
+  await pool.query("INSERT INTO accounts(id,name) VALUES($1,$3),($2,$4)", [ACCOUNT, OTHER_ACCOUNT, which === "stress" ? "SYNTHETIC-DPTEST-stress Household Tan (Ivan)" : which.startsWith("binding") ? `SYNTHETIC-DPTEST-${which} Household Tan (Darren)` : which === "livelib" ? "SYNTHETIC-DPTEST-livelib Household Wong (Adrian)" : which === "pr50" ? "SYNTHETIC-DPTEST-pr50 Household Wong (Adrian)" : which === "tan" ? "SYNTHETIC-DPTEST-rc Household Tan (Mei Ling)" : which === "booklet" ? "SYNTHETIC-DPTEST-booklet Household Lee (Daniel)" : which === "actuallib" ? "SYNTHETIC-DPTEST-actuallib Household Lee (Daniel)" : which === "deathjourney" ? "SYNTHETIC-DPTEST-deathjourney Household Lee (Daniel)" : "SYNTHETIC-DPTEST-scenario Household Lim (Raymond)", `SYNTHETIC-DPTEST-${which} other household`]);
   await pool.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]).catch(() => undefined);
   for (const p of Object.values(M)) await pool.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship,notes,date_of_birth) VALUES($1,$2,$3,$4,$5,$6,$7)", [p.id, (p as { account?: string }).account ?? ACCOUNT, p.name, p.pref, p.rel, p.notes, p.dob]);
   for (const d of DOCS) {

@@ -67,7 +67,7 @@ t("a missing guide file never stops the chat: the guide is empty (Critic R121-2)
   assert.equal(answerStyle("/nonexistent/answer-style.md"), "");
 });
 t("the guide names no real household member (Critic R121-4)", () => {
-  assert.doesNotMatch(readFileSync("lib/chat/answer-style.md", "utf8"), /Desmond|Charmaine/);
+  assert.doesNotMatch(readFileSync("lib/chat/answer-style.md", "utf8"), /Raymond|Josephine/);
 });
 t("stripping row letters never makes two benefits of one cover read the same (TE #101)", () => {
   const rows = [{ benefit: "A. Death", coverKey: "c1" }, { benefit: "B. Death", coverKey: "c1" }, { benefit: "C. Hip", coverKey: "c1" }, { benefit: "A. Death", coverKey: "c2" }];

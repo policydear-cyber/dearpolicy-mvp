@@ -117,7 +117,7 @@ Selectors and flow were changed. No assertion, gate or scorer rule was changed. 
 | T0-1 | PASS |
 | T0-2 | PASS (p95 50 ms) |
 | T0-3 | PASS (14 ms, 1 call) |
-| T0-4 | PASS, both in-process and on the page. The list shows "Documents needed", consistent with the detail page (hasEstimate=false), and the event is named "Charmaine: broken arm". |
+| T0-4 | PASS, both in-process and on the page. The list shows "Documents needed", consistent with the detail page (hasEstimate=false), and the event is named "Josephine: broken arm". |
 | T0-5 | PASS, both in-process and on the page |
 | T0-6 | PASS (page checks on /schedule, /ledger and /policies) |
 | T0-7 in-process | **FAIL**: `/api/usage` still returns `hardStopUsd` 14.97. Calls are now recorded: 57 executions and 57 model_usage rows. |

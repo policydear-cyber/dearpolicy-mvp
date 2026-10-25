@@ -33,7 +33,7 @@
 | S47 PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times | INCOMPLETE | graded by scenario-check.ts | 6 | 0.5 s | 5.7 s | 12 | 103485/480 | US$0.01059 |
 
 ## S47 — PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times: INCOMPLETE
-- **Turn 1** — “Desmond broke his leg.”
+- **Turn 1** — “Raymond broke his leg.”
   - Answer: “PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.”
   - Tools: search_passages → final_answer; outcome final_answer; evidence none
   - Time: accepted 0.3 s, answer saved 0.5 s, seen 0.7 s; model 0.1 s (upstream 0.0 s via the relay); 2 calls, 17189/80 tokens, US$0.00176

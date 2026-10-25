@@ -23,12 +23,12 @@ async function testAsync(name: string, fn: () => Promise<void>) {
 
 const CAUSE = "Blunt force trauma from a road traffic accident";
 const POLICE_REPORT = {
-  deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [],
+  deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [],
   dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE, mannerOfDeath: "accident",
   issuingAuthority: "SPF", documentReference: "REF-1", documentType: "police_report",
   pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE }], confidence: {},
 };
-const POLICE_PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Desmond. Date of death 2026-09-14. Cause of death: ${CAUSE}.` }];
+const POLICE_PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE}.` }];
 const DEATH_FACTS = { eventType: "death" as const, death: true, deathDate: "2026-09-14", eventDate: "2026-09-14" };
 
 async function main() {
@@ -36,7 +36,7 @@ async function main() {
   try {
     const owner = fixedUuid("b2000000", 1), reviewer = fixedUuid("c2000000", 1);
     const household = await h.createHousehold(fixedUuid("a2000000", 1), owner);
-    const member = await h.createMember(household, fixedUuid("d2000000", 1), "Tan Yi Chuen Desmond");
+    const member = await h.createMember(household, fixedUuid("d2000000", 1), "Tan Yi Chuen Raymond");
     const claim = await h.createClaim(household, member, fixedUuid("e2000000", 1), "death");
     const { policyId, coverageId } = await h.createPolicy({
       accountId: household, memberId: member, policyId: fixedUuid("f3000000", 1), coverageId: fixedUuid("f4000000", 1),

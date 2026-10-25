@@ -104,7 +104,7 @@ supported if (a) "S$" is cited to PS p13, or it stays a bare "$250" for BS p9, (
 "whether its condition is met is for the insurer to decide" for a pure-sickness report suggests an open question that the pages do not support. The pages
 support "on what you told me the accident condition is not met for this stay; any claim decision is the insurer's".
 
-### J6 GP bill (DC live: "desmond tripped over the kerb and fell, his GP bill is $800, can he claim for this?"; reconstruction with Daniel)
+### J6 GP bill (DC live: "raymond tripped over the kerb and fell, his GP bill is $800, can he claim for this?"; reconstruction with Daniel)
 
 A. No stored page prints an outpatient, GP or accidental medical-expenses benefit (PS p8 key features, PS p13, BS p7-p9). BS p1 names an Outpatient Medicare Policy;
 Daniel's certificate does not list it, and BS p1 says a benefit applies only if its policy is in Part 1. Conditional accident benefits: Ambulance to Hospital

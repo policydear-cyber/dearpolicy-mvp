@@ -25,17 +25,17 @@
 
 | Q | Question | Result | Gates failed | ms |
 |---|---|---|---|---|
-| Q01 | What policies does Charmaine have? | pass |  | 6151 |
-| Q02 | What is Charmaine's hospital room and board benefit? | FAIL | positive_control | 1776 |
-| Q03 | Does Charmaine have a fracture benefit? | FAIL | positive_control | 2645 |
-| Q04 | What is the waiting period for critical illness on Charmaine's CritiCare plan? | FAIL | positive_control | 2164 |
-| Q05 | Does Charmaine's hospital plan cover dental treatment? | FAIL | positive_control | 2108 |
-| Q06 | If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid? | FAIL | positive_control | 2229 |
-| Q07 | What does Charmaine's group life policy pay if she dies? | FAIL | internal_text, positive_control | 1870 |
-| Q08 | What is Charmaine covered for if she dies in an accident? | FAIL | internal_text | 2324 |
-| Q09 | What is Charmaine's maternity coverage? | FAIL | internal_text, unsupported_assertion | 2279 |
-| Q10 | Does Charmaine have travel insurance? | FAIL | unsupported_assertion | 2203 |
-| Q11 | Charmaine broke her arm. | pass |  | 2550 |
+| Q01 | What policies does Josephine have? | pass |  | 6151 |
+| Q02 | What is Josephine's hospital room and board benefit? | FAIL | positive_control | 1776 |
+| Q03 | Does Josephine have a fracture benefit? | FAIL | positive_control | 2645 |
+| Q04 | What is the waiting period for critical illness on Josephine's CritiCare plan? | FAIL | positive_control | 2164 |
+| Q05 | Does Josephine's hospital plan cover dental treatment? | FAIL | positive_control | 2108 |
+| Q06 | If Josephine had both a fracture and a permanent disablement from one accident, would both be paid? | FAIL | positive_control | 2229 |
+| Q07 | What does Josephine's group life policy pay if she dies? | FAIL | internal_text, positive_control | 1870 |
+| Q08 | What is Josephine covered for if she dies in an accident? | FAIL | internal_text | 2324 |
+| Q09 | What is Josephine's maternity coverage? | FAIL | internal_text, unsupported_assertion | 2279 |
+| Q10 | Does Josephine have travel insurance? | FAIL | unsupported_assertion | 2203 |
+| Q11 | Josephine broke her arm. | pass |  | 2550 |
 | Q12 | An accident. | pass |  | 2029 |
 | Q13 | claim interview (6 answers): When did it happen? → Was the fracture confirmed by a doctor or on an X-ray or scan? → What treatment was given? → Was surgery performed? → How much did the treatment cost? | pass |  | 10725 |
 | Q14 | (the final response once the interview has no question left) | pass |  | 2345 |
@@ -51,7 +51,7 @@
 | Q24 | Does Marcus have a fracture benefit? | pass |  | 836 |
 | Q25 | Does Marcus have car insurance? | FAIL | unsupported_assertion | 2256 |
 | Q26 | Does Marcus have a fracture benefit? | FAIL | internal_text, unsupported_assertion | 4437 |
-| Q28 | Does Charmaine have a fracture benefit? | pass |  | 4106 |
+| Q28 | Does Josephine have a fracture benefit? | pass |  | 4106 |
 
 ## Every gate violation
 
@@ -92,7 +92,7 @@
 
 ## Answers (visible text)
 
-### Q01 — What policies does Charmaine have?
+### Q01 — What policies does Josephine have?
 
 ```
 DearPolicy
@@ -100,26 +100,26 @@ DearPolicy
 I found 6 personal policy contracts across 1 family profile. The table separates confirmed cover from records that still need review.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Personal policy inventory
 Family member	Policy	Confirmed cover	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-JetSure	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-JetSure	
 SYNTHETIC-DPTEST-v11after2-JetSure
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-AccidentGuard	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-AccidentGuard	
 SYNTHETIC-DPTEST-v11after2-AccidentGuard
 SYNTHETIC-DPTEST-v11after2-AccidentGuard · S$100,000
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-GroupTermLife	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-GroupTermLife	
 SYNTHETIC-DPTEST-v11after2-GroupTermLife
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-DisabilityCare	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-DisabilityCare	
 SYNTHETIC-DPTEST-v11after2-DisabilityCare · S$200,000
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-HospitalShield	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-HospitalShield	
 SYNTHETIC-DPTEST-v11after2-HospitalShield
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-CritiCare	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11after2-CritiCare	
 SYNTHETIC-DPTEST-v11after2-CritiCare · S$120,000
 	Active status not recently verified
 
@@ -129,7 +129,7 @@ Schedules, amendments and supporting documents are grouped by insured person, in
 
 NEXT STEP
 
-Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-JetSure; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-DisabilityCare so current status can be verified separately from ownership.
+Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-JetSure; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-DisabilityCare so current status can be verified separately from ownership.
 
 SOURCES
 SYNTHETIC-DPTEST-v11after2-JetSure
@@ -157,31 +157,31 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: travelExpired (SYNTHETIC-DPTEST-v11after2-JetSure) p1; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p1; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p1; groupLife (SYNTHETIC-DPTEST-v11after2-GroupTermLife) p1; disability (SYNTHETIC-DPTEST-v11after2-DisabilityCare) p1; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p1; criticalIllness (SYNTHETIC-DPTEST-v11after2-CritiCare) p1  ·  next question: none  ·  6151 ms
 
-### Q02 — What is Charmaine's hospital room and board benefit?
+### Q02 — What is Josephine's hospital room and board benefit?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-Policy-stated coverage limitS$100.00Charmaine Tan Hui Min · Hospital cash
+Policy-stated coverage limitS$100.00Josephine Tan Hui Min · Hospital cash
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-HospitalShield, page 2: “Hospital cash S$100 per day, maximum 30 days”
-Policy-stated coverage limitS$100,000Charmaine Tan Hui Min · Overseas medical expenses
+Policy-stated coverage limitS$100,000Josephine Tan Hui Min · Overseas medical expenses
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-JetSure, page 2: “Overseas medical expenses S$100,000”
-Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -213,26 +213,26 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-JetSure) p2; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (SYNTHETIC-DPTEST-v11after2-JetSure) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2  ·  next question: none  ·  1776 ms
 
-### Q03 — Does Charmaine have a fracture benefit?
+### Q03 — Does Josephine have a fracture benefit?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms. Fracture of arm: your documents state different figures, so DearPolicy has not picked one. Upload the latest schedule to settle it.
+Here is what Josephine Tan Hui Min’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms. Fracture of arm: your documents state different figures, so DearPolicy has not picked one. Upload the latest schedule to settle it.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-Policy-stated coverage limitS$50,000Charmaine Tan Hui Min · Additional accidental death benefit
+Policy-stated coverage limitS$50,000Josephine Tan Hui Min · Additional accidental death benefit
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-GroupTermLife, page 2: “Additional accidental death benefit S$50,000”
-Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -261,15 +261,15 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-GroupTermLife) p2; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; groupLife (SYNTHETIC-DPTEST-v11after2-GroupTermLife) p2; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2  ·  next question: none  ·  2645 ms
 
-### Q04 — What is the waiting period for critical illness on Charmaine's CritiCare plan?
+### Q04 — What is the waiting period for critical illness on Josephine's CritiCare plan?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about critical illness cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Mar 2025, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about critical illness cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Mar 2025, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 
 SYNTHETIC-DPTEST-v11after2-CritiCare — Critical illness benefit: 100% of the sum insured (page 2, document dated 1 Mar 2025; not confirmed current).
 
@@ -287,31 +287,31 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: criticalIllness (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-CritiCare) p2  ·  next question: none  ·  2164 ms
 
-### Q05 — Does Charmaine's hospital plan cover dental treatment?
+### Q05 — Does Josephine's hospital plan cover dental treatment?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-Policy-stated coverage limitS$100.00Charmaine Tan Hui Min · Hospital cash
+Policy-stated coverage limitS$100.00Josephine Tan Hui Min · Hospital cash
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-HospitalShield, page 2: “Hospital cash S$100 per day, maximum 30 days”
-Policy-stated coverage limitS$100,000Charmaine Tan Hui Min · Overseas medical expenses
+Policy-stated coverage limitS$100,000Josephine Tan Hui Min · Overseas medical expenses
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-JetSure, page 2: “Overseas medical expenses S$100,000”
-Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -343,31 +343,31 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-JetSure) p2; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (SYNTHETIC-DPTEST-v11after2-JetSure) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2  ·  next question: none  ·  2108 ms
 
-### Q06 — If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?
+### Q06 — If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025 and 1 Jan 2024, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-Policy-stated coverage limitS$100.00Charmaine Tan Hui Min · Hospital cash
+Policy-stated coverage limitS$100.00Josephine Tan Hui Min · Hospital cash
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-HospitalShield, page 2: “Hospital cash S$100 per day, maximum 30 days”
-Policy-stated coverage limitS$100,000Charmaine Tan Hui Min · Overseas medical expenses
+Policy-stated coverage limitS$100,000Josephine Tan Hui Min · Overseas medical expenses
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-JetSure, page 2: “Overseas medical expenses S$100,000”
-Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -399,7 +399,7 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-JetSure) p2; accident (SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2; travelExpired (SYNTHETIC-DPTEST-v11after2-JetSure) p2; hosp2025 (SYNTHETIC-DPTEST-v11after2-HospitalShield) p2  ·  next question: none  ·  2229 ms
 
-### Q07 — What does Charmaine's group life policy pay if she dies?
+### Q07 — What does Josephine's group life policy pay if she dies?
 
 ```
 DearPolicy
@@ -407,12 +407,12 @@ DearPolicy
 If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Death (any cause)
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Death (any cause)
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -421,7 +421,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accidental death
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accidental death
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -430,7 +430,7 @@ Policy condition unresolved
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Additional accidental death benefit
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Additional accidental death benefit
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -455,7 +455,7 @@ Preliminary claim assessment: DearPolicy has not reviewed claim evidence for thi
 ```
 Citations: groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-GroupTermLife) p2; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2  ·  next question: none  ·  1870 ms
 
-### Q08 — What is Charmaine covered for if she dies in an accident?
+### Q08 — What is Josephine covered for if she dies in an accident?
 
 ```
 DearPolicy
@@ -463,12 +463,12 @@ DearPolicy
 If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Death (any cause)
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Death (any cause)
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -477,7 +477,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accidental death
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accidental death
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -486,7 +486,7 @@ Policy condition unresolved
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Additional accidental death benefit
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-GroupTermLife — Additional accidental death benefit
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -511,15 +511,15 @@ Preliminary claim assessment: DearPolicy has not reviewed claim evidence for thi
 ```
 Citations: groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-GroupTermLife) p2; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-AccidentGuard) p2  ·  next question: none  ·  2324 ms
 
-### Q09 — What is Charmaine's maternity coverage?
+### Q09 — What is Josephine's maternity coverage?
 
 ```
 DearPolicy
 
-DearPolicy didn’t find maternity cover in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find maternity cover in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 
 6 policy contracts still need wording, processing or further review. See the policy review list.
 
@@ -529,16 +529,16 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: none  ·  next question: none  ·  2279 ms
 
-### Q10 — Does Charmaine have travel insurance?
+### Q10 — Does Josephine have travel insurance?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about travel cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2024, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about travel cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2024, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$3,000Charmaine Tan Hui Min · Trip cancellation
+Josephine Tan Hui Min
+Policy-stated coverage limitS$3,000Josephine Tan Hui Min · Trip cancellation
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -558,12 +558,12 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: travelExpired (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11after2-JetSure) p2; travelExpired (SYNTHETIC-DPTEST-v11after2-JetSure) p2  ·  next question: none  ·  2203 ms
 
-### Q11 — Charmaine broke her arm.
+### Q11 — Josephine broke her arm.
 
 ```
 DearPolicy
 
-I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.
+I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.
 
 A FACT THAT CHANGES THIS ASSESSMENT
 Was this caused by an accident, or an illness?
@@ -573,12 +573,12 @@ An illness
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Fracture: arm
 Injuries: broke her arm
@@ -591,7 +591,7 @@ Citations: none  ·  next question: Was this caused by an accident, or an illnes
 ```
 DearPolicy
 
-I’m sorry Charmaine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Charmaine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
+I’m sorry Josephine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Josephine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
 
 A FACT THAT CHANGES THIS ASSESSMENT
 Where did the accident happen?
@@ -601,12 +601,12 @@ Overseas
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Fracture: arm
@@ -628,12 +628,12 @@ Not sure
 Answer
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Fracture: arm
@@ -657,12 +657,12 @@ No
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Location: Singapore
@@ -688,12 +688,12 @@ Outpatient or clinic
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -719,12 +719,12 @@ No
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -754,12 +754,12 @@ Not sure
 Answer
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -781,16 +781,16 @@ Citations: none  ·  next question: How much did the treatment cost?  ·  2035 m
 ```
 DearPolicy
 
-Thanks — that’s what I need for now. For the broken arm, Charmaine’s policies have possible benefits: SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+Thanks — that’s what I need for now. For the broken arm, Josephine’s policies have possible benefits: SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -805,7 +805,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -814,7 +814,7 @@ Listed in the policy on page 2. It may respond to the broken arm; whether it pay
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement
 NEEDS CHECKING
 Information needed
 
@@ -842,16 +842,16 @@ Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v
 ```
 DearPolicy
 
-Thanks — that’s what I need for now. For the broken arm, Charmaine’s policies have possible benefits: SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
+Thanks — that’s what I need for now. For the broken arm, Josephine’s policies have possible benefits: SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.
 
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -866,7 +866,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Fracture of arm
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -875,7 +875,7 @@ Listed in the policy on page 2. It may respond to the broken arm; whether it pay
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: The uploaded document shows a renewal or expiry date of 2024-12-31 that has already passed, and no later premium or renewal evidence is on file. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11after2-AccidentGuard — Accident medical reimbursement
 NEEDS CHECKING
 Information needed
 
@@ -903,9 +903,9 @@ Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v
 ```
 DearPolicy
 
-Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
-CHARMAINE TAN HUI MIN · INJURY
+JOSEPHINE TAN HUI MIN · INJURY
 Has any other insurer or the employer already paid part of the bill?
 Reimbursement is coordinated so the same bill is not paid twice.
 Yes
@@ -913,12 +913,12 @@ No
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -929,12 +929,12 @@ Event Location: Singapore
 Treatment Type: Emergency department
 Fracture: arm
 Fracture Confirmed: yes
-Policy-stated coverage limitS$1,000Charmaine Tan Hui Min · Fracture of arm
+Policy-stated coverage limitS$1,000Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-AccidentGuard, page 2: “Fracture of arm S$1,000”
-Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -957,10 +957,10 @@ Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v
 ```
 DearPolicy
 
-DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -985,10 +985,10 @@ Citations: none  ·  next question: none  ·  2242 ms
 ```
 DearPolicy
 
-DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1278,21 +1278,21 @@ Answers come from the documents you uploaded. The insurer decides eligibility an
 ```
 Citations: none  ·  next question: none  ·  4437 ms
 
-### Q28 — Does Charmaine have a fracture benefit?
+### Q28 — Does Josephine have a fracture benefit?
 
 ```
 DearPolicy
 
-Here is what Charmaine Tan Hui Min’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
+Here is what Josephine Tan Hui Min’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$9,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$9,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11after2-OtherHouseholdPA, page 2: “Accident medical reimbursement Up to S$9,000 per accident”
-Policy-stated coverage limitS$3,500Charmaine Tan Hui Min · Fracture of arm
+Policy-stated coverage limitS$3,500Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 

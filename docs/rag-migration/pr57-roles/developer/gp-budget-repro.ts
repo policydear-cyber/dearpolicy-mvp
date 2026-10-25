@@ -1,5 +1,5 @@
 /**
- * Production 0417567 (20 Oct 2026, Live site tester t12): "desmond tripped on the kerb, GP bill was $800, can he claim" ran 59 s and
+ * Production 0417567 (20 Oct 2026, Live site tester t12): "raymond tripped on the kerb, GP bill was $800, can he claim" ran 59 s and
  * stopped at the per-question model-use limit. This replays that question over the household SNAPSHOT the baseline thread took with
  * DC's yes (/mnt/project-files/ux-live/release-set/snapshot, real data, never committed), with a scripted model that makes the moves a
  * hosted model makes on it, and reports for every model call the prompt it would send (tokens estimated as the meter does) and what
@@ -31,16 +31,16 @@ const DOCS = snap.documents.map((d: any, i: number) => ({
   pages: Object.fromEntries(d.pages.map((p: any) => [p.page, p.text])),
 }));
 const HH = { ACCOUNT, OTHER_ACCOUNT: "00000000-0000-0000-0000-00000000d002", DOCS, M: Object.fromEntries(Object.values(M).map((m, i) => [`m${i}`, m])) } as unknown as HarnessHousehold;
-const DES = Object.values(M).find((m) => /desmond/i.test(m.name))!.id;
+const DES = Object.values(M).find((m) => /raymond/i.test(m.name))!.id;
 
 const call = (name: string, args: Record<string, unknown>): ScriptCall => ({ name, arguments: args });
-const absence = (): ScriptCall[] => [call("final_answer", { subject_id: DES, sentences: [{ kind: "fact", text: "Desmond's documents do not include a benefit that pays for a GP bill after a fall.", subject_id: DES }], next_steps: [] })];
+const absence = (): ScriptCall[] => [call("final_answer", { subject_id: DES, sentences: [{ kind: "fact", text: "Raymond's documents do not include a benefit that pays for a GP bill after a fall.", subject_id: DES }], next_steps: [] })];
 // (MODE=notfound: the model answers with a checked absence, which the documents refute -- they print GP lines)
 const notFound = (): ScriptCall[] => [call("final_answer", { subject_id: DES, sentences: [{ kind: "not_found", claim: "benefit_not_found", topic: "GP or outpatient treatment", terms: ["GP", "outpatient", "clinic"], subject_id: DES }], next_steps: [] })];
 const search = (query: string) => (): ScriptCall[] => [call("search_passages", { k: 8, query, subject_id: DES })];
 const MODE = process.env.MODE ?? "searches";
 const TURN: ScriptTurn = { steps: [
-  () => [call("resolve_person", { mention: "desmond" })],
+  () => [call("resolve_person", { mention: "raymond" })],
   () => [call("note_facts", { subject_id: DES, facts: [{ key: "how_it_happened", value: "tripped on the kerb", words: "tripped on the kerb" }, { key: "bill_amount", value: "$800 GP bill", words: "GP bill was $800" }] }), call("person_benefits", { subject_id: DES, topic: "GP bill after a fall" })],
   search("GP outpatient clinic consultation medical expenses"),
   // (MODE=searches: a model that keeps looking -- the production turn ran 59 s -- until the budget stops it before any answer)
@@ -74,7 +74,7 @@ async function main() {
   const NEXT: ScriptTurn = { steps: Array.from({ length: 4 }, () => () => [call("final_answer", { subject_id: DES, sentences: [{ kind: "fact", text: "You need to submit a claim form with the GP bill and receipts to the insurer.", subject_id: DES }], next_steps: ["contact:" + CERT_ID] })]) };
   installLoopModel(new Metered(process.env.NEXT ? [TURN, NEXT] : [TURN]));
   try {
-    const a = await h.send("desmond tripped on the kerb, GP bill was $800, can he claim");
+    const a = await h.send("raymond tripped on the kerb, GP bill was $800, can he claim");
     const sv = await h.savedAnswer(a.conversationId!);
     const t = sv.state?.ragLoop?.turns?.at(-1);
     console.log(rows.join("\n"));

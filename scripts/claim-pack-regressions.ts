@@ -14,21 +14,21 @@ const facts:ClaimFacts={...EMPTY_CLAIM_FACTS,eventType:"accident",eventDate:"202
   hospitalised:true,hospitalNights:4,ambulanceUsed:true,ambulanceBill:220,surgery:true,uncertainFacts:[]};
 const packet:ClaimDecisionPacket={
   sessionId:"session-1",
-  eventSummary:"Desmond came off his motorcycle on 14 September 2026 and fractured his wrist.",
+  eventSummary:"Raymond came off his motorcycle on 14 September 2026 and fractured his wrist.",
   facts,knownFacts:[],missingFacts:["the final hospital bill"],
   relevantOwnedProducts:["Group Personal Accident"],
   assessments:[
-    {id:"gpa-fracture",title:"Desmond · Simple Fracture (wrist)",status:"likely_applicable",
+    {id:"gpa-fracture",title:"Raymond · Simple Fracture (wrist)",status:"likely_applicable",
      amountText:"S$1,250",calculatedAmount:1250,currency:"SGD",
      reason:"25% of the S$5,000 fracture limit printed in the schedule.",
      conditions:["A medical report confirming the fracture is required."],
      evidenceTerms:["fracture"],productName:"Group Personal Accident",
      ruleEvidence:{chunkId:"c1",policyId:"p1",policyName:"Group Personal Accident",pageStart:14,pageEnd:14}},
-    {id:"gpa-ambulance",title:"Desmond · Ambulance reimbursement",status:"potentially_applicable",
+    {id:"gpa-ambulance",title:"Raymond · Ambulance reimbursement",status:"potentially_applicable",
      amountText:"S$220.00",calculatedAmount:220,currency:"SGD",
      reason:"Lower of the reported ambulance bill and the S$500 cap.",
      aggregation:"reimbursement",conditions:[],evidenceTerms:["ambulance"],productName:"Group Personal Accident"},
-    {id:"gtl-death",title:"Desmond · Death Benefit",status:"not_applicable",amountText:null,
+    {id:"gtl-death",title:"Raymond · Death Benefit",status:"not_applicable",amountText:null,
      reason:"Nobody died.",conditions:[],evidenceTerms:["death"],productName:"Group Term Life"},
   ],
   nextSteps:["Ask the hospital for an itemised final bill."],
@@ -36,7 +36,7 @@ const packet:ClaimDecisionPacket={
 };
 
 export async function runClaimPackRegressions(){
-  const content=claimPackContent({packet,claimantName:"Tan Yi Chuen Desmond",relationship:"self",
+  const content=claimPackContent({packet,claimantName:"Tan Yi Chuen Raymond",relationship:"self",
     generatedOn:new Date("2026-09-16T00:00:00+08:00")});
   const flat=content.sections.flatMap(section=>[section.heading,...section.lines,section.note??""]).join("\n");
 
@@ -69,19 +69,19 @@ export async function runClaimPackRegressions(){
   // and the superseded row still says which benefit is paid instead of it.
   const twice=claimPackContent({packet:{...packet,assessments:[
     ...packet.assessments,
-    {id:"gpa-fracture-dup",title:"Desmond · Fracture of the wrist",status:"potentially_applicable",
-     amountText:"S$1,250",currency:"SGD",supersededBy:"Desmond · Simple Fracture (wrist)",
+    {id:"gpa-fracture-dup",title:"Raymond · Fracture of the wrist",status:"potentially_applicable",
+     amountText:"S$1,250",currency:"SGD",supersededBy:"Raymond · Simple Fracture (wrist)",
      reason:"Same benefit read from the benefit table.",conditions:[],evidenceTerms:[],productName:"Group Personal Accident"},
-    {id:"gtl-tpd",title:"Desmond · Total and Permanent Disability",status:"likely_applicable",
+    {id:"gtl-tpd",title:"Raymond · Total and Permanent Disability",status:"likely_applicable",
      amountText:"S$1,000,000",calculatedAmount:1_000_000,currency:"SGD",coverLabel:"Group Term Life",
      reason:"100% of the sum insured of S$1,000,000.",conditions:[],evidenceTerms:[],productName:"Group Term Life"},
-  ]},claimantName:"Tan Yi Chuen Desmond"});
+  ]},claimantName:"Tan Yi Chuen Raymond"});
   const twiceBenefits=twice.sections.find(section=>section.heading==="Benefits that may be relevant")!.lines.join(" | ");
   assert.match(twiceBenefits,/pays this instead of/,"the row that is not counted says which benefit is paid instead of it");
   assert.equal(/S\$|1,000,000|1,250/.test(twiceBenefits),false,"no amount survives, including one written inside a reason");
 
   // An unassessed claim states that plainly instead of printing an empty sheet.
-  const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Yi Chuen Desmond"});
+  const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Yi Chuen Raymond"});
   const claimed=empty.sections.find(section=>section.heading==="Benefits that may be relevant")!;
   assert.match(claimed.lines.join(" "),/No relevant benefit has been identified yet/);
   assert.equal(/S\$/.test(claimed.lines.join(" ")),false,"With nothing assessed, no figure may appear");
@@ -97,7 +97,7 @@ export async function runClaimPackRegressions(){
   assert.ok(pages.length>=1);
   const printed=pages.map(page=>page.text).join(" ").replace(/\s+/g," ");
   assert.match(printed,/Claim summary/);
-  assert.match(printed,/Tan Yi Chuen Desmond/);
+  assert.match(printed,/Tan Yi Chuen Raymond/);
   assert.equal(/S\$1,250/.test(printed),false,"No calculated amount reaches the printed page");
   assert.match(printed,/Preliminary claim assessment/);
   assert.match(printed,/Hospital discharge summary/);
@@ -106,7 +106,7 @@ export async function runClaimPackRegressions(){
   // A long condition must wrap rather than run off the page or be dropped.
   const long="A ".repeat(400)+"final clause";
   const wrapped=await renderClaimPack(claimPackContent({packet:{...packet,
-    assessments:[{...packet.assessments[0],conditions:[long]}]},claimantName:"Tan Yi Chuen Desmond"}));
+    assessments:[{...packet.assessments[0],conditions:[long]}]},claimantName:"Tan Yi Chuen Raymond"}));
   const wrappedPages=await extractPdfPages(new Uint8Array(wrapped));
   assert.ok(wrappedPages.length>=2,"Long content continues onto another page instead of being cut off");
   assert.match(wrappedPages.map(page=>page.text).join(" ").replace(/\s+/g," "),/final clause/,"Nothing is silently dropped off the end");

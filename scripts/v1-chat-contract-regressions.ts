@@ -5,7 +5,7 @@
  * against PGlite with the same deterministic model stand-in the local browser
  * stack uses (DEARPOLICY_DETERMINISTIC_MODEL=synthetic-e2e, see
  * lib/ai/deterministic-model.ts). Every other network call throws. Data is
- * synthetic: household A (Charmaine: hospital plan, personal-accident plan
+ * synthetic: household A (Josephine: hospital plan, personal-accident plan
  * with a fracture benefit and a permanent-disablement schedule; Marcus: a
  * travel plan with SGD and USD limits and an endowment with no medical
  * benefit) and household B (isolation: a travel plan that must never appear).
@@ -35,7 +35,7 @@ const ACCOUNT = "00000000-0000-0000-0000-00000000a001", FOREIGN = "00000000-0000
 process.env.DEV_ACCOUNT_ID = ACCOUNT;
 
 const uuid = (n: number) => "20000000-0000-4000-8000-" + String(n).padStart(12, "0");
-const CHARMAINE = uuid(1), MARCUS = uuid(2), FOREIGN_PERSON = uuid(3), IVY = uuid(4), KEN = uuid(5);
+const JOSEPHINE = uuid(1), MARCUS = uuid(2), FOREIGN_PERSON = uuid(3), IVY = uuid(4), KEN = uuid(5);
 const vec = "[" + Array.from({ length: 1024 }, (_, j) => (j === 0 ? 1 : 0)).join(",") + "]";
 
 type Page = { page: number; text: string };
@@ -92,8 +92,8 @@ const PLANS: Plan[] = [
       rowBenefit("Emergency medical evacuation", "USD 500,000", "fixed", 500000, "USD", ["medical_expense", "travel_disruption"]),
       rowBenefit("Trip cancellation", "S$5,000", "fixed", 5000, "SGD", ["trip_cancellation", "travel_disruption"]),
       rowBenefit("Baggage delay", "S$200 for every 6 hours", "fixed", 200, "SGD", ["delay", "travel_disruption"])] },
-  { key: "hospital", account: ACCOUNT, member: CHARMAINE, product: "SafeCare Hospital Plan", number: "HSP-100", type: "Hospital Cash",
-    schedule: "Ong Pei Lin Charmaine is the life assured under SafeCare Hospital Plan, policy HSP-100. Daily hospital cash S$150 per day.",
+  { key: "hospital", account: ACCOUNT, member: JOSEPHINE, product: "SafeCare Hospital Plan", number: "HSP-100", type: "Hospital Cash",
+    schedule: "Ong Pei Lin Josephine is the life assured under SafeCare Hospital Plan, policy HSP-100. Daily hospital cash S$150 per day.",
     wording: [
       { page: 1, text: "SafeCare Hospital Plan policy wording. Definitions of hospital, confinement and physician apply to this plan." },
       { page: 3, text: "SafeCare Hospital Plan hospital coverage: we pay a daily hospital cash benefit of S$150 for each day of hospital confinement, up to 90 days per admission." },
@@ -101,8 +101,8 @@ const PLANS: Plan[] = [
     coverages: [{ category: "Hospital Cash", amount: 150, currency: "SGD" }],
     benefits: [{ name: "Daily hospital cash", traits: ["hospitalisation"], kind: "daily", value: 150, currency: "SGD", factKey: "hospitalNights", maximumDays: 90, page: 3,
       quote: "we pay a daily hospital cash benefit of S$150 for each day of hospital confinement, up to 90 days per admission." }] },
-  { key: "accident", account: ACCOUNT, member: CHARMAINE, product: "Guardian Personal Accident", number: "GPA-200", type: "Personal Accident",
-    schedule: "Ong Pei Lin Charmaine is the insured person under Guardian Personal Accident, policy GPA-200. Sum Insured S$200,000.",
+  { key: "accident", account: ACCOUNT, member: JOSEPHINE, product: "Guardian Personal Accident", number: "GPA-200", type: "Personal Accident",
+    schedule: "Ong Pei Lin Josephine is the insured person under Guardian Personal Accident, policy GPA-200. Sum Insured S$200,000.",
     wording: [
       { page: 2, text: "Guardian Personal Accident fracture benefit: we pay S$2,000 for a fracture of the arm, leg or hip caused by an Accident. Accidental medical expenses: we reimburse medical expenses due to an Accident up to S$3,000. Surgical benefit: we pay S$500 if surgery is performed for an Accident." },
       { page: 5, text: "Permanent disablement schedule. Loss of one arm at or above the elbow: 100% of Sum Insured. Loss of one hand at the wrist: 75% of Sum Insured." },
@@ -211,8 +211,8 @@ async function main() {
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Household A'),($2,'Household B')", [ACCOUNT, FOREIGN]);
   await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [ACCOUNT]);
   await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [FOREIGN]);
-  for (const [id, account, name, preferred, rel] of [[CHARMAINE, ACCOUNT, "Ong Pei Lin Charmaine", "Charmaine", "spouse"], [MARCUS, ACCOUNT, "Marcus Lim Wei Jie", "Marcus", "self"],
-    [FOREIGN_PERSON, FOREIGN, "Other Household Person", "Charmaine", "self"], [IVY, ACCOUNT, "Ivy Tan Mei Ling", "Ivy", "spouse"], [KEN, ACCOUNT, "Ken Ho Wei", "Ken", "child"]] as const)
+  for (const [id, account, name, preferred, rel] of [[JOSEPHINE, ACCOUNT, "Ong Pei Lin Josephine", "Josephine", "spouse"], [MARCUS, ACCOUNT, "Marcus Lim Wei Jie", "Marcus", "self"],
+    [FOREIGN_PERSON, FOREIGN, "Other Household Person", "Josephine", "self"], [IVY, ACCOUNT, "Ivy Tan Mei Ling", "Ivy", "spouse"], [KEN, ACCOUNT, "Ken Ho Wei", "Ken", "child"]] as const)
     await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)", [id, account, name, preferred, rel]);
 
   const docIds: Record<string, { schedule: string; wording: string }> = {};
@@ -311,15 +311,15 @@ async function main() {
 
   const c: { id?: string; rev?: number } = {};
   // 1 portfolio (through the async job path: enqueue -> worker -> poll)
-  await turn("T1", "What policies does Charmaine have?", CHARMAINE, c, "portfolio", (a, f) => {
+  await turn("T1", "What policies does Josephine have?", JOSEPHINE, c, "portfolio", (a, f) => {
     checkCommon(a, f);
     const names = ((a as any).portfolioItems ?? []).map((p: any) => p.policyName).join(" | ");
-    if (!/SafeCare Hospital Plan/.test(names) || !/Guardian Personal Accident/.test(names)) f.push("portfolio misses Charmaine's plans: " + names);
-    if (/Voyager|SteadySave/.test(names)) f.push("portfolio for Charmaine lists Marcus's plans: " + names);
-    if (!cites(a, "hospital") || !cites(a, "accident")) f.push("portfolio does not cite both of Charmaine's schedules");
+    if (!/SafeCare Hospital Plan/.test(names) || !/Guardian Personal Accident/.test(names)) f.push("portfolio misses Josephine's plans: " + names);
+    if (/Voyager|SteadySave/.test(names)) f.push("portfolio for Josephine lists Marcus's plans: " + names);
+    if (!cites(a, "hospital") || !cites(a, "accident")) f.push("portfolio does not cite both of Josephine's schedules");
   }, true);
   // 2 policy question: hospital coverage
-  await turn("T2", "What is her hospital coverage?", CHARMAINE, c, "policy_question (reading path)", (a, f) => {
+  await turn("T2", "What is her hospital coverage?", JOSEPHINE, c, "policy_question (reading path)", (a, f) => {
     checkCommon(a, f);
     if ((a as any).portfolioItems?.length) f.push("answered the previous portfolio question again instead of the hospital-coverage question");
     if (!cites(a, "hospital", 3)) f.push("does not cite SafeCare Hospital Plan wording page 3");
@@ -327,7 +327,7 @@ async function main() {
     if (/Guardian|fracture/i.test(a.details.join(" "))) f.push("hospital answer quotes the accident policy");
   });
   // 3 policy question: fracture benefit exists?
-  await turn("T3", "Does she have a fracture benefit?", CHARMAINE, c, "policy_question / what-if", (a, f) => {
+  await turn("T3", "Does she have a fracture benefit?", JOSEPHINE, c, "policy_question / what-if", (a, f) => {
     // V1.1 Task 2: a verified policy-fact answer states the printed figure (as S3,
     // the same question, already allows); a claim/fact-finding answer stays scrubbed.
     checkCommon(a, f, { claimContext: a.mode !== "answer" || a.claimItems.length > 0 || !a.verifiedPolicyFactsOnly });
@@ -338,7 +338,7 @@ async function main() {
     if (!/fractur/i.test(text)) f.push("answer does not mention the fracture benefit");
   });
   // 4 injury report
-  let a4 = await turn("T4", "Charmaine broke her arm.", CHARMAINE, c, "claim -> injury fact-finding", (a, f) => {
+  let a4 = await turn("T4", "Josephine broke her arm.", JOSEPHINE, c, "claim -> injury fact-finding", (a, f) => {
     checkCommon(a, f, { claimContext: true });
     if (a.mode !== "fact_finding") f.push("mode " + a.mode + ", expected fact_finding");
     if (a.questions.length !== 1) f.push("expected exactly one question, got " + a.questions.length);
@@ -347,7 +347,7 @@ async function main() {
     if (/loss of (?:one )?arm|permanent/i.test(a.summary + a.details.join(" ")) && !/not the same as permanent loss/i.test(a.summary)) f.push("permanent-loss wording before cause is known");
   });
   // 5 cause
-  let last = await turn("T5", "An accident.", CHARMAINE, c, "claim -> injury fact-finding (pending eventType)", (a, f) => {
+  let last = await turn("T5", "An accident.", JOSEPHINE, c, "claim -> injury fact-finding (pending eventType)", (a, f) => {
     checkCommon(a, f, { claimContext: true });
     if (a.mode !== "fact_finding" || a.questions.length !== 1) f.push("expected one fact-finding question, got mode " + a.mode + " / " + a.questions.length);
     else if (!/where/i.test(a.questions[0].text)) f.push("expected the location question next: " + a.questions[0].text);
@@ -358,7 +358,7 @@ async function main() {
   // A claim question is still open here (where did it happen?). An unrelated
   // question is answered in its own right, and the open question is offered
   // again rather than swallowed or dropped.
-  last = (await turn("T5b", "What is her dental coverage?", CHARMAINE, c, "aside while a claim question is pending", (a, f) => {
+  last = (await turn("T5b", "What is her dental coverage?", JOSEPHINE, c, "aside while a claim question is pending", (a, f) => {
     checkCommon(a, f, { claimContext: true });
     if (!/dental/i.test(a.summary)) f.push("the dental question was not answered: " + a.summary.slice(0, 160));
     // Missing from a complete read: "isn't stated"; from a partial read: "didn't find … read so far".
@@ -374,7 +374,7 @@ async function main() {
     const message = q.options?.includes(value) ? value : q.text.replace(/\?\s*$/, "") + ": " + value;
     if (asked.filter((t) => t === q.text).length >= 2) break; // already proven stuck; stop the loop
     asked.push(q.text); steps++;
-    last = await turn("T6." + steps, message, CHARMAINE, c, "claim -> injury fact-finding (" + (key || q.id) + ")", (a, f) => {
+    last = await turn("T6." + steps, message, JOSEPHINE, c, "claim -> injury fact-finding (" + (key || q.id) + ")", (a, f) => {
       checkCommon(a, f, { claimContext: true });
       if (a.questions.length === 1 && asked.includes(a.questions[0].text)) f.push("re-asked: " + a.questions[0].text);
       if (a.mode === "fact_finding" && a.claimItems.length) f.push("claim cards while still fact-finding");
@@ -382,20 +382,20 @@ async function main() {
   }
   if (last?.questions.length) results.push({ turn: "T6.end", message: "(interview did not finish)", branch: "fact-finding", ok: false, failures: ["still asking after " + steps + " answers: " + last.questions[0].text], visible: "" });
   // 7 how much
-  await turn("T7", "How much can she claim?", CHARMAINE, c, "claim -> catalogue assessment (preliminary)", (a, f) => {
+  await turn("T7", "How much can she claim?", JOSEPHINE, c, "claim -> catalogue assessment (preliminary)", (a, f) => {
     checkCommon(a, f, { claimContext: true });
     const titles = a.claimItems.map((i) => i.title).join(" | ");
     if (!/Fracture benefit/i.test(titles)) f.push("fracture benefit missing from assessment: " + titles);
     if (/Loss of one (?:arm|hand)/i.test(titles)) f.push("permanent-loss row offered for a broken arm: " + titles);
     if (/Surgical benefit/i.test(titles)) f.push("surgical benefit offered after 'No' to 'Was surgery performed?'");
-    if (/Voyager|SteadySave/i.test(titles)) f.push("Marcus's plans in Charmaine's claim");
+    if (/Voyager|SteadySave/i.test(titles)) f.push("Marcus's plans in Josephine's claim");
     if (!cites(a, "accident", 2)) f.push("does not cite the fracture wording page 2");
     if (a.questions.length > 1) f.push("more than one question");
     if (a.claimItems.length && a.assessmentKind !== "preliminary") f.push("assessmentKind " + a.assessmentKind + ", expected preliminary");
     if (a.nextSteps.some((x) => /:\s*\.?$/.test(x.trim()))) f.push("empty next step: " + a.nextSteps.find((x) => /:\s*\.?$/.test(x.trim())));
   });
   // 8 information absent from the documents
-  const absent = (label: string, message: string, subject: RegExp) => turn(label, message, CHARMAINE, c, "policy_question (reading path, absent info)", (a, f) => {
+  const absent = (label: string, message: string, subject: RegExp) => turn(label, message, JOSEPHINE, c, "policy_question (reading path, absent info)", (a, f) => {
     checkCommon(a, f);
     const text = [a.summary, ...a.details].join(" ");
     if (!/(?:not|n['’]t)\s+(?:find|found|stated|state|shown|printed|say|include|verify|mention)|no (?:\w+ )?(?:mention|information|clause|wording)|isn['’]t in|not in (?:the|your)/i.test(text))
@@ -412,7 +412,7 @@ async function main() {
     checkCommon(a, f);
     const text = visibleText(a);
     if (!cites(a, "travel", 1)) f.push("does not cite Voyager Travel Plan wording page 1");
-    if (/SafeCare|Guardian|Charmaine/i.test(text)) f.push("Charmaine's data in Marcus's answer");
+    if (/SafeCare|Guardian|Josephine/i.test(text)) f.push("Josephine's data in Marcus's answer");
     if (a.mode !== "answer") f.push("a coverage question was handled as a claim (mode " + a.mode + ")");
     if (a.nextSteps.some((x) => /:\s*\.?$/.test(x.trim()))) f.push("empty next step");
     const sums = text.match(/(?:S\$|US\$)\s?[\d,]+/g) ?? [];
@@ -472,7 +472,7 @@ async function main() {
   // into a follow-up. These variants reach the policy-question path directly,
   // separating what the ANSWER path does from what the stand-in classifier did.
   const v: { id?: string; rev?: number } = {};
-  await turn("T2b", "What is the hospital coverage in her SafeCare plan?", CHARMAINE, v, "policy_question (reading path, control phrasing)", (a, f) => {
+  await turn("T2b", "What is the hospital coverage in her SafeCare plan?", JOSEPHINE, v, "policy_question (reading path, control phrasing)", (a, f) => {
     checkCommon(a, f);
     if (!cites(a, "hospital", 3)) f.push("does not cite SafeCare Hospital Plan wording page 3");
     if (/If that happened|This is a what-if/i.test(a.summary + a.details.join(" "))) f.push("coverage question answered as a hypothetical event (what-if framing)");
@@ -480,7 +480,7 @@ async function main() {
     if (/Guardian|fracture/i.test(a.details.join(" "))) f.push("hospital answer quotes the accident policy");
   });
   const v3: { id?: string; rev?: number } = {};
-  await turn("T3b", "What is the fracture benefit in her Guardian accident policy?", CHARMAINE, v3, "policy_question (reading path, control phrasing)", (a, f) => {
+  await turn("T3b", "What is the fracture benefit in her Guardian accident policy?", JOSEPHINE, v3, "policy_question (reading path, control phrasing)", (a, f) => {
     checkCommon(a, f);
     if (!cites(a, "accident", 2)) f.push("does not cite Guardian Personal Accident wording page 2");
     if (/loss of one (?:arm|hand)/i.test(visibleText(a))) f.push("fracture question surfaced the permanent-loss schedule");
@@ -491,7 +491,7 @@ async function main() {
     checkCommon(a, f);
     if (!cites(a, "travel", 1)) f.push("does not cite Voyager Travel Plan wording page 1");
     if (/If that happened|This is a what-if/i.test(a.summary + a.details.join(" "))) f.push("coverage question answered as a hypothetical event (what-if framing)");
-    if (/SafeCare|Guardian|Charmaine/i.test(visibleText(a))) f.push("Charmaine's data in Marcus's answer");
+    if (/SafeCare|Guardian|Josephine/i.test(visibleText(a))) f.push("Josephine's data in Marcus's answer");
   });
   // 10 delete the travel policy (both documents, the real deletion route) and ask again
   // The deletion coordinator (lib/lifecycle/coordinator.ts) mixes a held
@@ -533,25 +533,25 @@ async function main() {
   {
     const f: string[] = [];
     const jobId = uuid(990001);
-    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status) VALUES($1,$2,$3,$4,'{}'::jsonb,'running')", [jobId, ACCOUNT, CHARMAINE, c.id]);
+    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status) VALUES($1,$2,$3,$4,'{}'::jsonb,'running')", [jobId, ACCOUNT, JOSEPHINE, c.id]);
     await db.query("INSERT INTO background_jobs(job_type,idempotency_key,account_id,payload,status,attempt_count,max_attempts) VALUES('chat_analysis',$1,$2,'{}'::jsonb,'dead_letter',3,3)", [jobId, ACCOUNT]).catch((e) => f.push("seed bg job: " + e.message));
     const healed = await getChatJob(ACCOUNT, jobId);
     if (healed?.status !== "failed") f.push("dead-lettered chat job still reads as " + healed?.status);
     for (const [label, re] of LEAKS) if (re.test(healed?.error ?? "")) f.push("heal message leaks " + label);
     // Orphan: the chat row exists but no background job was ever enqueued.
     const orphan = uuid(990002);
-    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status,updated_at) VALUES($1,$2,$3,$4,'{}'::jsonb,'queued',now()-interval '2 hours')", [orphan, ACCOUNT, CHARMAINE, c.id]);
+    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status,updated_at) VALUES($1,$2,$3,$4,'{}'::jsonb,'queued',now()-interval '2 hours')", [orphan, ACCOUNT, JOSEPHINE, c.id]);
     const o = await getChatJob(ACCOUNT, orphan);
     if (o?.status === "queued" || o?.status === "running") f.push("orphan chat job with no background job and 2h old still reads '" + o.status + "' (client spinner never ends)");
     // A slow turn whose background job is still processing is never cut off.
     const live = uuid(990003);
-    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status,updated_at) VALUES($1,$2,$3,$4,'{}'::jsonb,'running',now()-interval '20 minutes')", [live, ACCOUNT, CHARMAINE, c.id]);
+    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status,updated_at) VALUES($1,$2,$3,$4,'{}'::jsonb,'running',now()-interval '20 minutes')", [live, ACCOUNT, JOSEPHINE, c.id]);
     await db.query("INSERT INTO background_jobs(job_type,idempotency_key,account_id,payload,status,attempt_count,max_attempts) VALUES('chat_analysis',$1,$2,'{}'::jsonb,'processing',1,3)", [live, ACCOUNT]).catch((e) => f.push("seed live bg job: " + e.message));
     const l = await getChatJob(ACCOUNT, live);
     if (l?.status !== "running") f.push("a chat job whose background job is still processing was healed to " + l?.status);
     // A fresh queued row (just enqueued) is never healed either.
     const fresh = uuid(990004);
-    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status) VALUES($1,$2,$3,$4,'{}'::jsonb,'queued')", [fresh, ACCOUNT, CHARMAINE, c.id]);
+    await db.query("INSERT INTO chat_analysis_jobs(id,account_id,family_member_id,conversation_id,request_json,status) VALUES($1,$2,$3,$4,'{}'::jsonb,'queued')", [fresh, ACCOUNT, JOSEPHINE, c.id]);
     if ((await getChatJob(ACCOUNT, fresh))?.status !== "queued") f.push("a just-enqueued chat job was healed");
     results.push({ turn: "JOBS", message: "(dead-letter + orphan heal)", branch: "lib/chat/jobs.ts getChatJob", ok: !f.length, failures: f, visible: healed?.error ?? "" });
     console.log("\n=== JOBS " + (f.length ? "FAIL" : "PASS") + " heal: " + healed?.status + " / " + (healed?.error ?? "")); for (const x of f) console.log("  ✗ " + x);

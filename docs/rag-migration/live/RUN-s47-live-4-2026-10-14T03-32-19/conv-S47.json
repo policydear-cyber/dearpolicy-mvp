@@ -5,10 +5,10 @@
   "turns": [
     {
       "turn": 1,
-      "user": "Desmond broke his leg.",
+      "user": "Raymond broke his leg.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nHow did Desmond break his leg?",
+      "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nHow did Raymond break his leg?",
       "timings": {
         "acceptedMs": 389,
         "firstAssistantPersistedMs": 18422,
@@ -643,7 +643,7 @@
       "user": "He fell down the stairs.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+      "visible": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
       "timings": {
         "acceptedMs": 11,
         "firstAssistantPersistedMs": 16338,
@@ -1375,7 +1375,7 @@
       "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+      "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
       "timings": {
         "acceptedMs": 11,
         "firstAssistantPersistedMs": 11518,
@@ -1811,7 +1811,7 @@
       "user": "Transverse fracture.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+      "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
       "timings": {
         "acceptedMs": 12,
         "firstAssistantPersistedMs": 4034,
@@ -2048,7 +2048,7 @@
       "user": "The tibia. It was a closed fracture.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.\nIf the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+      "visible": "You told me, “The tibia. It was a closed fracture.”\nRaymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.\nIf the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
       "timings": {
         "acceptedMs": 10,
         "firstAssistantPersistedMs": 11054,
@@ -2483,7 +2483,7 @@
       "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
+      "visible": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
       "timings": {
         "acceptedMs": 14,
         "firstAssistantPersistedMs": 16437,
@@ -3067,7 +3067,7 @@
               "turn": 1,
               "basis": "stated",
               "value": "broke his leg",
-              "words": "Desmond broke his leg.",
+              "words": "Raymond broke his leg.",
               "source": "user_reported"
             },
             "fracture_type": {
@@ -3134,7 +3134,7 @@
                 "admission_datetime",
                 "discharge_datetime"
               ],
-              "sentence": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
+              "sentence": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
               "evidenceIds": [
                 "e15",
                 "e5"
@@ -3207,7 +3207,7 @@
             "modelId": "openai:gpt-6-luna",
             "outcome": "ask_user",
             "composed": [
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
             ],
             "latencyMs": 17920,
             "modelKind": "hosted",
@@ -3215,7 +3215,7 @@
               {
                 "ok": true,
                 "args": {
-                  "mention": "Desmond"
+                  "mention": "Raymond"
                 },
                 "name": "resolve_person",
                 "summary": "{\"status\":\"ok\"}",
@@ -3228,7 +3228,7 @@
                     {
                       "key": "injury",
                       "value": "broke his leg",
-                      "words": "Desmond broke his leg."
+                      "words": "Raymond broke his leg."
                     }
                   ],
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -3323,10 +3323,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "how_it_happened",
-                  "question": "How did Desmond break his leg?",
+                  "question": "How did Raymond break his leg?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "value_ids": [
                         "v1"
@@ -3350,7 +3350,7 @@
                 "evidenceIds": []
               }
             ],
-            "userMessage": "Desmond broke his leg.",
+            "userMessage": "Raymond broke his leg.",
             "evidenceChosen": [
               "e3",
               "e4",
@@ -3429,14 +3429,14 @@
             "dropped": [
               {
                 "reason": "S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)",
-                "sentence": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
+                "sentence": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
               }
             ],
             "modelId": "openai:gpt-6-luna",
             "outcome": "ask_user",
             "composed": [
-              "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+              "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
             ],
             "latencyMs": 15242,
             "modelKind": "hosted",
@@ -3495,10 +3495,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                      "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3507,7 +3507,7 @@
                       ]
                     },
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3522,7 +3522,7 @@
                   ]
                 },
                 "name": "ask_user",
-                "error": "not shown before the question: \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+                "error": "not shown before the question: \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
                 "evidenceIds": []
               },
               {
@@ -3530,10 +3530,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
+                      "text": "Raymond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3542,7 +3542,7 @@
                       ]
                     },
                     {
-                      "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3557,7 +3557,7 @@
                   ]
                 },
                 "name": "ask_user",
-                "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+                "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
                 "evidenceIds": []
               },
               {
@@ -3568,7 +3568,7 @@
                       "text": "You told me, “He fell down the stairs.”"
                     },
                     {
-                      "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3576,7 +3576,7 @@
                       ]
                     },
                     {
-                      "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                      "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3591,7 +3591,7 @@
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 },
                 "name": "final_answer",
-                "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+                "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
                 "evidenceIds": []
               },
               {
@@ -3599,10 +3599,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3610,7 +3610,7 @@
                       ]
                     },
                     {
-                      "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                      "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3686,8 +3686,8 @@
             "modelId": "openai:gpt-6-luna",
             "outcome": "ask_user",
             "composed": [
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
-              "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods."
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+              "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods."
             ],
             "latencyMs": 10433,
             "modelKind": "hosted",
@@ -3717,10 +3717,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "value_ids": [
                         "v1"
@@ -3779,10 +3779,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "value_ids": [
                         "v1"
@@ -3795,7 +3795,7 @@
                       ]
                     },
                     {
-                      "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+                      "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
                       "benefit": "Accident Hospital Income",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3854,7 +3854,7 @@
             "modelId": "openai:gpt-6-luna",
             "outcome": "ask_user",
             "composed": [
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
             ],
             "latencyMs": 3427,
             "modelKind": "hosted",
@@ -3879,10 +3879,10 @@
                 "args": {
                   "kind": "fact",
                   "fact_key": "fractured_bone",
-                  "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                  "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                       "benefit": "Fracture benefits",
                       "value_ids": [
                         "v1"
@@ -3961,9 +3961,9 @@
             "outcome": "final_answer",
             "composed": [
               "You told me, “The tibia. It was a closed fracture.”",
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
-              "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
-              "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined."
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+              "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
+              "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined."
             ],
             "latencyMs": 9951,
             "modelKind": "hosted",
@@ -4041,7 +4041,7 @@
                       "subject_id": "7c000000-0000-4000-8000-000000000001"
                     },
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
                       "benefit": "Fracture of lower leg (tibia or fibula)",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -4051,13 +4051,13 @@
                       ]
                     },
                     {
-                      "text": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
+                      "text": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
                       "benefit": "Fracture of lower leg (tibia or fibula)",
                       "result_id": "k7c2fc04d5c",
                       "subject_id": "7c000000-0000-4000-8000-000000000001"
                     },
                     {
-                      "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+                      "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
                       "benefit": "Accident Hospital Income",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -4140,7 +4140,7 @@
             "outcome": "final_answer",
             "composed": [
               "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”",
-              "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
+              "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
             ],
             "latencyMs": 15602,
             "modelKind": "hosted",
@@ -4252,7 +4252,7 @@
                       "text": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”"
                     },
                     {
-                      "text": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
+                      "text": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
                       "benefit": "Accident Hospital Income",
                       "result_id": "k570004c1da",
                       "evidence_ids": [
@@ -4302,7 +4302,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4341,7 +4341,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4351,13 +4351,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4394,7 +4394,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4433,7 +4433,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4443,13 +4443,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4465,7 +4465,7 @@
               ],
               "columnBasis": {
                 "basis": "document",
-                "detail": "the document prints Desmond Lim Wei Jie's own row (“Lim Wei Jie, Desmond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
+                "detail": "the document prints Raymond Lim Wei Jie's own row (“Lim Wei Jie, Raymond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
                 "evidence": {
                   "page": {
                     "end": 1,
@@ -4482,7 +4482,7 @@
                         },
                         {
                           "end": 577,
-                          "text": "Lim Wei Jie, Desmond",
+                          "text": "Lim Wei Jie, Raymond",
                           "start": 557,
                           "header": ""
                         },
@@ -4521,7 +4521,7 @@
                     },
                     "rowPerson": {
                       "end": 577,
-                      "text": "Lim Wei Jie, Desmond",
+                      "text": "Lim Wei Jie, Raymond",
                       "start": 557,
                       "memberId": "7c000000-0000-4000-8000-000000000001"
                     },
@@ -4531,13 +4531,13 @@
                   "context": null,
                   "passage": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
                   "support": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
@@ -4873,28 +4873,28 @@
         },
         "history": [
           {
-            "user": "Desmond broke his leg.",
-            "assistant": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. How did Desmond break his leg?"
+            "user": "Raymond broke his leg.",
+            "assistant": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. How did Raymond break his leg?"
           },
           {
             "user": "He fell down the stairs.",
-            "assistant": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+            "assistant": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
           },
           {
             "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
-            "assistant": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods. Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+            "assistant": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods. Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
           },
           {
             "user": "Transverse fracture.",
-            "assistant": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+            "assistant": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
           },
           {
             "user": "The tibia. It was a closed fracture.",
-            "assistant": "You told me, “The tibia. It was a closed fracture.” Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation. If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”). Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined."
+            "assistant": "You told me, “The tibia. It was a closed fracture.” Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation. If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”). Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined."
           },
           {
             "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
-            "assistant": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.” Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
+            "assistant": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.” Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
           }
         ],
         "pending": null,
@@ -4939,13 +4939,13 @@
             "context": null,
             "passage": {
               "end": 424,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 354,
               "onPage": 1
             },
             "support": {
               "end": 424,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 354,
               "onPage": 1
             },
@@ -5137,7 +5137,7 @@
                   },
                   {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "header": ""
                   },
@@ -5176,7 +5176,7 @@
               },
               "rowPerson": {
                 "end": 577,
-                "text": "Lim Wei Jie, Desmond",
+                "text": "Lim Wei Jie, Raymond",
                 "start": 557,
                 "memberId": "7c000000-0000-4000-8000-000000000001"
               },
@@ -5186,13 +5186,13 @@
             "context": null,
             "passage": {
               "end": 613,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "start": 543,
               "onPage": 1
             },
             "support": {
               "end": 613,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "start": 543,
               "onPage": 1
             },
@@ -5211,7 +5211,7 @@
             "context": null,
             "passage": {
               "end": 684,
-              "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+              "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
               "start": 425,
               "onPage": 1
             },
@@ -5236,7 +5236,7 @@
             "context": null,
             "passage": {
               "end": 424,
-              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 0,
               "onPage": 1
             },
@@ -5437,7 +5437,7 @@
         },
         "established": [
           {
-            "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+            "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
             "turn": 3,
             "benefit": "Accident Hospital Income",
             "valueIds": [],
@@ -5447,7 +5447,7 @@
             ]
           },
           {
-            "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
             "turn": 4,
             "benefit": "Fracture benefits",
             "valueIds": [
@@ -5461,7 +5461,7 @@
             ]
           },
           {
-            "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+            "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
             "turn": 5,
             "benefit": "Fracture of lower leg (tibia or fibula)",
             "valueIds": [],
@@ -5473,7 +5473,7 @@
             ]
           },
           {
-            "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+            "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
             "turn": 5,
             "benefit": "Accident Hospital Income",
             "valueIds": [],
@@ -5493,11 +5493,11 @@
     "turns": [
       {
         "index": 0,
-        "user": "Desmond broke his leg.",
+        "user": "Raymond broke his leg.",
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+          "summary": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
           "citations": [
             {
               "chunkId": "rag2:e3",
@@ -5521,7 +5521,7 @@
             },
             {
               "chunkId": "rag2:e9",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -5555,7 +5555,7 @@
             {
               "id": "rag_fact_how_it_happened",
               "why": "This changes what your policy pays under: “Death due to Accident 100%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2); “We will not pay for injury caused by illness or disease.” (page 2)",
-              "text": "How did Desmond break his leg?",
+              "text": "How did Raymond break his leg?",
               "type": "text"
             }
           ],
@@ -5575,12 +5575,12 @@
               "layout": "person_row",
               "benefit": "Group Personal Accident",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             }
@@ -5591,10 +5591,10 @@
           "potentialPayoutTotals": [],
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
-        "content": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
-        "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nHow did Desmond break his leg?\nThis changes what your policy pays under: “Death due to Accident 100%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2); “We will not pay for injury caused by illness or disease.” (page 2)",
+        "content": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+        "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nHow did Raymond break his leg?\nThis changes what your policy pays under: “Death due to Accident 100%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2); “We will not pay for injury caused by illness or disease.” (page 2)",
         "questions": [
-          "How did Desmond break his leg?"
+          "How did Raymond break his leg?"
         ],
         "userAt": "2026-10-14T03:32:40.002Z",
         "assistantAt": "2026-10-14T03:32:40.002Z",
@@ -5661,7 +5661,7 @@
           "modelId": "openai:gpt-6-luna",
           "outcome": "ask_user",
           "composed": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
           ],
           "latencyMs": 17920,
           "modelKind": "hosted",
@@ -5669,7 +5669,7 @@
             {
               "ok": true,
               "args": {
-                "mention": "Desmond"
+                "mention": "Raymond"
               },
               "name": "resolve_person",
               "summary": "{\"status\":\"ok\"}",
@@ -5682,7 +5682,7 @@
                   {
                     "key": "injury",
                     "value": "broke his leg",
-                    "words": "Desmond broke his leg."
+                    "words": "Raymond broke his leg."
                   }
                 ],
                 "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -5777,10 +5777,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "how_it_happened",
-                "question": "How did Desmond break his leg?",
+                "question": "How did Raymond break his leg?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "value_ids": [
                       "v1"
@@ -5804,7 +5804,7 @@
               "evidenceIds": []
             }
           ],
-          "userMessage": "Desmond broke his leg.",
+          "userMessage": "Raymond broke his leg.",
           "evidenceChosen": [
             "e3",
             "e4",
@@ -5820,7 +5820,7 @@
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+          "summary": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
           "citations": [
             {
               "chunkId": "rag2:e3",
@@ -5844,7 +5844,7 @@
             },
             {
               "chunkId": "rag2:e9",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -5858,7 +5858,7 @@
             {
               "id": "rag_fact_fractured_bone",
               "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
-              "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "type": "text"
             }
           ],
@@ -5878,12 +5878,12 @@
               "layout": "person_row",
               "benefit": "Group Personal Accident",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             }
@@ -5894,10 +5894,10 @@
           "potentialPayoutTotals": [],
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
-        "content": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
-        "visible": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
+        "content": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+        "visible": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
         "questions": [
-          "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+          "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
         ],
         "userAt": "2026-10-14T03:32:56.462Z",
         "assistantAt": "2026-10-14T03:32:56.462Z",
@@ -5971,14 +5971,14 @@
           "dropped": [
             {
               "reason": "S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)",
-              "sentence": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
+              "sentence": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
             }
           ],
           "modelId": "openai:gpt-6-luna",
           "outcome": "ask_user",
           "composed": [
-            "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+            "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
           ],
           "latencyMs": 15242,
           "modelKind": "hosted",
@@ -6037,10 +6037,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                    "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6049,7 +6049,7 @@
                     ]
                   },
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6064,7 +6064,7 @@
                 ]
               },
               "name": "ask_user",
-              "error": "not shown before the question: \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+              "error": "not shown before the question: \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
               "evidenceIds": []
             },
             {
@@ -6072,10 +6072,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
+                    "text": "Raymond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6084,7 +6084,7 @@
                     ]
                   },
                   {
-                    "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6099,7 +6099,7 @@
                 ]
               },
               "name": "ask_user",
-              "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+              "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
               "evidenceIds": []
             },
             {
@@ -6110,7 +6110,7 @@
                     "text": "You told me, “He fell down the stairs.”"
                   },
                   {
-                    "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6118,7 +6118,7 @@
                     ]
                   },
                   {
-                    "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                    "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6133,7 +6133,7 @@
                 "subject_id": "7c000000-0000-4000-8000-000000000001"
               },
               "name": "final_answer",
-              "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+              "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
               "evidenceIds": []
             },
             {
@@ -6141,10 +6141,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6152,7 +6152,7 @@
                     ]
                   },
                   {
-                    "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                    "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6188,7 +6188,7 @@
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+          "summary": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
           "citations": [
             {
               "chunkId": "rag2:e3",
@@ -6212,7 +6212,7 @@
             },
             {
               "chunkId": "rag2:e9",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -6236,7 +6236,7 @@
             {
               "id": "rag_fact_fractured_bone",
               "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
-              "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "type": "text"
             }
           ],
@@ -6256,12 +6256,12 @@
               "layout": "person_row",
               "benefit": "Group Personal Accident",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             },
@@ -6273,7 +6273,7 @@
               "passage": "Section 2 - Benefits\nAccident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accident, up to 90 days per Accident.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nThe Sum Insured is the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000103",
-              "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+              "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
               "pageStart": 2,
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-pa-wording"
@@ -6285,10 +6285,10 @@
           "potentialPayoutTotals": [],
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
-        "content": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
-        "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
+        "content": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
+        "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
         "questions": [
-          "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+          "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
         ],
         "userAt": "2026-10-14T03:33:08.097Z",
         "assistantAt": "2026-10-14T03:33:08.097Z",
@@ -6339,8 +6339,8 @@
           "modelId": "openai:gpt-6-luna",
           "outcome": "ask_user",
           "composed": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
-            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods."
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods."
           ],
           "latencyMs": 10433,
           "modelKind": "hosted",
@@ -6370,10 +6370,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "value_ids": [
                       "v1"
@@ -6432,10 +6432,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "value_ids": [
                       "v1"
@@ -6448,7 +6448,7 @@
                     ]
                   },
                   {
-                    "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+                    "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
                     "benefit": "Accident Hospital Income",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6483,7 +6483,7 @@
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+          "summary": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
           "citations": [
             {
               "chunkId": "rag2:e3",
@@ -6507,7 +6507,7 @@
             },
             {
               "chunkId": "rag2:e9",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -6521,7 +6521,7 @@
             {
               "id": "rag_fact_fractured_bone",
               "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1)",
-              "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "type": "text"
             }
           ],
@@ -6541,12 +6541,12 @@
               "layout": "person_row",
               "benefit": "Group Personal Accident",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             }
@@ -6557,10 +6557,10 @@
           "potentialPayoutTotals": [],
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
-        "content": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
-        "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1)",
+        "content": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+        "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.\nWhich bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1)",
         "questions": [
-          "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+          "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
         ],
         "userAt": "2026-10-14T03:33:12.350Z",
         "assistantAt": "2026-10-14T03:33:12.350Z",
@@ -6595,7 +6595,7 @@
           "modelId": "openai:gpt-6-luna",
           "outcome": "ask_user",
           "composed": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray."
           ],
           "latencyMs": 3427,
           "modelKind": "hosted",
@@ -6620,10 +6620,10 @@
               "args": {
                 "kind": "fact",
                 "fact_key": "fractured_bone",
-                "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+                "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                     "benefit": "Fracture benefits",
                     "value_ids": [
                       "v1"
@@ -6661,9 +6661,9 @@
         "answer": {
           "mode": "answer",
           "details": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
-            "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
-            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined."
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+            "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
+            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined."
           ],
           "summary": "You told me, “The tibia. It was a closed fracture.”",
           "citations": [
@@ -6689,7 +6689,7 @@
             },
             {
               "chunkId": "rag2:e9",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -6763,10 +6763,10 @@
                     "layout": "person_row",
                     "benefit": "Group Personal Accident",
                     "pageEnd": 1,
-                    "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "policyId": "7c000000-0000-4000-8000-000000000101",
                     "pageStart": 1,
-                    "rowPerson": "Lim Wei Jie, Desmond",
+                    "rowPerson": "Lim Wei Jie, Raymond",
                     "subjectId": "7c000000-0000-4000-8000-000000000001",
                     "documentHash": "sha256:scenario-cert"
                   },
@@ -6824,7 +6824,7 @@
                 "source": "default",
                 "precision": 2
               },
-              "sentence": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
+              "sentence": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "assumption": "The tibia. It was a closed fracture.",
               "calculator": "lump_sum",
@@ -6834,7 +6834,7 @@
                   "kind": "definition",
                   "text": "closed tibia fracture confirmed by X-ray must meet Meridian Public Service Group Personal Accident - Policy Wording’s own definition, confirmed by a reviewed medical decision.",
                   "basis": "none",
-                  "needs": "a reviewed decision that Desmond’s diagnosis meets Meridian Public Service Group Personal Accident - Policy Wording’s definition of closed tibia fracture confirmed by X-ray (the insurer’s medical assessment)",
+                  "needs": "a reviewed decision that Raymond’s diagnosis meets Meridian Public Service Group Personal Accident - Policy Wording’s definition of closed tibia fracture confirmed by X-ray (the insurer’s medical assessment)",
                   "status": "unresolved"
                 },
                 {
@@ -6852,7 +6852,7 @@
                 }
               ],
               "documentHash": "sha256:scenario-pa-wording",
-              "unresolvedText": "I worked out Desmond’s fracture of lower leg (tibia or fibula) under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
+              "unresolvedText": "I worked out Raymond’s fracture of lower leg (tibia or fibula) under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
               "evidenceRequirements": [
                 "the specialist’s diagnosis report",
                 "the insurer’s claim form and medical assessment"
@@ -6871,12 +6871,12 @@
               "layout": "person_row",
               "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             },
@@ -6888,7 +6888,7 @@
               "passage": "Section 2 - Benefits\nAccident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accident, up to 90 days per Accident.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nThe Sum Insured is the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000103",
-              "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+              "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
               "pageStart": 2,
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-pa-wording"
@@ -6901,7 +6901,7 @@
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
         "content": "You told me, “The tibia. It was a closed fracture.”",
-        "visible": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.\nIf the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.\nThe fracture illustration remains subject to the insurer’s medical assessment and claim review.",
+        "visible": "You told me, “The tibia. It was a closed fracture.”\nRaymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.\nIf the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.\nThe fracture illustration remains subject to the insurer’s medical assessment and claim review.",
         "questions": [],
         "userAt": "2026-10-14T03:33:23.544Z",
         "assistantAt": "2026-10-14T03:33:23.544Z",
@@ -6953,9 +6953,9 @@
           "outcome": "final_answer",
           "composed": [
             "You told me, “The tibia. It was a closed fracture.”",
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
-            "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
-            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined."
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+            "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
+            "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined."
           ],
           "latencyMs": 9951,
           "modelKind": "hosted",
@@ -7033,7 +7033,7 @@
                     "subject_id": "7c000000-0000-4000-8000-000000000001"
                   },
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
                     "benefit": "Fracture of lower leg (tibia or fibula)",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -7043,13 +7043,13 @@
                     ]
                   },
                   {
-                    "text": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
+                    "text": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
                     "benefit": "Fracture of lower leg (tibia or fibula)",
                     "result_id": "k7c2fc04d5c",
                     "subject_id": "7c000000-0000-4000-8000-000000000001"
                   },
                   {
-                    "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+                    "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
                     "benefit": "Accident Hospital Income",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -7083,7 +7083,7 @@
         "answer": {
           "mode": "answer",
           "details": [
-            "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
+            "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
           ],
           "summary": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”",
           "citations": [
@@ -7218,7 +7218,7 @@
                 "source": "default",
                 "precision": 2
               },
-              "sentence": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
+              "sentence": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "unitTerms": {
                 "caps": [
@@ -7316,9 +7316,9 @@
                 }
               ],
               "documentHash": "sha256:scenario-pa-wording",
-              "unresolvedText": "I worked out Desmond’s accident hospital income under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
+              "unresolvedText": "I worked out Raymond’s accident hospital income under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
               "evidenceRequirements": [
-                "the hospital’s discharge summary or bill showing Desmond’s admission and discharge dates and times",
+                "the hospital’s discharge summary or bill showing Raymond’s admission and discharge dates and times",
                 "the Meridian Public Service Group Personal Accident - Policy Wording claim form"
               ]
             }
@@ -7335,7 +7335,7 @@
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
         "content": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”",
-        "visible": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.\nKeep the hospital discharge summary or bill showing the admission and discharge times for the claim.\nIndicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.",
+        "visible": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.\nKeep the hospital discharge summary or bill showing the admission and discharge times for the claim.\nIndicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.",
         "questions": [],
         "userAt": "2026-10-14T03:33:40.128Z",
         "assistantAt": "2026-10-14T03:33:40.128Z",
@@ -7395,7 +7395,7 @@
           "outcome": "final_answer",
           "composed": [
             "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”",
-            "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
+            "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident."
           ],
           "latencyMs": 15602,
           "modelKind": "hosted",
@@ -7507,7 +7507,7 @@
                     "text": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”"
                   },
                   {
-                    "text": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
+                    "text": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
                     "benefit": "Accident Hospital Income",
                     "result_id": "k570004c1da",
                     "evidence_ids": [
@@ -7582,7 +7582,7 @@
           "turn": 1,
           "basis": "stated",
           "value": "broke his leg",
-          "words": "Desmond broke his leg.",
+          "words": "Raymond broke his leg.",
           "source": "user_reported"
         },
         "fracture_type": {
@@ -7649,7 +7649,7 @@
             "admission_datetime",
             "discharge_datetime"
           ],
-          "sentence": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
+          "sentence": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
           "evidenceIds": [
             "e15",
             "e5"
@@ -7674,7 +7674,7 @@
           {
             "ok": true,
             "args": {
-              "mention": "Desmond"
+              "mention": "Raymond"
             },
             "name": "resolve_person",
             "summary": "{\"status\":\"ok\"}",
@@ -7687,7 +7687,7 @@
                 {
                   "key": "injury",
                   "value": "broke his leg",
-                  "words": "Desmond broke his leg."
+                  "words": "Raymond broke his leg."
                 }
               ],
               "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -7782,10 +7782,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "how_it_happened",
-              "question": "How did Desmond break his leg?",
+              "question": "How did Raymond break his leg?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "value_ids": [
                     "v1"
@@ -7887,10 +7887,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                  "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7899,7 +7899,7 @@
                   ]
                 },
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7914,7 +7914,7 @@
               ]
             },
             "name": "ask_user",
-            "error": "not shown before the question: \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+            "error": "not shown before the question: \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
             "evidenceIds": []
           },
           {
@@ -7922,10 +7922,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
+                  "text": "Raymond’s Fracture benefits schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; these benefits are payable only when the fracture is confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7934,7 +7934,7 @@
                   ]
                 },
                 {
-                  "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7949,7 +7949,7 @@
               ]
             },
             "name": "ask_user",
-            "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+            "error": "before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
             "evidenceIds": []
           },
           {
@@ -7960,7 +7960,7 @@
                   "text": "You told me, “He fell down the stairs.”"
                 },
                 {
-                  "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7968,7 +7968,7 @@
                   ]
                 },
                 {
-                  "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                  "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -7983,7 +7983,7 @@
               "subject_id": "7c000000-0000-4000-8000-000000000001"
             },
             "name": "final_answer",
-            "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
+            "error": "\"The schedule’s rows depend on which bone was fractured, which is not yet known.\" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause. Also: the save-time check would not show this sentence: \"Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.\" -- left out: S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit); state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out). Call final_answer again with the same sentences, rewriting only this one so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. \"previously X, and Y from <date>\"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.",
             "evidenceIds": []
           },
           {
@@ -7991,10 +7991,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8002,7 +8002,7 @@
                   ]
                 },
                 {
-                  "text": "Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
+                  "text": "Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8029,7 +8029,7 @@
         "dropped": [
           {
             "reason": "S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)",
-            "sentence": "Desmond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
+            "sentence": "Raymond’s Group Personal Accident certificate lists a sum assured of S$300,000 as of 1 July 2025."
           }
         ],
         "gate": [],
@@ -8073,10 +8073,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "value_ids": [
                     "v1"
@@ -8135,10 +8135,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "value_ids": [
                     "v1"
@@ -8151,7 +8151,7 @@
                   ]
                 },
                 {
-                  "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+                  "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
                   "benefit": "Accident Hospital Income",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8214,10 +8214,10 @@
             "args": {
               "kind": "fact",
               "fact_key": "fractured_bone",
-              "question": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+              "question": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
                   "benefit": "Fracture benefits",
                   "value_ids": [
                     "v1"
@@ -8336,7 +8336,7 @@
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 },
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
                   "benefit": "Fracture of lower leg (tibia or fibula)",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8346,13 +8346,13 @@
                   ]
                 },
                 {
-                  "text": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
+                  "text": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment.",
                   "benefit": "Fracture of lower leg (tibia or fibula)",
                   "result_id": "k7c2fc04d5c",
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 },
                 {
-                  "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+                  "text": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
                   "benefit": "Accident Hospital Income",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8501,7 +8501,7 @@
                   "text": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”"
                 },
                 {
-                  "text": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
+                  "text": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident.",
                   "benefit": "Accident Hospital Income",
                   "result_id": "k570004c1da",
                   "evidence_ids": [
@@ -8565,13 +8565,13 @@
         "context": null,
         "passage": {
           "end": 424,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 354,
           "onPage": 1
         },
         "support": {
           "end": 424,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 354,
           "onPage": 1
         },
@@ -8763,7 +8763,7 @@
               },
               {
                 "end": 577,
-                "text": "Lim Wei Jie, Desmond",
+                "text": "Lim Wei Jie, Raymond",
                 "start": 557,
                 "header": ""
               },
@@ -8802,7 +8802,7 @@
           },
           "rowPerson": {
             "end": 577,
-            "text": "Lim Wei Jie, Desmond",
+            "text": "Lim Wei Jie, Raymond",
             "start": 557,
             "memberId": "7c000000-0000-4000-8000-000000000001"
           },
@@ -8812,13 +8812,13 @@
         "context": null,
         "passage": {
           "end": 613,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
           "start": 543,
           "onPage": 1
         },
         "support": {
           "end": 613,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
           "start": 543,
           "onPage": 1
         },
@@ -8837,7 +8837,7 @@
         "context": null,
         "passage": {
           "end": 684,
-          "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+          "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
           "start": 425,
           "onPage": 1
         },
@@ -8862,7 +8862,7 @@
         "context": null,
         "passage": {
           "end": 424,
-          "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 0,
           "onPage": 1
         },
@@ -9082,7 +9082,7 @@
           },
           {
             "chunkId": "rag2:e9",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9119,12 +9119,12 @@
             "layout": "person_row",
             "benefit": "Group Personal Accident",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           }
@@ -9135,7 +9135,7 @@
           {
             "id": "rag_fact_how_it_happened",
             "why": "This changes what your policy pays under: “Death due to Accident 100%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2); “We will not pay for injury caused by illness or disease.” (page 2)",
-            "text": "How did Desmond break his leg?",
+            "text": "How did Raymond break his leg?",
             "type": "text"
           }
         ]
@@ -9166,7 +9166,7 @@
           },
           {
             "chunkId": "rag2:e9",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9183,12 +9183,12 @@
             "layout": "person_row",
             "benefit": "Group Personal Accident",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           }
@@ -9199,7 +9199,7 @@
           {
             "id": "rag_fact_fractured_bone",
             "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
-            "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+            "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
             "type": "text"
           }
         ]
@@ -9230,7 +9230,7 @@
           },
           {
             "chunkId": "rag2:e9",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9257,12 +9257,12 @@
             "layout": "person_row",
             "benefit": "Group Personal Accident",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           },
@@ -9274,7 +9274,7 @@
             "passage": "Section 2 - Benefits\nAccident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accident, up to 90 days per Accident.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nThe Sum Insured is the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000103",
-            "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.",
+            "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.",
             "pageStart": 2,
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-pa-wording"
@@ -9286,7 +9286,7 @@
           {
             "id": "rag_fact_fractured_bone",
             "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
-            "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+            "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
             "type": "text"
           }
         ]
@@ -9317,7 +9317,7 @@
           },
           {
             "chunkId": "rag2:e9",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9334,12 +9334,12 @@
             "layout": "person_row",
             "benefit": "Group Personal Accident",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           }
@@ -9350,7 +9350,7 @@
           {
             "id": "rag_fact_fractured_bone",
             "why": "This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1)",
-            "text": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
+            "text": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?",
             "type": "text"
           }
         ]
@@ -9381,7 +9381,7 @@
           },
           {
             "chunkId": "rag2:e9",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9408,12 +9408,12 @@
             "layout": "person_row",
             "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           },
@@ -9425,7 +9425,7 @@
             "passage": "Section 2 - Benefits\nAccident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accident, up to 90 days per Accident.\nAccident means a sudden, unforeseen and involuntary event caused by external, violent and visible means.\nThe Sum Insured is the amount shown for the Insured Person under Group Personal Accident in the Certificate of Group Insurance.",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000103",
-            "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.",
+            "sentence": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.",
             "pageStart": 2,
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-pa-wording"
@@ -9478,10 +9478,10 @@
                   "layout": "person_row",
                   "benefit": "Group Personal Accident",
                   "pageEnd": 1,
-                  "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "policyId": "7c000000-0000-4000-8000-000000000101",
                   "pageStart": 1,
-                  "rowPerson": "Lim Wei Jie, Desmond",
+                  "rowPerson": "Lim Wei Jie, Raymond",
                   "subjectId": "7c000000-0000-4000-8000-000000000001",
                   "documentHash": "sha256:scenario-cert"
                 },
@@ -9539,7 +9539,7 @@
               "source": "default",
               "precision": 2
             },
-            "sentence": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
+            "sentence": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "assumption": "The tibia. It was a closed fracture.",
             "calculator": "lump_sum",
@@ -9549,7 +9549,7 @@
                 "kind": "definition",
                 "text": "closed tibia fracture confirmed by X-ray must meet Meridian Public Service Group Personal Accident - Policy Wording’s own definition, confirmed by a reviewed medical decision.",
                 "basis": "none",
-                "needs": "a reviewed decision that Desmond’s diagnosis meets Meridian Public Service Group Personal Accident - Policy Wording’s definition of closed tibia fracture confirmed by X-ray (the insurer’s medical assessment)",
+                "needs": "a reviewed decision that Raymond’s diagnosis meets Meridian Public Service Group Personal Accident - Policy Wording’s definition of closed tibia fracture confirmed by X-ray (the insurer’s medical assessment)",
                 "status": "unresolved"
               },
               {
@@ -9567,7 +9567,7 @@
               }
             ],
             "documentHash": "sha256:scenario-pa-wording",
-            "unresolvedText": "I worked out Desmond’s fracture of lower leg (tibia or fibula) under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
+            "unresolvedText": "I worked out Raymond’s fracture of lower leg (tibia or fibula) under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
             "evidenceRequirements": [
               "the specialist’s diagnosis report",
               "the insurer’s claim form and medical assessment"
@@ -9705,7 +9705,7 @@
               "source": "default",
               "precision": 2
             },
-            "sentence": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
+            "sentence": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "unitTerms": {
               "caps": [
@@ -9803,9 +9803,9 @@
               }
             ],
             "documentHash": "sha256:scenario-pa-wording",
-            "unresolvedText": "I worked out Desmond’s accident hospital income under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
+            "unresolvedText": "I worked out Raymond’s accident hospital income under Meridian Public Service Group Personal Accident - Policy Wording, but I couldn’t confirm the figure against your documents.",
             "evidenceRequirements": [
-              "the hospital’s discharge summary or bill showing Desmond’s admission and discharge dates and times",
+              "the hospital’s discharge summary or bill showing Raymond’s admission and discharge dates and times",
               "the Meridian Public Service Group Personal Accident - Policy Wording claim form"
             ]
           }

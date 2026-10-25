@@ -24,7 +24,7 @@ const visible = (a: ChatAnswer) => [a.summary, ...a.details, ...(a.questions ?? 
 const results: { name: string; ok: boolean }[] = [];
 async function check(name: string, fn: () => Promise<void> | void) { try { await fn(); results.push({ name, ok: true }); console.log("PASS " + name); } catch (e) { results.push({ name, ok: false }); console.log("FAIL " + name + "\n     " + (e instanceof Error ? e.message : String(e)).split("\n").slice(0, 10).join("\n     ")); } }
 const docKey = (id: string) => HH.DOCS.find((d) => d.id === id)?.key;
-const D = HH.M.desmond.id, G = HH.M.grace.id;
+const D = HH.M.raymond.id, G = HH.M.grace.id;
 type Saved = { answer: ChatAnswer; state: any; trace: any };
 
 async function installScript(script: ScriptTurn[]) {
@@ -112,7 +112,7 @@ async function main() {
     const v1 = visible(r2.saved[0].answer);
     assert.match(v1, /S\$300,000(?![\d,]*\d)[^.]*1 July 2025/, v1); assert.ok(!/haven['’]t yet read/i.test(v1), v1);
     // V1.4: the figure is completed either by the one bounded lookup or -- when the model's sentence already states it
-    // -- bound directly to Desmond's own certificate row through the shared benefit view (no lookup needed).
+    // -- bound directly to Raymond's own certificate row through the shared benefit view (no lookup needed).
     const look = (r2.saved[0].trace.toolCalls as any[]).filter((x) => /grounded fallback/.test(String(x.args?.by ?? "")));
     const direct = ((r2.saved[0].answer as any).figureBindings ?? []).some((b: any) => b.value === 300000 && /personal accident/i.test(b.benefit) && b.subjectId === D);
     assert.ok((look.length >= 2 && look.length <= 4) || direct, JSON.stringify({ look: look.map((x) => x.name), bindings: ((r2.saved[0].answer as any).figureBindings ?? []).map((b: any) => [b.value, b.benefit, b.subjectId]) }));
@@ -131,8 +131,8 @@ async function main() {
       assert.ok(!/what you told me[^.]*assuming/i.test(v), "the assumption is presented as the household's words");
       const q = r3.saved[5].answer.questions?.[0]?.text ?? ""; assert.match(q, /already been paid/i); assert.ok(!/admission|discharge/i.test(q), q);
     });
-    await check("s47-live-3 turns 2-4: questions name Desmond (never \"your\"), ask one thing at a time, and \"Transverse fracture\" is explained and leads to the still-unanswered bone question", () => {
-      for (const i of [1, 2, 3]) { const q = r3.saved[i].answer.questions?.[0]?.text ?? ""; assert.match(q, /Desmond/, `turn ${i + 1}: ${q}`); assert.ok(!/\byour\b/i.test(q), `turn ${i + 1}: ${q}`); }
+    await check("s47-live-3 turns 2-4: questions name Raymond (never \"your\"), ask one thing at a time, and \"Transverse fracture\" is explained and leads to the still-unanswered bone question", () => {
+      for (const i of [1, 2, 3]) { const q = r3.saved[i].answer.questions?.[0]?.text ?? ""; assert.match(q, /Raymond/, `turn ${i + 1}: ${q}`); assert.ok(!/\byour\b/i.test(q), `turn ${i + 1}: ${q}`); }
       const q3 = r3.saved[2].answer.questions?.[0]?.text ?? ""; assert.ok(!/already been paid|and had/i.test(q3), q3); assert.match(q3, /admission and discharge/);
       const v4 = visible(r3.saved[3].answer); assert.match(v4, /transverse/i); assert.match(r3.saved[3].answer.questions?.[0]?.text ?? "", /Which bone/);
       assert.ok(r3.saved[3].state.ragLoop.claim.facts.fracture_pattern, "the detail was not recorded");
@@ -161,7 +161,7 @@ async function main() {
       assert.equal(at(q), null, `located: ${q}`);
   });
 
-  // Loop-level: a probe conversation selecting evidence by id for Desmond's calculation.
+  // Loop-level: a probe conversation selecting evidence by id for Raymond's calculation.
   const PA = HH.doc("PA_WORD").id;
   const call = (name: string, args: Record<string, unknown>): ScriptCall => ({ name, arguments: args });
   const hitIn = (v: ScriptView, re: RegExp, who = D) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok && (o.args.subject_id ?? null) === who) { const hs = (o.result.data.hits as any[]).filter((y) => y.evidence); const x = hs.find((y) => re.test(y.evidence?.excerpt ?? "")) ?? hs.find((y) => re.test(`${y.text ?? ""} ${y.evidence?.excerpt ?? ""}`)); if (x) return x.evidence.evidence_id as string; } return null; };
@@ -175,19 +175,19 @@ async function main() {
     call("search_passages", { query: "Accident Hospital Income fracture benefit", subject_id: G }),
     call("select_table_value", { policy_id: HH.doc("CERT").id, benefit: "Group Personal Accident", subject_id: D, want: "amount" }),
   ];
-  const howQ = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Desmond hurt himself?", because_evidence_ids: [hitIn(v, /Accident means/)].filter(Boolean) });
+  const howQ = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Raymond hurt himself?", because_evidence_ids: [hitIn(v, /Accident means/)].filter(Boolean) });
   let probeIds: Record<string, string | null> = {};
   const sumId = (v: ScriptView) => v.find("select_table_value")?.result?.data?.valueId;
   const PROBE: ScriptTurn[] = [
-    { user: "Desmond", steps: [
-      () => [call("resolve_person", { mention: "Desmond" })],
+    { user: "Raymond", steps: [
+      () => [call("resolve_person", { mention: "Raymond" })],
       () => lookups(),
       (v) => {
-        // Another person's retrieval: a passage the search for Grace returned that no search for Desmond did.
+        // Another person's retrieval: a passage the search for Grace returned that no search for Raymond did.
         const mine = new Set(v.turn.filter((o) => o.name === "search_passages" && o.ok && o.args.subject_id === D).flatMap((o) => (o.result.data.hits as any[]).map((x) => x.evidence?.evidence_id)));
         const g = v.turn.find((o) => o.name === "search_passages" && o.ok && o.args.subject_id === G);
         probeIds = { rate: hitIn(v, /Accident Hospital Income/), note: hitIn(v, /simple \(closed\)/), cert: anyHit(v, /CERTIFICATE OF GROUP INSURANCE/), grace: ((g?.result.data.hits as any[]) ?? []).map((x) => x.evidence?.evidence_id).find((id) => id && !mine.has(id)) ?? null };
-        const lump = (proportion: Record<string, unknown>) => call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: PA, benefit: "Fracture of lower leg (tibia or fibula)", condition: "closed tibia fracture", assumption_words: "Desmond", sum_insured_value_id: sumId(v), proportion });
+        const lump = (proportion: Record<string, unknown>) => call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: D, policy_id: PA, benefit: "Fracture of lower leg (tibia or fibula)", condition: "closed tibia fracture", assumption_words: "Raymond", sum_insured_value_id: sumId(v), proportion });
         return [
           hc({ rate_evidence_id: probeIds.rate }),                                           // the right record
           hc({ rate_evidence_id: probeIds.cert }),                                           // another document
@@ -202,11 +202,11 @@ async function main() {
     ] },
     { user: "stale", steps: [
       () => [hc({ rate_evidence_id: probeIds.rate })],                                       // the document has changed since it was read
-      () => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Desmond hurt himself?", because_evidence_ids: [probeIds.rate].filter(Boolean) as string[] })],
+      () => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "how_it_happened", question: "How did Raymond hurt himself?", because_evidence_ids: [probeIds.rate].filter(Boolean) as string[] })],
     ] },
   ];
   await installScript(PROBE);
-  const p1 = await h.send("Desmond had an accident.", {});
+  const p1 = await h.send("Raymond had an accident.", {});
   const s1 = await h.savedAnswer(p1.conversationId!);
   const calcs1 = (s1.state.ragLoop.turns.at(-1).toolCalls as any[]).filter((x) => x.name === "calculate");
   await check("CONTROL evidence ids: the right record gives the S$100 rate from the stored line on page 2; another document, another person's retrieval, an unknown id, a wrong page, a share for another case and a changed share are each refused", () => {
@@ -232,8 +232,8 @@ async function main() {
   // Conflicting counting rules in the wording: never an indicative estimate.
   await h.db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,9,$3)", [HH.ACCOUNT, PA, "Accident Hospital Income is payable for each night spent in hospital."]);
   try {
-    const CONFLICT: ScriptTurn[] = [{ user: "conflict", steps: [() => [call("resolve_person", { mention: "Desmond" })], () => lookups(), (v) => [hc({ rate_evidence_id: hitIn(v, /Accident Hospital Income:/) })], (v) => [howQ(v)]] }];
-    const [s] = await converse(h, CONFLICT, ["conflict: Desmond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026."], false);
+    const CONFLICT: ScriptTurn[] = [{ user: "conflict", steps: [() => [call("resolve_person", { mention: "Raymond" })], () => lookups(), (v) => [hc({ rate_evidence_id: hitIn(v, /Accident Hospital Income:/) })], (v) => [howQ(v)]] }];
+    const [s] = await converse(h, CONFLICT, ["conflict: Raymond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026."], false);
     const c = (s.trace.toolCalls as any[]).find((x) => x.name === "calculate");
     await check("CONTROL conflicting counting rules: a second Accident Hospital Income sentence counting each night (beside complete periods of 24 hours) gives no indicative estimate", () => {
       assert.ok(c, "no calculation"); assert.notEqual(JSON.parse(c.summary ?? "{}").kind, "indicative_estimate", c.summary);
@@ -242,15 +242,15 @@ async function main() {
   } finally { await h.db.query("DELETE FROM policy_pages WHERE policy_id=$1 AND page_number=9", [PA]); }
 
   // New facts while another question is pending (each calculation completes when ITS facts arrive).
-  const boneAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "bone_fractured", question: "Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?", because_evidence_ids: [hitIn(v, /Fracture of thigh bone|% of Sum Insured/), hitIn(v, /simple \(closed\)/)].filter(Boolean) });
-  const timesAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "admission_datetime", question: "What were Desmond's admission and discharge dates and times?", because_evidence_ids: [hitIn(v, /Accident Hospital Income/)].filter(Boolean) });
+  const boneAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "bone_fractured", question: "Which bone in Raymond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?", because_evidence_ids: [hitIn(v, /Fracture of thigh bone|% of Sum Insured/), hitIn(v, /simple \(closed\)/)].filter(Boolean) });
+  const timesAsk = (v: ScriptView) => call("ask_user", { kind: "fact", subject_id: D, fact_key: "admission_datetime", question: "What were Raymond's admission and discharge dates and times?", because_evidence_ids: [hitIn(v, /Accident Hospital Income/)].filter(Boolean) });
   const t1Steps = (ask: (v: ScriptView) => ScriptCall) => [
-    () => [call("resolve_person", { mention: "Desmond" })],
+    () => [call("resolve_person", { mention: "Raymond" })],
     () => [call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "fell down the stairs", words: "fell down the stairs" }, { key: "injury", value: "broke his leg", words: "broke his leg" }] }), ...lookups(), call("search_passages", { query: "Schedule of Compensation fracture of thigh bone lower leg kneecap % of Sum Insured", subject_id: D })],
     (v: ScriptView) => [call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: D, policy_id: PA, benefit: "Accident Hospital Income", rate_evidence_id: hitIn(v, /Accident Hospital Income/) })],
     (v: ScriptView) => [ask(v)],
   ];
-  const T1 = "Desmond fell down the stairs and broke his leg, and was warded in hospital.";
+  const T1 = "Raymond fell down the stairs and broke his leg, and was warded in hospital.";
   {
     const conv: ScriptTurn[] = [
       { user: "warded", steps: t1Steps(boneAsk) },

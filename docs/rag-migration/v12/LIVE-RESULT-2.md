@@ -16,26 +16,26 @@
 
 ## Visible transcript (exactly as shown)
 
-**USER:** Desmond broke his leg.
+**USER:** Raymond broke his leg.
 
 **APP:**
 
 > The fracture schedule lists 10% of the Sum Insured for a thigh-bone fracture, 6% for a lower-leg fracture, and 4% for a kneecap fracture; the fracture must be confirmed by X-ray, and a simple (closed) fracture pays 50% of the listed percentage while a compound (open) fracture pays the full percentage.
-> You told me “Desmond broke his leg.”
-> I haven't yet read Desmond's own sum insured, which the schedule's percentages apply to, so no amount can be shown yet.
+> You told me “Raymond broke his leg.”
+> I haven't yet read Raymond's own sum insured, which the schedule's percentages apply to, so no amount can be shown yet.
 
 **USER:** He fell down the stairs.
 
 **APP:**
 
-> Thanks, I’ve noted that Desmond fell down the stairs. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone fracture, 6% for a lower-leg fracture, and 4% for a kneecap fracture; fracture benefits are payable only for a fracture confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture.
+> Thanks, I’ve noted that Raymond fell down the stairs. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone fracture, 6% for a lower-leg fracture, and 4% for a kneecap fracture; fracture benefits are payable only for a fracture confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture.
 > Which bone was fractured: the thigh bone (femur), lower leg (tibia or fibula), or kneecap (patella)?
 
 **USER:** Yes, confirmed with an X-ray. He was also warded for two nights.
 
 **APP:**
 
-> Desmond’s Fracture benefits are payable only for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone fracture, 6% for a lower-leg fracture, and 4% for a kneecap fracture, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture. Desmond’s GROUP PERSONAL ACCIDENT Sum Assured is listed as S$300,000 as of 1 July 2025. Desmond’s Accident Hospital Income is S$100 for each complete period of 24 hours of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; the two nights alone do not establish the complete 24-hour periods.
+> Raymond’s Fracture benefits are payable only for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone fracture, 6% for a lower-leg fracture, and 4% for a kneecap fracture, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture. Raymond’s GROUP PERSONAL ACCIDENT Sum Assured is listed as S$300,000 as of 1 July 2025. Raymond’s Accident Hospital Income is S$100 for each complete period of 24 hours of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; the two nights alone do not establish the complete 24-hour periods.
 > Which bone was fractured: the thigh bone (femur), lower leg (tibia or fibula), or kneecap (patella)?
 
 **USER:** Transverse fracture.
@@ -51,7 +51,7 @@
 
 > You told me the tibia.
 > You told me it was a closed fracture.
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.
 > The policy lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and says fracture benefits require X-ray confirmation; for a simple (closed) fracture, 50% of the listed percentage applies.
 > If the insurer’s medical assessment confirms the reported tibia fracture meets the policy definition, the indicative illustration is S$9,000 for a simple (closed) fracture, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
 
@@ -60,8 +60,8 @@
 **APP:**
 
 > You told me “Admitted at 9pm on 3 October 2026” and “discharged at 11am on 5 October 2026.”
-> Desmond’s Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; based on the dates and times you gave, the indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident.
-> Desmond’s fracture benefit remains subject to the policy’s X-ray confirmation condition and the insurer accepting the event as an Accident.
+> Raymond’s Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; based on the dates and times you gave, the indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident.
+> Raymond’s fracture benefit remains subject to the policy’s X-ray confirmation condition and the insurer accepting the event as an Accident.
 
 ## Failed checks
 
@@ -77,7 +77,7 @@
   - The grounded fallback was not needed in this run. The replay of s47-live-1 exercises it.
 - **Turn 6:** an S$100 indicative estimate from the times, with its record saved. It never says S$200.
 - **Remaining material defect (the one failed check): turn 1.**
-  - The model listed Desmond's policies but read only the wording's percentages, not his certificate row. The grounded fallback then said "I haven't yet read Desmond's own sum insured …".
+  - The model listed Raymond's policies but read only the wording's percentages, not his certificate row. The grounded fallback then said "I haven't yet read Raymond's own sum insured …".
   - The certificate was available, so this is recorded as a **retrieval/tool-selection failure**, as pre-registered.
   - The turn also ends without a question. The amount appeared from turn 2 on.
 - **Minor:** turn 4's reply is only "I need one more detail first." plus the bone question. That is correct, but thin.

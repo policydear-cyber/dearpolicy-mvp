@@ -18,25 +18,25 @@
 
 ## Visible transcript (exactly as shown)
 
-**USER:** Desmond broke his leg.
+**USER:** Raymond broke his leg.
 
 **APP:**
 
-> I’m sorry Desmond has been hurt. The policy lists fracture benefits as a percentage of the Sum Insured, with different percentages for a thigh bone, lower leg, and kneecap; fracture benefits require X-ray confirmation, and the payable percentage also differs for simple (closed) versus compound (open) fractures.
-> How did Desmond break his leg?
+> I’m sorry Raymond has been hurt. The policy lists fracture benefits as a percentage of the Sum Insured, with different percentages for a thigh bone, lower leg, and kneecap; fracture benefits require X-ray confirmation, and the payable percentage also differs for simple (closed) versus compound (open) fractures.
+> How did Raymond break his leg?
 
 **USER:** He fell down the stairs.
 
 **APP:**
 
-> Thanks for letting me know. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit lists 10% of the Sum Insured for a thigh bone, 6% for a lower leg, and 4% for a kneecap; it is payable only for a fracture confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture.
+> Thanks for letting me know. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit lists 10% of the Sum Insured for a thigh bone, 6% for a lower leg, and 4% for a kneecap; it is payable only for a fracture confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture.
 > Which bone was fractured—his thigh bone (femur), lower leg (tibia or fibula), or kneecap (patella)?
 
 **USER:** Yes, confirmed with an X-ray. He was also warded for two nights.
 
 **APP:**
 
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The policy lists 10% of the Sum Insured for a fracture of the thigh bone (femur), 6% for the lower leg (tibia or fibula), and 4% for the kneecap (patella); fracture benefits are payable only when confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident.
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The policy lists 10% of the Sum Insured for a fracture of the thigh bone (femur), 6% for the lower leg (tibia or fibula), and 4% for the kneecap (patella); fracture benefits are payable only when confirmed by X-ray, with 50% of the listed percentage for a simple (closed) fracture and the full percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident.
 > Which bone was fractured—his thigh bone (femur), lower leg (tibia or fibula), or kneecap (patella)?
 
 **USER:** Transverse fracture.
@@ -50,17 +50,17 @@
 
 **APP:**
 
-> You told me the fracture was in Desmond’s tibia and was closed; you also said it was confirmed by X-ray.
+> You told me the fracture was in Raymond’s tibia and was closed; you also said it was confirmed by X-ray.
 > Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; two nights alone do not establish the number of complete 24-hour periods.
 > What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.
-> I haven’t stated the amount for Lim Wei Jie, Desmond in Meridian Public Service Group Scheme - Certificate (page 1), because I couldn’t confirm it against the document.
+> I haven’t stated the amount for Lim Wei Jie, Raymond in Meridian Public Service Group Scheme - Certificate (page 1), because I couldn’t confirm it against the document.
 
 **USER:** Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.
 
 **APP:**
 
-> You told me Desmond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.
-> Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Desmond’s indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident.
+> You told me Raymond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.
+> Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Raymond’s indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident.
 
 ## Failed checks
 
@@ -72,7 +72,7 @@
 
 | Requirement | Result |
 |---|---|
-| Desmond's Personal Accident amount (S$300,000), not Term Life, Grace's or another household's | **pass**: turns 2 and 3 |
+| Raymond's Personal Accident amount (S$300,000), not Term Life, Grace's or another household's | **pass**: turns 2 and 3 |
 | Dated attribution ("as of 1 July 2025"), never "current cover" | **pass** |
 | "Transverse" does not select a payout category | **pass**: noted and asked again for the bone; no "Other fracture", no correction |
 | Closed tibia: the policy's 6% and the 50% simple-fracture share | **FAIL (visible)**: the model's `calculate` produced the correct S$9,000 conditional illustration, but the household never saw it |
@@ -92,7 +92,7 @@ All of this is in turn 5's tool trace (`run.json` → `conversations[0].loaded.t
    - The result was correct: **S$9,000**, `conditional_illustration`.
 2. **Verification and presentation failed (the earliest failing stage).**
    - **Illustration dropped.** The model worded it "on those reported facts, the conditional illustration is S$9,000". The composer requires an illustration to state its condition with "if", so it dropped the sentence. The turn's one repair named this, but the model's second answer left the sentence out instead of rewording it.
-   - **Certificate figure rejected.** The sentence "The policy lists 6% … and Desmond's certificate lists … S$300,000 as of 1 July 2025" carried one `benefit` label ("Fracture of lower leg"), and the composer bound the certificate figure to it. The save-time gate correctly refused the figure, because it is printed under GROUP PERSONAL ACCIDENT, not under that label. The household saw "I haven't stated the amount for Lim Wei Jie, Desmond …".
+   - **Certificate figure rejected.** The sentence "The policy lists 6% … and Raymond's certificate lists … S$300,000 as of 1 July 2025" carried one `benefit` label ("Fracture of lower leg"), and the composer bound the certificate figure to it. The save-time gate correctly refused the figure, because it is printed under GROUP PERSONAL ACCIDENT, not under that label. The household saw "I haven't stated the amount for Lim Wei Jie, Raymond …".
    - **Paperwork note.** The "your own account … the insurer will check" note appeared once, at turn 5, which is allowed.
 3. **Smallest general fixes (proposed, not implemented here).**
    - **Fix a, compose.ts.** When an illustration sentence is dropped only for its "if" wording, and the turn's one repair is spent, have the grounded fallback state that calculation from its own record: "If it is <the calculation's condition>, an indicative illustration is S$X." Every part comes from the verified record, as the fallback already does for passages.

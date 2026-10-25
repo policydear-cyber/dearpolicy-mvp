@@ -77,11 +77,11 @@ test.describe("household screens show answers, not the system's work", () => {
     await signIn(page, email, password, "/family");
 
     // A synthetic family member and a synthetic personal-accident policy.
-    const displayName = printedName("Charmaine");
+    const displayName = printedName("Josephine");
     let family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
     let member = family.find((m) => m.display_name === displayName);
     if (!member) {
-      const created = await api(page, "/api/family", { method: "POST", body: { displayName, relationship: "self", preferredName: "Charmaine" } });
+      const created = await api(page, "/api/family", { method: "POST", body: { displayName, relationship: "self", preferredName: "Josephine" } });
       expect(created.status, JSON.stringify(created.body)).toBeLessThan(300);
       family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
       member = family.find((m) => m.display_name === displayName)!;
@@ -121,14 +121,14 @@ test.describe("household screens show answers, not the system's work", () => {
 
     // A factual question, then a claim event.
     await page.goto(`/chat?member=${member.id}`);
-    await ask(page, "What does Charmaine's AccidentGuard policy pay for a fracture?");
+    await ask(page, "What does Josephine's AccidentGuard policy pay for a fracture?");
     await checkScreen(page, "10-chat-factual");
     const citations = page.locator("details.citations").last();
     if (await citations.isVisible().catch(() => false)) {
       expect.soft(await citations.evaluate((el) => (el as HTMLDetailsElement).open), "sources start collapsed").toBe(false);
     }
     await page.getByRole("button", { name: "New chat" }).click();
-    await ask(page, "Charmaine broke her arm");
+    await ask(page, "Josephine broke her arm");
     await checkScreen(page, "11-chat-claim-start");
     // Answer the interview's questions (one at a time) so a claim is recorded.
     for (let turn = 0; turn < 6; turn++) {
@@ -165,7 +165,7 @@ test.describe("household screens show answers, not the system's work", () => {
       const requested = await page.locator('[data-testid="claim-requested-documents"]').innerText().catch(() => "");
       expect.soft(requested, "a fracture claim never asks for death documents").not.toMatch(/death certificate|coroner/i);
     } else {
-      findings.push("claims: no claim was recorded for 'Charmaine broke her arm'");
+      findings.push("claims: no claim was recorded for 'Josephine broke her arm'");
     }
 
     // Operator area: refused for a household account...

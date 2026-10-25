@@ -35,13 +35,13 @@ async function injuryControl() {
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
   const { REPORTED_MEDICAL_NOTE, REPORTED_MEDICAL_STEP } = await import("@/lib/rag2/loop/compose");
-  const D = SCENARIO.M.desmond.id;
+  const D = SCENARIO.M.raymond.id;
   const call = (name: string, args: Record<string, unknown>) => ({ name, arguments: args });
   const xray = (v: any) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const hit = ((o.result?.data?.hits ?? []) as any[]).find((x) => /confirmed by X-ray/.test(x.evidence?.excerpt ?? "")); if (hit) return [hit.evidence.evidence_id as string]; } return [] as string[]; };
   const S1 = "Fracture benefits are payable for a fracture confirmed by X-ray.";
   installLoopModel(new ScriptedLoopModel([
-    { user: "Desmond broke his leg (tibia) in a fall. What can he claim?", steps: [
-      () => [call("resolve_person", { mention: "Desmond" })],
+    { user: "Raymond broke his leg (tibia) in a fall. What can he claim?", steps: [
+      () => [call("resolve_person", { mention: "Raymond" })],
       () => [call("search_passages", { query: "fracture benefits payable confirmed by X-ray", subject_id: D })],
       (v: any) => [call("ask_user", { kind: "fact", subject_id: D, fact_key: "xray_confirmed", question: "Was the fracture confirmed by X-ray?", because_evidence_ids: xray(v), statements: [{ text: `The Personal Accident wording says: “${S1}”`, evidence_ids: xray(v), subject_id: D }] })],
     ] },
@@ -52,7 +52,7 @@ async function injuryControl() {
     ] },
   ]));
   let c: { id?: string; rev?: number } = {}; const out: ChatAnswer[] = [];
-  for (const u of ["Desmond broke his leg (tibia) in a fall. What can he claim?", "Yes, the X-ray confirmed it."]) { const a = await h.send(u, c); c = { id: a.conversationId, rev: a.conversationRevision }; out.push((await h.savedAnswer(c.id!)).answer); console.log(`\nUSER: ${u}\nAPP:  ${visible(out.at(-1)!).replace(/\n/g, "\n      ")}`); }
+  for (const u of ["Raymond broke his leg (tibia) in a fall. What can he claim?", "Yes, the X-ray confirmed it."]) { const a = await h.send(u, c); c = { id: a.conversationId, rev: a.conversationRevision }; out.push((await h.savedAnswer(c.id!)).answer); console.log(`\nUSER: ${u}\nAPP:  ${visible(out.at(-1)!).replace(/\n/g, "\n      ")}`); }
   installLoopModel(null);
   await check("positive control: when the selected injury benefit's wording requires an X-ray, the answer after the household confirms it keeps the medical paperwork (the doctor's report and the test or scan results), labelled as a suggestion to confirm with the insurer -- the same note path that now gives a death answer the non-medical wording", () => {
     const v = visible(out[1]);

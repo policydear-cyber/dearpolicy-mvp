@@ -31,7 +31,7 @@ async function main() {
       n++;
       const owner = fixedUuid("b8000000", n);
       const household = await h.createHousehold(fixedUuid("a8000000", n), owner);
-      const member = await h.createMember(household, fixedUuid("d8000000", n), "Tan Yi Chuen Desmond");
+      const member = await h.createMember(household, fixedUuid("d8000000", n), "Tan Yi Chuen Raymond");
       const claim = await h.createClaim(household, member, fixedUuid("e8000000", n), "death");
       const p = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f8100000", n), coverageId: fixedUuid("f8200000", n), ...travel.policy, currency: policy.currency ?? "SGD", ...policy });
       const document = await h.uploadEvidence({ accountId: household, ownerUserId: owner, memberId: member, claimId: claim, ...travel.evidence });
@@ -106,7 +106,7 @@ async function main() {
       n++;
       const owner = fixedUuid("b8000000", n);
       const household = await h.createHousehold(fixedUuid("a8000000", n), owner);
-      const member = await h.createMember(household, fixedUuid("d8000000", n), "Tan Yi Chuen Desmond");
+      const member = await h.createMember(household, fixedUuid("d8000000", n), "Tan Yi Chuen Raymond");
       const claim = await h.createClaim(household, member, fixedUuid("e8000000", n), "death");
       const sgd = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f8300000", 1), coverageId: fixedUuid("f8400000", 1), ...travel.policy });
       const usd = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f8300000", 2), coverageId: fixedUuid("f8400000", 2), ...travel.policy, insurer: "GlobeCover", pages: USD_WORDING, currency: "USD" });

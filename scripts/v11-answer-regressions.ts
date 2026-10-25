@@ -80,9 +80,9 @@ async function main() {
   // ---------------------------------------------------------------- fixture
   const A = "00000000-0000-0000-0000-0000000000a1", B = "00000000-0000-0000-0000-0000000000b1";
   const id = (n: number) => "30000000-0000-4000-8000-" + String(n).padStart(12, "0");
-  const ch = { id: id(1), display_name: "Ong Pei Lin Charmaine", preferred_name: "Charmaine", relationship: "spouse" };
-  const de = { id: id(2), display_name: "Tan Yi Chuen Desmond", preferred_name: "Desmond", relationship: "self" };
-  const chB = { id: id(3), display_name: "Ong Pei Lin Charmaine", preferred_name: "Charmaine", relationship: "self" };
+  const ch = { id: id(1), display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "spouse" };
+  const de = { id: id(2), display_name: "Tan Yi Chuen Raymond", preferred_name: "Raymond", relationship: "self" };
+  const chB = { id: id(3), display_name: "Ong Pei Lin Josephine", preferred_name: "Josephine", relationship: "self" };
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Household A'),($2,'Household B')", [A, B]);
   for (const h of [A, B]) await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [h]);
   for (const [p, acct] of [[ch, A], [de, A], [chB, B]] as const)
@@ -92,9 +92,9 @@ async function main() {
   const recent = new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10);
   const docs: Record<string, Doc> = {
     CH_LIFE: { id: id(101), acct: A, member: ch.id, number: "L-100", product: "Term Protector", hash: "sha256:chlife-v2", effective: recent, docDate: recent,
-      pages: { 1: "Term Protector policy schedule for Ong Pei Lin Charmaine.", 2: "Life Assured: Ong Pei Lin Charmaine. Death Sum Insured SGD 250,000. Total and Permanent Disability Sum Insured SGD 300,000.", 3: "Premium schedule. Monthly premium: S$120.00 payable by GIRO." } },
+      pages: { 1: "Term Protector policy schedule for Ong Pei Lin Josephine.", 2: "Life Assured: Ong Pei Lin Josephine. Death Sum Insured SGD 250,000. Total and Permanent Disability Sum Insured SGD 300,000.", 3: "Premium schedule. Monthly premium: S$120.00 payable by GIRO." } },
     CH_LIFE_OLD: { id: id(102), acct: A, member: ch.id, number: "L-100", product: "Term Protector", hash: "sha256:chlife-v1", superseded: true, effective: "2021-01-01",
-      pages: { 1: "Term Protector old schedule.", 2: "Life Assured: Ong Pei Lin Charmaine. Death Sum Insured SGD 200,000." } },
+      pages: { 1: "Term Protector old schedule.", 2: "Life Assured: Ong Pei Lin Josephine. Death Sum Insured SGD 200,000." } },
     CH_DELETED: { id: id(103), acct: A, member: ch.id, number: "CI-9", product: "Deleted CI Plan", hash: "sha256:del", lifecycle: "pending_deletion", effective: recent,
       pages: { 1: "Deleted CI Plan.", 2: "Critical Illness Sum Insured SGD 100,000." } },
     CH_CI_WRONGPAGE: { id: id(104), acct: A, member: ch.id, number: "CI-1", product: "CareShield Plus", hash: "sha256:ci", effective: recent,
@@ -102,11 +102,11 @@ async function main() {
     CH_PA_OLD: { id: id(105), acct: A, member: ch.id, number: "PA-7", product: "Accident Guard", hash: "sha256:pa", effective: "2019-01-01", expiry: "2020-01-01", docDate: "2019-01-01",
       pages: { 1: "Accident Guard certificate dated 1 January 2019.", 2: "Personal Accident Sum Insured SGD 50,000." } },
     DE_HOSP: { id: id(106), acct: A, member: de.id, number: "H-5", product: "Hospital Cash Plan", hash: "sha256:hosp", effective: recent,
-      pages: { 1: "Hospital Cash Plan for Tan Yi Chuen Desmond.", 4: "Daily Hospital Cash: We pay S$100 per day of hospital stay, up to 30 days." } },
+      pages: { 1: "Hospital Cash Plan for Tan Yi Chuen Raymond.", 4: "Daily Hospital Cash: We pay S$100 per day of hospital stay, up to 30 days." } },
     DE_ENDOW: { id: id(107), acct: A, member: de.id, number: "E-8", product: "Wealth Endowment 20", hash: "sha256:endow", effective: recent,
-      pages: { 1: "Wealth Endowment 20 policy schedule for Tan Yi Chuen Desmond.", 3: "The guaranteed maturity value is SGD 42,000 payable at the end of the policy term." } },
+      pages: { 1: "Wealth Endowment 20 policy schedule for Tan Yi Chuen Raymond.", 3: "The guaranteed maturity value is SGD 42,000 payable at the end of the policy term." } },
     B_LIFE: { id: id(201), acct: B, member: chB.id, number: "L-100", product: "Term Protector", hash: "sha256:blife", effective: recent,
-      pages: { 1: "Term Protector for Ong Pei Lin Charmaine.", 2: "Life Assured: Ong Pei Lin Charmaine. Death Sum Insured SGD 999,000." } },
+      pages: { 1: "Term Protector for Ong Pei Lin Josephine.", 2: "Life Assured: Ong Pei Lin Josephine. Death Sum Insured SGD 999,000." } },
   };
   for (const d of Object.values(docs)) {
     await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,renewal_or_expiry_date,quarantine_status,lifecycle_state,superseded_at,file_hash,document_date,benefits_indexed_at,conditions_indexed_at,ledger_read_at)
@@ -165,8 +165,8 @@ async function main() {
   const text = (a: { summary: string; details: string[] }) => [a.summary, ...a.details].join(" | ");
   try {
     // ================================================================ A positive controls
-    await check("A1 death cover for Charmaine answers S$250,000 from page 2 with the verbatim passage", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover?", people: [ch] });
+    await check("A1 death cover for Josephine answers S$250,000 from page 2 with the verbatim passage", async () => {
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover?", people: [ch] });
       assert.equal(r.handled, true, "handled: " + JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /S\$250,000/);
       const c = r.answer.citations.find((x) => x.policyId === docs.CH_LIFE.id);
@@ -174,14 +174,14 @@ async function main() {
       assert.ok(r.answer.policyStatedLimits.some((l) => l.amount === 250000 && l.currency === "SGD" && l.citation.pageStart === 2), "typed, cited limit");
       assert.equal(r.modelCalls, 0);
     });
-    await check("A2 Desmond's hospital cash answers S$100 per day, page 4, condition from the passage only", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "Does Desmond's plan pay hospital cash?", people: [de] });
+    await check("A2 Raymond's hospital cash answers S$100 per day, page 4, condition from the passage only", async () => {
+      const r = await answerPolicyQuestion({ accountId: A, question: "Does Raymond's plan pay hospital cash?", people: [de] });
       assert.equal(r.handled, true, JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /Daily Hospital Cash: S\$100(?:\.00)? per day/);
       assert.ok(r.answer.citations.some((c) => c.policyId === docs.DE_HOSP.id && c.pageStart === 4 && /S\$100 per day/.test(c.excerpt ?? "")));
     });
-    await check("A3 Charmaine's premium answers S$120 monthly from page 3", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What premium does Charmaine pay?", people: [ch] });
+    await check("A3 Josephine's premium answers S$120 monthly from page 3", async () => {
+      const r = await answerPolicyQuestion({ accountId: A, question: "What premium does Josephine pay?", people: [ch] });
       assert.equal(r.handled, true, JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /Premium: S\$120/);
       assert.ok(r.answer.citations.some((c) => c.pageStart === 3 && /Monthly premium: S\$120\.00/.test(c.excerpt ?? "")));
@@ -189,31 +189,31 @@ async function main() {
 
     // ================================================================ B never
     await check("B1 superseded (S$200,000), deleted, other household (S$999,000) never appear; household A only", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover and critical illness cover?", people: [ch] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover and critical illness cover?", people: [ch] });
       const all = JSON.stringify(r.answer);
       for (const bad of ["200,000", "999,000", "100,000", docs.CH_LIFE_OLD.id, docs.CH_DELETED.id, docs.B_LIFE.id]) assert.ok(!all.includes(bad), "leaked " + bad);
     });
-    await check("B2 a question about Charmaine never returns Desmond's hospital cash", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "Does Charmaine's plan pay hospital cash?", people: [ch] });
-      assert.ok(!JSON.stringify(r.answer).includes("S$100"), "Desmond's benefit shown for Charmaine");
+    await check("B2 a question about Josephine never returns Raymond's hospital cash", async () => {
+      const r = await answerPolicyQuestion({ accountId: A, question: "Does Josephine's plan pay hospital cash?", people: [ch] });
+      assert.ok(!JSON.stringify(r.answer).includes("S$100"), "Raymond's benefit shown for Josephine");
       assert.ok(!r.answer.citations.some((c) => c.policyId === docs.DE_HOSP.id));
     });
-    await check("B3 household B asking about its own same-named Charmaine sees only its own S$999,000", async () => {
-      const r = await answerPolicyQuestion({ accountId: B, question: "What is Charmaine's death cover?", people: [chB] });
+    await check("B3 household B asking about its own same-named Josephine sees only its own S$999,000", async () => {
+      const r = await answerPolicyQuestion({ accountId: B, question: "What is Josephine's death cover?", people: [chB] });
       assert.equal(r.handled, true);
       assert.match(text(r.answer), /S\$999,000/);
       assert.ok(!/250,000/.test(JSON.stringify(r.answer)));
-      const forged = await answerPolicyQuestion({ accountId: B, question: "What is Charmaine's death cover?", people: [ch] });
+      const forged = await answerPolicyQuestion({ accountId: B, question: "What is Josephine's death cover?", people: [ch] });
       assert.ok(!/250,000/.test(JSON.stringify(forged.answer)), "household A's person passed with household B's account leaks nothing");
     });
     await check("B4 a figure cited to a page that does not contain it (S$150,000 on p5, really p6) is omitted", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's critical illness cover?", people: [ch] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's critical illness cover?", people: [ch] });
       assert.ok(!/150,000/.test(JSON.stringify(r.answer)), "wrong-page figure rendered");
       assert.ok(r.rejected.some((x) => /not on the cited page/.test(x.reason)), JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.equal(r.handled, false, "unverifiable stored fact hands the topic back to the reading path");
     });
     await check("B5 a recorded conflict withholds the figure and explains it", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's disability cover?", people: [ch] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's disability cover?", people: [ch] });
       assert.equal(r.handled, true);
       assert.ok(!/300,000|350,000/.test(JSON.stringify(r.answer)), "conflicting figure rendered");
       assert.match(r.answer.summary, /different figures, so DearPolicy has not picked one/);
@@ -221,20 +221,20 @@ async function main() {
 
     // ================================================================ C currentness / not found
     await check("C1 an expired 2019 document is answered with its date and marked expired", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's accident cover?", people: [ch] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's accident cover?", people: [ch] });
       assert.equal(r.handled, true, JSON.stringify(r.rejected.map((x) => x.reason)));
       assert.match(text(r.answer), /S\$50,000/);
       assert.match(text(r.answer), /1 Jan 2019/); assert.match(text(r.answer), /expired/); assert.ok(!/is currently active|currently covered/i.test(text(r.answer)));
       assert.ok(r.answer.citations.some((c) => c.notConfirmedCurrent === true));
     });
     await check("C2 maturity (not in stored facts) is handed back, never 'not covered'", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is the maturity value of Desmond's endowment?", people: [de] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is the maturity value of Raymond's endowment?", people: [de] });
       assert.equal(r.handled, false);
       assert.ok(!/not covered|no cover|uninsured/i.test(JSON.stringify(r)), "negative wording");
       assert.deepEqual(r.notFound, ["maturity or surrender value"]);
     });
     await check("C3 a partly answered question says what was not found in the documents read", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover and travel cover?", people: [ch] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover and travel cover?", people: [ch] });
       assert.equal(r.handled, true);
       assert.match(r.answer.summary, /could not find travel cover in the documents read/);
       assert.ok(!/not covered/i.test(r.answer.summary));
@@ -251,8 +251,8 @@ async function main() {
       assert.deepEqual(meta.meta.map((m) => m.label), ["Policy number", "Expiry date"]); assert.equal(meta.rows.length, 0);
     });
     await check("R2 policy and condition questions with an 'if' stay factual; claim-money questions do not", () => {
-      assert.equal(isFactualPolicyQuestion("What does Charmaine's group life policy pay if she dies?"), true);
-      assert.equal(isFactualPolicyQuestion("If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?"), true);
+      assert.equal(isFactualPolicyQuestion("What does Josephine's group life policy pay if she dies?"), true);
+      assert.equal(isFactualPolicyQuestion("If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?"), true);
       assert.equal(isFactualPolicyQuestion("What is the waiting period for critical illness?"), true);
       assert.equal(isFactualPolicyQuestion("How much can she claim?"), false);
       assert.equal(isFactualPolicyQuestion("What if I die tomorrow?"), false);
@@ -288,20 +288,20 @@ async function main() {
       }
     });
     await check("D2 a narration adding a number, currency or condition is discarded; a faithful one is used", async () => {
-      assert.equal(rephrasingIsFaithful("Charmaine is covered for S$250,000 on death.", [base]), true);
-      assert.equal(rephrasingIsFaithful("Charmaine is covered for S$300,000 on death.", [base]), false);
-      assert.equal(rephrasingIsFaithful("Charmaine is covered for US$250,000 on death.", [base]), false);
+      assert.equal(rephrasingIsFaithful("Josephine is covered for S$250,000 on death.", [base]), true);
+      assert.equal(rephrasingIsFaithful("Josephine is covered for S$300,000 on death.", [base]), false);
+      assert.equal(rephrasingIsFaithful("Josephine is covered for US$250,000 on death.", [base]), false);
       assert.equal(rephrasingIsFaithful("Covered for S$250,000, subject to a waiting period.", [base]), false);
-      const bad = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover?", people: [ch], narrate: async () => "You are covered for S$275,000 on death, guaranteed." });
+      const bad = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover?", people: [ch], narrate: async () => "You are covered for S$275,000 on death, guaranteed." });
       assert.equal(bad.narrated, false); assert.ok(!/275,000/.test(bad.answer.summary));
-      const good = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover?", people: [ch], narrate: async () => "Charmaine's Term Protector states S$250,000 on death." });
+      const good = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover?", people: [ch], narrate: async () => "Josephine's Term Protector states S$250,000 on death." });
       assert.equal(good.narrated, true); assert.match(good.answer.summary, /S\$250,000/);
     });
 
     // ================================================================ E speed
     await check("E1 stored factual answers make no model call; p95 <= 8 s (20 runs)", async () => {
       const before = openAiCalls + geminiCalls, times: number[] = [];
-      for (let i = 0; i < 20; i++) { const t = Date.now(); const r = await answerPolicyQuestion({ accountId: A, question: "What is Charmaine's death cover?", people: [ch] }); times.push(Date.now() - t); assert.equal(r.handled, true); }
+      for (let i = 0; i < 20; i++) { const t = Date.now(); const r = await answerPolicyQuestion({ accountId: A, question: "What is Josephine's death cover?", people: [ch] }); times.push(Date.now() - t); assert.equal(r.handled, true); }
       times.sort((a, b) => a - b);
       const p95 = times[Math.ceil(0.95 * times.length) - 1];
       console.log("     stored-fact answer ms: median " + times[10] + ", p95 " + p95);
@@ -334,7 +334,7 @@ async function main() {
     };
     await check("F2 chat: the endowment question with an exhausted OpenAI account (interpretation) gives a clean, fast message", async () => {
       process.env.MODEL_PRESET = "openai"; openAiMode = "quota"; const before = openAiCalls, t = Date.now();
-      const r = await send(A, de.id, "What is the maturity value of Desmond's endowment policy?");
+      const r = await send(A, de.id, "What is the maturity value of Raymond's endowment policy?");
       const elapsed = Date.now() - t;
       assert.equal(r.status, 200, JSON.stringify(r.data).slice(0, 300));
       assert.ok(!LEAKS.test(JSON.stringify(r.data)), "leak: " + JSON.stringify(r.data).match(LEAKS)?.[0] + " in " + JSON.stringify(r.answer.summary));
@@ -344,7 +344,7 @@ async function main() {
     });
     await check("F3 chat: the endowment question when only the document-reading model's account is exhausted gives a clean, fast message", async () => {
       useGemini(); process.env.READING_MODEL = "openai:gpt-5-mini"; openAiMode = "quota"; const before = openAiCalls, t = Date.now();
-      const r = await send(A, de.id, "What is the maturity value of Desmond's endowment policy?");
+      const r = await send(A, de.id, "What is the maturity value of Raymond's endowment policy?");
       const elapsed = Date.now() - t;
       assert.equal(r.status, 200, JSON.stringify(r.data).slice(0, 300));
       assert.ok(!LEAKS.test(JSON.stringify(r.data)), "leak: " + JSON.stringify(r.data).match(LEAKS)?.[0] + " in " + JSON.stringify([r.answer.summary, r.answer.details]).slice(0, 500));
@@ -386,9 +386,9 @@ async function main() {
     // ================================================================ I monetary boundary, both ways
     const answerOf = (r: Awaited<ReturnType<typeof answerPolicyQuestion>>): ChatAnswer => ({ ...r.answer, claimItems: [], disclaimer: "", claimSessionId: null, knownFacts: [], missingFacts: [] } as ChatAnswer);
     await check("I1 a verified policy fact shows its printed figure in the line even when the question names an event word", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "Does Desmond's plan pay hospital cash?", people: [de] });
+      const r = await answerPolicyQuestion({ accountId: A, question: "Does Raymond's plan pay hospital cash?", people: [de] });
       const a = answerOf(r);
-      const claim = liveClaimContext("policy_question", a, "Does Desmond's plan pay hospital cash?");
+      const claim = liveClaimContext("policy_question", a, "Does Raymond's plan pay hospital cash?");
       assert.equal(claim, false, "verified policy-fact answer is not a claim context");
       const out = enforceLiveChatMonetaryBoundary(a, { claimContext: claim });
       assert.ok(out.details.some((d) => /Daily Hospital Cash: S\$100 per day \(page 4/.test(d)), "printed figure kept: " + out.details.join(" | "));
@@ -401,8 +401,8 @@ async function main() {
       assert.ok(!/999,999/.test(out.summary), out.summary); assert.match(out.details[0], /S\$100 per day/);
     });
     await check("I3 'How much can she claim?' and every claim turn still show no amount, flag or not", async () => {
-      const r = await answerPolicyQuestion({ accountId: A, question: "Does Desmond's plan pay hospital cash?", people: [de] });
-      for (const [intent, question] of [["policy_question", "How much can he claim for his hospital stay?"], ["claim", "Desmond was hospitalised, what does his plan pay?"]] as const) {
+      const r = await answerPolicyQuestion({ accountId: A, question: "Does Raymond's plan pay hospital cash?", people: [de] });
+      for (const [intent, question] of [["policy_question", "How much can he claim for his hospital stay?"], ["claim", "Raymond was hospitalised, what does his plan pay?"]] as const) {
         const a = answerOf(r);
         const out = enforceLiveChatMonetaryBoundary(a, { claimContext: liveClaimContext(intent, a, question) });
         assert.ok(!/S\$100/.test([out.summary, ...out.details].join(" ")), intent + ": amount shown: " + out.details.join(" | "));
@@ -413,9 +413,9 @@ async function main() {
     });
 
     // ================================================================ H chat route end to end
-    await check("H1 chat: 'What is Charmaine's death cover?' answers from stored facts, cited, with no document-reading call", async () => {
+    await check("H1 chat: 'What is Josephine's death cover?' answers from stored facts, cited, with no document-reading call", async () => {
       useGemini(); const systemsBefore = geminiSystems.length, t = Date.now();
-      const r = await send(A, ch.id, "What is Charmaine's death cover?");
+      const r = await send(A, ch.id, "What is Josephine's death cover?");
       const elapsed = Date.now() - t;
       assert.equal(r.status, 200, JSON.stringify(r.data).slice(0, 300));
       const reads = geminiSystems.slice(systemsBefore).filter((s) => s.startsWith("Read insurance"));

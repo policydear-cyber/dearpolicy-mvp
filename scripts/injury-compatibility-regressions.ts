@@ -6,13 +6,13 @@ import type { InventoryDocument,PolicyContract } from "@/lib/policies/inventory"
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 
-/** "Charmaine broke her arm" -> "An accident" surfaced "Loss of arm ...".
+/** "Josephine broke her arm" -> "An accident" surfaced "Loss of arm ...".
  * A schedule pays for the injury that happened: the row's KIND must agree with
  * a reported kind before a body part is looked at, and incompatible rows never
  * become candidates in the claim path. */
 const fact=(value:string|number|boolean|null)=>({value,state:"known" as const,quote:String(value),
   recordedAt:"2026-09-28T00:00:00Z",source:"user" as const});
-const PERSON="charmaine",CERT="cert-1";
+const PERSON="josephine",CERT="cert-1";
 const row=(benefitName:string,quote="",extra:Partial<CatalogBenefit>={}):CatalogBenefit=>({
   id:benefitName.toLowerCase().replace(/[^a-z0-9]+/g,"-"),policyId:CERT,productName:"Group Personal Accident",benefitName,
   traits:["bodily_injury","accident"],formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,offsetDays:null,
@@ -122,7 +122,7 @@ check("10. the claim path returns Loss of arm only as internal audit data",()=>{
   const cover:OwnedCoverage={id:"c-gpa",policyId:CERT,familyMemberId:PERSON,category:"Personal Accident",amount:600_000,currency:"SGD",
     productName:"Group Personal Accident",sourcePage:1,evidenceText:"Certificate",insurer:"Singlife",policyName:"Group Insurance",
     policyNumber:"1",groupPolicyNumber:"G1",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null,currencyVerified:true};
-  const contract:PolicyContract={id:"contract-1",ownerId:PERSON,ownerName:"Charmaine",name:"Group Insurance",insurer:"Singlife",
+  const contract:PolicyContract={id:"contract-1",ownerId:PERSON,ownerName:"Josephine",name:"Group Insurance",insurer:"Singlife",
     documents:[document],references:[],coverages:[cover],confirmed:true,effectiveDate:"2022-10-06",ownershipBasis:"evidence"};
   const catalog=[LOSS_OF_ARM,FRACTURE_OF_ARM,MEDICAL,HOSPITAL_CASH,BURNS];
   for(const facts of [armFracture,{eventType:fact("accident"),injured:fact(true),injuryBodyPart:fact("arm"),injuries:fact("injured arm")}] as SubjectFacts[]){

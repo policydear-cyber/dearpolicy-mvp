@@ -16,7 +16,7 @@ export async function runDeathBenefitContextualRegressions() {
   let cases = 0;
   const test = (name: string, fn: () => void) => { try { fn(); cases++; } catch (error) { throw new Error(name, { cause: error }); } };
   const context = { now: new Date("2026-09-14T12:00:00Z"), timeZone: "Asia/Singapore", allowAi: false };
-  const coverage = (overrides: Partial<OwnedCoverage>): OwnedCoverage => ({ id: "gtl", policyId: "certificate", familyMemberId: "charmaine", category: "Death", amount: 1_000_000, currency: "SGD", productName: "Group Term Life", sourcePage: 1, evidenceText: "personal certificate", insurer: "Singlife", policyName: "MINDEF & MHA", policyNumber: "personal", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2022-10-06", renewalOrExpiryDate: null, currencyVerified: true, ...overrides });
+  const coverage = (overrides: Partial<OwnedCoverage>): OwnedCoverage => ({ id: "gtl", policyId: "certificate", familyMemberId: "josephine", category: "Death", amount: 1_000_000, currency: "SGD", productName: "Group Term Life", sourcePage: 1, evidenceText: "personal certificate", insurer: "Singlife", policyName: "MINDEF & MHA", policyNumber: "personal", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2022-10-06", renewalOrExpiryDate: null, currencyVerified: true, ...overrides });
   const coverages = [coverage({}), coverage({ id: "gpa", category: "Personal Accident", productName: "Group Personal Accident", amount: 600_000 })];
   const citation = { chunkId: "page:wording:2", policyId: "wording", policyName: "Benefit summary", pageStart: 2, pageEnd: 2, personalEvidence: false };
   const deathRules: DeathRuleEvidence[] = [
@@ -35,8 +35,8 @@ export async function runDeathBenefitContextualRegressions() {
   const confirmedMatch = (): CauseDefinitionMatch => {
     const rule = deathRules.find(r => r.benefit === "gpa-accidental-death")!;
     return {
-      familyMemberId: "charmaine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
-      causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
+      familyMemberId: "josephine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
+      causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "josephine", claimEventId: SESSION_ID },
       definitionEvidence: { policyId: rule.citation.policyId, chunkId: rule.citation.chunkId, pageStart: rule.citation.pageStart, pageEnd: rule.citation.pageEnd, wordingHash: definitionWordingHash(rule.quote) },
       result: "matches", reviewedAt: "2026-09-14",
       provenance: verifiedEvidenceProvenance("police-report-1"),
@@ -47,7 +47,7 @@ export async function runDeathBenefitContextualRegressions() {
   // 1. Cancer death with ordinary death cover: ordinary is payable, the
   // accidental rider is never even considered because the reported cause
   // itself rules it out.
-  const cancer = await extractClaimFacts({ text: "Charmaine died from stage 4 cancer yesterday", ...context });
+  const cancer = await extractClaimFacts({ text: "Josephine died from stage 4 cancer yesterday", ...context });
   test("Cancer death pays only the ordinary death benefit", () => {
     assert.equal(cancer.accidentalDeath, false);
     const result = assessClaim(cancer, coverages, deathRules, [], SESSION_ID);
@@ -60,7 +60,7 @@ export async function runDeathBenefitContextualRegressions() {
   // 2. Car-crash death with the accidental cover unresolved: the ordinary
   // benefit is payable, the accidental benefit stays visible with no amount
   // until an official document is confirmed, and DearPolicy asks for it.
-  const carCrash = await extractClaimFacts({ text: "Charmaine died in a car crash yesterday", ...context });
+  const carCrash = await extractClaimFacts({ text: "Josephine died in a car crash yesterday", ...context });
   test("Car-crash death does not by itself authorise the accidental-death amount", () => {
     assert.equal(carCrash.accidentalDeath, true);
     assert.equal(carCrash.causeOfDeathDocumentAvailable, null); assert.equal(carCrash.causeOfDeathEvidenceReviewed, null); assert.deepEqual(carCrash.causeDefinitionMatches, []);
@@ -87,7 +87,7 @@ export async function runDeathBenefitContextualRegressions() {
   });
 
   // 4. Homicide is never automatically treated as confirmed accidental death.
-  const murdered = await extractClaimFacts({ text: "Charmaine was murdered yesterday", ...context });
+  const murdered = await extractClaimFacts({ text: "Josephine was murdered yesterday", ...context });
   test("A reported homicide never auto-confirms accidental death", () => {
     assert.equal(murdered.death, true); assert.equal(murdered.accidentalDeath, null);
     // DearPolicy asks what caused the death -- it never labels a homicide
@@ -118,7 +118,7 @@ export async function runDeathBenefitContextualRegressions() {
 
   // 6. Natural causes (heart attack) exclude the accidental-death benefit
   // outright rather than leaving it pending.
-  const natural = await extractClaimFacts({ text: "Charmaine died of a heart attack yesterday", ...context });
+  const natural = await extractClaimFacts({ text: "Josephine died of a heart attack yesterday", ...context });
   test("Natural causes rule out the accidental-death benefit rather than deferring it", () => {
     assert.equal(natural.accidentalDeath, false);
     assert.equal(assessClaim(natural, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death"), undefined);
@@ -183,7 +183,7 @@ export async function runDeathBenefitContextualRegressions() {
   // 13. Mentioning a document in free text is availability only, extracted
   // the same deterministic way as an explicit "yes" -- and is just as
   // incapable of unlocking an amount.
-  const mentionedReport = await extractClaimFacts({ text: "Charmaine died in a car crash yesterday, there's a police report", ...context });
+  const mentionedReport = await extractClaimFacts({ text: "Josephine died in a car crash yesterday, there's a police report", ...context });
   test("Mentioning “police report” in chat does not unlock an amount", () => {
     assert.equal(mentionedReport.causeOfDeathDocumentAvailable, true);
     assert.equal(mentionedReport.causeOfDeathEvidenceReviewed, null);

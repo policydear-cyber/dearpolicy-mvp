@@ -62,7 +62,7 @@ The UI changed on purpose; each original is kept in a comment beside the change.
 
 | test | check | was | now | reason |
 | --- | --- | --- | --- | --- |
-| `e2e/tests/v11-ux-r5.spec.ts` (~217) | empty chat | `.prompt-grid` visible, containing this household's employee and not "Charmaine"/"endowment" | no `.prompt-grid`; `chat-welcome` invites "Ask anything about your policies, in your own words." and names nothing from another household; it does not say "Upload a policy first" once documents are ready | PR #77 first-run: no fixed starter questions (DC 11:54, any question) |
+| `e2e/tests/v11-ux-r5.spec.ts` (~217) | empty chat | `.prompt-grid` visible, containing this household's employee and not "Josephine"/"endowment" | no `.prompt-grid`; `chat-welcome` invites "Ask anything about your policies, in your own words." and names nothing from another household; it does not say "Upload a policy first" once documents are ready | PR #77 first-run: no fixed starter questions (DC 11:54, any question) |
 | same (new, after the empty portfolio) | first-run chat | | with nothing uploaded, `chat-welcome` says "Upload a policy first" and links "Upload a document" to /policies; no `.prompt-grid` | the upload-first state of the same change |
 | `e2e/auth-tests/owner-reviewer-journey.spec.ts` test 7 | preferred-name edit | filled "Preferred name" on the card directly | clicks "Edit details" first | PR #77 family page: fields are folded behind "Edit details" |
 | same, test 7 (after Save) | the save is confirmed | the button turns into "Saved" | the card's status line reads "Saved <name>." and "Edit details" is back; the saved preferred name is still checked through the API | PR #77 family page: a successful save closes the details |

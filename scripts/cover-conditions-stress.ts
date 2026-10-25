@@ -32,7 +32,7 @@ function condition(over:Partial<CoverCondition>&{kind:CoverConditionKind}):Cover
     amountBasis:null,scope:null,carveOut:null,sourcePage:1,quote:"stated in the policy",...over};
 }
 function item(over:Partial<ClaimItem>={}):ClaimItem{
-  return {title:"Charmaine · Death Benefit",status:"likely_applicable",amountText:"S$1,000,000",
+  return {title:"Josephine · Death Benefit",status:"likely_applicable",amountText:"S$1,000,000",
     calculatedAmount:1_000_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",
     estimateBasis:"confirmed",coverLabel:"Group Term Life",coverAmount:1_000_000,payingEvent:"death",
     contractId:"contract-1",reason:"",conditions:[],...over} as ClaimItem;
@@ -116,9 +116,9 @@ export function runCoverConditionsStress(){
     const conditions=Array.from({length:1+Math.floor(rnd()*5)},randomCondition);
     const facts=randomFacts();
     const coverStart=pick(COVER_STARTS);
-    const items=[item(),item({title:"Charmaine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
+    const items=[item(),item({title:"Josephine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
       calculatedAmount:350_000,amountText:"S$350,000",payingEvent:"critical_illness"}),
-      item({title:"Charmaine · Ambulance",coverLabel:"Living Care",coverAmount:undefined,
+      item({title:"Josephine · Ambulance",coverLabel:"Living Care",coverAmount:undefined,
         calculatedAmount:220,amountText:"S$220.00",calculationKind:"expense_cap",aggregation:"reimbursement",
         payingEvent:undefined})];
     const before=items.map(entry=>entry.calculatedAmount??0);
@@ -154,7 +154,7 @@ export function runCoverConditionsStress(){
   for(let round=0;round<600;round++){
     const conditions=Array.from({length:1+Math.floor(rnd()*4)},randomCondition);
     const facts=randomFacts();const coverStart=pick(COVER_STARTS);
-    const once=[item(),item({title:"Charmaine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
+    const once=[item(),item({title:"Josephine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
       calculatedAmount:350_000,amountText:"S$350,000"})];
     applyCoverConditions({items:once,conditions,facts,coverStart,today:TODAY});
     const after=once.map(entry=>entry.calculatedAmount??null);
@@ -171,7 +171,7 @@ export function runCoverConditionsStress(){
   for(let round=0;round<600;round++){
     const conditions=Array.from({length:2+Math.floor(rnd()*4)},randomCondition);
     const facts=randomFacts();const coverStart=pick(COVER_STARTS);
-    const build=()=>[item(),item({title:"Charmaine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
+    const build=()=>[item(),item({title:"Josephine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
       calculatedAmount:350_000,amountText:"S$350,000"})];
     const forwards=build();applyCoverConditions({items:forwards,conditions,facts,coverStart,today:TODAY});
     const backwards=build();applyCoverConditions({items:backwards,conditions:[...conditions].reverse(),facts,coverStart,today:TODAY});
@@ -187,8 +187,8 @@ export function runCoverConditionsStress(){
   //    ninety-day wait must never silence another cover's benefit.
   // ---------------------------------------------------------------------
   {
-    const items=[item({title:"Charmaine · Death Benefit",coverLabel:"Group Term Life"}),
-      item({title:"Charmaine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
+    const items=[item({title:"Josephine · Death Benefit",coverLabel:"Group Term Life"}),
+      item({title:"Josephine · Living Care",coverLabel:"Living Care",coverAmount:350_000,
         calculatedAmount:350_000,amountText:"S$350,000"})];
     applyCoverConditions({items,conditions:[condition({kind:"waiting_period",productName:"Living Care",days:90})],
       facts:{diagnosisDate:fact("2026-06-15"),death:fact(true)} as SubjectFacts,coverStart:"2026-06-01",today:TODAY});

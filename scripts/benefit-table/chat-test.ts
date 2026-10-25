@@ -216,7 +216,7 @@ test("an answer card names the cover shortly; the product is added only when two
   assert.deepEqual([...labels.values()], ["GROUP TERM LIFE", "Death Benefit, Singlife Shield", "Death Benefit, FWD Term", "Travel Care, plan Business",
     "Single Trip, plan Business, Travel insurance summary", "Same Name, Ward", "Same Name (Policy No. 2), Ward"]);
 });
-test("a plan or product printed with the cover's own name is not repeated on the card (Charmaine's new documents, AIA)", () => {
+test("a plan or product printed with the cover's own name is not repeated on the card (Josephine's new documents, AIA)", () => {
   const labels = coverLabels([{ product: "AIA PRO LIFETIME PROTECTOR - MAX", cover: "PRO LIFETIME PROTECTOR - MAX", plan: "AIA PRO LIFETIME PROTECTOR - MAX" }]);
   assert.deepEqual([...labels.values()], ["PRO LIFETIME PROTECTOR - MAX"]);
   // A plan with words of its own still names it (Critic R173-1).
@@ -1451,7 +1451,7 @@ test("claim windows are never a waiting period or a free look; a passed deadline
 
 test("claim deadlines: days said as 'yesterday' or 'N days ago' get their dates and each printed claim window's last day; a 'passed' clause goes when the answer's own deadline is open (overnight run 23 Oct, K1, N111, N118, N264)", () => {
   const now = new Date("2026-10-23T02:00:00Z");
-  assert.match(datesSaidNote("charmaine had a heart attack yesterday", now, [30, 120]), /"yesterday" is 22\/10\/2026, 1 day before today \(30 days after it is 21\/11\/2026, 29 days after today; 120 days after it is 19\/02\/2027, 119 days after today\)/);
+  assert.match(datesSaidNote("josephine had a heart attack yesterday", now, [30, 120]), /"yesterday" is 22\/10\/2026, 1 day before today \(30 days after it is 21\/11\/2026, 29 days after today; 120 days after it is 19\/02\/2027, 119 days after today\)/);
   assert.match(datesSaidNote("he fell 3 days ago", now, []), /"3 days ago" is 20\/10\/2026, 3 days before today/);
   assert.match(datesSaidNote("the day before yesterday", now, []), /21\/10\/2026, 2 days before today/);
   assert.doesNotMatch(datesSaidNote("the day before yesterday", now, []), /"yesterday"/);
@@ -1491,7 +1491,7 @@ test("an NRIC or FIN is masked as the certificate prints it, everywhere in the a
 });
 
 test("a stay's length the latest message gives works out a daily card the model gave none for (overnight run 23 Oct, N145, N258)", () => {
-  assert.equal(stayDaysSaid(["how much hospital cash would charmaine get for 25 days"]), 25);
+  assert.equal(stayDaysSaid(["how much hospital cash would josephine get for 25 days"]), 25);
   assert.equal(stayDaysSaid(["he broke his leg skiing on 1 oct, stayed in hospital there 4 days"]), 4);
   assert.equal(stayDaysSaid(["hospitalised for 15 days"]), 15);
   // No stay, two lengths, or a claim window: none.
@@ -1544,10 +1544,10 @@ test("the same benefit with the same figure from another document is shown once,
 });
 
 test("with an amount left out, words pointing at the amounts shown go; the rest stays (live run 23 Oct after #111, A6)", () => {
-  const b = "Desmond pays two CI II premiums and a one-off travel premium, shown below.";
+  const b = "Raymond pays two CI II premiums and a one-off travel premium, shown below.";
   const a = { summary: b, bottomLine: b, statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }, { text: "The amounts below are monthly.", amount: null }] };
   dropAmountPointers(a, ["Up to S$73.17"], true);
-  assert.equal(a.bottomLine, "Desmond pays two CI II premiums and a one-off travel premium.");
+  assert.equal(a.bottomLine, "Raymond pays two CI II premiums and a one-off travel premium.");
   assert.deepEqual(a.statements.map((x) => x.text), ["Up to S$73.17"]);
   // Nothing left out: pointers stay.
   const c = { summary: b, bottomLine: b, statements: [{ text: "Up to S$73.17", amount: { text: "S$73.17" } }] };

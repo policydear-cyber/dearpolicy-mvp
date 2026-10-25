@@ -640,8 +640,8 @@ function runEndToEndFixtures() {
   test("end-to-end: two policies with byte-identical wording but distinct policy identities are both counted independently, never merged as duplicates", () => {
     const sharedWordingText = "Group Term Life: Death Benefit. 100% of the Sum Insured is payable on death.";
     const coverages = [
-      makeCoverage({ id: "cov-a", policyId: "P-A", insurer: "Singlife", policyNumber: "POL-DESMOND" }),
-      makeCoverage({ id: "cov-b", policyId: "P-B", insurer: "Singlife", policyNumber: "POL-CHARMAINE" }),
+      makeCoverage({ id: "cov-a", policyId: "P-A", insurer: "Singlife", policyNumber: "POL-RAYMOND" }),
+      makeCoverage({ id: "cov-b", policyId: "P-B", insurer: "Singlife", policyNumber: "POL-JOSEPHINE" }),
     ];
     const assessments = [
       makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 150000, currency: "SGD" }),

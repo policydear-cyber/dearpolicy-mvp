@@ -4,7 +4,7 @@
   "checks": [
     {
       "turn": null,
-      "name": "Desmond's Personal Accident sum insured (S$300,000) is stated",
+      "name": "Raymond's Personal Accident sum insured (S$300,000) is stated",
       "ok": true,
       "stage": "presentation"
     },
@@ -94,7 +94,7 @@
       "name": "the closed-tibia illustration S$9,000 (6% x S$300,000 x 50%) is shown",
       "ok": false,
       "stage": "calculation",
-      "detail": "You told me the fracture was in Desmond’s tibia and was closed; you also said it was confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; two nights alone do not establish the number of complete 24-hou"
+      "detail": "You told me the fracture was in Raymond’s tibia and was closed; you also said it was confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; two nights alone do not establish the number of complete 24-hou"
     },
     {
       "turn": 5,
@@ -138,7 +138,7 @@
       "name": "the stay's Accident Hospital Income S$100 (one complete 24-hour period) is shown",
       "ok": true,
       "stage": "calculation",
-      "detail": "You told me Desmond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Desmond’s indicative estimate is S$100, assumi"
+      "detail": "You told me Raymond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Raymond’s indicative estimate is S$100, assumi"
     },
     {
       "turn": 6,
@@ -152,7 +152,7 @@
       "name": "the reported hospital stay is addressed by turn 3 or 4 (hospital income / complete 24 hours)",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The policy lists 10% of the Sum Insured for a fracture of the thigh bone (femur), 6% for the lower leg (tibia or fibula), and 4% for the kneecap (patella); fracture benefits are payable only when confir"
+      "detail": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The policy lists 10% of the Sum Insured for a fracture of the thigh bone (femur), 6% for the lower leg (tibia or fibula), and 4% for the kneecap (patella); fracture benefits are payable only when confir"
     },
     {
       "turn": null,
@@ -183,7 +183,7 @@
       "name": "saved facts include the X-ray, the nights, the closed tibia and both times",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "injury=broke his leg (Desmond broke his leg.); fracture_bone=tibia (The tibia.); fracture_type=closed (It was a closed fracture.); how_it_happened=fell down the stairs (He fell down the stairs.); fracture_pattern=transverse fracture (Transverse fracture.); admission_datetime=2026-10-03T21:00+08:00 ("
+      "detail": "injury=broke his leg (Raymond broke his leg.); fracture_bone=tibia (The tibia.); fracture_type=closed (It was a closed fracture.); how_it_happened=fell down the stairs (He fell down the stairs.); fracture_pattern=transverse fracture (Transverse fracture.); admission_datetime=2026-10-03T21:00+08:00 ("
     },
     {
       "turn": 2,
@@ -248,14 +248,14 @@
       "name": "the Accident Hospital Income figure is labelled an illustration or indicative estimate",
       "ok": true,
       "stage": "presentation",
-      "detail": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Desmond’s indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident."
+      "detail": "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Raymond’s indicative estimate is S$100, assuming at least 1 of the 90 days is still available this accident."
     },
     {
       "turn": 6,
       "name": "the final answer gives useful information (a figure with its basis), not only echoes, caveats or an insurer referral",
       "ok": true,
       "stage": "presentation",
-      "detail": "You told me Desmond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Desmond’s indicative estimate is S$100, assumi"
+      "detail": "You told me Raymond was admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; based on those times, Raymond’s indicative estimate is S$100, assumi"
     }
   ],
   "incomplete": null

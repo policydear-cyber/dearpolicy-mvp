@@ -4,7 +4,7 @@
   "checks": [
     {
       "turn": null,
-      "name": "Desmond's Personal Accident sum insured (S$300,000) is stated",
+      "name": "Raymond's Personal Accident sum insured (S$300,000) is stated",
       "ok": true,
       "stage": "presentation"
     },
@@ -85,14 +85,14 @@
       "name": "'transverse' does not select a payout row (no 'Other fracture' / 1%)",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confir"
+      "detail": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confir"
     },
     {
       "turn": 4,
       "name": "after 'transverse' it asks for the detail the schedule uses (bone, or closed/open)",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
+      "detail": "Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?"
     },
     {
       "turn": 4,
@@ -112,7 +112,7 @@
       "name": "the closed-tibia illustration S$9,000 (6% x S$300,000 x 50%) is shown",
       "ok": true,
       "stage": "presentation",
-      "detail": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and "
+      "detail": "You told me, “The tibia. It was a closed fracture.”\nRaymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and "
     },
     {
       "turn": 5,
@@ -156,7 +156,7 @@
       "name": "the stay's Accident Hospital Income S$100 (one complete 24-hour period) is shown",
       "ok": true,
       "stage": "calculation",
-      "detail": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient conf"
+      "detail": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient conf"
     },
     {
       "turn": 6,
@@ -170,7 +170,7 @@
       "name": "the reported hospital stay is addressed by turn 3 or 4 (hospital income / complete 24 hours)",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confir"
+      "detail": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confir"
     },
     {
       "turn": null,
@@ -201,7 +201,7 @@
       "name": "saved facts include the X-ray, the nights, the closed tibia and both times",
       "ok": true,
       "stage": "model reasoning-tool selection",
-      "detail": "injury=broke his leg (Desmond broke his leg.); fracture_type=closed fracture (It was a closed fracture.); fractured_bone=tibia (The tibia.); xray_confirmed=yes (Yes, confirmed with an X-ray.); how_it_happened=fell down the stairs (He fell down the stairs.); fracture_pattern=transverse fracture (Tran"
+      "detail": "injury=broke his leg (Raymond broke his leg.); fracture_type=closed fracture (It was a closed fracture.); fractured_bone=tibia (The tibia.); xray_confirmed=yes (Yes, confirmed with an X-ray.); how_it_happened=fell down the stairs (He fell down the stairs.); fracture_pattern=transverse fracture (Tran"
     },
     {
       "turn": 1,
@@ -292,21 +292,21 @@
       "name": "the Fracture of lower leg (tibia or fibula) figure is labelled an illustration or indicative estimate",
       "ok": true,
       "stage": "presentation",
-      "detail": "If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “"
+      "detail": "If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “"
     },
     {
       "turn": 6,
       "name": "the Accident Hospital Income figure is labelled an illustration or indicative estimate",
       "ok": true,
       "stage": "presentation",
-      "detail": "Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least "
+      "detail": "Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least "
     },
     {
       "turn": 6,
       "name": "the final answer gives useful information (a figure with its basis), not only echoes, caveats or an insurer referral",
       "ok": true,
       "stage": "presentation",
-      "detail": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient conf"
+      "detail": "You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”\nBased on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient conf"
     }
   ],
   "incomplete": null

@@ -1,6 +1,6 @@
 /**
  * Seeds the synthetic injury-chat fixture into household A of the LOCAL
- * database: a family member "Charmaine" (every name carries the run's
+ * database: a family member "Josephine" (every name carries the run's
  * SYNTHETIC-DPTEST prefix) with one synthetic personal-accident schedule
  * whose stored benefit rules include a permanent-loss arm row, a genuine
  * fracture benefit and an accident medical reimbursement benefit -- the
@@ -58,16 +58,16 @@ async function main() {
   if (!household) throw new Error("the synthetic household is not provisioned");
   if (!household.name.startsWith(prefix)) throw new Error("seed refuses a household whose name does not carry this run's synthetic prefix");
   const householdId = household.household_id;
-  const charmaine = randomUUID(), other = randomUUID();
-  // Charmaine is the display name the chat resolves; the synthetic marker is
+  const josephine = randomUUID(), other = randomUUID();
+  // Josephine is the display name the chat resolves; the synthetic marker is
   // kept in preferred_name-free legal name so cleanup still finds the rows via
   // the household prefix.
-  await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Charmaine','spouse')`, [charmaine, householdId]);
+  await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Josephine','spouse')`, [josephine, householdId]);
   await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Bob','child')`, [other, householdId]);
-  const charmainePolicy = await seedPolicy(householdId, charmaine, "Charmaine", prefix, "C");
+  const josephinePolicy = await seedPolicy(householdId, josephine, "Josephine", prefix, "C");
   const otherPolicy = await seedPolicy(householdId, other, "Bob", prefix, "B");
   await writeFile(path.resolve(process.env.E2E_INJURY_SEED_FILE || ".e2e-injury-seed.json"),
-    JSON.stringify({ household: householdId, charmaine, other, charmainePolicy, otherPolicy }, null, 2));
+    JSON.stringify({ household: householdId, josephine, other, josephinePolicy, otherPolicy }, null, 2));
   console.log("seeded synthetic injury-chat fixture");
   await pool.end();
 }

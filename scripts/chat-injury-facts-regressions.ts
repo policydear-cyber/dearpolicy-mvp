@@ -1,6 +1,6 @@
 /**
  * Deterministic fracture / injury facts in the live-chat parser (lib/chat/facts.ts).
- * "Charmaine broke her arm." must keep the fracture kind even when the model
+ * "Josephine broke her arm." must keep the fracture kind even when the model
  * reduces it to a generic injury, and hypotheticals/negations must add nothing.
  */
 import assert from "node:assert/strict";
@@ -22,9 +22,9 @@ const v = (s: ConversationState, key: string, id = "p1") => s.subjects[id]?.[key
 const strip = (facts: SubjectFacts) => Object.fromEntries(Object.entries(facts).map(([k, f]) => [k, { ...f, recordedAt: "" }]));
 
 const positives: [string, string, "left" | "right" | null, string][] = [
-  ["Charmaine broke her arm.", "arm", null, "broke her arm"],
+  ["Josephine broke her arm.", "arm", null, "broke her arm"],
   ["She has a broken arm.", "arm", null, "broken arm"],
-  ["Charmaine fractured her wrist yesterday.", "wrist", null, "fractured her wrist"],
+  ["Josephine fractured her wrist yesterday.", "wrist", null, "fractured her wrist"],
   ["The X-ray showed a fracture of the left elbow.", "elbow", "left", "fracture of the left elbow"],
   ["He cracked a rib playing football.", "rib", null, "cracked a rib"],
   ["He cracked two ribs? No - he cracked ribs.", "rib", null, "cracked ribs"],
@@ -67,18 +67,18 @@ for (const message of negatives) test("negative: " + message, () => {
 });
 
 test("model 'arm' injury in the same turn does not erase the fracture", () => {
-  const s = turn("Charmaine broke her arm.", { facts: [mf("injuries", "arm", "broke her arm"), mf("injuryKind", "broke", "broke her arm"), mf("fractureBodyPart", null, "broke her arm")] });
+  const s = turn("Josephine broke her arm.", { facts: [mf("injuries", "arm", "broke her arm"), mf("injuryKind", "broke", "broke her arm"), mf("fractureBodyPart", null, "broke her arm")] });
   assert.equal(v(s, "injuryKind"), "fracture");
   assert.equal(v(s, "fractureBodyPart"), "arm");
   assert.equal(v(s, "injuries"), "broke her arm");
 });
 test("a more specific model injuries value is kept", () => {
-  const s = turn("Charmaine broke her arm - a fractured left radius.", { facts: [mf("injuries", "fractured left radius", "a fractured left radius")] });
+  const s = turn("Josephine broke her arm - a fractured left radius.", { facts: [mf("injuries", "fractured left radius", "a fractured left radius")] });
   assert.equal(v(s, "injuries"), "fractured left radius");
   assert.equal(v(s, "injuryKind"), "fracture");
 });
 test("'An accident.' follow-up keeps the fracture facts; vaguer model values are ignored", () => {
-  const first = turn("Charmaine broke her arm.");
+  const first = turn("Josephine broke her arm.");
   const s = turn("An accident.", { state: first, intent: "follow_up", newTopic: false,
     facts: [mf("injuries", "accident", "An accident."), mf("injuryKind", "accident", "An accident."), mf("injured", false, "An accident."), mf("eventType", "accident", "An accident.")] });
   assert.equal(s.intent, "claim");
@@ -90,12 +90,12 @@ test("'An accident.' follow-up keeps the fracture facts; vaguer model values are
   assert.equal(s.scenarios!.p1.length, 1);
 });
 test("later model refinement of the site is accepted", () => {
-  const first = turn("Charmaine broke her arm.");
+  const first = turn("Josephine broke her arm.");
   const s = turn("It was her left arm.", { state: first, intent: "follow_up", newTopic: false, facts: [mf("fractureBodyPart", "left arm", "left arm"), mf("fractureBodyPart", "leg", "It was her left arm.")] });
   assert.equal(v(s, "fractureBodyPart"), "left arm");
 });
 test("an explicit correction clears the fracture", () => {
-  const first = turn("Charmaine broke her arm.");
+  const first = turn("Josephine broke her arm.");
   const s = turn("Sorry, it wasn't broken, just bruised.", { state: first, intent: "follow_up", newTopic: false, facts: [mf("injuries", "bruised", "just bruised")] });
   assert.equal(v(s, "injuryKind"), undefined);
   assert.equal(v(s, "fractureBodyPart"), undefined);
@@ -104,7 +104,7 @@ test("an explicit correction clears the fracture", () => {
   assert.deepEqual(s.scenarios!.p1, []);
 });
 test("'hurt her arm' is an injury, not a fracture", () => {
-  for (const message of ["Charmaine hurt her arm.", "She injured her right arm."]) {
+  for (const message of ["Josephine hurt her arm.", "She injured her right arm."]) {
     const s = turn(message, { intent: "policy_question" });
     assert.equal(v(s, "injured"), true);
     assert.equal(v(s, "injuryBodyPart"), "arm");
@@ -115,7 +115,7 @@ test("'hurt her arm' is an injury, not a fracture", () => {
   assert.equal(v(turn("She injured her right arm."), "injurySide"), "right");
 });
 test("two subjects: no deterministic fact is attributed", () => {
-  const s = turn("Charmaine broke her arm.", { subjectIds: ["p1", "p2"] });
+  const s = turn("Josephine broke her arm.", { subjectIds: ["p1", "p2"] });
   for (const id of ["p1", "p2"]) { assert.equal(v(s, "injuryKind", id), undefined); assert.equal(v(s, "fractureBodyPart", id), undefined); assert.deepEqual(s.scenarios![id] ?? [], []); }
 });
 test("a deceased subject gets no fracture facts", () => {
@@ -124,15 +124,15 @@ test("a deceased subject gets no fracture facts", () => {
   assert.equal(v(s, "injuryKind"), undefined);
 });
 test("determinism: same input twice gives identical facts", () => {
-  const a = turn("Charmaine broke her left wrist.", { facts: [mf("injuries", "wrist", "left wrist")] });
-  const b = turn("Charmaine broke her left wrist.", { facts: [mf("injuries", "wrist", "left wrist")] });
+  const a = turn("Josephine broke her left wrist.", { facts: [mf("injuries", "wrist", "left wrist")] });
+  const b = turn("Josephine broke her left wrist.", { facts: [mf("injuries", "wrist", "left wrist")] });
   assert.deepEqual(strip(a.subjects.p1), strip(b.subjects.p1));
   assert.deepEqual(a.scenarios, b.scenarios);
 });
 
 test("X1: an elliptical self-retraction cancels the fracture report in the same message", () => {
-  for (const message of ["Charmaine broke her arm last year. No wait, she didn't.", "Charmaine broke her arm. Actually she didn't.",
-    "Charmaine broke her arm. Sorry, she didn't.", "Charmaine broke her arm. Scratch that.", "Charmaine broke her arm last year? no wait, she didn't"]) {
+  for (const message of ["Josephine broke her arm last year. No wait, she didn't.", "Josephine broke her arm. Actually she didn't.",
+    "Josephine broke her arm. Sorry, she didn't.", "Josephine broke her arm. Scratch that.", "Josephine broke her arm last year? no wait, she didn't"]) {
     const s = turn(message, { facts: [mf("injured", true, "broke her arm"), mf("injuries", "broke her arm", "broke her arm")] });
     assert.equal(v(s, "injuryKind"), undefined, message);
     assert.equal(v(s, "fractureBodyPart"), undefined, message);
@@ -142,14 +142,14 @@ test("X1: an elliptical self-retraction cancels the fracture report in the same 
   }
 });
 test("X1: a later-turn retraction clears an existing fracture", () => {
-  const s = turn("No wait, she didn't.", { state: turn("Charmaine broke her arm."), intent: "follow_up", newTopic: false });
+  const s = turn("No wait, she didn't.", { state: turn("Josephine broke her arm."), intent: "follow_up", newTopic: false });
   assert.equal(v(s, "injuryKind"), undefined);
   assert.equal(v(s, "fractureBodyPart"), undefined);
   assert.equal(v(s, "injured"), undefined);
   assert.deepEqual(s.scenarios!.p1, []);
 });
 test("X1: 'actually' without a retraction does not cancel", () => {
-  const s = turn("Charmaine broke her arm. Actually she didn't go to hospital.");
+  const s = turn("Josephine broke her arm. Actually she didn't go to hospital.");
   assert.equal(v(s, "injuryKind"), "fracture");
 });
 test("X5: model injury facts on hypotheticals, questions and negations are screened", () => {

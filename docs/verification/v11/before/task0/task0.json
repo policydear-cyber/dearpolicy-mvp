@@ -4,10 +4,10 @@
   "checks": [
     {
       "id": "T0-1",
-      "defect": "\"Charmaine broke her arm\" produced an assessment and a permanent-loss schedule",
+      "defect": "\"Josephine broke her arm\" produced an assessment and a permanent-loss schedule",
       "pass": true,
       "detail": "mode=fact_finding; first question=\"Was this caused by an accident, or an illness?\"; permanent-loss text=none; claim items with amounts=0",
-      "evidence": "I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply."
+      "evidence": "I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply."
     },
     {
       "id": "T0-2",

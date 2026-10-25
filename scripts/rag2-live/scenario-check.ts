@@ -7,7 +7,7 @@
  *   node --import tsx scripts/rag2-live/scenario-check.ts <RUN directory>   (writes scenario-grade.json + .md there)
  *
  * Source-grounded expectations (scripts/fixtures/rag2-scenario/household.ts):
- *   - Desmond's Group Personal Accident sum insured: S$300,000 "As of 01/07/2025" on the current certificate (not the
+ *   - Raymond's Group Personal Accident sum insured: S$300,000 "As of 01/07/2025" on the current certificate (not the
  *     Group Term Life S$500,000, not Grace's S$200,000, not the superseded S$250,000, not another household's).
  *   - Lower leg (tibia or fibula) 6% of the Sum Insured; simple (closed) fracture: 50% of the percentage shown
  *     -> 6% x S$300,000 = S$18,000 -> 50% = S$9,000 (a conditional illustration, never an approved payment).
@@ -33,7 +33,7 @@ export function gradeScenario(conv: any): { verdict: "PASS" | "FAIL" | "INCOMPLE
   const Q = (i: number) => ((turns[i]?.questions ?? []) as string[]).join(" | ");
   // 1. certificate amount and person
   const firstSum = turns.findIndex((t) => has(String(t.visible), "S$300,000"));
-  add(null, "Desmond's Personal Accident sum insured (S$300,000) is stated", firstSum >= 0, firstSum >= 0 ? "presentation" : "model reasoning-tool selection");
+  add(null, "Raymond's Personal Accident sum insured (S$300,000) is stated", firstSum >= 0, firstSum >= 0 ? "presentation" : "model reasoning-tool selection");
   for (const [f, why] of [["S$500,000", "Group Term Life"], ["S$200,000", "Grace's amount"], ["S$250,000", "superseded certificate"], ["S$800,000", "another household"], ["S$900,000", "another household"]] as const) add(null, `never states ${f} (${why})`, !has(all, f), "person-version resolution");
   const notRead = turns.findIndex((t) => /haven['’]t (?:yet )?read [^.]*sum insured/i.test(String(t.visible)));
   add(notRead >= 0 ? notRead + 1 : null, "the certificate's sum insured is read when it is available (not 'I haven't yet read the sum insured')", notRead < 0, "model reasoning-tool selection", notRead >= 0 ? "retrieval/tool-selection failure: the certificate was available" : undefined);

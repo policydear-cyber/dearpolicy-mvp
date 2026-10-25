@@ -56,7 +56,7 @@ async function main() {
     await h.admin.provisionClaimReviewer({ userId: reviewer, displayLabel: "Reviewer", operator: "ops.lead" });
     const owner = fixedUuid("b9100000", 1);
     const household = await h.createHousehold(fixedUuid("a9100000", 1), owner, "SYNTHETIC-v11-estimate");
-    const member = await h.createMember(household, fixedUuid("d9100000", 1), "Tan Yi Chuen Desmond");
+    const member = await h.createMember(household, fixedUuid("d9100000", 1), "Tan Yi Chuen Raymond");
     const policies: { policyId: string; coverageId: string }[] = [];
     // As the eval journey's operator fixture (e2e/support/seed-claim-fixture.ts):
     // two certificates that write their currency (the reviewer decides both)
@@ -89,7 +89,7 @@ async function main() {
     // review): the diagnosis and a claim-money question in one message, then
     // the interview answered through the question card. The claim's facts are
     // ONLY what the chat recorded -- nothing is patched into the claim.
-    let turn = await send("Tan Yi Chuen Desmond was diagnosed with Malignant neoplasm of the colon on 2026-06-01. How much can we claim?");
+    let turn = await send("Tan Yi Chuen Raymond was diagnosed with Malignant neoplasm of the colon on 2026-06-01. How much can we claim?");
     const replies: [RegExp, string][] = [[/specialist|oncologist/i, "Yes"], [/when|date/i, "2026-06-01"], [/hospital|admitted/i, "No"],
       [/stage|spread|severity/i, "Not sure"], [/symptom|before the (?:cover|policy)|first/i, "No"], [/./, "Not sure"]];
     let claimId = turn.claimSessionId;

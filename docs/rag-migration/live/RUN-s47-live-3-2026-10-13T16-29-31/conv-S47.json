@@ -5,7 +5,7 @@
   "turns": [
     {
       "turn": 1,
-      "user": "Desmond broke his leg.",
+      "user": "Raymond broke his leg.",
       "jobStatus": "complete",
       "jobError": null,
       "visible": "I’m sorry to hear that.\nHow did the leg injury happen?",
@@ -444,7 +444,7 @@
       "user": "He fell down the stairs.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).\nWhich bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
+      "visible": "I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).\nWhich bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
       "timings": {
         "acceptedMs": 11,
         "firstAssistantPersistedMs": 15488,
@@ -983,7 +983,7 @@
       "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
+      "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
       "timings": {
         "acceptedMs": 15,
         "firstAssistantPersistedMs": 19989,
@@ -1856,7 +1856,7 @@
       "user": "The tibia. It was a closed fracture.",
       "jobStatus": "complete",
       "jobError": null,
-      "visible": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.\nThe schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\nWhen you’re ready, here is the question I was on.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
+      "visible": "You told me, “The tibia. It was a closed fracture.”\nRaymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.\nThe schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\nWhen you’re ready, here is the question I was on.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
       "timings": {
         "acceptedMs": 11,
         "firstAssistantPersistedMs": 14423,
@@ -2846,7 +2846,7 @@
               "turn": 1,
               "basis": "stated",
               "value": "broke his leg",
-              "words": "Desmond broke his leg.",
+              "words": "Raymond broke his leg.",
               "source": "user_reported"
             },
             "fracture_bone": {
@@ -2969,7 +2969,7 @@
                     {
                       "key": "injury",
                       "value": "broke his leg",
-                      "words": "Desmond broke his leg."
+                      "words": "Raymond broke his leg."
                     }
                   ],
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -3051,7 +3051,7 @@
                 "evidenceIds": []
               }
             ],
-            "userMessage": "Desmond broke his leg.",
+            "userMessage": "Raymond broke his leg.",
             "evidenceChosen": [
               "e3",
               "e4",
@@ -3115,7 +3115,7 @@
             "outcome": "ask_user",
             "composed": [
               "I’m sorry that happened.",
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
               "The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open)."
             ],
             "latencyMs": 14654,
@@ -3266,7 +3266,7 @@
                   "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                       "value_ids": [
                         "v4"
                       ],
@@ -3361,7 +3361,7 @@
             "modelId": "openai:gpt-6-luna",
             "outcome": "ask_user",
             "composed": [
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
               "The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture.",
               "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods."
             ],
@@ -3430,7 +3430,7 @@
                   "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3452,7 +3452,7 @@
                   ]
                 },
                 "name": "ask_user",
-                "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+                "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
                 "evidenceIds": []
               },
               {
@@ -3463,7 +3463,7 @@
                   "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3486,7 +3486,7 @@
                   ]
                 },
                 "name": "ask_user",
-                "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+                "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
                 "evidenceIds": []
               },
               {
@@ -3554,7 +3554,7 @@
                   "question": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
                   "statements": [
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                       "benefit": "Group Personal Accident",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -3721,7 +3721,7 @@
             "reasked": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
             "composed": [
               "You told me, “The tibia. It was a closed fracture.”",
-              "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+              "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
               "The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.",
               "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods."
             ],
@@ -3848,7 +3848,7 @@
                       "subject_id": "7c000000-0000-4000-8000-000000000001"
                     },
                     {
-                      "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+                      "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
                       "benefit": "Group Personal Accident Sum Insured",
                       "subject_id": "7c000000-0000-4000-8000-000000000001",
                       "evidence_ids": [
@@ -4561,7 +4561,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4600,7 +4600,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4610,13 +4610,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4653,7 +4653,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4692,7 +4692,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4702,13 +4702,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4724,7 +4724,7 @@
               ],
               "columnBasis": {
                 "basis": "document",
-                "detail": "the document prints Desmond Lim Wei Jie's own row (“Lim Wei Jie, Desmond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
+                "detail": "the document prints Raymond Lim Wei Jie's own row (“Lim Wei Jie, Raymond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
                 "evidence": {
                   "page": {
                     "end": 1,
@@ -4741,7 +4741,7 @@
                         },
                         {
                           "end": 577,
-                          "text": "Lim Wei Jie, Desmond",
+                          "text": "Lim Wei Jie, Raymond",
                           "start": 557,
                           "header": ""
                         },
@@ -4780,7 +4780,7 @@
                     },
                     "rowPerson": {
                       "end": 577,
-                      "text": "Lim Wei Jie, Desmond",
+                      "text": "Lim Wei Jie, Raymond",
                       "start": 557,
                       "memberId": "7c000000-0000-4000-8000-000000000001"
                     },
@@ -4790,13 +4790,13 @@
                   "context": null,
                   "passage": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
                   "support": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
@@ -4834,7 +4834,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4873,7 +4873,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4883,13 +4883,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4926,7 +4926,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -4965,7 +4965,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -4975,13 +4975,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -4997,7 +4997,7 @@
               ],
               "columnBasis": {
                 "basis": "document",
-                "detail": "the document prints Desmond Lim Wei Jie's own row (“Lim Wei Jie, Desmond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
+                "detail": "the document prints Raymond Lim Wei Jie's own row (“Lim Wei Jie, Raymond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
                 "evidence": {
                   "page": {
                     "end": 1,
@@ -5014,7 +5014,7 @@
                         },
                         {
                           "end": 577,
-                          "text": "Lim Wei Jie, Desmond",
+                          "text": "Lim Wei Jie, Raymond",
                           "start": 557,
                           "header": ""
                         },
@@ -5053,7 +5053,7 @@
                     },
                     "rowPerson": {
                       "end": 577,
-                      "text": "Lim Wei Jie, Desmond",
+                      "text": "Lim Wei Jie, Raymond",
                       "start": 557,
                       "memberId": "7c000000-0000-4000-8000-000000000001"
                     },
@@ -5063,13 +5063,13 @@
                   "context": null,
                   "passage": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
                   "support": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
@@ -5107,7 +5107,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -5146,7 +5146,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -5156,13 +5156,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -5199,7 +5199,7 @@
                       },
                       {
                         "end": 577,
-                        "text": "Lim Wei Jie, Desmond",
+                        "text": "Lim Wei Jie, Raymond",
                         "start": 557,
                         "header": ""
                       },
@@ -5238,7 +5238,7 @@
                   },
                   "rowPerson": {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "memberId": "7c000000-0000-4000-8000-000000000001"
                   },
@@ -5248,13 +5248,13 @@
                 "context": null,
                 "passage": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
                 "support": {
                   "end": 613,
-                  "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                  "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                   "start": 543,
                   "onPage": 1
                 },
@@ -5270,7 +5270,7 @@
               ],
               "columnBasis": {
                 "basis": "document",
-                "detail": "the document prints Desmond Lim Wei Jie's own row (“Lim Wei Jie, Desmond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
+                "detail": "the document prints Raymond Lim Wei Jie's own row (“Lim Wei Jie, Raymond”) under “GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)”",
                 "evidence": {
                   "page": {
                     "end": 1,
@@ -5287,7 +5287,7 @@
                         },
                         {
                           "end": 577,
-                          "text": "Lim Wei Jie, Desmond",
+                          "text": "Lim Wei Jie, Raymond",
                           "start": 557,
                           "header": ""
                         },
@@ -5326,7 +5326,7 @@
                     },
                     "rowPerson": {
                       "end": 577,
-                      "text": "Lim Wei Jie, Desmond",
+                      "text": "Lim Wei Jie, Raymond",
                       "start": 557,
                       "memberId": "7c000000-0000-4000-8000-000000000001"
                     },
@@ -5336,13 +5336,13 @@
                   "context": null,
                   "passage": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
                   "support": {
                     "end": 613,
-                    "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+                    "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
                     "start": 543,
                     "onPage": 1
                   },
@@ -5358,16 +5358,16 @@
         },
         "history": [
           {
-            "user": "Desmond broke his leg.",
+            "user": "Raymond broke his leg.",
             "assistant": "I’m sorry to hear that. How did the leg injury happen?"
           },
           {
             "user": "He fell down the stairs.",
-            "assistant": "I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open). Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?"
+            "assistant": "I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open). Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?"
           },
           {
             "user": "Yes, confirmed with an X-ray. He was also warded for two nights.",
-            "assistant": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods. What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
+            "assistant": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods. What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
           },
           {
             "user": "Transverse fracture.",
@@ -5375,7 +5375,7 @@
           },
           {
             "user": "The tibia. It was a closed fracture.",
-            "assistant": "You told me, “The tibia. It was a closed fracture.” Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date. The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods. What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them. When you’re ready, here is the question I was on. What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
+            "assistant": "You told me, “The tibia. It was a closed fracture.” Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date. The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods. What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them. When you’re ready, here is the question I was on. What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
           },
           {
             "user": "Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.",
@@ -5434,13 +5434,13 @@
             "context": null,
             "passage": {
               "end": 424,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 354,
               "onPage": 1
             },
             "support": {
               "end": 424,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 354,
               "onPage": 1
             },
@@ -5600,7 +5600,7 @@
             "context": null,
             "passage": {
               "end": 684,
-              "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+              "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
               "start": 425,
               "onPage": 1
             },
@@ -5849,7 +5849,7 @@
                   },
                   {
                     "end": 577,
-                    "text": "Lim Wei Jie, Desmond",
+                    "text": "Lim Wei Jie, Raymond",
                     "start": 557,
                     "header": ""
                   },
@@ -5888,7 +5888,7 @@
               },
               "rowPerson": {
                 "end": 577,
-                "text": "Lim Wei Jie, Desmond",
+                "text": "Lim Wei Jie, Raymond",
                 "start": 557,
                 "memberId": "7c000000-0000-4000-8000-000000000001"
               },
@@ -5898,13 +5898,13 @@
             "context": null,
             "passage": {
               "end": 613,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "start": 543,
               "onPage": 1
             },
             "support": {
               "end": 613,
-              "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "start": 543,
               "onPage": 1
             },
@@ -5923,7 +5923,7 @@
             "context": null,
             "passage": {
               "end": 424,
-              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+              "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
               "start": 0,
               "onPage": 1
             },
@@ -5967,7 +5967,7 @@
         "subjectId": "7c000000-0000-4000-8000-000000000001",
         "established": [
           {
-            "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+            "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
             "turn": 3,
             "benefit": "Group Personal Accident",
             "valueIds": [],
@@ -5987,7 +5987,7 @@
             ]
           },
           {
-            "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+            "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
             "turn": 5,
             "benefit": "Group Personal Accident Sum Insured",
             "valueIds": [],
@@ -6027,7 +6027,7 @@
     "turns": [
       {
         "index": 0,
-        "user": "Desmond broke his leg.",
+        "user": "Raymond broke his leg.",
         "answer": {
           "mode": "fact_finding",
           "details": [],
@@ -6163,7 +6163,7 @@
                   {
                     "key": "injury",
                     "value": "broke his leg",
-                    "words": "Desmond broke his leg."
+                    "words": "Raymond broke his leg."
                   }
                 ],
                 "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -6245,7 +6245,7 @@
               "evidenceIds": []
             }
           ],
-          "userMessage": "Desmond broke his leg.",
+          "userMessage": "Raymond broke his leg.",
           "evidenceChosen": [
             "e3",
             "e4",
@@ -6260,11 +6260,11 @@
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).",
+          "summary": "I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).",
           "citations": [
             {
               "chunkId": "rag2:e13",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -6318,12 +6318,12 @@
               "layout": "person_row",
               "benefit": "Group Personal Accident",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             }
@@ -6333,8 +6333,8 @@
           "conversationRevision": 2,
           "potentialPayoutTotals": []
         },
-        "content": "I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).",
-        "visible": "I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).\nWhich bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
+        "content": "I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).",
+        "visible": "I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).\nWhich bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?\nThis changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)",
         "questions": [
           "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?"
         ],
@@ -6396,7 +6396,7 @@
           "outcome": "ask_user",
           "composed": [
             "I’m sorry that happened.",
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
             "The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open)."
           ],
           "latencyMs": 14654,
@@ -6547,7 +6547,7 @@
                 "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                     "value_ids": [
                       "v4"
                     ],
@@ -6586,11 +6586,11 @@
         "answer": {
           "mode": "fact_finding",
           "details": [],
-          "summary": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.",
+          "summary": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.",
           "citations": [
             {
               "chunkId": "rag2:e13",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -6654,12 +6654,12 @@
               "layout": "person_row",
               "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             },
@@ -6682,8 +6682,8 @@
           "conversationRevision": 3,
           "potentialPayoutTotals": []
         },
-        "content": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.",
-        "visible": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?\nThis changes what your policy pays under: “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
+        "content": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.",
+        "visible": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?\nThis changes what your policy pays under: “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
         "questions": [
           "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
         ],
@@ -6752,7 +6752,7 @@
           "modelId": "openai:gpt-6-luna",
           "outcome": "ask_user",
           "composed": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
             "The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture.",
             "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods."
           ],
@@ -6821,7 +6821,7 @@
                 "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6843,7 +6843,7 @@
                 ]
               },
               "name": "ask_user",
-              "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+              "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
               "evidenceIds": []
             },
             {
@@ -6854,7 +6854,7 @@
                 "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -6877,7 +6877,7 @@
                 ]
               },
               "name": "ask_user",
-              "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+              "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
               "evidenceIds": []
             },
             {
@@ -6945,7 +6945,7 @@
                 "question": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
                 "statements": [
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                     "benefit": "Group Personal Accident",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -7110,7 +7110,7 @@
         "answer": {
           "mode": "answer",
           "details": [
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
             "The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.",
             "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.",
             "What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.",
@@ -7120,7 +7120,7 @@
           "citations": [
             {
               "chunkId": "rag2:e13",
-              "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "insurer": "Meridian Assurance",
               "pageEnd": 1,
               "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -7186,12 +7186,12 @@
               "layout": "person_row",
               "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
               "pageEnd": 1,
-              "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+              "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
               "currency": "SGD",
               "policyId": "7c000000-0000-4000-8000-000000000101",
-              "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+              "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
               "pageStart": 1,
-              "rowPerson": "Lim Wei Jie, Desmond",
+              "rowPerson": "Lim Wei Jie, Raymond",
               "subjectId": "7c000000-0000-4000-8000-000000000001",
               "documentHash": "sha256:scenario-cert"
             },
@@ -7216,7 +7216,7 @@
           "resolvedFamilyMemberId": "7c000000-0000-4000-8000-000000000001"
         },
         "content": "You told me, “The tibia. It was a closed fracture.”",
-        "visible": "You told me, “The tibia. It was a closed fracture.”\nDesmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.\nThe schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\nWhen you’re ready, here is the question I was on.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?\nThis changes what your policy pays under: “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
+        "visible": "You told me, “The tibia. It was a closed fracture.”\nRaymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.\nThe schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.\nAccident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\nWhen you’re ready, here is the question I was on.\nWhat were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?\nThis changes what your policy pays under: “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)",
         "questions": [
           "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?"
         ],
@@ -7279,7 +7279,7 @@
           "reasked": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
           "composed": [
             "You told me, “The tibia. It was a closed fracture.”",
-            "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+            "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
             "The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.",
             "Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods."
           ],
@@ -7406,7 +7406,7 @@
                     "subject_id": "7c000000-0000-4000-8000-000000000001"
                   },
                   {
-                    "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+                    "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
                     "benefit": "Group Personal Accident Sum Insured",
                     "subject_id": "7c000000-0000-4000-8000-000000000001",
                     "evidence_ids": [
@@ -7707,7 +7707,7 @@
           "turn": 1,
           "basis": "stated",
           "value": "broke his leg",
-          "words": "Desmond broke his leg.",
+          "words": "Raymond broke his leg.",
           "source": "user_reported"
         },
         "fracture_bone": {
@@ -7790,7 +7790,7 @@
                 {
                   "key": "injury",
                   "value": "broke his leg",
-                  "words": "Desmond broke his leg."
+                  "words": "Raymond broke his leg."
                 }
               ],
               "subject_id": "7c000000-0000-4000-8000-000000000001"
@@ -8040,7 +8040,7 @@
               "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                   "value_ids": [
                     "v4"
                   ],
@@ -8149,7 +8149,7 @@
               "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8171,7 +8171,7 @@
               ]
             },
             "name": "ask_user",
-            "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
+            "error": "not shown before the question: \"Thanks for letting me know; I’ve noted the X-ray confirmation and the two-night \" (states cover or a figure without citing evidence); \"Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 a\" (S$300,000 is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)). State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out.",
             "evidenceIds": []
           },
           {
@@ -8182,7 +8182,7 @@
               "question": "Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8205,7 +8205,7 @@
               ]
             },
             "name": "ask_user",
-            "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
+            "error": "before asking: the household also told you \"He was also warded for two nights.\" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Raymond Lim Wei Jie (Raymond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.",
             "evidenceIds": []
           },
           {
@@ -8273,7 +8273,7 @@
               "question": "What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?",
               "statements": [
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
                   "benefit": "Group Personal Accident",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8500,7 +8500,7 @@
                   "subject_id": "7c000000-0000-4000-8000-000000000001"
                 },
                 {
-                  "text": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+                  "text": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
                   "benefit": "Group Personal Accident Sum Insured",
                   "subject_id": "7c000000-0000-4000-8000-000000000001",
                   "evidence_ids": [
@@ -8710,13 +8710,13 @@
         "context": null,
         "passage": {
           "end": 424,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 354,
           "onPage": 1
         },
         "support": {
           "end": 424,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 354,
           "onPage": 1
         },
@@ -8876,7 +8876,7 @@
         "context": null,
         "passage": {
           "end": 684,
-          "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
+          "text": "S****930G     Ng Hui Lin Grace        S$300,000     As of   01/07/2025\nGROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025\nS****930G     Ng Hui Lin Grace        S$200,000     As of   01/07/2025",
           "start": 425,
           "onPage": 1
         },
@@ -9125,7 +9125,7 @@
               },
               {
                 "end": 577,
-                "text": "Lim Wei Jie, Desmond",
+                "text": "Lim Wei Jie, Raymond",
                 "start": 557,
                 "header": ""
               },
@@ -9164,7 +9164,7 @@
           },
           "rowPerson": {
             "end": 577,
-            "text": "Lim Wei Jie, Desmond",
+            "text": "Lim Wei Jie, Raymond",
             "start": 557,
             "memberId": "7c000000-0000-4000-8000-000000000001"
           },
@@ -9174,13 +9174,13 @@
         "context": null,
         "passage": {
           "end": 613,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
           "start": 543,
           "onPage": 1
         },
         "support": {
           "end": 613,
-          "text": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+          "text": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
           "start": 543,
           "onPage": 1
         },
@@ -9199,7 +9199,7 @@
         "context": null,
         "passage": {
           "end": 424,
-          "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Desmond    S$500,000     As of   01/07/2025",
+          "text": "CERTIFICATE OF GROUP INSURANCE\nThis is to certify that the person(s) named herein is/are insured with \"Meridian Assurance\" for cover(s) as indicated:\nMERIDIAN PUBLIC SERVICE GROUP SCHEME (GROUP POLICY NO. G7720)   Page 1 of 1\nProduct, Policy Number, Particulars of Insured Person(s) and Sum Assured   Effective Date\nGROUP TERM LIFE(POLICY NO.MPS-500123)\nS****514D     Lim Wei Jie, Raymond    S$500,000     As of   01/07/2025",
           "start": 0,
           "onPage": 1
         },
@@ -9303,7 +9303,7 @@
         "citations": [
           {
             "chunkId": "rag2:e13",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9340,12 +9340,12 @@
             "layout": "person_row",
             "benefit": "Group Personal Accident",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           }
@@ -9367,7 +9367,7 @@
         "citations": [
           {
             "chunkId": "rag2:e13",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9414,12 +9414,12 @@
             "layout": "person_row",
             "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           },
@@ -9481,7 +9481,7 @@
         "citations": [
           {
             "chunkId": "rag2:e13",
-            "excerpt": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "excerpt": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "insurer": "Meridian Assurance",
             "pageEnd": 1,
             "policyId": "7c000000-0000-4000-8000-000000000101",
@@ -9528,12 +9528,12 @@
             "layout": "person_row",
             "benefit": "GROUP PERSONAL ACCIDENT(POLICY NO. MPS-500123)",
             "pageEnd": 1,
-            "passage": "S****514D     Lim Wei Jie, Desmond    S$300,000     As of   01/07/2025",
+            "passage": "S****514D     Lim Wei Jie, Raymond    S$300,000     As of   01/07/2025",
             "currency": "SGD",
             "policyId": "7c000000-0000-4000-8000-000000000101",
-            "sentence": "Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
+            "sentence": "Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.",
             "pageStart": 1,
-            "rowPerson": "Lim Wei Jie, Desmond",
+            "rowPerson": "Lim Wei Jie, Raymond",
             "subjectId": "7c000000-0000-4000-8000-000000000001",
             "documentHash": "sha256:scenario-cert"
           },

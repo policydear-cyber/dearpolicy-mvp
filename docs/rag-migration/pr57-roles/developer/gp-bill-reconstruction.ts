@@ -1,5 +1,5 @@
 /**
- * RECONSTRUCTION (not evidence of what the live model did): DC's live answer of 20 Oct 2026 to "desmond tripped over the kerb and
+ * RECONSTRUCTION (not evidence of what the live model did): DC's live answer of 20 Oct 2026 to "raymond tripped over the kerb and
  * fell, his GP bill is $800, can he claim for this?" (production main 4956588). Household and documents: the ANONYMISED fixture
  * scripts/fixtures/reliable-chat/fracture-conversation.ts (Daniel stands in for the policyholder; no production data was read).
  * The model is the test-only ScriptedLoopModel: each variant is one PLAUSIBLE way the model could have answered, played through the

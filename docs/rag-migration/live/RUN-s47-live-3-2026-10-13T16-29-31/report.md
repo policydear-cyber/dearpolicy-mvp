@@ -45,16 +45,16 @@
 | S47 PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times | INCOMPLETE | graded by scenario-check.ts | 6 | 25.1 s | 94.0 s | 26 | 219138/4566 | US$0.00968 |
 
 ## S47 — PR #47 reported broken-leg conversation, extended to the bone, the fracture type and the stay times: INCOMPLETE
-- **Turn 1** — “Desmond broke his leg.”
+- **Turn 1** — “Raymond broke his leg.”
   - Answer: “I’m sorry to hear that. How did the leg injury happen?”
   - Tools: note_facts → policies_for → search_passages → search_passages → ask_user; outcome ask_user; evidence e3, e4, e6, e9
   - Time: accepted 0.4 s, answer saved 25.1 s, seen 25.3 s; model 24.6 s (upstream 24.5 s via the relay); 4 calls, 28974/390 tokens, US$0.00083
 - **Turn 2** — “He fell down the stairs.”
-  - Answer: “I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open). Which bone in your leg was fractured (femur, tibia, fibula, or knee”
+  - Answer: “I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open). Which bone in your leg was fractured (femur, tibia, fibula, or knee”
   - Tools: note_facts → policies_for → search_passages → select_table_value → select_table_value → select_table_value → select_table_value → search_passages → select_table_value → ask_user; outcome ask_user; evidence e4, e3, e13
   - Time: accepted 0.0 s, answer saved 15.5 s, seen 15.6 s; model 14.5 s (upstream 14.4 s via the relay); 5 calls, 44035/932 tokens, US$0.00198
 - **Turn 3** — “Yes, confirmed with an X-ray. He was also warded for two nights.”
-  - Answer: “Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each”
+  - Answer: “Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each”
   - Tools: note_facts → search_passages → policies_for → ask_user✗ → ask_user✗ → select_table_value → calculate → search_passages → ask_user; outcome ask_user; evidence e4, e15, e13, e3
   - Time: accepted 0.0 s, answer saved 20.0 s, seen 20.2 s; model 18.8 s (upstream 18.6 s via the relay); 6 calls, 56058/1489 tokens, US$0.00253
 - **Turn 4** — “Transverse fracture.”
@@ -62,7 +62,7 @@
   - Tools: note_facts → ask_user; outcome ask_user; evidence e15
   - Time: accepted 0.0 s, answer saved 5.4 s, seen 5.4 s; model 4.8 s (upstream 4.8 s via the relay); 2 calls, 14063/142 tokens, US$0.00087
 - **Turn 5** — “The tibia. It was a closed fracture.”
-  - Answer: “You told me, “The tibia. It was a closed fracture.” Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date. The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray. Accident Hospital Income is ”
+  - Answer: “You told me, “The tibia. It was a closed fracture.” Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date. The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray. Accident Hospital Income is ”
   - Tools: note_facts → calculate✗ → select_table_value → search_passages → search_passages → calculate✗ → final_answer; outcome final_answer; evidence e13, e3, e4, e6
   - Time: accepted 0.0 s, answer saved 14.4 s, seen 14.5 s; model 14.1 s (upstream 13.9 s via the relay); 5 calls, 42463/939 tokens, US$0.00188
 - **Turn 6** — “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”

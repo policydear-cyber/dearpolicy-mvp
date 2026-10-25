@@ -33,7 +33,7 @@ WHAT CHANGED, IN ONE BREATH
      wherever its benefit table has been read.
    - A line from a certificate's cover table is no longer treated as a benefit.
      Rows named after a person and an identity number - "S****195A Ong Pei Lin
-     Charmaine GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" - were being
+     Josephine GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" - were being
      matched to claims by the words inside them, and paid.
    - A "Total Permanent Disability" row under a plan called "Group Term Life"
      is no longer read as a second death benefit.
@@ -156,7 +156,7 @@ booklets - uploading one says you hold that cover.
 
 Now, on the Policies page, any document with no named policyholder asks:
 
-   "Whose policy is this?"   [ Desmond ] [ Charmaine ] ...
+   "Whose policy is this?"   [ Raymond ] [ Josephine ] ...
 
 Click a name and its benefits are used in answers from then on. A figure the
 document itself prints - "S$600 each month" - is shown as that person's, marked
@@ -469,7 +469,7 @@ What to try:
 - Ask a natural multi-fact question rather than following a script.
 - Say that one fact is not yet known, then supply it later.
 - Ask about an independent benefit while another fact remains unknown.
-- Ask about people naturally: “Charmaine caught dengue”, “my wife’s flight was delayed” and then “what can she claim?” No profile selector is required.
+- Ask about people naturally: “Josephine caught dengue”, “my wife’s flight was delayed” and then “what can she claim?” No profile selector is required.
 - Ask “What policies does my family have?” to review a mixed household portfolio.
 - Open Previous chats, delete one chat, then test Clear all chat history.
 - Report a death in ordinary language, including homicide wording and a location. DearPolicy should retain those facts without assuming the death was accidental.

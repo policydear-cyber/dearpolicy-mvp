@@ -1,10 +1,10 @@
 {
   "description": "DearPolicy V1.1 independent evaluation set. Patterns are case-insensitive RegExp sources. See e2e/support/v11-dataset.ts.",
   "people": {
-    "charmaine": {
+    "josephine": {
       "household": "A",
-      "fullName": "Charmaine Tan Hui Min",
-      "preferred": "Charmaine",
+      "fullName": "Josephine Tan Hui Min",
+      "preferred": "Josephine",
       "relationship": "spouse"
     },
     "marcus": {
@@ -13,10 +13,10 @@
       "preferred": "Marcus",
       "relationship": "self"
     },
-    "charmaineB": {
+    "josephineB": {
       "household": "B",
-      "fullName": "Charmaine Tan Hui Min",
-      "preferred": "Charmaine",
+      "fullName": "Josephine Tan Hui Min",
+      "preferred": "Josephine",
       "relationship": "self"
     }
   },
@@ -40,7 +40,7 @@
     "otherHouseholdAccident"
   ],
   "coverage": {
-    "two family members + another household": "charmaine, marcus (A); charmaineB (B, same printed name) -- Q01, Q24, Q28",
+    "two family members + another household": "josephine, marcus (A); josephineB (B, same printed name) -- Q01, Q24, Q28",
     "personal and group cover": "personal schedules; groupLife certificate -- Q01, Q07",
     "identical wording from different policies": "accident vs accidentMarcus (same wording, different amounts) -- Q03, Q24",
     "current and outdated versions": "hosp2022 superseded by hosp2025; travelExpired -- Q02, Q10",
@@ -60,7 +60,7 @@
     {
       "key": "hosp2022",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-HospitalShield",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-HOSPITAL-001",
@@ -80,7 +80,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-HospitalShield Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HOSPITAL-001\nInsured person Charmaine Tan Hui Min\nPolicy type Hospitalisation\nEffective date 2022-01-01\nExpiry date 2024-12-31\nEdition: 2022 schedule"
+          "text": "SYNTHETIC-DPTEST-v11set-HospitalShield Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HOSPITAL-001\nInsured person Josephine Tan Hui Min\nPolicy type Hospitalisation\nEffective date 2022-01-01\nExpiry date 2024-12-31\nEdition: 2022 schedule"
         },
         {
           "page": 2,
@@ -91,7 +91,7 @@
     {
       "key": "hosp2025",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-HospitalShield",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-HOSPITAL-001",
@@ -115,7 +115,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-HospitalShield Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HOSPITAL-001\nInsured person Charmaine Tan Hui Min\nPolicy type Hospitalisation\nEffective date 2025-01-01\nExpiry date 2027-12-31\nEdition: 2025 schedule\nAnnual limit: S$1,000,000 per policy year"
+          "text": "SYNTHETIC-DPTEST-v11set-HospitalShield Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HOSPITAL-001\nInsured person Josephine Tan Hui Min\nPolicy type Hospitalisation\nEffective date 2025-01-01\nExpiry date 2027-12-31\nEdition: 2025 schedule\nAnnual limit: S$1,000,000 per policy year"
         },
         {
           "page": 2,
@@ -130,7 +130,7 @@
     {
       "key": "accident",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-AccidentGuard",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-ACCIDENT-001",
@@ -153,7 +153,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-AccidentGuard Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-ACCIDENT-001\nInsured person Charmaine Tan Hui Min\nPolicy type Personal Accident\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$100,000"
+          "text": "SYNTHETIC-DPTEST-v11set-AccidentGuard Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-ACCIDENT-001\nInsured person Josephine Tan Hui Min\nPolicy type Personal Accident\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$100,000"
         },
         {
           "page": 2,
@@ -168,7 +168,7 @@
     {
       "key": "accidentEndorsement",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-AccidentGuard",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-ACCIDENT-001",
@@ -185,14 +185,14 @@
       "pages": [
         {
           "page": 1,
-          "text": "Endorsement No. 1\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-ACCIDENT-001\nInsured person Charmaine Tan Hui Min\nEffective date of endorsement 2026-01-01\nWith effect from 2026-01-01 the Schedule of Benefits is amended as follows.\nFracture of arm S$1,200\nAll other terms remain unchanged.\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY"
+          "text": "Endorsement No. 1\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-ACCIDENT-001\nInsured person Josephine Tan Hui Min\nEffective date of endorsement 2026-01-01\nWith effect from 2026-01-01 the Schedule of Benefits is amended as follows.\nFracture of arm S$1,200\nAll other terms remain unchanged.\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY"
         }
       ]
     },
     {
       "key": "disability",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-DisabilityCare",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-DISABILITY-001",
@@ -210,7 +210,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-DisabilityCare Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-DISABILITY-001\nInsured person Charmaine Tan Hui Min\nPolicy type Permanent Disability\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$200,000"
+          "text": "SYNTHETIC-DPTEST-v11set-DisabilityCare Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-DISABILITY-001\nInsured person Josephine Tan Hui Min\nPolicy type Permanent Disability\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$200,000"
         },
         {
           "page": 2,
@@ -221,7 +221,7 @@
     {
       "key": "groupLife",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-GroupTermLife",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-GROUPLIFE-001",
@@ -239,7 +239,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-GroupTermLife Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-GROUPLIFE-001\nGroup policyholder Synthetic Employer Pte Ltd (fictitious)\nInsured person Charmaine Tan Hui Min\nPolicy type Group Term Life\nEffective date 2026-01-01\nExpiry date 2026-12-31\nCertificate of insurance for an employee covered under the group policy"
+          "text": "SYNTHETIC-DPTEST-v11set-GroupTermLife Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-GROUPLIFE-001\nGroup policyholder Synthetic Employer Pte Ltd (fictitious)\nInsured person Josephine Tan Hui Min\nPolicy type Group Term Life\nEffective date 2026-01-01\nExpiry date 2026-12-31\nCertificate of insurance for an employee covered under the group policy"
         },
         {
           "page": 2,
@@ -250,7 +250,7 @@
     {
       "key": "criticalIllness",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-CritiCare",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-CRITICALILLNESS-001",
@@ -270,7 +270,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-CritiCare Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-CRITICALILLNESS-001\nInsured person Charmaine Tan Hui Min\nPolicy type Critical Illness\nEffective date 2025-03-01\nExpiry date 2035-03-01\nSum insured: S$120,000"
+          "text": "SYNTHETIC-DPTEST-v11set-CritiCare Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-CRITICALILLNESS-001\nInsured person Josephine Tan Hui Min\nPolicy type Critical Illness\nEffective date 2025-03-01\nExpiry date 2035-03-01\nSum insured: S$120,000"
         },
         {
           "page": 2,
@@ -285,7 +285,7 @@
     {
       "key": "travelExpired",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-JetSure",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-TRAVELEXPIRED-001",
@@ -303,7 +303,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-JetSure Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-JETSURE-001\nInsured person Charmaine Tan Hui Min\nPolicy type Travel\nEffective date 2024-01-01\nExpiry date 2024-12-31"
+          "text": "SYNTHETIC-DPTEST-v11set-JetSure Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-JETSURE-001\nInsured person Josephine Tan Hui Min\nPolicy type Travel\nEffective date 2024-01-01\nExpiry date 2024-12-31"
         },
         {
           "page": 2,
@@ -314,7 +314,7 @@
     {
       "key": "unreadable",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "format": "corrupt-pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-DentalCare-scan",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-UNREADABLE-001",
@@ -403,7 +403,7 @@
         "fracture_vs_permanent_loss",
         "deleted"
       ],
-      "notes": "Identical wording to Charmaine's AccidentGuard; fracture of arm S$500. Deleted through the app after the pre-deletion questions.",
+      "notes": "Identical wording to Josephine's AccidentGuard; fracture of arm S$500. Deleted through the app after the pre-deletion questions.",
       "fileName": "SYNTHETIC-DPTEST-v11set-AccidentGuard-M.pdf",
       "pages": [
         {
@@ -539,7 +539,7 @@
     {
       "key": "otherHouseholdAccident",
       "household": "B",
-      "person": "charmaineB",
+      "person": "josephineB",
       "format": "pdf",
       "productName": "SYNTHETIC-DPTEST-v11set-OtherHouseholdPA",
       "policyNumber": "SYNTHETIC-DPTEST-v11set-OTHERHOUSEHOLDACCIDENT-001",
@@ -557,7 +557,7 @@
       "pages": [
         {
           "page": 1,
-          "text": "SYNTHETIC-DPTEST-v11set-OtherHouseholdPA Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HB-OTHERPA-001\nInsured person Charmaine Tan Hui Min\nPolicy type Personal Accident\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$80,000"
+          "text": "SYNTHETIC-DPTEST-v11set-OtherHouseholdPA Policy Schedule\nSYNTHETIC TEST DOCUMENT - NOT A REAL POLICY\nIssued by Synthetic Test Assurance (fictitious)\nPolicy number SYNTHETIC-DPTEST-v11set-HB-OTHERPA-001\nInsured person Josephine Tan Hui Min\nPolicy type Personal Accident\nEffective date 2025-01-01\nExpiry date 2027-12-31\nSum insured: S$80,000"
         },
         {
           "page": 2,
@@ -624,7 +624,7 @@
         },
         {
           "re": "WanderSafe|FutureSaver|DailyCash|TermGuard|HealthPlusRider|AccidentGuard-M",
-          "desc": "Marcus's policies listed as Charmaine's",
+          "desc": "Marcus's policies listed as Josephine's",
           "gate": "cross_scope"
         }
       ],
@@ -664,22 +664,22 @@
       "forbiddenCitations": [
         {
           "doc": "otherHouseholdAccident",
-          "why": "not Charmaine's",
+          "why": "not Josephine's",
           "gate": "cross_scope"
         },
         {
           "doc": "travel",
-          "why": "not Charmaine's",
+          "why": "not Josephine's",
           "gate": "cross_scope"
         },
         {
           "doc": "endowment",
-          "why": "not Charmaine's",
+          "why": "not Josephine's",
           "gate": "cross_scope"
         },
         {
           "doc": "accidentMarcus",
-          "why": "not Charmaine's",
+          "why": "not Josephine's",
           "gate": "cross_scope"
         },
         {
@@ -694,8 +694,8 @@
       "id": "Q01",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What policies does Charmaine have?"
+      "person": "josephine",
+      "text": "What policies does Josephine have?"
     },
     {
       "phase": "pre",
@@ -763,8 +763,8 @@
       "id": "Q02",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What is Charmaine's hospital room and board benefit?"
+      "person": "josephine",
+      "text": "What is Josephine's hospital room and board benefit?"
     },
     {
       "phase": "pre",
@@ -873,8 +873,8 @@
       "id": "Q03",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "Does Charmaine have a fracture benefit?",
+      "person": "josephine",
+      "text": "Does Josephine have a fracture benefit?",
       "amended": {
         "current": "S\\$\\s?1,200",
         "replaced": "S\\$\\s?1,000\\b",
@@ -924,8 +924,8 @@
       "id": "Q04",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What is the waiting period for critical illness on Charmaine's CritiCare plan?"
+      "person": "josephine",
+      "text": "What is the waiting period for critical illness on Josephine's CritiCare plan?"
     },
     {
       "phase": "pre",
@@ -962,8 +962,8 @@
       "id": "Q05",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "Does Charmaine's hospital plan cover dental treatment?"
+      "person": "josephine",
+      "text": "Does Josephine's hospital plan cover dental treatment?"
     },
     {
       "phase": "pre",
@@ -1000,8 +1000,8 @@
       "id": "Q06",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?"
+      "person": "josephine",
+      "text": "If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?"
     },
     {
       "phase": "pre",
@@ -1052,8 +1052,8 @@
       "id": "Q07",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What does Charmaine's group life policy pay if she dies?"
+      "person": "josephine",
+      "text": "What does Josephine's group life policy pay if she dies?"
     },
     {
       "phase": "pre",
@@ -1118,8 +1118,8 @@
       "id": "Q08",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What is Charmaine covered for if she dies in an accident?"
+      "person": "josephine",
+      "text": "What is Josephine covered for if she dies in an accident?"
     },
     {
       "phase": "pre",
@@ -1150,8 +1150,8 @@
       "id": "Q09",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "What is Charmaine's maternity coverage?"
+      "person": "josephine",
+      "text": "What is Josephine's maternity coverage?"
     },
     {
       "phase": "pre",
@@ -1189,7 +1189,7 @@
       "forbidden": [
         {
           "re": "WanderSafe",
-          "desc": "Marcus's travel policy attributed to Charmaine",
+          "desc": "Marcus's travel policy attributed to Josephine",
           "gate": "cross_scope"
         },
         {
@@ -1226,8 +1226,8 @@
       "id": "Q10",
       "conversation": "c-facts",
       "household": "A",
-      "person": "charmaine",
-      "text": "Does Charmaine have travel insurance?",
+      "person": "josephine",
+      "text": "Does Josephine have travel insurance?",
       "requiresIfMentioned": [
         {
           "mention": "JetSure",
@@ -1266,8 +1266,8 @@
       "id": "Q11",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
-      "text": "Charmaine broke her arm."
+      "person": "josephine",
+      "text": "Josephine broke her arm."
     },
     {
       "phase": "pre",
@@ -1292,7 +1292,7 @@
       "id": "Q12",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "An accident."
     },
     {
@@ -1328,7 +1328,7 @@
       "id": "Q13",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "(the app's questions, answered as the chat UI does until none is left)",
       "mode": "interview",
       "interview": {
@@ -1467,7 +1467,7 @@
       "id": "Q14",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "(the final response once the interview has no question left)",
       "mode": "interview_final"
     },
@@ -1536,7 +1536,7 @@
       "id": "Q15",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "Which of her policies could pay for the broken arm?"
     },
     {
@@ -1597,7 +1597,7 @@
       "id": "Q16",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "How much can she claim?"
     },
     {
@@ -1617,7 +1617,7 @@
       "id": "Q17",
       "conversation": "c-injury",
       "household": "A",
-      "person": "charmaine",
+      "person": "josephine",
       "text": "(reopen c-injury from history)",
       "mode": "reopen"
     },
@@ -1659,7 +1659,7 @@
         },
         {
           "re": "JetSure",
-          "desc": "Charmaine's policy",
+          "desc": "Josephine's policy",
           "gate": "cross_scope"
         }
       ],
@@ -1699,7 +1699,7 @@
       "forbiddenCitations": [
         {
           "doc": "travelExpired",
-          "why": "Charmaine's policy",
+          "why": "Josephine's policy",
           "gate": "cross_scope"
         }
       ],
@@ -1795,7 +1795,7 @@
         },
         {
           "re": "S\\$\\s?100\\b",
-          "desc": "Charmaine's hospital cash",
+          "desc": "Josephine's hospital cash",
           "gate": "cross_scope"
         }
       ],
@@ -1967,7 +1967,7 @@
       "forbidden": [
         {
           "re": "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b",
-          "desc": "Charmaine's fracture amount (identical wording)",
+          "desc": "Josephine's fracture amount (identical wording)",
           "gate": "cross_scope"
         },
         {
@@ -2072,7 +2072,7 @@
         },
         {
           "re": "S\\$\\s?1,000\\b|S\\$\\s?1,200\\b",
-          "desc": "Charmaine's amount",
+          "desc": "Josephine's amount",
           "gate": "cross_scope"
         },
         {
@@ -2240,8 +2240,8 @@
       "id": "Q28",
       "conversation": "c-b",
       "household": "B",
-      "person": "charmaineB",
-      "text": "Does Charmaine have a fracture benefit?"
+      "person": "josephineB",
+      "text": "Does Josephine have a fracture benefit?"
     }
   ]
 }

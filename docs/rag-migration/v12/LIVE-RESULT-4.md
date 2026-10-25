@@ -17,36 +17,36 @@
 
 ## Visible transcript (exactly as shown)
 
-**USER:** Desmond broke his leg.
+**USER:** Raymond broke his leg.
 
 **APP:**
 
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
-> How did Desmond break his leg?
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
+> How did Raymond break his leg?
 > This changes what your policy pays under: “Death due to Accident 100%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2); “We will not pay for injury caused by illness or disease.” (page 2)
 
 **USER:** He fell down the stairs.
 
 **APP:**
 
-> Desmond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
-> Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
+> Raymond’s fracture schedule lists 10% of the Sum Insured for a femur fracture, 6% for a tibia or fibula fracture, and 4% for a patella fracture; fracture benefits are payable only when confirmed by X-ray. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
+> Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
 > This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1)
 
 **USER:** Yes, confirmed with an X-ray. He was also warded for two nights.
 
 **APP:**
 
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Desmond’s two nights do not establish the number of complete 24-hour periods.
-> Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident; Raymond’s two nights do not establish the number of complete 24-hour periods.
+> Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
 > This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1); “Accident Hospital Income: S$100 for each complete period of 24 hours of continuous confinement in a hospital as an in-patient as a direct result of an Accide…” (page 2)
 
 **USER:** Transverse fracture.
 
 **APP:**
 
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
-> Which bone did Desmond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; the fracture schedule lists 10% for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with fracture benefits payable only when confirmed by X-ray.
+> Which bone did Raymond fracture: the femur (thigh bone), tibia or fibula (lower leg), or patella (kneecap)?
 > This changes what your policy pays under: “Fracture of thigh bone (femur) 10%” (page 1); “Fracture benefits are payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable; the full percentage s…” (page 1); S****514D (page 1)
 
 **USER:** The tibia. It was a closed fracture.
@@ -54,9 +54,9 @@
 **APP:**
 
 > You told me, “The tibia. It was a closed fracture.”
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.
-> If the insurer’s medical assessment confirms that Desmond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
-> Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Desmond’s two nights do not establish how many complete 24-hour periods he was confined.
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025, and the fracture schedule lists 6% for a lower-leg (tibia or fibula) fracture; for a simple (closed) fracture, 50% of that percentage is payable, and fracture benefits require X-ray confirmation.
+> If the insurer’s medical assessment confirms that Raymond’s diagnosis meets the policy’s definition of a closed tibia fracture, the indicative illustration is S$9,000; this is conditional, not a confirmed payment, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”).
+> Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, and Raymond’s two nights do not establish how many complete 24-hour periods he was confined.
 > The fracture illustration remains subject to the insurer’s medical assessment and claim review.
 
 **USER:** Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.
@@ -64,7 +64,7 @@
 **APP:**
 
 > You told me, “Admitted at 9pm on 3 October 2026 and discharged at 11am on 5 October 2026.”
-> Based on those times, Desmond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.
+> Based on those times, Raymond’s indicative estimate under Accident Hospital Income is S$100 for one complete 24-hour period; the benefit pays S$100 for each complete 24-hour period of continuous inpatient confinement directly resulting from an Accident, up to 90 days per Accident, assuming at least 1 of the 90 days is still available this accident.
 > Keep the hospital discharge summary or bill showing the admission and discharge times for the claim.
 > Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.
 
@@ -82,6 +82,6 @@ No grader check failed. Observations that the grader does not score:
 - Replay of all three earlier actual-model runs (`npm run rag2:scenario-replay-test`): **22/22**. Each run's turn 5 shows the S$9,000 illustration from a saved, re-runnable lump_sum record cited to CERT p1 and PA_WORD p1; each run's turn 6 shows the S$100 estimate from a saved hospital_cash record cited to PA_WORD p2; no turn errors or gate rejections.
   - s47-live-3 turn 5: the recorded proportion quote ending "." (page prints ";") is accepted; the percentage is read from the schedule row.
   - s47-live-3 turn 6: the recorded paraphrased rate is still refused; the hospital calculation left open in turn 3 is completed from the recorded admission/discharge; duration, amount and prior-use assumption kept apart; prior use asked on its own.
-  - s47-live-3 turns 2-4: questions name Desmond; the compound question asks one clause; "Transverse fracture" is explained and leads back to the unanswered bone question.
+  - s47-live-3 turns 2-4: questions name Raymond; the compound question asks one clause; "Transverse fracture" is explained and leads back to the unanswered bone question.
 - Negative controls (same suite): identical figures in different benefits; another document / another person's retrieval / unknown id / stale document version / wrong page; changed figure, added negation, changed qualifier; a share asked for the other case or a changed share; conflicting counting rules (no estimate); new facts while another question is pending (each benefit completes when its own facts arrive, the other question is still asked).
 - `rag2:scenario-test` 16/16; 42 affected suites pass; typecheck clean; `next build` ok; spending guard 17/17; browser journey 8/8.

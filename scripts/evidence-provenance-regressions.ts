@@ -47,12 +47,12 @@ function providerReply(id: string, model: string | null, payload: unknown) {
 }
 
 const CAUSE_TEXT = "Blunt force trauma from a road traffic accident";
-const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Desmond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
+const PAGES = [{ pageNumber: 1, text: `Police report. Deceased: Tan Yi Chuen Raymond. Date of death 2026-09-14. Cause of death: ${CAUSE_TEXT}.` }];
 function extractionPayload(documentType: string) {
   return {
-    deceasedName: "Tan Yi Chuen Desmond", otherNamesMentioned: [], personIdentifiers: [],
+    deceasedName: "Tan Yi Chuen Raymond", otherNamesMentioned: [], personIdentifiers: [],
     dateOfDeath: "2026-09-14", statedCauseOfDeath: CAUSE_TEXT, mannerOfDeath: "accident",
-    patientName: "Tan Yi Chuen Desmond",
+    patientName: "Tan Yi Chuen Raymond",
     billLineItems: [{ category: "Surgical fees", description: null, amountText: "1,250.00", currency: "SGD" }],
     issuingAuthority: "SPF", documentReference: "REF-1", documentType,
     pageCitations: [{ field: "statedCauseOfDeath", pageStart: 1, pageEnd: 1, excerpt: CAUSE_TEXT }],
@@ -97,7 +97,7 @@ async function main() {
 
     const account = "10000000-0000-4000-8000-000000000001";
     const otherAccount = "10000000-0000-4000-8000-000000000099";
-    const desmond = "20000000-0000-4000-8000-000000000001";
+    const raymond = "20000000-0000-4000-8000-000000000001";
     const otherMember = "20000000-0000-4000-8000-000000000002";
     const claimA = "30000000-0000-4000-8000-000000000001";
     const claimB = "30000000-0000-4000-8000-000000000002";
@@ -106,23 +106,23 @@ async function main() {
     const coverageA = "50000000-0000-4000-8000-0000000000a1";
     const coverageB = "50000000-0000-4000-8000-0000000000b1";
     await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Test'),($2,'Other')`, [account, otherAccount]);
-    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Desmond','Desmond','self'),($3,$2,'Other Member','Other','spouse')`, [desmond, account, otherMember]);
-    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, desmond, claimB]);
+    await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Raymond','Raymond','self'),($3,$2,'Other Member','Other','spouse')`, [raymond, account, otherMember]);
+    await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death'),($4,$2,$3,'fact_finding','death')`, [claimA, account, raymond, claimB]);
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
     for (const policyId of [policyA, policyB]) {
       await pool.query(
         `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
          VALUES($1,$2,$3,'Singlife','Group Personal Accident','G007500','certificate',true,'ready','cert.pdf','k',90,'scan_clean')`,
-        [policyId, account, desmond],
+        [policyId, account, raymond],
       );
       for (const p of pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [account, policyId, p.page_number, p.text]);
     }
-    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyA, desmond, account]);
+    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyA, raymond, account]);
     await pool.query(
       `INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name)
        VALUES($1,$2,$3,$4,'Personal Accident',600000,'SGD',true,true,'Group Personal Accident'),
              ($5,$2,$6,$4,'Personal Accident',600000,'SGD',true,true,'Group Personal Accident')`,
-      [coverageA, account, policyA, desmond, coverageB, policyB],
+      [coverageA, account, policyA, raymond, coverageB, policyB],
     );
 
     // A historical document/extraction/match written with the OLD column set.
@@ -131,7 +131,7 @@ async function main() {
     await pool.query(
       `INSERT INTO claim_evidence_documents(id,account_id,family_member_id,claim_session_id,document_type,original_filename,storage_key,mime_type,byte_size,file_hash,status,scan_status,identity_status)
        VALUES($1,$2,$3,$4,'police_report','old.pdf','k-old','application/pdf',100,'hash-legacy','matched','clean','confirmed')`,
-      [legacyDoc, account, desmond, claimB],
+      [legacyDoc, account, raymond, claimB],
     );
     await pool.query(
       `INSERT INTO claim_evidence_extractions(account_id,evidence_document_id,source_document_version,extracted_fields,extraction_model,extraction_provider,extraction_version)
@@ -141,8 +141,8 @@ async function main() {
     await pool.query(
       `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by)
        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,'matches','Legacy reviewer')`,
-      [account, desmond, claimB, policyA, coverageA, legacyDoc,
-        JSON.stringify({ documentId: legacyDoc, documentType: "police_report", familyMemberId: desmond, claimEventId: claimB, pageStart: 1, pageEnd: 1 }),
+      [account, raymond, claimB, policyA, coverageA, legacyDoc,
+        JSON.stringify({ documentId: legacyDoc, documentType: "police_report", familyMemberId: raymond, claimEventId: claimB, pageStart: 1, pageEnd: 1 }),
         JSON.stringify(legacyDefinition)],
     );
     const columnCount = async (table: string, column: string) => Number((await pool.query<{ n: string }>(
@@ -176,10 +176,10 @@ async function main() {
       if (!check.valid) throw new Error("fixture: stored definition evidence must be well-formed");
       const definition = check.evidence;
       return {
-        ownership: { contractId, coverageId }, familyMember: { id: desmond, confirmed: true }, claimEventId,
+        ownership: { contractId, coverageId }, familyMember: { id: raymond, confirmed: true }, claimEventId,
         deathConfirmed: true, dateOfDeath: "2026-09-14", policyEffectiveDate: "2020-01-01", sumInsured: 600_000, currency: "SGD",
         formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definition },
-        ruleEvidence: definition, ownershipEvidence: { policyId: contractId, chunkId: `coverage:${coverageId}`, coverageId, familyMemberId: desmond },
+        ruleEvidence: definition, ownershipEvidence: { policyId: contractId, chunkId: `coverage:${coverageId}`, coverageId, familyMemberId: raymond },
         accidentalDeathDefinitionEvidence: definition, causeDefinitionMatch: match,
       };
     };
@@ -187,7 +187,7 @@ async function main() {
     let fileSeq = 0;
     async function readyDocument(documentType: "police_report" | "medical_report" | "discharge_summary", claimSessionId = claimA) {
       fileSeq++;
-      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId, documentType, originalFilename: `d${fileSeq}.pdf`, storageKey: `k-prov-${fileSeq}`, mimeType: "application/pdf", byteSize: 100, fileHash: `hash-prov-${fileSeq}` });
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: raymond, claimSessionId, documentType, originalFilename: `d${fileSeq}.pdf`, storageKey: `k-prov-${fileSeq}`, mimeType: "application/pdf", byteSize: 100, fileHash: `hash-prov-${fileSeq}` });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "quarantined", to: "processing" });
       return document;
@@ -217,7 +217,7 @@ async function main() {
       assert.ok(legacyExtraction);
       assert.equal(legacyExtraction!.model_execution ?? null, null);
       assert.equal(provenanceSnapshotForExtraction(legacyExtraction!, legacyDoc), null);
-      const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimB);
+      const facts = await loadCauseDefinitionMatchesForFacts(account, raymond, claimB);
       const legacy = facts.find((m) => m.contractId === policyA && (m.causeEvidence as { documentId?: string }).documentId === legacyDoc);
       assert.ok(legacy, "the historical match must still load");
       assert.equal(legacy!.provenance, undefined, "extraction_model on a historical row is never promoted into provenance");
@@ -258,11 +258,11 @@ async function main() {
     const verifiedDoc = await readyDocument("police_report");
     const verifiedExtraction = await extractAndStore(verifiedDoc, "msg_prov_chain");
     await toNeedsReview(verifiedDoc.id);
-    const chainMatch = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "Household reviewer", familyMemberId: desmond, claimSessionId: claimA, evidenceDocumentId: verifiedDoc.id, contractId: policyA, coverageId: coverageA, result: "matches" });
+    const chainMatch = await confirmCauseDefinitionMatch({ accountId: account, reviewerName: "Household reviewer", familyMemberId: raymond, claimSessionId: claimA, evidenceDocumentId: verifiedDoc.id, contractId: policyA, coverageId: coverageA, result: "matches" });
 
     await testAsync("verified provenance survives extraction -> storage -> reviewer match -> facts mapping -> calculator, and unlocks only that match", async () => {
       assert.ok(chainMatch.evidence_provenance, "the reviewer's match row must snapshot the extraction's provenance");
-      const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimA);
+      const facts = await loadCauseDefinitionMatchesForFacts(account, raymond, claimA);
       const loaded = facts.find((m) => m.contractId === policyA && (m.causeEvidence as { documentId?: string }).documentId === verifiedDoc.id);
       assert.ok(loaded);
       assert.ok(loaded!.provenance);
@@ -285,7 +285,7 @@ async function main() {
     });
 
     await testAsync("provenance bound to one document never unlocks a match resting on another document", async () => {
-      const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimA);
+      const facts = await loadCauseDefinitionMatchesForFacts(account, raymond, claimA);
       const loaded = facts.find((m) => (m.causeEvidence as { documentId?: string }).documentId === verifiedDoc.id)!;
       const swapped = { ...loaded, causeEvidence: { ...(loaded.causeEvidence as object), documentId: "60000000-0000-4000-8000-0000000000ff" } };
       const result = calculateAccidentalDeath(accidentalInput(swapped));
@@ -298,23 +298,23 @@ async function main() {
       const context = (await loadEvidenceProvenanceContext(account, [verifiedDoc.id])).get(verifiedDoc.id);
       assert.ok(context);
       const snapshot = chainMatch.evidence_provenance;
-      assert.ok(resolveMatchProvenance(snapshot, context, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA }));
+      assert.ok(resolveMatchProvenance(snapshot, context, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA }));
       assert.equal(resolveMatchProvenance(snapshot, context, { documentId: verifiedDoc.id, familyMemberId: otherMember, claimSessionId: claimA }), undefined);
-      assert.equal(resolveMatchProvenance(snapshot, context, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimB }), undefined);
-      assert.equal(resolveMatchProvenance(snapshot, context, { documentId: legacyDoc, familyMemberId: desmond, claimSessionId: claimA }), undefined);
-      assert.equal(resolveMatchProvenance(snapshot, undefined, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA }), undefined);
+      assert.equal(resolveMatchProvenance(snapshot, context, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimB }), undefined);
+      assert.equal(resolveMatchProvenance(snapshot, context, { documentId: legacyDoc, familyMemberId: raymond, claimSessionId: claimA }), undefined);
+      assert.equal(resolveMatchProvenance(snapshot, undefined, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA }), undefined);
     });
 
     await testAsync("a changed document version or a malformed snapshot fails closed", async () => {
       const context = (await loadEvidenceProvenanceContext(account, [verifiedDoc.id])).get(verifiedDoc.id)!;
-      const changed = resolveMatchProvenance(chainMatch.evidence_provenance, { ...context, fileHash: "sha256:corrected-upload" }, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA });
+      const changed = resolveMatchProvenance(chainMatch.evidence_provenance, { ...context, fileHash: "sha256:corrected-upload" }, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA });
       assert.ok(changed);
       assert.equal(evaluateEvidenceAuthority(changed).authorized, false);
-      const supersededDoc = resolveMatchProvenance(chainMatch.evidence_provenance, { ...context, supersededAt: new Date().toISOString() }, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA });
+      const supersededDoc = resolveMatchProvenance(chainMatch.evidence_provenance, { ...context, supersededAt: new Date().toISOString() }, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA });
       assert.equal(evaluateEvidenceAuthority(supersededDoc).authorized, false);
       const malformed = { ...(chainMatch.evidence_provenance as object), verified: "yes" };
-      assert.equal(resolveMatchProvenance(malformed, context, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA }), undefined);
-      const r = evaluateEvidenceAuthority(resolveMatchProvenance(malformed, context, { documentId: verifiedDoc.id, familyMemberId: desmond, claimSessionId: claimA }));
+      assert.equal(resolveMatchProvenance(malformed, context, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA }), undefined);
+      const r = evaluateEvidenceAuthority(resolveMatchProvenance(malformed, context, { documentId: verifiedDoc.id, familyMemberId: raymond, claimSessionId: claimA }));
       assert.equal(r.authorized, false);
       if (!r.authorized) assert.equal(r.reasonCode, "EVIDENCE_PROVENANCE_MISSING");
     });
@@ -342,13 +342,13 @@ async function main() {
       });
       await toNeedsReview(document.id);
       const recorded = await recordCauseDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimB, contractId: policyB, coverageId: coverageB, evidenceDocumentId: document.id,
-        causeEvidence: { documentId: document.id, documentType: "police_report", familyMemberId: desmond, claimEventId: claimB, pageStart: 1, pageEnd: 1 },
+        accountId: account, familyMemberId: raymond, claimSessionId: claimB, contractId: policyB, coverageId: coverageB, evidenceDocumentId: document.id,
+        causeEvidence: { documentId: document.id, documentType: "police_report", familyMemberId: raymond, claimEventId: claimB, pageStart: 1, pageEnd: 1 },
         definitionEvidence: { policyId: policyB, chunkId: `page:${policyB}:5`, pageStart: 5, pageEnd: 5 }, result: "matches", reviewedBy: "R", reason: null,
         evidenceProvenance: provenanceSnapshotForExtraction((await getLatestExtraction(account, document.id))!, document.id),
       });
       assert.equal(recorded.evidence_provenance ?? null, null);
-      const loaded = (await loadCauseDefinitionMatchesForFacts(account, desmond, claimB)).find((m) => m.contractId === policyB && (m.causeEvidence as { documentId?: string }).documentId === document.id)!;
+      const loaded = (await loadCauseDefinitionMatchesForFacts(account, raymond, claimB)).find((m) => m.contractId === policyB && (m.causeEvidence as { documentId?: string }).documentId === document.id)!;
       assert.equal(loaded.provenance, undefined);
       const result = calculateAccidentalDeath(accidentalInput(loaded, policyB, coverageB, claimB));
       assert.equal(result.status, "blocked");
@@ -360,20 +360,20 @@ async function main() {
       await extractAndStore(document, "msg_prov_ci");
       await toNeedsReview(document.id);
       const extraction = (await getLatestExtraction(account, document.id))!;
-      const medicalEvidence = { documentId: document.id, documentType: "medical_report", familyMemberId: desmond, claimEventId: claimA, pageStart: 1, pageEnd: 1 };
+      const medicalEvidence = { documentId: document.id, documentType: "medical_report", familyMemberId: raymond, claimEventId: claimA, pageStart: 1, pageEnd: 1 };
       const definitionEvidence = { policyId: policyA, chunkId: `page:${policyA}:5`, pageStart: 5, pageEnd: 5, wordingHash: definitionWordingHash("Fixture definition clause.") };
       await recordCIDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id,
         benefitCode: "ci-major", illnessName: "Major Cancer", medicalEvidence, definitionEvidence, result: "matches", reviewedBy: "R", reason: null,
         evidenceProvenance: provenanceSnapshotForExtraction(extraction, document.id),
       });
       await recordDisabilityDefinitionMatch({
-        accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id,
+        accountId: account, familyMemberId: raymond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id,
         benefitCode: "tpd-lump-sum", matchKey: "total_permanent_disability", medicalEvidence, definitionEvidence, result: "matches", reviewedBy: "R", reason: null,
         evidenceProvenance: provenanceSnapshotForExtraction(extraction, document.id),
       });
-      const ci = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
-      const tpd = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const ci = (await loadCIDefinitionMatchesForFacts(account, raymond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const tpd = (await loadDisabilityDefinitionMatchesForFacts(account, raymond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
       for (const match of [ci, tpd]) {
         assert.ok(match.provenance, "a reviewed CI/disability match must carry its extraction's provenance");
         assert.deepEqual(evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: document.id }), { authorized: true });
@@ -384,8 +384,8 @@ async function main() {
       // A later re-extraction of the same document version replaces the
       // execution behind it; the reviewed snapshot is now superseded.
       await extractAndStore(document, "msg_prov_ci_rerun");
-      const ciAfter = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
-      const tpdAfter = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const ciAfter = (await loadCIDefinitionMatchesForFacts(account, raymond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const tpdAfter = (await loadDisabilityDefinitionMatchesForFacts(account, raymond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
       for (const match of [ciAfter, tpdAfter]) {
         const r = evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: document.id });
         assert.equal(r.authorized, false);
@@ -395,7 +395,7 @@ async function main() {
 
     await testAsync("a re-extracted cause-of-death document supersedes the reviewed provenance and blocks the calculator", async () => {
       await extractAndStore(verifiedDoc, "msg_prov_chain_rerun");
-      const loaded = (await loadCauseDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => (m.causeEvidence as { documentId?: string }).documentId === verifiedDoc.id)!;
+      const loaded = (await loadCauseDefinitionMatchesForFacts(account, raymond, claimA)).find((m) => (m.causeEvidence as { documentId?: string }).documentId === verifiedDoc.id)!;
       assert.ok(loaded.provenance?.supersededByExecutionId);
       const result = calculateAccidentalDeath(accidentalInput(loaded));
       assert.equal(result.status, "blocked");
@@ -405,7 +405,7 @@ async function main() {
     await testAsync("a superseded (replaced) document's match never reaches the calculator again", async () => {
       const replacement = await readyDocument("police_report");
       await supersedeEvidenceDocument({ accountId: account, oldId: verifiedDoc.id, newId: replacement.id, reason: "corrected upload" });
-      const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimA);
+      const facts = await loadCauseDefinitionMatchesForFacts(account, raymond, claimA);
       assert.equal(facts.some((m) => (m.causeEvidence as { documentId?: string }).documentId === verifiedDoc.id), false);
     });
 
@@ -414,7 +414,7 @@ async function main() {
       await extractAndStore(bill, "msg_prov_bill");
       await toNeedsReview(bill.id);
       await transitionEvidenceStatus({ accountId: account, id: bill.id, from: "needs_review", to: "matched" });
-      const facts = await loadVerifiedMedicalBillFacts(account, desmond, claimB);
+      const facts = await loadVerifiedMedicalBillFacts(account, raymond, claimB);
       assert.deepEqual(facts.sourceDocumentIds, [bill.id]);
       assert.equal(facts.provenance?.length, 1);
       assert.equal(facts.provenance![0].sourceDocumentId, bill.id);
@@ -429,7 +429,7 @@ async function main() {
       });
       await toNeedsReview(unprovenanced.id);
       await transitionEvidenceStatus({ accountId: account, id: unprovenanced.id, from: "needs_review", to: "matched" });
-      const mixed = await loadVerifiedMedicalBillFacts(account, desmond, claimB);
+      const mixed = await loadVerifiedMedicalBillFacts(account, raymond, claimB);
       assert.equal(mixed.sourceDocumentIds.length, 2);
       const r = evaluateAggregateEvidenceAuthority(mixed.provenance);
       assert.equal(r.authorized, false);

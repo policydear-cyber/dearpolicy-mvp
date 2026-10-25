@@ -41,7 +41,7 @@ const cover=(id:string,category:string,amount:number,productName:string):OwnedCo
   policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true});
 
 const contract:PolicyContract={
-  id:CONTRACT,ownerId:PERSON,ownerName:"Charmaine",name:"MINDEF & MHA Group Insurance",insurer:"Singlife",
+  id:CONTRACT,ownerId:PERSON,ownerName:"Josephine",name:"MINDEF & MHA Group Insurance",insurer:"Singlife",
   documents:[document()],references:[document({id:"wording",document_role:"policy_wording",personal_coverage_confirmed:false})],
   coverages:[
     cover("c-gtl","Death",1_000_000,"Group Term Life"),
@@ -160,7 +160,7 @@ const SCHEME_CONDITIONS=[LIVING_CARE_WAIT,LIVING_CARE_SURVIVAL,LIVING_CARE_PLUS_
 
 const cases:Case[]=[
   {
-    question:"charmaine died in an accident in japan",
+    question:"josephine died in an accident in japan",
     facts:{death:fact(true),accidentalDeath:fact(true),eventType:fact("accident")},
     pays:{},
     oneOf:{names:["Death due to Accident","Accidental Death Benefit"],amount:"S$600,000"},
@@ -266,7 +266,7 @@ const cases:Case[]=[
     total:null,
   },
   {
-    question:"charmaine died in an accident in japan (certificate only, no benefit table read yet)",
+    question:"josephine died in an accident in japan (certificate only, no benefit table read yet)",
     facts:{death:fact(true),accidentalDeath:fact(true),eventType:fact("accident")},
     withoutBenefitRules:true,
     // The same answer has to come out of the schedule lines alone. This is the

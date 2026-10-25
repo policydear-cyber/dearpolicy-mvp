@@ -4,10 +4,10 @@
   "checks": [
     {
       "id": "T0-1",
-      "defect": "\"Charmaine broke her arm\" produced an assessment and a permanent-loss schedule",
+      "defect": "\"Josephine broke her arm\" produced an assessment and a permanent-loss schedule",
       "pass": true,
       "detail": "mode=fact_finding; first question=\"Was this caused by an accident, or an illness?\"; permanent-loss text=none; claim items with amounts=0",
-      "evidence": "I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply."
+      "evidence": "I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply."
     },
     {
       "id": "T0-2",
@@ -26,10 +26,10 @@
       "id": "T0-4",
       "defect": "the claims list said \"Assessment ready\" while the detail page said \"No estimate yet\"",
       "pass": true,
-      "detail": "list \"Questions to answer\" (claimDisplayStatus) vs detail hasEstimate=false; event \"Charmaine: broken arm\"; list \"Documents needed\" (claimDisplayStatus) vs detail hasEstimate=false; event \"Charmaine: broken arm\"",
+      "detail": "list \"Questions to answer\" (claimDisplayStatus) vs detail hasEstimate=false; event \"Josephine: broken arm\"; list \"Documents needed\" (claimDisplayStatus) vs detail hasEstimate=false; event \"Josephine: broken arm\"",
       "evidence": [
         {
-          "summary": "Charmaine: broken arm",
+          "summary": "Josephine: broken arm",
           "status": "fact_finding",
           "listLabel": "Questions to answer",
           "hasEstimate": false,
@@ -39,7 +39,7 @@
           ]
         },
         {
-          "summary": "Charmaine: broken arm",
+          "summary": "Josephine: broken arm",
           "status": "complete",
           "listLabel": "Documents needed",
           "hasEstimate": false,

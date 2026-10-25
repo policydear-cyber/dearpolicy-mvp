@@ -3,7 +3,7 @@
 
 | turn | check | result | stage | detail |
 |---|---|---|---|---|
-| all | Desmond's Personal Accident sum insured (S$300,000) is stated | pass |  |  |
+| all | Raymond's Personal Accident sum insured (S$300,000) is stated | pass |  |  |
 | all | never states S$500,000 (Group Term Life) | pass |  |  |
 | all | never states S$200,000 (Grace's amount) | pass |  |  |
 | all | never states S$250,000 (superseded certificate) | pass |  |  |
@@ -17,7 +17,7 @@
 | 4 | after 'transverse' it asks for the detail the schedule uses (bone, or closed/open) | pass |  |  |
 | 4 | 'transverse' is not saved as a correction | pass |  |  |
 | 4 | no 'Updated: … at first' correction note | pass |  |  |
-| 5 | the closed-tibia illustration S$9,000 (6% x S$300,000 x 50%) is shown | **FAIL** | calculation | You told me the fracture was in Desmond’s tibia and was closed; you also said it was confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; two nights alone do not establish the number of complete 24-hou |
+| 5 | the closed-tibia illustration S$9,000 (6% x S$300,000 x 50%) is shown | **FAIL** | calculation | You told me the fracture was in Raymond’s tibia and was closed; you also said it was confirmed by X-ray. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per Accident; two nights alone do not establish the number of complete 24-hou |
 | 5 | a saved lump_sum record of S$9,000 for the lower leg | **FAIL** | calculation | [] |
 | 5 | S$18,000 is not given as the amount for the closed fracture | pass |  |  |
 | 3 | never S$200 for the stay (two nights are not two payable days) | pass |  |  |

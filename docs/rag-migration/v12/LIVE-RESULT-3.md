@@ -16,7 +16,7 @@
 
 ## Visible transcript (exactly as shown)
 
-**USER:** Desmond broke his leg.
+**USER:** Raymond broke his leg.
 
 **APP:**
 
@@ -27,14 +27,14 @@
 
 **APP:**
 
-> I’m sorry that happened. Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).
+> I’m sorry that happened. Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture; fracture benefits require X-ray confirmation, and the percentage depends on whether the fracture is simple (closed) or compound (open).
 > Which bone in your leg was fractured (femur, tibia, fibula, or kneecap/patella)?
 
 **USER:** Yes, confirmed with an X-ray. He was also warded for two nights.
 
 **APP:**
 
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025. The fracture benefit is payable for a fracture confirmed by X-ray; the schedule lists 10% of the Sum Insured for a thigh-bone (femur) fracture, 6% for a lower-leg (tibia or fibula) fracture, and 4% for a kneecap (patella) fracture, with 50% of the listed percentage for a simple (closed) fracture and the full listed percentage for a compound (open) fracture. Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident; the two nights alone do not establish the number of complete 24-hour periods.
 > What were your admission and discharge dates and times (Singapore time), and had any Accident Hospital Income already been paid for this accident?
 
 **USER:** Transverse fracture.
@@ -49,7 +49,7 @@
 **APP:**
 
 > You told me, “The tibia. It was a closed fracture.”
-> Desmond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.
+> Raymond’s certificate lists a Group Personal Accident sum assured of S$300,000 as of 1 July 2025; this is the amount shown on that date, not confirmation of cover on a later date.
 > The schedule lists 6% of the Sum Insured for a fracture of the lower leg (tibia or fibula), and the wording says 50% of that percentage applies to a simple (closed) fracture; fracture benefits are payable for a fracture confirmed by X-ray.
 > Accident Hospital Income is S$100 for each complete 24-hour period of continuous inpatient confinement, up to 90 days per accident, and the two nights alone do not establish the number of complete 24-hour periods.
 > What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.

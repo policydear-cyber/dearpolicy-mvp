@@ -85,8 +85,8 @@ async function main(){
   process.env.DEV_ACCOUNT_ID=account;
   const uuid=(n:number)=>"10000000-0000-4000-8000-"+String(n).padStart(12,"0");
   const people=Array.from({length:9},(_,i)=>({
-    id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Desmond":i===1?"Ong Pei Lin Charmaine":"Family Member "+i,
-    preferred_name:i===0?"Desmond":i===1?"Charmaine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
+    id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Raymond":i===1?"Ong Pei Lin Josephine":"Family Member "+i,
+    preferred_name:i===0?"Raymond":i===1?"Josephine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
   }));
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Test Family'),($2,'Other Account')",[account,foreign]);
   // The dev-fallback session user (id == DEV_ACCOUNT_ID == account, see
@@ -455,7 +455,7 @@ async function main(){
       assert.ok(messages.rows.length>=4);assert.equal(messages.rows.every(m=>m.family_member_id===people[5].id),true);
     });
     await test("A homicide keeps verified death cover visible and withholds inferred accidental death cover",async()=>{
-      const result=await send("Desmond was murdered in Thailand");
+      const result=await send("Raymond was murdered in Thailand");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;
       assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.doesNotMatch(answer.summary,/S\$1,000,000/);
@@ -485,7 +485,7 @@ async function main(){
     // pass, the figure is shown with confidence, not held back a third time
     // for a human to re-approve what two independent reads already verified.
     await test("A travel rule is found without a pre-review payout figure",async()=>{
-      const result=await send("Desmond's flight was delayed for eight hours.");
+      const result=await send("Raymond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
       assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
@@ -498,7 +498,7 @@ async function main(){
       assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
-      const result=await send("Desmond's flight was delayed for three hours.");
+      const result=await send("Raymond's flight was delayed for three hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const item=answer.claimItems.find(value=>value.title.includes("Flight delay"));assert.equal(item?.status,"not_applicable");assert.equal(item?.amountText,null);
       assert.equal(answer.potentialPayoutTotals?.length,0);
@@ -509,7 +509,7 @@ async function main(){
     // summed into a lump-sum household total, which is the separate
     // invariant this test also protects.
     await test("A motor reimbursement is found without a pre-review payout or total",async()=>{
-      const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
+      const result=await send("Raymond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
       assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
@@ -519,8 +519,8 @@ async function main(){
       assert.equal(item?.aggregation,undefined);
       assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
-    await test("The active API resolves Charmaine before loading personal policies",async()=>{
-      const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
+    await test("The active API resolves Josephine before loading personal policies",async()=>{
+      const result=await send("Josephine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
       assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
@@ -549,12 +549,12 @@ async function main(){
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
     });
     await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
-      const result=await send("Charmaine caught dengue",null);
+      const result=await send("Josephine caught dengue",null);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
       assert.ok(answer.knownFacts.includes("Diagnosis: dengue"));
       assert.ok(answer.scenarioClassifications?.some(item=>item.family==="illness"&&item.traits.includes("diagnosis")));
-      assert.match(answer.summary,/Charmaine.*dengue/i);assert.equal(answer.policyReview?.length,10);
+      assert.match(answer.summary,/Josephine.*dengue/i);assert.equal(answer.policyReview?.length,10);
       assert.ok(!answer.details.some(detail=>/model could not finish/i.test(detail)));
     });
     await test("Whole-family portfolio responses include all policies without a huge model prompt",async()=>{
@@ -1155,12 +1155,12 @@ async function main(){
       const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
       assert.equal(pack.status,200);
       assert.equal(pack.headers.get("content-type"),"application/pdf");
-      assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Desmond\.pdf"/);
+      assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Raymond\.pdf"/);
       const bytes=new Uint8Array(await pack.arrayBuffer());
       assert.equal(Buffer.from(bytes.slice(0,5)).toString("latin1"),"%PDF-");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(bytes)).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/Tan Yi Chuen Desmond/);
+      assert.match(printed,/Tan Yi Chuen Raymond/);
       assert.doesNotMatch(printed,/S\$1,250/,"Preliminary claim pack must not print a proposed payout");
       assert.match(printed,/page 14/,"The insurer can check the policy wording");
       assert.doesNotMatch(printed,/the an amount/,"Redaction must leave readable prose");
@@ -1787,7 +1787,7 @@ async function main(){
       // The same daily benefit stated again in a second document of the same plan.
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Daily Hospital Cash Benefit',ARRAY['hospitalisation']::text[],'{}'::text[],'daily',30,'SGD','hospitalNights',0,30,9,'Daily Hospital Cash S$30 per day','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.policyId,product]);
-      const first=(await send("Desmond caught dengue. What can he claim?",people[0].id)).data;
+      const first=(await send("Raymond caught dengue. What can he claim?",people[0].id)).data;
       const one=first.answer as ChatAnswer;
       assert.equal(one.mode,"fact_finding","Facts come first");
       assert.equal(one.claimItems.length,0,"No figure before the facts are in");
@@ -1819,7 +1819,7 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       // The interpreter reports a hospital stay and nothing about its cause.
-      const first=(await send("Desmond was discharged after twelve nights",people[0].id)).data;
+      const first=(await send("Raymond was discharged after twelve nights",people[0].id)).data;
       const one=first.answer as ChatAnswer;
       assert.equal(one.mode,"fact_finding");
       assert.match(one.questions[0]?.text??"",/accident, or an illness/i,JSON.stringify(one.questions));
@@ -1838,7 +1838,7 @@ async function main(){
       await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,deathClause]);
       await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,2,2,$5,$6::vector)",
         [uuid(700499),account,people[0].id,fixture.referenceId,deathClause,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      const {data}=await send("Desmond was murdered in Thailand",people[0].id);
+      const {data}=await send("Raymond was murdered in Thailand",people[0].id);
       const answer=data.answer as ChatAnswer;
       assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
       assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText===null),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
@@ -1859,7 +1859,7 @@ async function main(){
       await cover(700511,"Group Personal Accident",600_000);
       await cover(700512,"Group Living Care",350_000);
       // Labelled an inventory question ("policies"), it is a what-if about a payout.
-      const whatIf=(await send("If Desmond dies in an accident, how much would the payout be across his policies?",people[0].id)).data.answer as ChatAnswer;
+      const whatIf=(await send("If Raymond dies in an accident, how much would the payout be across his policies?",people[0].id)).data.answer as ChatAnswer;
       assert.equal(whatIf.mode,"claim_assessment","A payout what-if is not answered with the inventory table: "+whatIf.summary);
       assert.equal(whatIf.portfolioItems,undefined);
       const titles=whatIf.claimItems.map(item=>item.title);
@@ -1876,7 +1876,7 @@ async function main(){
       // The same schedule answers a reported death whose cause is not yet known.
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const reported=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
+      const reported=(await send("Raymond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       assert.equal(reported.mode,"claim_assessment",reported.summary);
       const life=reported.claimItems.find(item=>/Group Term Life/.test(item.title));
       const pa=reported.claimItems.find(item=>/Group Personal Accident/.test(item.title));
@@ -1905,7 +1905,7 @@ async function main(){
       const tpd=(listed.rows as LRow[]).find(r=>r.eventType==="tpd"&&/Group Term Life/.test(r.planName));
       assert.ok(tpd,"…with the standard companion rows for that kind of plan");
       // Before confirmation the answer is an estimate; after, it is confirmed.
-      const before=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
+      const before=(await send("Raymond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const beforeItem=before.claimItems.find(i=>/Group Term Life/.test(i.title));
       // A proposed, unconfirmed row only assumes the standard rule, so the
       // gate withholds the figure -- the same treatment the schedule-only
@@ -1919,7 +1919,7 @@ async function main(){
       const added=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000,currency:"SGD"})}))).json();
       assert.equal(added.row.status,"confirmed");
-      const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
+      const after=(await send("Raymond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const afterItem=after.claimItems.find(i=>/Group Term Life/.test(i.title));
       assert.equal(afterItem?.estimateBasis,undefined);assert.equal(afterItem?.status,"likely_applicable");
       assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText===null),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
@@ -2236,7 +2236,7 @@ async function main(){
       await insert("Daily Hospital Cash Benefit","hospitalisation","","daily",30,"hospitalNights",0,30);
       await insert("Ambulance Cost","medical_expense","","expense_cap",500,"ambulanceBill",null,null);
       const before=relevanceCalls;
-      const first=(await send("Desmond caught dengue. What can he claim?",people[0].id)).data;
+      const first=(await send("Raymond caught dengue. What can he claim?",people[0].id)).data;
       const one=first.answer as ChatAnswer;
       assert.ok(relevanceCalls>before,"The shortlist was put to the reader");
       const candidates=one.details.find(d=>d.startsWith("This may relate to"))??"";
@@ -2524,7 +2524,7 @@ async function main(){
       // Product summary of the same plan: "% of S$5,000" heading -> S$1,250.
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES($1,$2,$3,'Arm , Elbow, Wrist or Ribs',ARRAY['accident','bodily_injury']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','[]'::jsonb,'[]'::jsonb,true,true)",
         [account,fixture.policyId,product]);
-      const {data}=await send("Desmond broke his forearm playing basketball",people[0].id);
+      const {data}=await send("Raymond broke his forearm playing basketball",people[0].id);
       assert.equal((data.answer as ChatAnswer).mode,"fact_finding","A fracture is fact-found before any benefit is shown");
       const answer=await answerInjuryInterview(data.answer as ChatAnswer,people[0].id);
       const cards=answer.claimItems.map(item=>item.title+"="+item.amountText);

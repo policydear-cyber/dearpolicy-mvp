@@ -25,17 +25,17 @@
 
 | Q | Question | Result | Gates failed | ms |
 |---|---|---|---|---|
-| Q01 | What policies does Charmaine have? | pass |  | 7870 |
-| Q02 | What is Charmaine's hospital room and board benefit? | FAIL | positive_control | 2377 |
-| Q03 | Does Charmaine have a fracture benefit? | pass |  | 2081 |
-| Q04 | What is the waiting period for critical illness on Charmaine's CritiCare plan? | FAIL | internal_text | 2330 |
-| Q05 | Does Charmaine's hospital plan cover dental treatment? | FAIL | positive_control | 1068 |
-| Q06 | If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid? | FAIL | positive_control | 1353 |
-| Q07 | What does Charmaine's group life policy pay if she dies? | FAIL | internal_text, positive_control | 2352 |
-| Q08 | What is Charmaine covered for if she dies in an accident? | FAIL | internal_text | 3211 |
-| Q09 | What is Charmaine's maternity coverage? | FAIL | internal_text | 1899 |
-| Q10 | Does Charmaine have travel insurance? | FAIL | unsupported_assertion | 1822 |
-| Q11 | Charmaine broke her arm. | pass |  | 2391 |
+| Q01 | What policies does Josephine have? | pass |  | 7870 |
+| Q02 | What is Josephine's hospital room and board benefit? | FAIL | positive_control | 2377 |
+| Q03 | Does Josephine have a fracture benefit? | pass |  | 2081 |
+| Q04 | What is the waiting period for critical illness on Josephine's CritiCare plan? | FAIL | internal_text | 2330 |
+| Q05 | Does Josephine's hospital plan cover dental treatment? | FAIL | positive_control | 1068 |
+| Q06 | If Josephine had both a fracture and a permanent disablement from one accident, would both be paid? | FAIL | positive_control | 1353 |
+| Q07 | What does Josephine's group life policy pay if she dies? | FAIL | internal_text, positive_control | 2352 |
+| Q08 | What is Josephine covered for if she dies in an accident? | FAIL | internal_text | 3211 |
+| Q09 | What is Josephine's maternity coverage? | FAIL | internal_text | 1899 |
+| Q10 | Does Josephine have travel insurance? | FAIL | unsupported_assertion | 1822 |
+| Q11 | Josephine broke her arm. | pass |  | 2391 |
 | Q12 | An accident. | pass |  | 1718 |
 | Q13 | claim interview (8 answers): When did it happen? → Was the fracture confirmed by a doctor or on an X-ray or scan? → What treatment was given? → Was surgery performed? → How much did the treatment cost? → Has any other insurer or the employer already paid part of the bill? → Has a doctor said the injury will leave any lasting impairment? | FAIL | internal_text | 20542 |
 | Q14 | (the final response once the interview has no question left) | FAIL | internal_text, unsupported_assertion | 3919 |
@@ -51,7 +51,7 @@
 | Q24 | Does Marcus have a fracture benefit? | pass |  | 1202 |
 | Q25 | Does Marcus have car insurance? | FAIL | internal_text | 1456 |
 | Q26 | Does Marcus have a fracture benefit? | FAIL | internal_text | 4178 |
-| Q28 | Does Charmaine have a fracture benefit? | pass |  | 2954 |
+| Q28 | Does Josephine have a fracture benefit? | pass |  | 2954 |
 
 ## Every gate violation
 
@@ -88,7 +88,7 @@
 
 ## Answers (visible text)
 
-### Q01 — What policies does Charmaine have?
+### Q01 — What policies does Josephine have?
 
 ```
 DearPolicy
@@ -96,26 +96,26 @@ DearPolicy
 I found 6 personal policy contracts across 1 family profile. The table separates confirmed cover from records that still need review.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Personal policy inventory
 Family member	Policy	Confirmed cover	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	
 SYNTHETIC-DPTEST-v11before1-AccidentGuard
 SYNTHETIC-DPTEST-v11before1-AccidentGuard · S$100,000
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	
 SYNTHETIC-DPTEST-v11before1-GroupTermLife
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	
 SYNTHETIC-DPTEST-v11before1-DisabilityCare · S$200,000
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	
 SYNTHETIC-DPTEST-v11before1-CritiCare · S$120,000
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	
 SYNTHETIC-DPTEST-v11before1-JetSure
 	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	
 SYNTHETIC-DPTEST-v11before1-HospitalShield
 	Active status not recently verified
 
@@ -125,14 +125,14 @@ Schedules, amendments and supporting documents are grouped by insured person, in
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHAT TO DO NEXT
-Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-DisabilityCare; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare so current status can be verified separately from ownership.
+Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-DisabilityCare; Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare so current status can be verified separately from ownership.
 WHY DEARPOLICY SAYS THIS · 7 SOURCES
 SYNTHETIC-DPTEST-v11before1-AccidentGuard
 Verified personal cover
@@ -159,16 +159,16 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; groupLife (SYNTHETIC-DPTEST-v11before1-GroupTermLife) p1; disability (SYNTHETIC-DPTEST-v11before1-DisabilityCare) p1; criticalIllness (SYNTHETIC-DPTEST-v11before1-CritiCare) p1; travelExpired (SYNTHETIC-DPTEST-v11before1-JetSure) p1; hosp2025 (SYNTHETIC-DPTEST-v11before1-HospitalShield) p1  ·  next question: none  ·  7870 ms
 
-### Q02 — What is Charmaine's hospital room and board benefit?
+### Q02 — What is Josephine's hospital room and board benefit?
 
 ```
 DearPolicy
 
-Here is the hospital cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the hospital cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+Josephine Tan Hui Min
+Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -184,12 +184,12 @@ SYNTHETIC-DPTEST-v11before1-HospitalShield — Surgical fees (page 2)
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 1 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-HospitalShield
 Benefit schedule, read when the document was uploaded
@@ -198,21 +198,21 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-HospitalShield) p2; hosp2025 (SYNTHETIC-DPTEST-v11before1-HospitalShield) p2  ·  next question: none  ·  2377 ms
 
-### Q03 — Does Charmaine have a fracture benefit?
+### Q03 — Does Josephine have a fracture benefit?
 
 ```
 DearPolicy
 
-Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+Josephine Tan Hui Min
+Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-AccidentGuard, page 1: “Fracture of arm S$1,200”
-Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -224,12 +224,12 @@ SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of leg (page 2)
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 2 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard
 Benefit schedule, read when the document was uploaded
@@ -241,7 +241,7 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: none  ·  2081 ms
 
-### Q04 — What is the waiting period for critical illness on Charmaine's CritiCare plan?
+### Q04 — What is the waiting period for critical illness on Josephine's CritiCare plan?
 
 ```
 DearPolicy
@@ -249,13 +249,13 @@ DearPolicy
 The uploaded passages support the policy details below.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare: General Conditions Waiting period: 90 days from the effective date for any critical illness.
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare: General Conditions Waiting period: 90 days from the effective date for any critical illness.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare: Schedule of Benefits - Critical Illness Critical illness benefit 100% of Sum Insured Early stage critical illness 25% of Sum Insured
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-CritiCare: Schedule of Benefits - Critical Illness Critical illness benefit 100% of Sum Insured Early stage critical illness 25% of Sum Insured
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-HospitalShield: General Conditions Waiting period: no benefit is payable for any illness that starts within 30 days of the effective date.
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-HospitalShield: General Conditions Waiting period: no benefit is payable for any illness that starts within 30 days of the effective date.
 
 6 policy contracts still need wording, processing or further review. See the policy review list.
 
@@ -265,12 +265,12 @@ Partial review: 13 of 23 processed pages across 7 documents in 6 contracts were 
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 3 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-CritiCare
 Personal document
@@ -285,16 +285,16 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: criticalIllness (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-CritiCare) p3; criticalIllness (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-CritiCare) p2; hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-HospitalShield) p3  ·  next question: none  ·  2330 ms
 
-### Q05 — Does Charmaine's hospital plan cover dental treatment?
+### Q05 — Does Josephine's hospital plan cover dental treatment?
 
 ```
 DearPolicy
 
-Here is the hospital cover and dental cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the hospital cover and dental cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$25,000Charmaine Tan Hui Min · Surgical fees
+Josephine Tan Hui Min
+Policy-stated coverage limitS$25,000Josephine Tan Hui Min · Surgical fees
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -310,12 +310,12 @@ SYNTHETIC-DPTEST-v11before1-HospitalShield — Surgical fees (page 2)
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 1 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-HospitalShield
 Benefit schedule, read when the document was uploaded
@@ -324,31 +324,31 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: hosp2025 (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-HospitalShield) p2; hosp2025 (SYNTHETIC-DPTEST-v11before1-HospitalShield) p2  ·  next question: none  ·  1068 ms
 
-### Q06 — If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?
+### Q06 — If Josephine had both a fracture and a permanent disablement from one accident, would both be paid?
 
 ```
 DearPolicy
 
-Here is the fracture cover and disability cover and accident cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the fracture cover and disability cover and accident cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$2,000Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min
+Policy-stated coverage limitS$2,000Josephine Tan Hui Min · Accident medical reimbursement
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-AccidentGuard, page 2: “Accident medical reimbursement Up to S$2,000 per accident”
-Policy-stated coverage limitS$50,000Charmaine Tan Hui Min · Additional accidental death benefit
+Policy-stated coverage limitS$50,000Josephine Tan Hui Min · Additional accidental death benefit
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-GroupTermLife, page 2: “Additional accidental death benefit S$50,000”
-Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-AccidentGuard, page 1: “Fracture of arm S$1,200”
-Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -372,12 +372,12 @@ SYNTHETIC-DPTEST-v11before1-DisabilityCare — Permanent total disablement (page
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 4 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard
 Benefit schedule, read when the document was uploaded
@@ -395,7 +395,7 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2; groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-GroupTermLife) p2; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; disability (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-DisabilityCare) p2; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2; groupLife (SYNTHETIC-DPTEST-v11before1-GroupTermLife) p2; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p1; accident (SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: none  ·  1353 ms
 
-### Q07 — What does Charmaine's group life policy pay if she dies?
+### Q07 — What does Josephine's group life policy pay if she dies?
 
 ```
 DearPolicy
@@ -403,12 +403,12 @@ DearPolicy
 If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Death (any cause)
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Death (any cause)
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -417,7 +417,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accidental death
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accidental death
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -426,7 +426,7 @@ Policy condition unresolved
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Additional accidental death benefit
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Additional accidental death benefit
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -442,12 +442,12 @@ The Coverage page shows where each of these came from in your documents, and whe
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 2 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-GroupTermLife
 Policy wording, read when the document was uploaded
@@ -456,7 +456,7 @@ Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v1
 ```
 Citations: groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-GroupTermLife) p2; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: none  ·  2352 ms
 
-### Q08 — What is Charmaine covered for if she dies in an accident?
+### Q08 — What is Josephine covered for if she dies in an accident?
 
 ```
 DearPolicy
@@ -464,12 +464,12 @@ DearPolicy
 If that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Death (any cause)
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Death (any cause)
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -478,7 +478,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accidental death
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accidental death
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -487,7 +487,7 @@ Policy condition unresolved
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Additional accidental death benefit
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-GroupTermLife — Additional accidental death benefit
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -503,12 +503,12 @@ The Coverage page shows where each of these came from in your documents, and whe
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 2 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-GroupTermLife
 Policy wording, read when the document was uploaded
@@ -517,15 +517,15 @@ Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v1
 ```
 Citations: groupLife (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-GroupTermLife) p2; accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: none  ·  3211 ms
 
-### Q09 — What is Charmaine's maternity coverage?
+### Q09 — What is Josephine's maternity coverage?
 
 ```
 DearPolicy
 
-DearPolicy didn’t find maternity cover in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find maternity cover in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 
 6 policy contracts still need wording, processing or further review. See the policy review list.
 
@@ -535,31 +535,31 @@ Partial review: 13 of 23 processed pages across 7 documents in 6 contracts were 
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: none  ·  1899 ms
 
-### Q10 — Does Charmaine have travel insurance?
+### Q10 — Does Josephine have travel insurance?
 
 ```
 DearPolicy
 
-Here is the travel and overseas cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the travel and overseas cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$100,000Charmaine Tan Hui Min · Overseas medical expenses
+Josephine Tan Hui Min
+Policy-stated coverage limitS$100,000Josephine Tan Hui Min · Overseas medical expenses
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-JetSure, page 2: “Overseas medical expenses S$100,000”
-Policy-stated coverage limitS$3,000Charmaine Tan Hui Min · Trip cancellation
+Policy-stated coverage limitS$3,000Josephine Tan Hui Min · Trip cancellation
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -571,12 +571,12 @@ SYNTHETIC-DPTEST-v11before1-JetSure — Trip cancellation (page 2)
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 1 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-JetSure
 Benefit schedule, read when the document was uploaded
@@ -585,12 +585,12 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: travelExpired (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-JetSure) p2; travelExpired (SYNTHETIC-DPTEST-v11before1-JetSure) p2; travelExpired (SYNTHETIC-DPTEST-v11before1-JetSure) p2  ·  next question: none  ·  1822 ms
 
-### Q11 — Charmaine broke her arm.
+### Q11 — Josephine broke her arm.
 
 ```
 DearPolicy
 
-I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.
+I’m sorry Josephine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Josephine’s policies.
 
 A FACT THAT CHANGES THIS ASSESSMENT
 Was this caused by an accident, or an illness?
@@ -600,23 +600,23 @@ An illness
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Fracture: arm
 Injuries: broke her arm
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: Was this caused by an accident, or an illness?  ·  2391 ms
@@ -626,7 +626,7 @@ Citations: none  ·  next question: Was this caused by an accident, or an illnes
 ```
 DearPolicy
 
-I’m sorry Charmaine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Charmaine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
+I’m sorry Josephine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, fracture or hospital cash benefits in Josephine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.
 
 A FACT THAT CHANGES THIS ASSESSMENT
 Where did the accident happen?
@@ -636,23 +636,23 @@ Overseas
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Fracture: arm
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: Where did the accident happen?  ·  1718 ms
@@ -671,24 +671,24 @@ Not sure
 Answer
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Fracture: arm
 Event Location: Singapore
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: When did it happen?  ·  1956 ms
@@ -708,12 +708,12 @@ No
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Location: Singapore
@@ -721,12 +721,12 @@ Fracture: arm
 Event Date: 2026-09-20
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: Was the fracture confirmed by a doctor or on an X-ray or scan?  ·  2157 ms
@@ -747,12 +747,12 @@ Outpatient or clinic
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Information needed
+Josephine Tan Hui Min · Injury Information needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -761,12 +761,12 @@ Fracture: arm
 Fracture Confirmed: yes
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: What treatment was given?  ·  897 ms
@@ -786,12 +786,12 @@ No
 Not sure
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -805,12 +805,12 @@ This may relate to accident medical reimbursement or fracture benefits, dependin
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: Was surgery performed?  ·  3407 ms
@@ -829,12 +829,12 @@ Not sure
 Answer
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Injuries: broke her arm
 Event Date: 2026-09-20
@@ -849,12 +849,12 @@ This may relate to accident medical reimbursement or fracture benefits, dependin
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: How much did the treatment cost?  ·  2502 ms
@@ -866,7 +866,7 @@ DearPolicy
 
 This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until claim evidence has been reviewed. Each card says what is still needed.
 
-CHARMAINE TAN HUI MIN · INJURY
+JOSEPHINE TAN HUI MIN · INJURY
 Has any other insurer or the employer already paid part of the bill?
 Reimbursement is coordinated so the same bill is not paid twice.
 Yes
@@ -875,12 +875,12 @@ Not sure
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -898,7 +898,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of arm
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of arm
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -907,7 +907,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accident medical reimbursement
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accident medical reimbursement
 NEEDS CHECKING
 Information needed
 
@@ -923,14 +923,14 @@ The Coverage page shows where each of these came from in your documents, and whe
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHAT TO DO NEXT
-Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard; Charmaine Tan Hui Min · SYNTHETIC-DPTEST
+Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard; Josephine Tan Hui Min · SYNTHETIC-DPTEST
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: Has any other insurer or the employer already paid part of the bill?  ·  2538 ms
 
@@ -941,7 +941,7 @@ DearPolicy
 
 This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until claim evidence has been reviewed. Each card says what is still needed.
 
-CHARMAINE TAN HUI MIN · INJURY
+JOSEPHINE TAN HUI MIN · INJURY
 Has a doctor said the injury will leave any lasting impairment?
 Only a lasting impairment can bring permanent-disability benefits into play.
 Yes
@@ -950,12 +950,12 @@ Not sure
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 Show full assessment
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -975,7 +975,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of arm
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of arm
 LIKELY APPLICABLE
 Policy condition unresolved
 
@@ -984,7 +984,7 @@ an amount that is only shown after claim evidence has been reviewed lump sum. Re
 2 conditions
 Subject to the insurer's assessment and the plan's own terms and exclusions.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accident medical reimbursement
+Josephine Tan Hui Min · SYNTHETIC-DPTEST-v11before1-AccidentGuard — Accident medical reimbursement
 NEEDS CHECKING
 Information needed
 
@@ -1000,14 +1000,14 @@ The Coverage page shows where each of these came from in your documents, and whe
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHAT TO DO NEXT
-Upload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · SYNTHETIC-DPTEST
+Upload the latest premium receipt or renewal notice for Josephine Tan Hui Min · SYNTHETIC-DPTEST
 ```
 Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard) p2  ·  next question: Has a doctor said the injury will leave any lasting impairment?  ·  3166 ms
 
@@ -1020,12 +1020,12 @@ I found 3 benefits that can respond to what happened. This is a preliminary clai
 
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1046,7 +1046,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min · Accident medical reimbursement
 POTENTIALLY APPLICABLE
 Information needed
 
@@ -1056,7 +1056,7 @@ This benefit can respond to what happened, but the actual eligible amount for Ac
 Still needed: the actual eligible amount for Accident medical reimbursement
 DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · Fracture of arm
+Josephine Tan Hui Min · Fracture of arm
 NEEDS CHECKING
 Reviewer assessment needed
 
@@ -1066,7 +1066,7 @@ Fixed benefit in the quoted clause. Calculated from your policy schedule and the
 DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
 A material fact or policy condition is still unresolved.
-Charmaine Tan Hui Min · Overseas medical expenses
+Josephine Tan Hui Min · Overseas medical expenses
 NEEDS CHECKING
 Policy condition unresolved
 
@@ -1093,12 +1093,12 @@ I found 3 benefits that can respond to what happened. This is a preliminary clai
 
 Upload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1119,7 +1119,7 @@ Preliminary claim assessment
 
 Preliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.
 
-Charmaine Tan Hui Min · Accident medical reimbursement
+Josephine Tan Hui Min · Accident medical reimbursement
 POTENTIALLY APPLICABLE
 Information needed
 
@@ -1129,7 +1129,7 @@ This benefit can respond to what happened, but the actual eligible amount for Ac
 Still needed: the actual eligible amount for Accident medical reimbursement
 DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
-Charmaine Tan Hui Min · Fracture of arm
+Josephine Tan Hui Min · Fracture of arm
 NEEDS CHECKING
 Reviewer assessment needed
 
@@ -1139,7 +1139,7 @@ Fixed benefit in the quoted clause. Calculated from your policy schedule and the
 DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened.
 Active status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.
 A material fact or policy condition is still unresolved.
-Charmaine Tan Hui Min · Overseas medical expenses
+Josephine Tan Hui Min · Overseas medical expenses
 NEEDS CHECKING
 Policy condition unresolved
 
@@ -1162,15 +1162,15 @@ Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v
 ```
 DearPolicy
 
-Here is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
+Here is the fracture cover in Josephine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 What DearPolicy still needs
-Charmaine Tan Hui Min · Injury Evidence needed
+Josephine Tan Hui Min · Injury Evidence needed
 
 Documents: Doctor's report (or X-ray or scan report) describing the injury
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1184,12 +1184,12 @@ Fracture: arm
 Fracture Confirmed: yes
 Other Insurance Paid: not sure
 Permanent Impairment: no
-Policy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm
+Policy-stated coverage limitS$1,200Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
 From SYNTHETIC-DPTEST-v11before1-AccidentGuard, page 1: “Fracture of arm S$1,200”
-Policy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg
+Policy-stated coverage limitS$1,500Josephine Tan Hui Min · Fracture of leg
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -1201,12 +1201,12 @@ SYNTHETIC-DPTEST-v11before1-AccidentGuard — Fracture of leg (page 2)
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 2 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-AccidentGuard
 Benefit schedule, read when the document was uploaded
@@ -1223,10 +1223,10 @@ Citations: accident (Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v
 ```
 DearPolicy
 
-DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1252,12 +1252,12 @@ Partial review: 13 of 23 processed pages across 7 documents in 6 contracts were 
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: none  ·  3385 ms
@@ -1267,10 +1267,10 @@ Citations: none  ·  next question: none  ·  3385 ms
 ```
 DearPolicy
 
-DearPolicy didn’t find How much can she claim in the parts of Charmaine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
+DearPolicy didn’t find How much can she claim in the parts of Josephine’s policies read so far (13 of 23 pages). That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
+Josephine Tan Hui Min
 Injured: yes
 Surgery: no
 Injuries: broke her arm
@@ -1296,12 +1296,12 @@ Partial review: 13 of 23 processed pages across 7 documents in 6 contracts were 
 
 Policy review · 6 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-AccidentGuard	Matching wording needed	No matching wording uploaded · 3/6 pages · 3/6 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-GroupTermLife	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-DisabilityCare	Matching wording needed	No matching wording uploaded · 2/3 pages · 2/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-CritiCare	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-JetSure	Matching wording needed	No matching wording uploaded · 1/3 pages · 1/3 passages	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-HospitalShield	Matching wording needed	No matching wording uploaded · 3/4 pages · 3/4 passages	Active status not recently verified
 DearPolicy uses uploaded personal evidence and policy passages. A partial review cannot guarantee eligibility or final insurer approval.
 ```
 Citations: none  ·  next question: none  ·  7590 ms
@@ -1632,7 +1632,7 @@ DearPolicy uses uploaded personal evidence and policy passages. A partial review
 ```
 Citations: none  ·  next question: none  ·  4178 ms
 
-### Q28 — Does Charmaine have a fracture benefit?
+### Q28 — Does Josephine have a fracture benefit?
 
 ```
 DearPolicy
@@ -1640,8 +1640,8 @@ DearPolicy
 Here is the fracture cover in your policy, from the benefit schedule on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.
 
 FACTS AND UNCERTAINTIES
-Charmaine Tan Hui Min
-Policy-stated coverage limitS$3,500Charmaine Tan Hui Min · Fracture of arm
+Josephine Tan Hui Min
+Policy-stated coverage limitS$3,500Josephine Tan Hui Min · Fracture of arm
 
 This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.
 
@@ -1651,7 +1651,7 @@ SYNTHETIC-DPTEST-v11before1-OtherHouseholdPA — Fracture of arm (page 2)
 
 Policy review · 1 contracts
 Family member	Policy	Review	Evidence read	Active status
-Charmaine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-OtherHouseholdPA	Matching wording needed	Not measured	Active status not recently verified
+Josephine Tan Hui Min	SYNTHETIC-DPTEST-v11before1-OtherHouseholdPA	Matching wording needed	Not measured	Active status not recently verified
 WHY DEARPOLICY SAYS THIS · 1 SOURCES
 Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11before1-OtherHouseholdPA
 Benefit schedule, read when the document was uploaded
