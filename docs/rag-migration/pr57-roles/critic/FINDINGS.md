@@ -6586,3 +6586,13 @@ Free review: code read only. I did not run the DB suite.
   const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) && !pageNo(l) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
   ```
   A skipped lone number that isn't the page's own number is still compared, so TE's A29-A31 / N8 values stay covered. Test: the page number only in the text reading still gives agree true and the text unchanged.
+
+## R216 — #139 5417562: READY
+
+- R215-1 is closed. A page number printed only by the text layer ("3" or "Page 3 of 12") gives agree true with the text unchanged.
+- The builder's exception holds. A lone value equal to the page number under a label-only line ("Hospital cash per day" over "3" on page 3) is kept only when the image prints the same label over the same number. Probes:
+  - the image prints the same: agree, kept;
+  - the image prints 5: masked, "figures differ";
+  - the image prints "Hospital cash per day 3" on one line: masked, "pairing differs" (fail safe).
+  The exception runs before the kind check, so the page never counts as agreeing.
+- My R211 probes are unchanged: the continuation is masked, and the header and heading cases are unchecked. Accepted cost: a label-only header over a lone page number that the image drops masks just that number (part checked).
