@@ -6740,3 +6740,8 @@ Free review: delta read only. The builder's next build and 15-set replay (0 chan
 - #144: every part word must match, and SIDE has the positional words; coverageFor uses only the row's own cover document (a name match, or its only coverage); covered() compares coverageId; DEATH_IDS covers all three death items; an unmatched death row is skipped when any death item exists. READY.
   - Low, fails safe (hides): "neck of femur" needs both words, so it misses a plain "Femur" or "Thigh (femur)" row. A cash, allowance or income item with no coverageId still hides hospital-cash rows on every cover.
 - #145 ca5bef3 only merged B in. R226 is still open: FIGURE in answer-verification.ts still has an unguarded `(RM)\s?`, so "FORM 2" and "TERM 1" read as RM figures and refuse caps; normalizeCurrencyCode still has no "NZ$" alias.
+
+## R228 — #143 eaa9a05: READY
+
+- The delta is 6 run-record files (s47 live-1, live-2 and live-4, conv and run JSON, 48 lines each way). Only calculation ids change: kc85c31c5d6 becomes k46fc3b9ba9, and k7c2fc04d5c becomes k1283bcfe55. Each map key, calcId and result_id changes together, and neither old id is left anywhere in the tree.
+- No Yi Chuen, Desmond or Charmaine is left. The builder reports scenario-replay 22/22, matching main.
