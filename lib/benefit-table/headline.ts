@@ -1,7 +1,15 @@
 /** Coverage's summary of one cover: which few rows lead its card, the short text of each amount, and the full list grouped
  * by section. Pure, and used in the browser, so it takes only the fields the page receives. Nothing here changes an
  * amount: it chooses which rows to show first and how to word them, never a figure. */
-import { periodWords, type Figure, type TableRow } from "./assemble";
+import type { Figure, TableRow } from "./assemble";
+
+/** "a month" for a period the reading names ("half_year": "a half year"); "for every three-hour delay" for a block a plan
+ * table prints in words (lib/benefit-table/chat planTableRows). Here, not in assemble.ts: this file runs in the browser,
+ * and assemble.ts imports the database, so a value import from it breaks the build (main 999048d). */
+export function periodWords(period: string | null | undefined): string {
+  const p = period ?? "period";
+  return /\s/.test(p) ? `for every ${p}` : `a ${p.replace("_", " ")}`;
+}
 
 export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> &
   Partial<Pick<TableRow, "percent" | "base">>;

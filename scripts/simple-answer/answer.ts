@@ -58,7 +58,7 @@ export type ModelClient = { beta: { messages: { stream(params: SimpleRequest): {
 /** US$ per million tokens (claude-api skill table, cached 2026-10-06). Cache writes are 2x input (1-hour TTL). */
 export const PRICES: Record<string, { input: number; output: number; cacheRead: number }> = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1 },
 };
 export type Usage = { input: number; cacheWrite: number; cacheRead: number; output: number };
 export function costUsd(model: string, u: Usage): number {
