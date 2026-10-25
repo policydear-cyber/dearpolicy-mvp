@@ -7007,3 +7007,24 @@ Fixed and confirmed:
 - Low, safe side: "SmartTraveller" and "Overseas Protection" are not travel. Beside other cover that gives "Covered".
 
 Verdict: NOT READY on Q1. After the Q1 fix, plus the live-name check, I expect READY.
+
+## R245: #147 Home tiles at 724ba9d (every row abroad-only + strict travel name): READY
+
+Checked for free:
+- Suites: regressions 25/0, te-pr147 78/0, te-pr147b 54/0, te-pr147c 39/0, te-pr147d 69/0 with 3 notes;
+- `tsc` clean, `next build` passes;
+- tsx probes of the real `tileRows`/`tableDisplay` with a standing S$30 a day group cover beside a second cover paying S$100.
+
+Probe results:
+- Live-shaped travel cover ("Travel insurance summary / Single Trip / Business", "Daily hospital cash while overseas"): S$30 a day. This matches the builder's live check: Hospital Cash S$30 a day, TPD S$1,000,000 (the travel TPD sits under personal accident).
+- The R244 misfires now stay in and give no single figure: "Life Journey Plan" + "in Singapore and overseas", and "Travel Guard Corporate Medical" + "including overseas".
+- These also stay in and give no single figure: employer "Holiday Inn Group Insurance" + "while overseas", "In Malaysia or while overseas", "while overseas or at home".
+- The cause and stay rules are unchanged since R243; all R241/R242 limits stay gated.
+
+Remaining, all on the safe side (the tile shows "Covered", never a wrong figure):
+- One-word travel brands ("TravelEasy", "SmartTraveller") are not travel.
+- The TE notes V3 (SG/MY/UK): a group scheme's business travel line beside standing cover gives no figure.
+- The R243 Q3 cause over-blocks.
+None of these blocks merge.
+
+Verdict: READY at 724ba9d.
