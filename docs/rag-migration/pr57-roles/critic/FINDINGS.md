@@ -6727,3 +6727,16 @@ Free review: code read plus tsx probes of MONEY_SIGN, statedCurrencyCode, moneyF
 - Low: compiled with "i", MONEY_SIGN reads "Rm 2" / "rm 12" (a room) as ringgit, and "Plan RM2" or "GBP3" as money. Only facts.ts (targetedMoney, moneyNear) could take one as a bill amount, and only when the person types it. Node 22 has no `(?-i:)`, so if it matters, build those two regexes without "i".
 - Low: parseAmount now drops "RM" / "£" / "EUR" from a typed sum insured and keeps the number, so a typed currency that differs from the policy's is lost. It is used only by scripts/benefit-table/service-test.ts today; refuse a non-matching sign before it gets a caller.
 - Racing texts: they no longer name the scheme and now quote the wording's own exception. Good.
+
+## R227 — re-check: #141 28d62b5, #142 c2bf547, #143 c2e5b15, #144 dd3f15b: READY; #145 ca5bef3: still NOT READY (R226 open)
+
+Free review: delta read only. The builder's next build and 15-set replay (0 changed lines) stand.
+
+- #141: (a) the group key is now the sorted, de-duplicated names, with "A, B and C" for three or more; (c) fromRecord lines skip withoutMoney; (d) grouped entries carry found:null and document:null; superseded files are skipped, as libraryList skips them. (b) was left as is, which I accept. READY.
+- #142: categoryRows drops value figures, pays:"value" rows and premium rows; wordingDescribes uses canonicalInsurer. Accident-only death, TPD and dismemberment rows go to Personal Accident, and any-cause or illness rows stay as Death or TPD. READY.
+  - Low: a Death row that only mentions the accident uplift ("Death benefit; doubled for accidental death", "Death (additional 100% if accidental)") has no any-cause word, so it moves to Personal Accident and the Death tile loses it. Add `doubl\w*|additional|extra|plus|uplift` to anyCause, or test whether the row starts with "death".
+  - SGD default on the tile: accepted, since the tile text is the row's own figure.
+- #143: no "Yi Chuen" anywhere. Names are now "Tan Jia Ming Raymond" and "Raymond Tan Jia Ming" (the reversed order is kept). READY.
+- #144: every part word must match, and SIDE has the positional words; coverageFor uses only the row's own cover document (a name match, or its only coverage); covered() compares coverageId; DEATH_IDS covers all three death items; an unmatched death row is skipped when any death item exists. READY.
+  - Low, fails safe (hides): "neck of femur" needs both words, so it misses a plain "Femur" or "Thigh (femur)" row. A cash, allowance or income item with no coverageId still hides hospital-cash rows on every cover.
+- #145 ca5bef3 only merged B in. R226 is still open: FIGURE in answer-verification.ts still has an unguarded `(RM)\s?`, so "FORM 2" and "TERM 1" read as RM figures and refuse caps; normalizeCurrencyCode still has no "NZ$" alias.
