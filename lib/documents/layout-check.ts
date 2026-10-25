@@ -68,16 +68,25 @@ const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string").join(" ")
 /** Why two readings did not agree, in words that quote nothing from the page: what is kept in the processing history
  * (TE P115-1: a label or an amount there would outlive the deleted document). */
 export type DisagreeKind = "image prints no figures" | "figures differ" | "figure line with no label" | "pairing differs";
-export function readingsAgree(textReading: string, imageReading: string): { agree: true } | { agree: false; why: string; kind: DisagreeKind } {
+export function readingsAgree(textReading: string, imageReading: string, pageNumber?: number): { agree: true } | { agree: false; why: string; kind: DisagreeKind } {
   const a = figuresIn(textReading).sort((x, y) => x - y), b = figuresIn(imageReading).sort((x, y) => x - y);
   if (!b.length) return { agree: false, why: "the image reading prints no figures", kind: "image prints no figures" };
   if (!sameFigures(a, b)) return { agree: false, why: "the two readings print different figures", kind: "figures differ" };
   // A page number or a date on a line of its own pairs nothing; its figures are still counted above (TE UC-3). Any other
   // label-less line is refused below.
   // One lone number is the page number; several are values whose labels are elsewhere, and stay to be refused.
+  // The page number is "Page 3" or "3 of 12" anywhere, the page's own number anywhere (a footer the text layer puts
+  // before its footer line, Critic R189-1), or a one- or two-digit number as the first or last line, unless the line
+  // beside it is a label alone: a value under its label ("Hospital Cash per day" over "150", first or last or mid-page)
+  // stays to be refused (TE N8, P122-1, Critic R189-2).
   const alone = (t: string) => {
     const lines = t.split("\n"), numbers = lines.filter((l) => LONE_NUMBER.test(l)).length;
-    return lines.filter((l) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l))).join("\n");
+    const filled = lines.map((l, i) => (l.trim() ? i : -1)).filter((i) => i >= 0);
+    const first = filled[0], last = filled[filled.length - 1];
+    const beside = (i: number) => lines[i === first ? filled[1] : filled[filled.length - 2]]?.trim() ?? "";
+    const edge = (i: number) => /page|of/i.test(lines[i]) || Number(lines[i].trim()) === pageNumber
+      || ((i === first || i === last) && /^\s*\d{1,2}\s*$/.test(lines[i]) && !LABEL_ONLY(beside(i)));
+    return lines.filter((l, i) => !LONE_DATE.test(l) && !(numbers === 1 && LONE_NUMBER.test(l) && edge(i))).join("\n");
   };
   const text = figureLines(alone(textReading)), image = figureLines(alone(imageReading));
   for (const l of text) {
@@ -122,7 +131,7 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     const check = !second ? { agree: false as const, kind: "image reading failed" }
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page" }
       : image.unreadable ? { agree: false as const, kind: "image unreadable" }
-      : readingsAgree(p.text, image.text);
+      : readingsAgree(p.text, image.text, p.pageNumber);
     return check.agree ? p : { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind };
   });
 }
