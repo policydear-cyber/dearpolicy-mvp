@@ -107,14 +107,14 @@ async function main() {
     assert.match(libraryFact(h, whole), /was read\./);
     // A file whose name says nothing is named by what the app takes it to be, with the file name after it; two such files
     // of the same kind are told apart by the day each was uploaded (overnight run 23 Oct, N195, N282).
-    const plain = { ...whole, productName: null, insurer: "FWD", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };
-    const files = [{ ...plain, name: "output_202609281146053.pdf" }, { ...plain, name: "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", uploadedAt: "2026-10-20T03:00:00Z" }];
+    const plain = { ...whole, productName: null, insurer: "Example Insurance", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };
+    const files = [{ ...plain, name: "output_202601010900001.pdf" }, { ...plain, name: "0a1b2c3d-0000-4000-8000-00000000abcd.pdf", uploadedAt: "2026-10-20T03:00:00Z" }];
     const two = { ...h, documents: files };
-    assert.match(libraryFact(two, files[0]), /^FWD endorsement \(uploaded 28 Sept 2026\) \(output_202609281146053\.pdf\) was read\./);
-    assert.match(libraryFact(two, files[1]), /^FWD endorsement \(uploaded 20 Oct 2026\) \(817d6e8b-874f-4527-a45d-05e03adaf14c\.pdf\) was read\./);
-    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^FWD endorsement \(output_202609281146053\.pdf\) was read\./);
+    assert.match(libraryFact(two, files[0]), /^Example Insurance endorsement \(uploaded 28 Sept 2026\) \(output_202601010900001\.pdf\) was read\./);
+    assert.match(libraryFact(two, files[1]), /^Example Insurance endorsement \(uploaded 20 Oct 2026\) \(0a1b2c3d-0000-4000-8000-00000000abcd\.pdf\) was read\./);
+    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^Example Insurance endorsement \(output_202601010900001\.pdf\) was read\./);
     // A name a person gave the file stays as it is.
-    assert.match(libraryFact(h, { ...plain, name: "Desmond travel.pdf" }), /^Desmond travel\.pdf was read\./);
+    assert.match(libraryFact(h, { ...plain, name: "Lim travel.pdf" }), /^Lim travel\.pdf was read\./);
   });
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
@@ -271,7 +271,7 @@ async function main() {
   });
 
   await check("a question about DearPolicy itself gets its fixed answer with no model call (overnight run 23 Oct, N286-N299)", async () => {
-    const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change charmaine's name to Charmaine Ong", "rename"],
+    const asked: [string, string][] = [["what is DearPolicy", "what"], ["delete my account", "delete"], ["change mei ling's name to Mei Ling Tan", "rename"],
       ["who else can see my documents", "who-sees"], ["is my data safe", "safe"], ["how much has my household used this month", "usage"], ["what does it cost to use dearpolicy", "cost"],
       ["What's DearPolicy?", "what"], ["how do I delete our household", "delete"], ["is dearpolicy free", "cost"], ["update my wife's name", "rename"], ["plan usage", "usage"],
       ["how many questions have I used this month", "usage"],
@@ -283,7 +283,7 @@ async function main() {
     for (const [q, id] of asked) assert.equal(appHelp(q)?.id, id, q);
     // Questions about cover, a claim or the insurer stay with the model, however they are worded.
     for (const q of ["change the nominee name on my policy", "who can claim on my documents", "how much of my hospital limit have I used this month", "delete my claim",
-      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with AIA", "remove my son from the policy",
+      "what does it cost to claim", "what is covered", "I broke my wrist, how much?", "what does it cost to use my travel card overseas", "is my data safe with my insurer", "remove my son from the policy",
       // Critic R185-1.
       "how much of my plan have I used for outpatient this year?", "how much of our plan is left for dental", "how much of my plan is used up for physio",
       "do I pay anything to use it at a panel clinic", "who can access the policy documents if I die", "change my name on the policy", "update my son's name on the rider",
@@ -297,6 +297,11 @@ async function main() {
       "how many dialysis sessions can I use this month", "how many chiropractor visits can I use this month", "how many acupuncture sessions can I use this month",
       "how much optical can I use this month", "how many vaccinations can I use this month", "how many chemo sessions can I use this month"])
       assert.equal(appHelp(q), null, q);
+    // The household's own insurer or product makes it a cover question; no insurer is named in the code (DC, 25 Oct: built
+    // for every account, anywhere).
+    assert.equal(appHelp("is my data safe with Zurich", ["Zurich Insurance", "Zurich Term"]), null);
+    assert.equal(appHelp("is my data safe with CareFirst", ["Example Assurance", "CareFirst Health"]), null);
+    assert.equal(appHelp("is my data safe", ["Zurich Insurance"])?.id, "safe");
     const model = stub(c2);
     const saved: { answer: { bottomLine?: string; nextSteps?: string[] } }[] = [];
     const result = await runSimpleChat({ ...context(), request: { ...context().request, question: "delete my account", submittedQuestion: "delete my account" } } as ChatContext, {}, {
