@@ -6576,3 +6576,13 @@ Free review: code read only. I did not run the DB suite.
 - **#136 3887506 READY.** style-test uses made-up file, person and insurer names. The verify.ts real file names (R209-1 lines 1112, 1563) are fixed in #138, so merge #138 with or before #136.
 - **#138 99696b5 READY.** Sdn, Pty, Pvt, Private and GmbH are legal forms, with a test. SE is left out on purpose.
 - Merge order I'd suggest: #138, #136, #117, #139, #140 (#139 and #140 both carry #135/#137, so whichever merges second may need a main merge).
+
+## R215 — #139 46e389f (lone dates and numbers compared in order): NOT READY (one small fix)
+
+- The new rule is sound for dates and stray values: the lone figures of both readings must match in printed order, or every skipped figure line is masked and kind becomes non-null, so the page can't count as agreeing. A print date only the text layer has (`Schedule / Sum Assured 100,000.00 / 01/10/2026`, image without the date) masks the date and keeps the rest. That is right.
+- **R215-1 (medium): a page number only the text layer prints now costs the page.** Text `… / Premium 181.44 / 3` (page 3), image without the footer: agree false, kind "figures differ", text ends `[amount not checked]`, and the document says "Read in part". Image readers often drop footers, so this brings back the R189-1 / TE UC-3 failure (a footer refusing the page) as "read in part" noise on many pages. Fix: leave the page's own number out of the comparison:
+  ```ts
+  const pageNo = (l: string) => /page|of/i.test(l) || (pageNumber != null && Number(l.trim()) === pageNumber);
+  const loneFigures = (ls: string[], skip: Set<number>) => ls.flatMap((l, i) => (skip.has(i) && !pageNo(l) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
+  ```
+  A skipped lone number that isn't the page's own number is still compared, so TE's A29-A31 / N8 values stay covered. Test: the page number only in the text reading still gives agree true and the text unchanged.
