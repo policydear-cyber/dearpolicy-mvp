@@ -6629,3 +6629,8 @@ Free review: code read only. I did not run the DB suite.
 ## R220 — #138 1554411: READY
 
 - "Private" is dropped only before Limited or Ltd. Probes: "AIA Singapore Private Limited" = "AIA Singapore Pte Ltd" = aiasingapore, "Private Health Mutual" stays privatehealthmutual, a bare "Private" stays private, the Singlife aliases are unchanged, and "Aviva Ltd" gives aviva.
+
+## R221 — #117 38e605b: READY
+
+- A whole name now counts only before a cover word or the end of the clause, and an insurer first word that is a relative's word (NOT_THEM_AFTER) never counts. So "my husband's business partner died" with a "Business Partner" product, and "my wife's family medical history" with Family Life Insurance, both give no match.
+- Low, rare: HIS_OR_HERS holds ordinary words (health, medical, life, hospital, bill), so a product named with plain English followed by one of them still matches ("my husband's business partner's hospital bill" if the name is "Business Partner"). The wrong case only resolves to the spouse, who is named in the message anyway. Leave it.
