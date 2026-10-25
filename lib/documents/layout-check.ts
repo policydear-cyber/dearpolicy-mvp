@@ -220,7 +220,10 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   };
   const edge = (ls: string[], i: number) => { const filled = ls.map((l, j) => (l.trim() ? j : -1)).filter((j) => j >= 0); return i === filled[0] || i === filled.at(-1); };
   const hasLonePage = (ls: string[], skip: Set<number>) => [...skip].some((i) => pageNo(ls[i]));
-  const left = (ls: string[], i: number, otherHasLone: boolean) => pageNo(ls[i]) && (valueUnder(ls, i) || /page|of/i.test(ls[i]) || edge(ls, i) || otherHasLone);
+  // At the page's edge, only under nothing or under a row that ends in an amount ("Premium 181.44"): under "Hospital cash
+  // per day, up to 30" the number may be the row's own value (TE A40).
+  const rowDone = (ls: string[], i: number) => { const a = above(ls, i); return !a || /(?:\d{1,3}(?:,\d{3})+|\d\.\d{2})\s*%?\s*$/.test(a); };
+  const left = (ls: string[], i: number, otherHasLone: boolean) => pageNo(ls[i]) && (valueUnder(ls, i) || /page|of/i.test(ls[i]) || (edge(ls, i) && rowDone(ls, i)) || otherHasLone);
   const imageHasLone = hasLonePage(imageLinesAll, skipImage), textHasLone = hasLonePage(lines, skipText);
   const loneFigures = (ls: string[], skip: Set<number>, otherHasLone: boolean) => ls.flatMap((l, i) => (skip.has(i) && !left(ls, i, otherHasLone) ? lineTokens(l).filter((t) => typeof t !== "string" || isDate(t)) : []));
   skipText.forEach((i) => {
