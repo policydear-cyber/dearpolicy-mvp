@@ -28,6 +28,11 @@ const SIDE = new Set(["left", "right", "both", "the", "and", "of", "bone", "bone
  * row's name: "upper arm" is never the "Upper jaw" row, and "neck of femur" never the "Neck (cervical vertebrae)" row
  * (Critic R225, TE P144-1). */
 const partWords = (part: string) => part.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !SIDE.has(w)).map((w) => w.replace(/s$/, ""));
+/** A row naming the opposite side of the reported one is another part: "lower jaw" is never the "Upper jaw" row, and
+ * "front teeth" never "Teeth (back)" (TE P144-5). */
+const OPPOSITE: Record<string, string> = { upper: "lower", lower: "upper", front: "back", back: "front", inner: "outer", outer: "inner" };
+const otherSide = (part: string, benefit: string) => part.toLowerCase().split(/[^a-z]+/).some((w) => OPPOSITE[w]
+  && new RegExp(`\\b${OPPOSITE[w]}\\b`, "i").test(benefit) && !new RegExp(`\\b${w}\\b`, "i").test(benefit));
 
 /** Which purpose a row serves for this event, or null. */
 function purposeOf(row: TableRow, facts: ClaimFacts): Purpose | null {
@@ -35,7 +40,7 @@ function purposeOf(row: TableRow, facts: ClaimFacts): Purpose | null {
   if (row.figure.kind === "projected" || row.pays === "not_covered") return null;
   if (facts.eventType === "accident" && facts.fractureBodyPart && /fractur/i.test(name)) {
     const words = partWords(facts.fractureBodyPart);
-    if (words.length && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit))) return "fracture";
+    if (words.length && words.every((w) => new RegExp(`\\b${w}s?\\b`, "i").test(row.benefit)) && !otherSide(facts.fractureBodyPart, row.benefit)) return "fracture";
   }
   if (facts.eventType === "accident" && facts.ambulanceUsed === true && /\bambulance\b/i.test(row.benefit)) return "ambulance";
   if (facts.eventType === "accident" && facts.hospitalised === true && /\b(?:recuperat|convalesc)/i.test(row.benefit)) return "recuperation";
@@ -63,7 +68,10 @@ function coverageFor(row: TableRow, table: ClaimTable, coverages: OwnedCoverage[
   const same = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
   const named = (c: OwnedCoverage) => same(c.productName, row.product) || same(c.productName, row.cover);
   const onDoc = coverages.filter((c) => c.policyId === doc);
-  return onDoc.find(named) ?? (onDoc.length === 1 ? onDoc[0] : null);
+  // The document's only coverage only when the document has only this cover: on a schedule of a life cover and an
+  // accident cover, the life cover's row is never paid under the accident coverage (TE P144-7).
+  const coversOnDoc = table.covers.filter((c) => c.source.documentId === doc).length;
+  return onDoc.find(named) ?? (onDoc.length === 1 && coversOnDoc === 1 ? onDoc[0] : null);
 }
 
 function itemFor(purpose: Purpose, rows: TableRow[], facts: ClaimFacts, table: ClaimTable, coverages: OwnedCoverage[]): ClaimAssessmentItem {
