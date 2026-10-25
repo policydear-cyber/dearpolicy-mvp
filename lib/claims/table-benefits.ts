@@ -45,12 +45,12 @@ function purposeOf(row: TableRow, facts: ClaimFacts): Purpose | null {
   if (facts.eventType === "accident" && facts.ambulanceUsed === true && /\bambulance\b/i.test(row.benefit)) return "ambulance";
   if (facts.eventType === "accident" && facts.hospitalised === true && /\b(?:recuperat|convalesc)/i.test(row.benefit)) return "recuperation";
   const inHospital = facts.eventType === "hospitalisation" || facts.hospitalised === true;
-  if (inHospital && ["accident", "hospitalisation", "diagnosis"].includes(facts.eventType ?? "") && categoryOfBenefit(row.benefit) === "Hospital Cash") return "hospital cash";
+  if (inHospital && ["accident", "hospitalisation", "diagnosis"].includes(facts.eventType ?? "") && categoryOfBenefit(row.benefit, row.section) === "Hospital Cash") return "hospital cash";
   // Death from any cause: a life cover's death row. An accidental death row stays with the accident wording, which needs
   // the cause of death checked first (lib/claims/rules.ts).
-  if (facts.eventType === "death" && categoryOfBenefit(row.benefit) === "Death") return "death";
-  if (facts.eventType === "diagnosis" && ["Critical Illness", "Early Critical Illness"].includes(categoryOfBenefit(row.benefit) ?? "")) return "critical illness";
-  if ((facts.eventType === "disability" || (facts.eventType === "accident" && facts.permanentImpairment === true)) && categoryOfBenefit(row.benefit) === "Total Permanent Disability") return "disability";
+  if (facts.eventType === "death" && categoryOfBenefit(row.benefit, row.section) === "Death") return "death";
+  if (facts.eventType === "diagnosis" && ["Critical Illness", "Early Critical Illness"].includes(categoryOfBenefit(row.benefit, row.section) ?? "")) return "critical illness";
+  if ((facts.eventType === "disability" || (facts.eventType === "accident" && facts.permanentImpairment === true)) && categoryOfBenefit(row.benefit, row.section) === "Total Permanent Disability") return "disability";
   return null;
 }
 

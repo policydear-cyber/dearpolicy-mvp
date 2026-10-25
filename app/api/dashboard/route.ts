@@ -9,7 +9,7 @@ import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { summarisePremiums } from "@/lib/policies/premium-summary";
 import { notDismissedClause } from "@/lib/policies/name-dismissals";
-import { categoryRows, tableDisplay, wordingDescribes } from "@/lib/coverage/table-figures";
+import { categoryRows, tableDisplay, tileRows, wordingDescribes } from "@/lib/coverage/table-figures";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -71,7 +71,7 @@ export async function GET(request:NextRequest){
       const { tableFor }=await import("@/lib/benefit-table/service");
       const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===active.id);
       for(const category of COVERAGE_CATEGORIES){
-        const rows=categoryRows(category,person?.rows??[]); if(!rows.length)continue;
+        const rows=tileRows(categoryRows(category,person?.rows??[])); if(!rows.length)continue;
         const cur=coverageMap.get(category); const display=tableDisplay(rows);
         if(!cur)coverageMap.set(category,{total:null,currency:normalizeCurrencyCode(rows.map(r=>(r.figure as {currency?:string|null}).currency).find(Boolean)??null,"SGD"),count:1,policyNames:[...new Set(rows.map(r=>r.product))].slice(0,2),displayAmount:display,derived:false,fromTable:true});
         else if(cur.total==null&&!cur.displayAmount)cur.displayAmount=display;
