@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
+import { scheduleRequestDrain, startJobNow } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { enqueuePolicyProcessing,POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
+import { enqueuePolicyProcessing,livePolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -70,12 +70,11 @@ export async function POST(request: NextRequest) {
     // but its job row has not been inserted yet.
     let stalled = false;
     if (["queued", "extracting", "indexing"].includes(policy.processing_status)) {
+      // A queued job nothing has claimed for UNCLAIMED_STALL_MINUTES is not live either: nothing is running it, and
+      // Try again starts it (25 Oct: a document sat queued for a day behind another).
       const live = await query(
-        `SELECT 1 FROM background_jobs
-          WHERE job_type=$1 AND idempotency_key=$2
-            AND (status IN ('queued','failed_retryable')
-                 OR (status='processing' AND lease_expires_at > now()))`,
-        [POLICY_PROCESSING_JOB_TYPE, body.policyId],
+        `SELECT 1 FROM background_jobs j WHERE j.job_type=$1 AND j.idempotency_key=$2 AND ${livePolicyJob("j", "$3")}`,
+        [POLICY_PROCESSING_JOB_TYPE, body.policyId, UNCLAIMED_STALL_MINUTES],
       );
       const stalledByAge = Date.now() - new Date(policy.updated_at).getTime() > 2 * 60_000;
       if (live.rows.length || !stalledByAge) throw new AlreadyProcessing();
@@ -105,14 +104,18 @@ export async function POST(request: NextRequest) {
     // the policy's own family_member_id/storage_key) are handed to the
     // background job -- never anything client-supplied beyond the request's
     // own pdfPassword field.
-    runAfterResponse(() => enqueuePolicyProcessing({
-      accountId: ctx.householdId,
-      familyMemberId: policy.family_member_id,
-      policyId: body.policyId,
-      storageKey: policy.storage_key,
-      pdfPassword: body.pdfPassword || undefined,
-      linkUploadMember: true,
-    }));
+    // The job then starts at once, after it is enqueued: not when a drain in flight elsewhere or the daily run gets to it.
+    runAfterResponse(async () => {
+      await enqueuePolicyProcessing({
+        accountId: ctx.householdId,
+        familyMemberId: policy.family_member_id,
+        policyId: body.policyId,
+        storageKey: policy.storage_key,
+        pdfPassword: body.pdfPassword || undefined,
+        linkUploadMember: true,
+      });
+      await startJobNow({ jobType: POLICY_PROCESSING_JOB_TYPE, idempotencyKey: body.policyId });
+    });
 
     return NextResponse.json({ ok: true, status: "queued" }, { status: 202 });
   } catch (error) {

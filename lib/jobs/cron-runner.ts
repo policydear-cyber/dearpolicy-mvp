@@ -31,7 +31,9 @@ import { claimAndProcessOne, type WorkerJobTypeConfig } from "./worker-runtime";
 
 export const JOB_RUNNER_PATH = "/api/internal/jobs/run";
 export const DEFAULT_JOB_RUNNER_MAX_JOBS = 10;
-export const DEFAULT_JOB_RUNNER_CLAIM_BUDGET_MS = 60_000;
+/** Half the runner route's maxDuration (300 s): one long document no longer ends the batch before the next one is
+ * claimed (25 Oct: a second document waited a day behind the first). */
+export const DEFAULT_JOB_RUNNER_CLAIM_BUDGET_MS = 150_000;
 /** Shorter secrets are treated as not configured (fail closed). Defined in
  * lib/launch/guards.ts so the startup guard and this endpoint agree. */
 export { MIN_CRON_SECRET_LENGTH } from "@/lib/launch/guards";

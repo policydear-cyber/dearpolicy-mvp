@@ -237,7 +237,7 @@ export async function enqueueJob(
  * is honored without that worker doing any work first. */
 export async function claimNextJob(
   db: DbClient,
-  params: { jobType: string; workerId: string; leaseDurationMs?: number },
+  params: { jobType: string; workerId: string; leaseDurationMs?: number; idempotencyKey?: string },
 ): Promise<BackgroundJobRow | null> {
   const leaseDurationMs = params.leaseDurationMs ?? DEFAULT_LEASE_DURATION_MS;
   const result = await db.query<BackgroundJobRow>(
@@ -252,12 +252,13 @@ export async function claimNextJob(
         SELECT id FROM background_jobs
          WHERE job_type=$3 AND status IN ('queued','failed_retryable')
            AND available_at <= now() AND NOT cancel_requested
+           AND ($4::text IS NULL OR idempotency_key=$4)
          ORDER BY available_at ASC
          FOR UPDATE SKIP LOCKED
          LIMIT 1
       )
       RETURNING ${COLUMNS}`,
-    [params.workerId, String(leaseDurationMs), params.jobType],
+    [params.workerId, String(leaseDurationMs), params.jobType, params.idempotencyKey ?? null],
   );
   const row = result.rows[0];
   if (!row) return null;

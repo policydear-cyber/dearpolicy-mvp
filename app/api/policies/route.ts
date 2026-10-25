@@ -6,7 +6,7 @@ import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type DocumentSafetyMode } from "@/lib/policies/quarantine/ui";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
-import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
+import { livePolicyJob, POLICY_PROCESSING_JOB_TYPE, UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
 import { notDismissedCondition } from "@/lib/policies/name-dismissals";
 import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
@@ -100,6 +100,8 @@ export async function GET(request: NextRequest) {
     // reads them on the trusted connection, scoped to the policies the RLS
     // query above already authorised, and the 2-minute grace covers the
     // window between a policy being marked queued and its job row landing.
+    // A job still queued that nothing has claimed for UNCLAIMED_STALL_MINUTES
+    // is stalled too: nothing is running it (25 Oct), and Try again starts it.
     const inFlightIds = policies.filter((p) => ["queued", "extracting", "indexing"].includes(p.processing_status)).map((p) => p.id);
     const stalledIds = new Set<string>();
     if (inFlightIds.length) {
@@ -109,9 +111,8 @@ export async function GET(request: NextRequest) {
             AND p.updated_at < now() - interval '2 minutes'
             AND NOT EXISTS (SELECT 1 FROM background_jobs j
                   WHERE j.job_type=$3 AND j.idempotency_key=p.id::text
-                    AND (j.status IN ('queued','failed_retryable')
-                         OR (j.status='processing' AND j.lease_expires_at > now())))`,
-        [ctx.householdId, inFlightIds, POLICY_PROCESSING_JOB_TYPE],
+                    AND ${livePolicyJob("j", "$4")})`,
+        [ctx.householdId, inFlightIds, POLICY_PROCESSING_JOB_TYPE, UNCLAIMED_STALL_MINUTES],
       );
       for (const stalledRow of stalledRows.rows) stalledIds.add(stalledRow.id);
     }

@@ -40,8 +40,10 @@ export async function claimAndProcessOne(params: {
   jobType: string;
   workerId: string;
   process: JobProcessor;
+  /** Only this job (by its idempotency key), when it is claimable: lib/jobs/request-drain.ts startJobNow. */
+  idempotencyKey?: string;
 }): Promise<ClaimOutcome> {
-  const claimed = await claimNextJob(pool, { jobType: params.jobType, workerId: params.workerId });
+  const claimed = await claimNextJob(pool, { jobType: params.jobType, workerId: params.workerId, idempotencyKey: params.idempotencyKey });
   if (!claimed) return "empty";
 
   try {

@@ -3,6 +3,14 @@ import { enqueueJob } from "@/lib/jobs/queue";
 import { pool } from "@/lib/db/client";
 
 export const POLICY_PROCESSING_JOB_TYPE = "policy_processing";
+/** A queued job that nothing has claimed for this long is stalled: the page offers Try again, which starts it. */
+export const UNCLAIMED_STALL_MINUTES = 10;
+/** SQL: a job row (alias `j`) that is actually backing its document: running under a live lease, waiting out a retry
+ * delay, or queued for less than UNCLAIMED_STALL_MINUTES (given as the parameter `minutes`, e.g. "$4"). Anything else
+ * is stalled: nothing is running it, so the page offers Try again (25 Oct: a document sat queued for a day). */
+export const livePolicyJob = (j: string, minutes: string) =>
+  `((${j}.status IN ('queued','failed_retryable') AND ${j}.available_at > now() - make_interval(mins => ${minutes}))
+     OR (${j}.status='processing' AND ${j}.lease_expires_at > now()))`;
 
 /**
  * Checkpoint 14f (claude/v1-launch-hardening): enqueue-only, no inline

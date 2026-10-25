@@ -37,7 +37,7 @@
 import { after } from "next/server";
 import { pool } from "@/lib/db/client";
 import { runJobBatch, type JobBatchSummary } from "./cron-runner";
-import type { WorkerJobTypeConfig } from "./worker-runtime";
+import { claimAndProcessOne, type WorkerJobTypeConfig } from "./worker-runtime";
 
 export const REQUEST_DRAIN_MAX_JOBS = 2;
 export const REQUEST_DRAIN_CLAIM_BUDGET_MS = 20_000;
@@ -161,6 +161,48 @@ export async function drainChatOnce(params: { jobTypes?: WorkerJobTypeConfig[]; 
 export function scheduleChatDrain(): void {
   if (!requestDrainEnabled()) return;
   try { after(async () => { await drainChatOnce(); }); }
+  catch { /* Outside a request scope: nothing to run after (see scheduleRequestDrain). */ }
+}
+
+// ---------------------------------------------------------------------------
+// 25 Oct: the job a household just asked for starts at once. The drain above is
+// one batch per server instance, so while it read one long document every
+// upload and Read again on that instance found it "in flight", and the next
+// document sat queued until a later drain or the daily run (a second document
+// waited a day). The route that enqueues a job therefore also starts THAT job
+// after its response: the same claim (FOR UPDATE SKIP LOCKED, so it is still run
+// exactly once), lease, heartbeat, retries and dead-lettering, not held by the
+// drain, and several documents read side by side. The drain and the daily run
+// stay as the backstop.
+// ---------------------------------------------------------------------------
+export const START_NOW_MAX_IN_FLIGHT = 3;
+let startNowInFlight = 0;
+export function resetStartNowStateForTests() { startNowInFlight = 0; }
+export type StartNowOutcome = "disabled" | "busy" | "not_claimable" | "succeeded" | "failed";
+/** Claims and runs the one job of this type with this idempotency key, now, when it is claimable (awaitable; tests and
+ * scheduleJobStart). At most START_NOW_MAX_IN_FLIGHT per instance; "not_claimable" when it is already running, done,
+ * cancelled or waiting out a retry delay. */
+export async function startJobNow(params: { jobType: string; idempotencyKey: string; jobTypes?: WorkerJobTypeConfig[]; env?: NodeJS.ProcessEnv }): Promise<StartNowOutcome> {
+  if (!requestDrainEnabled(params.env ?? process.env)) return "disabled";
+  if (startNowInFlight >= START_NOW_MAX_IN_FLIGHT) return "busy";
+  startNowInFlight++;
+  try {
+    const config = (params.jobTypes ?? (await import("./processors")).PRODUCTION_JOB_TYPES).find((t) => t.jobType === params.jobType);
+    if (!config) return "not_claimable";
+    const outcome = await claimAndProcessOne({ jobType: config.jobType, process: config.process, idempotencyKey: params.idempotencyKey, workerId: `start-${Math.random().toString(36).slice(2, 10)}` });
+    return outcome === "empty" ? "not_claimable" : outcome;
+  } catch (error) {
+    console.error(`start job now: failed (${error instanceof Error ? error.name : "unknown"})`);
+    return "failed";
+  } finally {
+    startNowInFlight--;
+  }
+}
+/** Starts that job after the current response. Call only after the request has been authenticated and the job
+ * enqueued. Never throws and never delays or changes the response. */
+export function scheduleJobStart(jobType: string, idempotencyKey: string): void {
+  if (!requestDrainEnabled()) return;
+  try { after(async () => { await startJobNow({ jobType, idempotencyKey }); }); }
   catch { /* Outside a request scope: nothing to run after (see scheduleRequestDrain). */ }
 }
 
