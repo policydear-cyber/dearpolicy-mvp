@@ -42,6 +42,10 @@ function causeOf(benefit: string): "accident" | "any" | "illness" {
   if (/\bpersonal\s+accident\b/i.test(benefit)) return "accident";
   const head = benefit.split(/\(|\s[-–—]\s|[,;:]/)[0];
   if (ACCIDENT_ONLY.test(head)) return "accident";
+  // The words before an exclusion: "Accidental Death excluding injury from war" is accident cover (Critic R234).
+  const lead = head.split(/\b(?:excluding|except|other\s+than|unless|but\s+not)\b/i)[0];
+  if (/\bnon-?\s?accident/i.test(lead)) return "illness";
+  if (new RegExp(String.raw`\b${ACC}`, "i").test(lead) && !ANY_CAUSE.test(lead)) return "accident";
   if (ILLNESS_ONLY.test(head)) return "illness";
   if (ANY_CAUSE.test(head)) return "any";
   if (new RegExp(String.raw`\b${ACC}`, "i").test(head)) return "accident";

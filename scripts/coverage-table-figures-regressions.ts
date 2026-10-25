@@ -64,10 +64,13 @@ test("the head of the name decides: an accident benefit's exclusions never make 
   for (const b of ["Accidental Death (excluding injury from war)", "Accidental Death, except for injury from extreme sports",
     "Accidental Death Benefit - excluding accidents on aircraft", "Accidental Death (other than injury caused by war)",
     "Death by Accident (except accidents while intoxicated)", "Accidental TPD (excluding injuries from contact sports)",
-    "Accidental Death (not payable for illness or injury caused by war)", "Accidental Death; sickness or injury from riots excluded"])
+    "Accidental Death (not payable for illness or injury caused by war)", "Accidental Death; sickness or injury from riots excluded",
+    "Accidental Death excluding injury from war", "Accidental Death other than injury from war", "Accidental death except injury from riots",
+    "Accidental Death Benefit excluding injuries sustained while racing"])
     assert.equal(categoryOfBenefit(b), "Personal Accident", b);
   for (const b of ["Death (other than by accident)", "Death from causes other than accident", "Death (any cause)", "Death by accident or by illness",
-    "Death due to Illness and/or Accident", "Death - natural or accidental"]) assert.equal(categoryOfBenefit(b), "Death", b);
+    "Death due to Illness and/or Accident", "Death - natural or accidental",
+    "Non-accidental death", "Accidental and Sickness Death Benefit"]) assert.equal(categoryOfBenefit(b), "Death", b);
 });
 
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {
