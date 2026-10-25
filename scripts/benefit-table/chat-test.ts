@@ -1396,6 +1396,44 @@ test("a plan table's rows: the cell's own currency; never another table's headin
   assert.deepEqual(plan(["Classic\tPremier", "Overseas medical expenses", "S$150,000\tS$300,000", "Personal accident", "Adult\tS$50,000\tS$100,000", "Child\tS$12,500\tS$25,000"]), []);
 });
 
+test("a plan table's per-block cells wrapped over two lines are a row for the person's column, printed as they are (overnight run 23 Oct, N106, N107)", () => {
+  const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
+  const TRAVEL = "aaaaaaaa-0000-0000-0000-0000000000t3";
+  const made = (lines: string[], column = "Business") => {
+    const house: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(TRAVEL, "Travel wording.pdf", [{ page: 5, text: lines.join("\n") }])] };
+    const template: ChatRow = { ...amb, id: "R902", benefit: "Trip diversion", column, plan: column, docIndex: house.documents.length - 1,
+      figure: { kind: "printed", amount: 1000, currency: "SGD", unit: "up_to", period: null }, source: { ...amb.source, documentId: TRAVEL, page: 5, excerpt: "Trip diversion\nS$500\tS$1,000\tS$1,500" } };
+    return planTableRows([template], house) as ChatRow[];
+  };
+  const TABLE = ["Premium\tBusiness\tFirst", "Trip diversion", "S$500\tS$1,000\tS$1,500", "Travel delay", "S$100 for every\tS$50 for every\tS$50 for every",
+    "Delay while overseas\tsix-hour delay\tthree-hour delay\tthree-hour delay", "S$100 for the first\tS$50 for every", "Delay while in Singapore", "six-hour delay\tthree-hour delay,",
+    "only\tup to S$100", "Overall limit^\tS$300\tS$800\tS$1,500"];
+  const business = made(TABLE);
+  assert.deepEqual(business.map((r) => [r.benefit, r.figure]), [["Travel delay: Delay while overseas", { kind: "printed", amount: 50, currency: "SGD", unit: "per_period", period: "three-hour delay" }]]);
+  assert.equal(business[0].source.excerpt, TABLE.slice(3, 6).join("\n"));
+  assert.match(rowLabel(business[0]), /Travel delay: Delay while overseas.*: paid for every three-hour delay\.$/);
+  assert.match(renderTable(business.map((r, i) => ({ ...r, id: `R${i}` })) as never), /S\$50 for every three-hour delay/);
+  // Each plan's own cell: the first column is S$100 for every six-hour delay.
+  assert.deepEqual(made(TABLE, "Premium").map((r) => r.figure), [{ kind: "printed", amount: 100, currency: "SGD", unit: "per_period", period: "six-hour delay" }]);
+  // Merged cells (the Singapore delay), a cell that is not "for every", a missing length, or a name above that is not the
+  // benefit's give none; nor the baggage delay's cells wrapped over five lines.
+  assert.deepEqual(made(TABLE.slice(0, 4).concat(TABLE.slice(6))), []);
+  assert.deepEqual(made([...TABLE.slice(0, 4), "S$100 for the first\tS$50 for every\tS$50 for every", TABLE[5]]), []);
+  assert.deepEqual(made([...TABLE.slice(0, 4), TABLE[4], "Delay while overseas\tsix-hour delay\tthree-hour delay"]), []);
+  assert.deepEqual(made([...TABLE.slice(0, 3), "S$100\tS$200\tS$300", TABLE[4], TABLE[5]]), []);
+  assert.deepEqual(made(["Premium\tBusiness\tFirst", "Trip diversion", "S$500\tS$1,000\tS$1,500", "Baggage delay", "S$150", "S$150\tS$150", "for the first", "Delay while overseas\tfor every\tfor every", "six-hour delay", "six-hour delay\tsix-hour delay", "only"]), []);
+  // A limit on the line after the two wrapped lines belongs to the cells: no row without it (Critic R186-2). A bare "$"
+  // names no currency (R186-1).
+  for (const next of ["up to S$1,000\tup to S$500\tup to S$800", "max S$500 per trip", "S$500\tS$800\tS$1,000", "per trip"])
+    assert.deepEqual(made([...TABLE.slice(0, 6), next]), [], next);
+  // Blank lines before it do not end the block, and a total or one figure per plan in one cell is part of it (TE P120-1/2).
+  assert.deepEqual(made([...TABLE.slice(0, 6), "", "up to S$1,000\tup to S$500\tup to S$800"]), []);
+  assert.deepEqual(made([...TABLE.slice(0, 6), "Total payable S$300 / S$600 / S$900"]), []);
+  assert.equal(made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure.kind === "printed" && (made([...TABLE.slice(0, 4), "$100 for every\t$50 for every\t$50 for every", TABLE[5]])[0].figure as { currency: string | null }).currency, null);
+  // A period the reading names keeps its wording.
+  assert.match(rowLabel({ ...business[0], figure: { kind: "printed", amount: 500, currency: "SGD", unit: "per_period", period: "month" } }), /: paid per month\.$/);
+});
+
 test("claim windows are never a waiting period or a free look; a passed deadline for one claim stays when only another claim's date is open (TE pr113 W2, W3, D4)", () => {
   const house = (text: string) => ({ ...HOUSE, documents: [doc(CERT, "x.pdf", [{ page: 1, text }])] });
   assert.deepEqual(claimWindows(house("No claim is payable for any illness that starts within 30 days of the cover start date.")), []);

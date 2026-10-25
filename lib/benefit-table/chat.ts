@@ -7,7 +7,7 @@
  * household sees in the chat is an amount on their Coverage page, checked twice. */
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
-import { figureText } from "./assemble";
+import { figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
@@ -91,7 +91,8 @@ const SUB_LIMIT = /^(?:sub-?\s?limit|overall\s+limit)\b/i;
  * ("Adult below 70 years of age"), a family-plan limit, or a name another row from that page already has gives none:
  * a row left out is a missing card, never a wrong one. */
 export function planTableRows(rows: ChatRow[], household: Household): TableRow[] {
-  const out: TableRow[] = [];
+  // Per-block rows come after the others, so a row read before them keeps its number.
+  const out: TableRow[] = [], blocks: TableRow[] = [];
   const plain = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const seen = new Set<string>();
   for (const template of rows) {
@@ -127,6 +128,21 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
         // line, ends the plan's table (TE pr113 P4, P6).
         if (cols && ((c.length >= 2 && !valuesOf(lines[i]) && c.every((x) => /^[A-Z][A-Za-z ]{1,20}$/.test(x))) || (c.length === 1 && OPTIONAL.test(lines[i])))) { cols = null; parent = null; continue; }
         if (!cols || used.has(i)) continue;
+        const block = perBlock(lines[i - 1], cellsOf(lines[i]), cellsOf(lines[i + 1]), lines.slice(i + 2).find((l) => l.trim()), cols.length, labelLine(lines[i - 1]) && !used.has(i - 1));
+        if (block) {
+          used.add(i - 1).add(i).add(i + 1);
+          parent = null;
+          const k = cols.indexOf(template.column);
+          const keys = [block.name, block.label].map(plain);
+          if (theirs.some((o) => o.source.page === page.page && keys.some((key) => plain(o.benefit).includes(key)))) continue;
+          const [, sign, figure] = block.cells[k];
+          // A bare "$" names no currency: never borrowed from another row (Critic R186-1).
+          const currency = /^us\$/i.test(sign) ? "USD" : /^(?:s\$|sgd)/i.test(sign) ? "SGD" : null;
+          blocks.push({ ...template, benefit: block.name, pays: "per_period", conditions: [], fromDay: null, maxDays: null, qualifier: null,
+            figure: { kind: "printed", amount: Number(figure.replace(/,/g, "")), currency, unit: "per_period", period: block.periods[k] },
+            source: { ...template.source, page: page.page, excerpt: lines.slice(i - 1, i + 2).join("\n") }, baseSource: null, percent: null, percentOf: null, base: null, capSource: null } as TableRow);
+          continue;
+        }
         const cells = valuesOf(lines[i]);
         if (!cells) {
           // Anything but a sub-limit's name ends the benefit a sub-limit could belong to, except the line describing it.
@@ -176,7 +192,32 @@ export function planTableRows(rows: ChatRow[], household: Household): TableRow[]
       }
     }
   }
-  return out;
+  return [...out, ...blocks];
+}
+
+const BLOCK_FIGURE = /^(S\$|US\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)\s+for\s+every$/i;
+const BLOCK_LENGTH = /^(?:[a-z]+|\d+)[- ]hours?(?:\s+(?:of\s+)?delay)?$/i;
+/** A plan table's per-block cells wrapped over two lines under the benefit's name (overnight run 23 Oct, N106, N107):
+ *   Travel delay
+ *   S$100 for every\tS$50 for every\tS$50 for every
+ *   Delay while overseas\tsix-hour delay\tthree-hour delay\tthree-hour delay
+ * read as "Travel delay: Delay while overseas", S$50 for every three-hour delay in the second plan's column. Only this exact
+ * shape: one figure cell per plan column, then the line's name and one block length per plan column. Anything else (merged
+ * cells, a third line that goes on with the cells, "for the first ... only") gives none. Never worked out for a delay:
+ * printed as it is. */
+function perBlock(above: string | undefined, figures: string[], lengths: string[], next: string | undefined, columns: number, named: boolean): { name: string; label: string; cells: RegExpExecArray[]; periods: string[] } | null {
+  if (!named || !above || figures.length !== columns || lengths.length !== columns + 1) return null;
+  // A third line that goes on with the cells ("up to S$1,000\tup to S$500\t...", a lowercase wrap, a limit or total, one
+  // figure per plan even in one cell) is part of them: a row without it would drop its limit (Critic R186-2). Blank lines
+  // between do not end the block (TE P120-1, P120-2).
+  const after = (next ?? "").trim();
+  if (after && (/^[a-z]/.test(after) || /^(?:up\s+to|max(?:imum)?|subject|capped|limit|overall|total|aggregate|per\s+(?:trip|journey|period))\b/i.test(after)
+    || (after.match(/(?:S\$|US\$|SGD|\$)\s?\d/g) ?? []).length >= columns)) return null;
+  const cells = figures.map((c) => BLOCK_FIGURE.exec(c));
+  if (cells.some((c) => !c)) return null;
+  const [label, ...periods] = lengths;
+  if (!/^[A-Z][A-Za-z ,()-]{2,60}$/.test(label) || BLOCK_LENGTH.test(label) || !periods.every((p) => BLOCK_LENGTH.test(p))) return null;
+  return { name: `${above}: ${label}`, label, cells: cells as RegExpExecArray[], periods: periods.map((p) => p.toLowerCase()) };
 }
 
 /** The one daily rate a limit's own line caps it at ("Capped at S$200 per day", "maximum S$300 per day"), when it is not the
@@ -920,7 +961,7 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   // A daily row's first paid day and most days are part of what it pays, so its card always says them (stress run 23 Oct,
   // S008, S016: "S$30 per day" shown without "from day 11").
   const daily = `paid per day${row.fromDay != null && row.fromDay > 1 ? `, from day ${row.fromDay} of the stay` : ""}${row.maxDays != null ? `, for at most ${row.maxDays} days` : ""}`;
-  const how = f.kind === "printed" ? (f.unit === "per_day" ? daily : f.unit === "per_period" ? `paid per ${(f.period ?? "period").replace("_", " ")}` : f.unit === "up_to" ? (row.lesserOf ? "the cost, up to this limit, whichever is less" : "up to this limit") : null)
+  const how = f.kind === "printed" ? (f.unit === "per_day" ? daily : f.unit === "per_period" ? (/\s/.test(f.period ?? "") ? `paid ${periodWords(f.period)}` : `paid per ${(f.period ?? "period").replace("_", " ")}`) : f.unit === "up_to" ? (row.lesserOf ? "the cost, up to this limit, whichever is less" : "up to this limit") : null)
     : f.kind === "value" ? `a value${f.asOf ? ` as of ${f.asOf}` : ", date not printed"}`
     : f.kind === "projected" ? `projected, not guaranteed${f.asOf ? ` (${f.asOf})` : ""}`
     // A worked-out figure's card shows how it is worked out ("25% of S$5,000") on its own line, so the label does not. A
