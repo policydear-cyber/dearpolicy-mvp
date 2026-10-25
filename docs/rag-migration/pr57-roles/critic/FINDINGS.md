@@ -6531,3 +6531,13 @@ Free review: code read and pure `checkLines` probes only. The PR's own layout as
 - **R211-4 (medium) — chat calls a part-checked document fully read.** `lib/simple-chat/verify.ts:1170` libraryFact checks only `uncheckedPages`; a document with only part-checked pages says "X was read." Fix: add a branch for `d.partCheckedPages?.length`: "`${named}` was read in part: some amounts on `${pageList(d.partCheckedPages)}` couldn't be checked against the page image, so they are not used."
 - Downstream checked and fine: benefit-table `service.ts:47` sends part-checked text, and `check.ts` drops any figure not printed in the quote, so an amount invented for `[amount not checked]` is dropped (but see R211-1). simple-chat `library.ts` readInPart covers both kinds. ingest second pass re-verifies against masked text and skips part-checked pages. checkLog holds shapes and positions only; uncheckedWhy stays a fixed phrase (TE P115-1 holds).
 - Low, pre-existing: lines with no figure, zero amounts and amounts in words are never compared; ANY_FIGURE eats a trailing comma ("S$50,000," becomes "[amount not checked]").
+
+## R212 — #138 861b71b (any-household cleanup): READY
+
+Free review: diff read, `canonicalInsurer` probed against the old alias rule.
+
+- Product code (lib, app, components) now has no real household names: 21 files and 42 lines before, 0 after. The other code changes are comments, two form placeholders and two example names in prompts (simple-chat prompt.ts, rag2 loop prompt.ts), all harmless.
+- `lib/policies/insurer-name.ts` canonicalInsurer: every old Singlife alias still maps to "singlife", and "Aviva Ltd" stays apart. Two names that differ only by legal-form words now match ("The Great Eastern Life Assurance Company Limited" = "Great Eastern Life Assurance Co Ltd"). Disability and travel move from the raw name to this rule. Every caller I checked (currentness matchPremiumEvidence, inventory, claims wording) also needs a policy number, group number or product match, so the wider insurer match can't attach another contract's evidence.
+- Low: LEGAL_FORM misses "private", "pvt", "sdn", "pty", "gmbh" and "se", so "AIA Singapore Private Limited" and "AIA Singapore Pte Ltd" still differ, as they did before. No regression; add them for other markets.
+- Medium, still open (R207-3): scripts and e2e still hold 738 lines with the owner household's first names, including a full name at scripts/claim-evidence-regressions.ts:134, :506 and :599. DC's rule says tests use made-up names. Needs its own PR if it isn't planned already.
+- G007500 hard-coding (ci-evidence.ts:214, death-evidence.ts:192, dashboard route:97) is left for its own plan, as stated.
