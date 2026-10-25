@@ -6645,3 +6645,7 @@ Free review: code read only. I did not run the DB suite.
   - When every word is generic, the full name is kept ("Singapore Life Ltd"), so "my wife's Singlife" doesn't match unless a product carries the brand.
   - Splitting market words cuts brands that contain them ("Hong Leong Assurance" becomes "leong", "NTUC Income" stays "ntuc income", so "my wife's Income policy" doesn't match).
   - A single plain-word core ("Income Insurance" becomes "income") matches "my wife's income." and resolves to the spouse, which is harmless.
+
+## R223 — #117 32791a2: READY
+
+- A person word right after the possessive (including plurals, and partner or partners) now gives false before any name is matched. This catches products and insurers whose names start with a relative's word. Accepted cost: those names ask who is meant, which fails safe.
