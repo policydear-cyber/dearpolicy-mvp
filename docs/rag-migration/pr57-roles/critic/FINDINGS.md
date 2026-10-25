@@ -6832,3 +6832,7 @@ Free review: tsx probe of categoryOfBenefit on 48 names (R232/R233 set plus roun
   Results with this: "Death other than by accident" has no accident word in its lead, so ILLNESS_ONLY makes it Death. "Non-accidental death" goes to illness. "Accidental and Sickness Death Benefit" has ANY_CAUSE in the lead, so it goes to Death.
 - Low (fails toward PA, so an any-cause row is missing from the Death tile): "Death and Accidental Death Benefit" (a combined row), "Death by accident, illness or otherwise" (the comma cuts the head) and "Death benefit (100%) accidental death 200%".
 - Every R232/R233 name, plus the round-4 bracket and dash cases, gives the expected tile.
+
+## R235 — #142 b113b93: READY (#144 3b18e52, #145 298c402 merges only, READY)
+
+- The R234 lead check went in word for word. Re-ran the 48-name probe plus 6 exclusion cases with no brackets. All four R234 probes now go to Personal Accident. "Non-accidental death", "Death, other than by accident" and "Accidental and Sickness Death Benefit" go to Death, and every R232/R233/round-4 name gives the same tile as before. The three lows are left as is; they fail toward PA, and I accept that.
