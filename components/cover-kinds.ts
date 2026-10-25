@@ -29,6 +29,52 @@ export const kindOfName = (name: string) => {
   return COVER_KINDS.find((k) => k.id === id) ?? COVER_KINDS[COVER_KINDS.length - 1];
 };
 
+/** The parts of a benefit-table row and cover (GET /api/benefit-table) kindsOfTable reads. */
+export type TableKindRow = { benefit: string; pays: string; product: string; cover: string };
+export type TableKindCover = { product: string; cover: string };
+/** A cover's own name, sorted into a kind when it names one. Travel first: every row of a travel policy is travel cover
+ * ("Rental Vehicle Excess" is not motor insurance); "Home and vehicle" only for a cover that is itself motor or home
+ * insurance. A life plan is death cover only when it says so, or is a mortgage plan: "CPF LIFE" is an annuity (Critic R199). */
+const COVER_NAME_KINDS: [RegExp, string][] = [
+  [/\b(?:travel\w*|trip|holiday|journey)\b/i, "travel"],
+  // A mortgage plan ("HomeProtect", "Mortgage Reducing Term") is death cover on the borrower, not home insurance (Critic R201-1).
+  [/\bmortgage\b|\breducing\s+term\b|\bhome\s?protect\b|\bhome\s+protection\s+scheme\b|\bHPS\b/i, "death"],
+  // Before motor and home: a "Public Vehicle Accident Plan" is accident cover (TE F12).
+  [/accident|\bpa\b/i, "accident"],
+  [/\bmotor\b|\bcar\b|\bvehicle\b|\bhome(?:shield|guard)?\b(?!\s*(?:care|nursing|health))|\bhousehold\b|\bfire\b/i, "property"],
+  [/critical illness|\bci\b|cancer|dread disease|early crisis/i, "ci"],
+  [/careshield|eldershield|disab|\btpd\b|long[- ]term care/i, "disability"],
+  [/shield|hospital|medical|health|surg/i, "hospital"],
+  [/\b(?:term|whole)\s+life\b|\blife\s+(?:insurance|assurance|cover|protection)\b|\bgroup\s+term\b/i, "death"],
+];
+const coverKindOfName = (name: string) => COVER_NAME_KINDS.find(([re]) => re.test(name))?.[1] ?? null;
+/** A row that is only the premium ("Annual premium", "Premium payable"), never a premium waiver, which is cover (Critic R199-1). */
+const PREMIUM_ONLY = /^(?:(?:annual|monthly|quarterly|half[- ]yearly|yearly|single|modal|total|basic|regular|instalment)\s+)?premiums?(?:\s+(?:payable|amount|paid|due|term))?$/i;
+/** The kinds of cover a person's benefit table shows, for a household whose documents are read into the benefit table
+ * (its Coverage rows are no longer read or refreshed, so they can be stale: 24 Oct, Family showed "Home and vehicle" for
+ * a travel policy). The cover's own name decides first; a row's benefit name adds its kind (a term life's TPD row is
+ * disability cover too), never "Home and vehicle" ("Home Nursing", "Home Modification" are not home insurance). A row
+ * printed as not covered, a value and a premium are no cover. A cover with no row counted (its pages not linked yet) is
+ * still cover: never "Nothing found" for a person who has one (Critic R199-2). */
+export function kindsOfTable(rows: TableKindRow[], covers: TableKindCover[] = []): string[] {
+  const found = new Set<string>(), counted = new Set<string>();
+  const ofCover = (product: string, cover: string) => coverKindOfName(`${product} ${cover}`);
+  for (const r of rows) {
+    // A value or the premium says nothing about the cover: its pages may not be linked yet (Critic R204-1). A cover whose
+    // rows are all printed as not covered is no cover (TE P124-2).
+    if (r.pays === "value" || PREMIUM_ONLY.test(r.benefit.trim())) continue;
+    counted.add(`${r.product}\u0000${r.cover}`);
+    if (r.pays === "not_covered") continue;
+    const cover = ofCover(r.product, r.cover), benefit = kindOfName(r.benefit).id;
+    if (cover) found.add(cover);
+    if (cover === "travel") continue;
+    if (benefit !== "other" && benefit !== "property") found.add(benefit);
+    else if (!cover) found.add("other");
+  }
+  for (const c of covers) if (!counted.has(`${c.product}\u0000${c.cover}`)) found.add(ofCover(c.product, c.cover) ?? "other");
+  return COVER_KINDS.filter((k) => found.has(k.id)).map((k) => k.label);
+}
+
 /** The parts of a Coverage row (GET /api/ledger) these helpers read. */
 export type KindRow = { eventType: string; eventLabel?: string | null; detail?: string | null; origin?: string; status?: string };
 export const kindOfRow = (row: KindRow) => row.eventType === "other" ? kindOfName(`${row.eventLabel ?? ""} ${row.detail ?? ""}`) : coverKindOf(row.eventType);

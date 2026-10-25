@@ -3,6 +3,7 @@
  *   npm run benefit-table:headline-test */
 import assert from "node:assert/strict";
 import { bySection, keyBenefits, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { kindsOfTable } from "@/components/cover-kinds";
 
 let passed = 0;
 const failures: string[] = [];
@@ -78,6 +79,52 @@ test("the full list is grouped by section in first-seen order, with rows that ha
   const g = bySection([{ section: "Fractures", n: 1 }, { section: null, n: 2 }, { section: "Death", n: 3 }, { section: "Fractures", n: 4 }]);
   assert.deepEqual(g.map((x) => [x.section, x.rows.map((r) => r.n)]), [["Fractures", [1, 4]], ["Death", [3]], ["Other", [2]]]);
   assert.deepEqual(bySection([{ section: null }]).map((x) => x.section), ["Benefits"]);
+});
+
+// Family's "Covered for" line from the benefit table (components/cover-kinds.ts; 24 Oct journeys: "Travel · Home and
+// vehicle" for a travel policy whose home cover is printed as not applicable).
+test("a person's kinds of cover come from their benefit-table rows", () => {
+  const r = (benefit: string, product: string, pays = "up_to", cover = product) => ({ benefit, pays, product, cover });
+  const travel = "FWD Travel Insurance";
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", travel), r("Home Guard", travel, "not_covered"), r("Overseas Medical Expenses", travel),
+    r("Personal Accident", travel, "amount")]), ["Travel"]);
+  assert.deepEqual(kindsOfTable([r("Hospital Cash", "Group Hospital & Surgical", "per_day"), r("Wrist fracture", "Group Personal Accident", "amount"),
+    r("Accident medical expenses", "Group Personal Accident", "not_covered"), r("Death", "Group Term Life", "amount")]), ["Death", "Hospital and medical", "Accidents and injuries"]);
+  // Nothing but a premium, a value or a cell printed as not covered: no kind of cover.
+  assert.deepEqual(kindsOfTable([r("Annual Premium", "Critical Illness II", "amount"), r("Surrender value", "Endowment Plan", "value"), r("Home contents", "HomeShield", "not_covered")]), []);
+  // A row named only by its sum is the kind its cover names; real motor and home cover still shows.
+  assert.deepEqual(kindsOfTable([r("Sum Insured", "Critical Illness II", "amount"), r("Own damage", "Motor Insurance", "up_to", "Motor Comprehensive")]), ["Critical illness", "Home and vehicle"]);
+});
+
+// Critic R199 and TE #124: the benefit's own name never makes "Home and vehicle"; the cover's name decides first.
+test("the cover's own name decides the kind, and a home-care benefit is not home insurance", () => {
+  const r = (benefit: string, product: string, pays = "up_to", cover = product) => ({ benefit, pays, product, cover });
+  assert.deepEqual(kindsOfTable([r("Home Modification", "Group Personal Accident"), r("Mobility Aids", "Group Personal Accident")]), ["Accidents and injuries"]);
+  assert.deepEqual(kindsOfTable([r("Room and board", "PRUShield"), r("Home Nursing", "PRUShield"), r("Home Healthcare", "PRUShield")]), ["Hospital and medical"]);
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", "Chubb Holiday Plan", "up_to", "Classic")]), ["Travel"]);
+  assert.deepEqual(kindsOfTable([r("Rental Vehicle Excess", "Singlife Journey Plan")]), ["Travel"]);
+  // A premium waiver is cover; a premium alone is not.
+  assert.deepEqual(kindsOfTable([r("Premium waiver on TPD", "PRUlife Vantage", "words"), r("Annual premium", "PRUlife Vantage", "amount")]), ["Disability"]);
+  assert.deepEqual(kindsOfTable([r("Waiver of Premium", "PRUlife Vantage", "words")]), ["Other"]);
+  // An annuity is not death cover.
+  assert.deepEqual(kindsOfTable([r("Monthly payout", "CPF LIFE Standard Plan", "per_period")]), ["Other"]);
+  // A term life's TPD row adds disability; a cover with no row counted still shows.
+  assert.deepEqual(kindsOfTable([r("Death", "Group Term Life", "amount"), r("Total and permanent disability", "Group Term Life", "amount")],
+    [{ product: "Group Term Life", cover: "Group Term Life" }, { product: "Critical Illness II", cover: "Critical Illness II" }]), ["Death", "Disability", "Critical illness"]);
+  assert.deepEqual(kindsOfTable([], [{ product: "HomeShield Contents", cover: "HomeShield Contents" }]), ["Home and vehicle"]);
+  // A cover whose rows are all printed as not covered is no cover (TE P124-2); a mortgage plan is death cover (Critic R201-1);
+  // a vehicle accident plan is accident cover (TE F12).
+  assert.deepEqual(kindsOfTable([r("Home contents", "HomeShield", "not_covered")], [{ product: "HomeShield", cover: "HomeShield" }]), []);
+  assert.deepEqual(kindsOfTable([r("Death", "HDB HomeProtect", "amount"), r("Total and permanent disability", "HDB HomeProtect", "amount")]), ["Death", "Disability"]);
+  assert.deepEqual(kindsOfTable([], [{ product: "Mortgage Reducing Term", cover: "Mortgage Reducing Term" }]), ["Death"]);
+  assert.deepEqual(kindsOfTable([r("Death", "HDB Home Protection Scheme", "amount")]), ["Death"]);
+  assert.deepEqual(kindsOfTable([r("Death", "HPS", "amount")]), ["Death"]);
+  // A home insurance plan that only calls itself "protection" is still home cover (Critic R205 note).
+  assert.deepEqual(kindsOfTable([r("Contents", "Home Protection Plan")]), ["Home and vehicle"]);
+  assert.deepEqual(kindsOfTable([r("Accidental death", "Public Vehicle Accident Plan", "amount")]), ["Accidents and injuries"]);
+  // A plan with only a value and its premium is still a plan (Critic R204-1).
+  assert.deepEqual(kindsOfTable([r("Fund value", "PRUlink Assurance", "value"), r("Annual premium", "PRUlink Assurance")], [{ product: "PRUlink Assurance", cover: "PRUlink Assurance" }]), ["Other"]);
+  assert.deepEqual(kindsOfTable([r("Annual premium", "Critical Illness II", "amount")], [{ product: "Critical Illness II", cover: "Critical Illness II" }]), ["Critical illness"]);
 });
 
 console.log(`benefit-table headline: ${passed} passed, ${failures.length} failed`);
