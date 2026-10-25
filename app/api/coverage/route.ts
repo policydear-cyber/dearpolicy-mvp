@@ -5,11 +5,22 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { categoryRows, wordingDescribes } from "@/lib/coverage/table-figures";
+import { rowDetail, shortFigure } from "@/lib/benefit-table/headline";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
-function canonicalProduct(value:string|null|undefined){const v=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();if(/group term life|\bgtl\b/.test(v))return"group term life";if(/group personal accident|\bgpa\b/.test(v))return"group personal accident";if(/living care plus/.test(v))return"living care plus";if(/\bliving care\b/.test(v))return"living care";if(/disability income/.test(v))return"disability income";if(/outpatient medicare/.test(v))return"outpatient medicare";return v;}
-function productFromCategory(category:string){if(category==="Death"||category==="Total Permanent Disability"||category==="Hospital Cash")return"group term life";if(category==="Personal Accident")return"group personal accident";if(category==="Critical Illness")return"living care";if(category==="Early Critical Illness")return"living care plus";if(category==="Disability Income")return"disability income";if(category==="Outpatient")return"outpatient medicare";return"";}
+/** The person's benefit-table rows for this category, each with the figure and page its document prints: the same rows
+ * the Family page and the chat use. Empty where the benefit table is off or names nothing for the category. */
+async function tableRows(accountId:string,member:string,category:string){
+  try{
+    const { benefitTableLive,appDb }=await import("@/lib/benefit-table/app");
+    if(!(await benefitTableLive(accountId)))return [];
+    const { tableFor }=await import("@/lib/benefit-table/service");
+    const person=(await tableFor(appDb,accountId)).table.people.find(p=>p.id===member);
+    return categoryRows(category,person?.rows??[]).map(r=>{const f=shortFigure(r);return{benefit:r.benefit,product:r.product,cover:r.cover,plan:r.plan,figure:f.text,note:f.note,detail:rowDetail(r)||null,document:r.source.document,page:r.source.page,excerpt:r.source.excerpt};});
+  }catch(error){console.warn("Benefit table unavailable for Coverage:",error instanceof Error?error.message:error);return [];}
+}
 export async function GET(request:NextRequest){
  try{
   const ctx = await requireHouseholdContext(request);
@@ -22,9 +33,9 @@ export async function GET(request:NextRequest){
     const owned=await client.query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;source_page:number|null;evidence_text:string|null;policy_id:string;insurer:string|null;policy_name:string|null;policy_number:string|null;group_policy_number:string|null;original_filename:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,pc.source_page,pc.evidence_text,p.id AS policy_id,p.insurer,p.product_name AS policy_name,p.policy_number,p.group_policy_number,p.original_filename FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,member]);
     const derived:any[]=[];
     if(!confirmed.rows.length&&reference.rows.length){
-     for(const ref of reference.rows as any[]){const rp=canonicalProduct(ref.product_name)||productFromCategory(category);const owner=owned.rows.find(o=>(canonicalProduct(o.coverage_product_name)||productFromCategory(normalizeCoverageCategory(o.category)))===rp&&(o.group_policy_number&&ref.group_policy_number?o.group_policy_number===ref.group_policy_number:true)&&(o.insurer&&ref.insurer?o.insurer.toLowerCase()===String(ref.insurer).toLowerCase():true));if(!owner)continue;let amount:string|null=null,display_amount:string|null=null;if(category==="Total Permanent Disability"&&rp==="group term life")amount=owned.rows.find(o=>normalizeCoverageCategory(o.category)==="Death"&&(canonicalProduct(o.coverage_product_name)||productFromCategory("Death"))===rp)?.amount??null;if(category==="Hospital Cash"&&rp==="group term life"&&(owner.group_policy_number==="G007500"||ref.group_policy_number==="G007500"))display_amount="S$30/day from day 11 · max 30 days";derived.push({id:`derived:${owner.id}:${ref.id}`,amount,currency:owner.currency,display_amount,product_name:ref.product_name??owner.coverage_product_name??owner.policy_name,insurer:owner.insurer,policy_number:owner.policy_number,group_policy_number:owner.group_policy_number,ownership_source_page:owner.source_page,ownership_evidence_text:owner.evidence_text,ownership_filename:owner.original_filename,reference_filename:ref.original_filename,reference_role:ref.document_role,reference_notes:ref.notes});}
+     for(const ref of reference.rows as any[]){const owner=owned.rows.find(o=>wordingDescribes({productName:o.coverage_product_name??o.policy_name,groupPolicyNumber:o.group_policy_number,insurer:o.insurer},{productName:ref.product_name,groupPolicyNumber:ref.group_policy_number,insurer:ref.insurer}));if(!owner)continue;derived.push({id:`derived:${owner.id}:${ref.id}`,amount:null,currency:owner.currency,display_amount:null,product_name:ref.product_name??owner.coverage_product_name??owner.policy_name,insurer:owner.insurer,policy_number:owner.policy_number,group_policy_number:owner.group_policy_number,ownership_source_page:owner.source_page,ownership_evidence_text:owner.evidence_text,ownership_filename:owner.original_filename,reference_filename:ref.original_filename,reference_role:ref.document_role,reference_notes:ref.notes});}
     }
-    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmed.rows,derived,reference:reference.rows};
+    return {member:{id:member,name:memberRow.rows[0].display_name},category,confirmed:confirmed.rows,derived,reference:reference.rows,table:await tableRows(accountId,member,category)};
   });
   if(!payload) return NextResponse.json({error:"Family member not found"},{status:404});
   return NextResponse.json(payload);
