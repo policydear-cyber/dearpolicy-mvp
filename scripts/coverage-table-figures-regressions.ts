@@ -40,6 +40,12 @@ test("an illness the name excludes is not a cause it pays; injury is accident; a
   assert.equal(categoryOfBenefit("Death benefit; doubled for accidental death"), "Death");
   assert.equal(categoryOfBenefit("TPD (illness or accident)"), "Total Permanent Disability");
   assert.equal(categoryOfBenefit("Death (excluding suicide in the first year)"), "Death");
+  // Critic R229: an uplift word counts only on a plain death benefit; an excluded accident is not an accident benefit.
+  assert.equal(categoryOfBenefit("Double Indemnity Accidental Death Benefit"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Accidental Death (double for public transport)"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Additional Accidental Death Benefit"), "Personal Accident");
+  assert.equal(categoryOfBenefit("Death from causes other than accident"), "Death");
+  assert.equal(categoryOfBenefit("Death (including death due to injury)"), "Death");
 });
 
 test("a death or disability paid only on an accident is personal accident, never the Death or TPD tile (TE P142-1)", () => {

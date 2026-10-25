@@ -23,14 +23,18 @@ const NAMES: [string, RegExp][] = [
 /** The one category a benefit name belongs to, or null. A name matching several takes the first in NAMES. */
 export function categoryOfBenefit(benefit: string): string | null {
   // "Death from any cause, including accident", "Death due to illness or accident" or "Death benefit; doubled for
-  // accidental death" is not accident-only. An illness word the name excludes ("Accidental Death (death from illness is
+  // accidental death" is not accident-only, nor is "Death from causes other than accident". An illness word the name excludes ("Accidental Death (death from illness is
   // not covered)", "- not payable for sickness", "(sickness excluded)") is not a cause it pays for (TE P144-6, Critic R227).
   const paid = benefit
     .replace(/\([^)]*\b(?:not|excluded?|excluding|except)\b[^)]*\)/gi, " ")
     .replace(/\b(?:not\s+(?:payable|covered|paid)|excluding|except(?:\s+for)?|other\s+than)\b[^,;)]*/gi, " ")
     .replace(/\b(?:illness|sickness|disease)\w*\s+(?:is\s+|are\s+)?(?:excluded|not\s+covered)\b/gi, " ");
-  const anyCause = /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?|doubl\w*|twice|uplift)\b/i.test(paid) && !/\bpersonal\s+accident\b/i.test(benefit);
-  return NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && anyCause))?.[0] ?? null;
+  // An accident uplift counts only on a plain death benefit: "Double Indemnity Accidental Death Benefit" stays accident-only
+  // (Critic R229). "Death (including death due to injury)" covers every cause.
+  const uplift = /^\s*death(?:\s+benefit)?\b/i.test(paid) && /\b(?:doubl\w*|twice|uplift)\b/i.test(paid);
+  const anyCause = (uplift || /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b|\bincluding\b[^)]*\b(?:accident\w*|injur\w*)/i.test(paid))
+    && !/\bpersonal\s+accident\b/i.test(benefit);
+  return NAMES.find(([name, re]) => re.test(name === "Personal Accident" ? paid : benefit) && !(name === "Personal Accident" && anyCause))?.[0] ?? null;
 }
 
 /** A premium the person pays, never a benefit (chat.ts's PREMIUM_ROW). */
