@@ -158,9 +158,12 @@ const words = (n: string) => n.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w
  * helper" is about the helper, "my husband's family claim" about his family (Critic R207-1, TE P117-4, P117-5). */
 function coverAfter(rest: string, cover: { insurers: string[][]; products: string[][] }): boolean {
   const said = words(rest.match(/^[^.,;:!?()]*/)?.[0] ?? "");
-  const whole = (p: string[]) => p.every((w, i) => said[i] === w);
-  return [...cover.insurers, ...cover.products].some(whole)
-    || cover.insurers.some((p) => said[0] === p[0] && (said.length === 1 || HIS_OR_HERS.test(said[1])));
+  // A name, then the clause ends or a cover word follows: "my husband's Business Partner policy", not "... business partner died".
+  const then = (n: number) => said.length === n || HIS_OR_HERS.test(said[n]);
+  // An insurer's first word alone never when it is a relative's word: "my wife's family medical history" is about her
+  // family, even with a Family Life Insurance in the library (TE P117-6).
+  return [...cover.insurers, ...cover.products].some((p) => p.every((w, i) => said[i] === w) && then(p.length))
+    || cover.insurers.some((p) => said[0] === p[0] && !NOT_THEM_AFTER.test(p[0]) && then(1));
 }
 // Only the person's own spouse: the word opens the message or a clause, or follows "my" or a clause word. Any other word
 // before it ("sis", "client", "kakak", "her") may make it someone else's, so it is not resolved: an allow-list, since a

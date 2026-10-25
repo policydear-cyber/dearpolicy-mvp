@@ -1684,6 +1684,11 @@ test("\"my husband\" is settled only by a title the documents print before that 
     ["Example General", "Business Partner Cover", "my husband's business partner died"], ["Great Example", "Term Plan", "my husband's great aunt has cancer"]])
     assert.equal(spouseMeant(insured(insurer, product), [said]), null, said);
   assert.ok(spouseMeant(insured("Great Example", "Term Plan"), ["my husband's Great Example policy"]), "a whole insurer name counts");
+  // A whole name counts only when the clause ends or a cover word follows it; a relative's word never does (TE P117-6).
+  assert.equal(spouseMeant(insured("Example General", "Business Partner"), ["my husband's business partner died"]), null);
+  assert.ok(spouseMeant(insured("Example General", "Business Partner"), ["my husband's Business Partner claim"]));
+  for (const said of ["my wife's family health history includes cancer", "my husband's family medical history"])
+    assert.equal(spouseMeant(insured("Family Life Insurance Company", "Term Plan"), [said]), null, said);
   assert.ok(spouseMeant(insured("Zurich Life", "Zurich Term"), ["hubby's Zurich, does it pay?"]), "an insurer's first word, then a clause");
   // A later word that is the person's own still counts after someone else's.
   assert.equal(spouseMeant(titled("Life Assured : Mr Lim Ah Kow"), ["her husband has AIA, my husband?"])?.word, "my husband");
