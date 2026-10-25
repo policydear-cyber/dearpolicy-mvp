@@ -7,7 +7,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type Family
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
 import { type ChatRow, amountsFromRows, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
-import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -1033,9 +1033,22 @@ test("what prose says about the library is held to the library's own record (liv
   r = run("Here they are.", [{ kind: "uncertainty", text: "The Certificate lists only Lim, and no document is linked to Mei Ling alone." }]);
   assert.equal(r.texts.length, 1);
   // Asked about documents, an unquoted point about one file is said from its record, never dropped.
+  // Files read in full are listed together under the people they are linked to, in one line, whichever way the model split
+  // its points: one point per file used to come back as a line per file repeating "was read. It is linked to ... It was
+  // uploaded for ..." (live 7e6d50e, E1, E4, H12).
   r = run("Mei Ling has two documents.", [{ text: "The group certificate for the scheme.", document: "D1" }, { text: "The scheme's terms.", document: "D2" }]);
-  assert.equal(r.texts.length, 2);
-  assert.match(r.texts[0], /^Certificate \(Certificate\.pdf\) was read\. It is linked to Lim Ah Kow and Tan Mei Ling in DearPolicy\. It was uploaded for Tan Mei Ling\.$/);
+  assert.equal(r.texts.length, 1);
+  assert.match(r.texts[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read: Certificate \(Certificate\.pdf\); .+\.$/);
+  assert.equal(r.texts.some((t) => /was read\. It is linked to/.test(t)), false);
+  // Every file, one point each (the live E1 shape): one line per set of people, then only what is news about a file.
+  r = run("You have 3 documents.", [1, 2, 3].map((i) => ({ text: `File ${i}.`, document: `D${i}` })), "what documents have we uploaded");
+  assert.equal(r.texts.filter((t) => /^Linked to /.test(t)).length, 2, r.texts.join(" | "));
+  assert.equal(r.texts.some((t) => /was read\. It is linked to/.test(t)), false, r.texts.join(" | "));
+  // A file uploaded for someone it is not linked to still says so, once (live H12).
+  const apart: Household = { ...H, documents: H.documents.map((d, i) => i === 0 ? { ...d, uploadedFor: "Alex Example" } : d) };
+  const { answer: a2 } = verifyAnswer(apart, readModelAnswer({ bottomLine: "One file.", nextSteps: [], question: null, statements: [{ kind: "fact", text: "x", person: null, document: "D1", quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: false }] })!, ["which of our documents are about alex"]);
+  const t2 = (a2.statements ?? []).map((x) => x.text);
+  assert.deepEqual(t2, ["Certificate (Certificate.pdf) was read. It is linked to Lim Ah Kow and Tan Mei Ling, but it was uploaded for Alex Example."]);
   // Asked how to file a claim, or which documents a claim needs, the question is not about the library (TE #104 L9).
   for (const q of ["how do I file a claim for Lim's hip", "what documents do I need to claim"])
     assert.deepEqual(run("Here.", [{ text: "Notice must be given within 30 days.", document: "D2" }], q).texts.filter((t) => /was read\./.test(t)), [], q);
@@ -1717,6 +1730,16 @@ test("for a question about the documents, a point about one person's files is th
     ["No document is linked to Lim Xiao Ming in DearPolicy."]);
   // Not a question about the documents: an unquoted point is left out as before.
   assert.deepEqual(ask([{ text: "Lim Ah Kow has 2 documents.", person: "Lim Ah Kow" }], "how much for a broken wrist"), []);
+});
+
+test("library groups: the same people in any order are one group, and a replaced file is not listed (Critic R224, TE N1 N2)", () => {
+  const d = (name: string, people: string[], o: Record<string, unknown> = {}) => ({ ...doc(`id-${name}`, name, [{ page: 1, text: "x" }]), linkedPeople: people, ...o });
+  const docs = [d("A.pdf", ["Lim Ah Kow", "Tan Mei Ling"]), d("B.pdf", ["Tan Mei Ling", "Lim Ah Kow"]), d("Old.pdf", ["Lim Ah Kow", "Tan Mei Ling"], { supersededAt: "2026-09-02" })];
+  const house = { ...HOUSE, documents: docs } as Household;
+  const lines = libraryGroups(house, docs as Household["documents"]);
+  assert.equal(lines.length, 1, lines.join(" | "));
+  assert.match(lines[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read/);
+  assert.doesNotMatch(lines[0], /Old\.pdf/);
 });
 
 async function atest(name: string, fn: () => Promise<void>) {

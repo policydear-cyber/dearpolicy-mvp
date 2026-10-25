@@ -214,7 +214,9 @@ const formatMoney = (sign: string, value: number) => sign + value.toLocaleString
 type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null };
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
+  /** A point about one file, or one person's files, stated from the library's record (libraryFact, libraryList). */
+  libraryDoc?: number; libraryPerson?: string };
 
 const valueOf = (raw: string) => Number(raw.replace(/^[^\d]+/, "").replace(/,/g, ""));
 
@@ -1172,7 +1174,38 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
     : `${named} was read.`;
   const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
-  return `${read}${linked}${d.uploadedFor ? ` It was uploaded for ${baseName(d.uploadedFor)}.` : ""}`;
+  return `${read}${linked}${uploadedApart(d) ? ` It was uploaded for ${baseName(d.uploadedFor!)}.` : ""}`;
+}
+/** Who a file was uploaded for, when that is news: someone it is not linked to. Said of a file linked to the same person,
+ * it only repeats the line before it (live 7e6d50e, E1). */
+const uploadedApart = (d: HouseholdDocument) => !!d.uploadedFor && !d.linkedPeople.some((p) => baseName(p) === baseName(d.uploadedFor!));
+const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages?.length && !d.partCheckedPages?.length;
+
+/** Points about several files, for a question about the documents: the files read in full, listed together under the
+ * people each is linked to, then one sentence for each file that is news on its own (read in part, unreadable, linked to
+ * nobody, uploaded for someone it is not linked to). One shape whatever way the model split its points: one point per
+ * file used to come back as a line per file repeating "was read. It is linked to ..." (live 7e6d50e, E1, E4, H12), and
+ * one point per person as a clean list (6809808). Files already in a person's list are not listed again. A file uploaded
+ * for someone it is not linked to is said on its own, once. */
+export function libraryGroups(household: Household, docs: HouseholdDocument[], listed: ReadonlySet<string> = new Set()): string[] {
+  const named = (d: HouseholdDocument) => { const label = labelFor(household, d); return label === d.name ? d.name : `${label} (${d.name})`; };
+  const groups = new Map<string, HouseholdDocument[]>(), out: string[] = [];
+  for (const d of docs) {
+    // A file a newer upload replaced is not listed, as libraryList leaves it out (TE N2).
+    if (d.supersededAt) continue;
+    if (!readInFull(d) || !d.linkedPeople.length || uploadedApart(d)) continue;
+    // The same people in any stored order are one group (Critic R224a, TE N1).
+    const people = [...new Set(d.linkedPeople.map(baseName))].sort((a, b) => a.localeCompare(b));
+    if (people.every((p) => listed.has(p))) continue;
+    const key = people.length > 2 ? `${people.slice(0, -1).join(", ")} and ${people.at(-1)}` : people.join(" and ");
+    groups.set(key, [...(groups.get(key) ?? []), d]);
+  }
+  for (const [people, ds] of groups) out.push(`Linked to ${people}${ds.length > 1 ? `, ${ds.length} documents, all read` : ", read"}: ${ds.map(named).join("; ")}.`);
+  for (const d of docs) {
+    if (!readInFull(d) || !d.linkedPeople.length) out.push(libraryFact(household, d));
+    else if (uploadedApart(d)) out.push(`${named(d)} was read. It is linked to ${d.linkedPeople.map(baseName).join(" and ")}, but it was uploaded for ${baseName(d.uploadedFor!)}.`);
+  }
+  return out;
 }
 
 /** A person's documents, as the library records them, in the server's words: for a question about the documents, a point
@@ -1310,6 +1343,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const read = proseRead(household);
   const library = libraryClaimsRead(household, report.sentencesLeftOut);
   const aboutFiles = new Set<number>();
+  /** Texts written here from the library's own record: never held to that record again. */
+  const fromRecord = new Set<string>();
   for (const st of model.statements) {
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
     const found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
@@ -1351,7 +1386,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         // When the question is about the documents themselves ("show me Mei Ling's documents"), any unquoted point about one
         // file is said the same way (release-set E4).
         if (di >= 0 && di < household.documents.length && (ABOUT_FILE.test(st.text) || aboutLibrary(written[0] ?? ""))) {
-          if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
+          if (!aboutFiles.has(di)) { aboutFiles.add(di); checked.push({ s: { ...st, text: libraryFact(household, household.documents[di]), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null, libraryDoc: di }); }
           continue;
         }
         // For a question about the documents, a point about one person's files is that person's list, as the library records it.
@@ -1359,7 +1394,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
         const whose = person ?? (named.length === 1 ? named[0] : null);
         if (di < 0 && aboutLibrary(written[0] ?? "") && whose) {
           const key = -2 - household.members.findIndex((m) => baseName(m.name) === whose);
-          if (!aboutFiles.has(key)) { aboutFiles.add(key); checked.push({ s: { ...st, text: libraryList(household, whose), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null }); }
+          if (!aboutFiles.has(key)) { aboutFiles.add(key); checked.push({ s: { ...st, text: libraryList(household, whose), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null, libraryPerson: whose }); }
           continue;
         }
         // A point about several files at once ("The other documents (D1, D2, ...) were read") is stated as the library's count.
@@ -1373,6 +1408,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     } else {
       checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
+  }
+  // For a question about the documents, the points about single files become one list per set of people, wherever the
+  // first of them stood (libraryGroups).
+  const filePoints = checked.filter((c) => c.libraryDoc != null);
+  if (aboutLibrary(written[0] ?? "") && filePoints.length) {
+    const listed = new Set(checked.flatMap((c) => (c.libraryPerson ? [c.libraryPerson] : [])));
+    const texts = libraryGroups(household, filePoints.map((c) => household.documents[c.libraryDoc!]), listed);
+    for (const t of texts) fromRecord.add(t);
+    const at = checked.indexOf(filePoints[0]);
+    const after = checked.slice(at).filter((c) => c.libraryDoc == null);
+    // A grouped line is the library's record: it cites no page and no one file (Critic R224d).
+    checked.splice(at, checked.length - at, ...texts.map((text) => ({ ...filePoints[0], found: null, s: { ...filePoints[0].s, text, document: null } })), ...after);
   }
   // A bill set against a limit is never also said to be uncovered for the same person, and one bill gets one card.
   const carded = new Set<string>();
@@ -1438,8 +1485,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       seenRows.add(key);
     }
     const doc = c.found ? household.documents[c.found.docIndex] : null;
-    const said = serverWords.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
-    let text = serverWords.has(c.s.text) ? said : library(said, true);
+    // The library's own record is never cut by the money filter: a product label with a figure would drop the whole group
+    // line (Critic R224c).
+    const said = serverWords.has(c.s.text) || fromRecord.has(c.s.text) ? c.s.text : withoutMoney(withoutQuestions(c.s.text, report.questionsLeftOut), report.sentencesLeftOut, read);
+    let text = serverWords.has(c.s.text) || fromRecord.has(c.s.text) ? said : library(said, true);
     // A point the library's record or the premium rule leaves out is not shown at all.
     if (said && !text && !c.amount) return;
     // With no words of its own left, a card says what its source prints (the quoted words carry the benefit's name).
