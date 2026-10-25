@@ -6634,3 +6634,14 @@ Free review: code read only. I did not run the DB suite.
 
 - A whole name now counts only before a cover word or the end of the clause, and an insurer first word that is a relative's word (NOT_THEM_AFTER) never counts. So "my husband's business partner died" with a "Business Partner" product, and "my wife's family medical history" with Family Life Insurance, both give no match.
 - Low, rare: HIS_OR_HERS holds ordinary words (health, medical, life, hospital, bill), so a product named with plain English followed by one of them still matches ("my husband's business partner's hospital bill" if the name is "Business Partner"). The wrong case only resolves to the spouse, who is named in the message anyway. Leave it.
+
+## R222 — #117 47c011a (insurer by its core name only): READY
+
+- insurerCore works as described:
+  - "Friends Provident International" becomes "friends provident", so "my husband's friends medical bills" gives no match;
+  - "Family Life Insurance" becomes "family life", so "my wife's family life is busy" gives no match (then() fails), while "my wife's family life insurance" matches;
+  - "Prudential Assurance Company Singapore" becomes "prudential", "AXA Insurance" becomes "axa", and "Great Eastern Life" becomes "great eastern".
+- Low, fails safe (the chat asks who is meant):
+  - When every word is generic, the full name is kept ("Singapore Life Ltd"), so "my wife's Singlife" doesn't match unless a product carries the brand.
+  - Splitting market words cuts brands that contain them ("Hong Leong Assurance" becomes "leong", "NTUC Income" stays "ntuc income", so "my wife's Income policy" doesn't match).
+  - A single plain-word core ("Income Insurance" becomes "income") matches "my wife's income." and resolves to the spouse, which is harmless.
