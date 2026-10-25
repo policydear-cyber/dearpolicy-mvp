@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { assessClaim } from "@/lib/claims/rules";
 import { enforceMonetarySafety } from "@/lib/claims/monetary-gate";
-import { EMPTY_CLAIM_FACTS, type ClaimFacts } from "@/lib/claims/types";
+import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
+import { withTableBenefits } from "@/lib/claims/table-benefits";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import { claimTable, personCover, printed, tableRow } from "./fixtures/claim-table";
 
@@ -91,6 +92,55 @@ test("no scheme number, product name or benefit amount is written into the claim
   const rules = readFileSync("lib/claims/rules.ts", "utf8");
   assert.doesNotMatch(rules, /S\$\d|\b5000\s*\*|Math\.min\([^)]*,\s*500\)|- 10\)/, "rules.ts writes a scheme's amount or waiting days");
   assert.doesNotMatch(rules, /Living Care|living-care/, "rules.ts names one scheme's product");
+});
+
+test("a body part matches a row only when every word of it is in the row's name (Critic R225, TE P144-1)", () => {
+  const rows = [tableRow("k", "Harbour Accident Shield", "Upper jaw", printed(3000, "lump_sum", "MYR"), { section: "Fractures" }),
+    tableRow("k", "Harbour Accident Shield", "Neck (cervical vertebrae)", printed(6000, "lump_sum", "MYR"), { section: "Fractures" }),
+    tableRow("k", "Harbour Accident Shield", "Arm (humerus)", printed(4000, "lump_sum", "MYR"), { section: "Fractures" })];
+  const arm = run(facts({ eventType: "accident", fractureBodyPart: "upper arm" }), [cover({})], rows).filter((i) => i.id.startsWith("table-fracture"));
+  assert.deepEqual(arm.map((i) => i.calculatedAmount), [4000]);
+  const femur = run(facts({ eventType: "accident", fractureBodyPart: "neck of femur" }), [cover({})], rows).filter((i) => i.id.startsWith("table-fracture"));
+  assert.equal(femur.length, 0, "the neck-of-spine row is not a femur");
+});
+
+test("a death paid only on an accident is never paid for a death from illness (TE P144-2)", () => {
+  const life = cover({ id: "c5", category: "Death", currency: "AUD", productName: "Coastal Life", evidenceText: "A$800,000" });
+  const rows = [tableRow("a", "Coastal Life", "Death due to accident", printed(800000, "lump_sum", "AUD"))];
+  const items = run(facts({ eventType: "death", death: true, deathDate: "2026-09-01" }), [life], rows, [personCover("a", "Coastal Life")]);
+  assert.equal(items.some((i) => i.id.startsWith("table-death") && i.calculatedAmount), false);
+});
+
+const item = (o: Partial<ClaimAssessmentItem>): ClaimAssessmentItem => ({ id: "x", title: "x", status: "potentially_applicable", amountText: null, reason: "", conditions: [], ...o } as ClaimAssessmentItem);
+test("a daily cash item from the wording's rules is never paid again from the table (TE P144-3)", () => {
+  const rows = [tableRow("k", "Harbour Accident Shield", "ICU Daily Cash", printed(500, "per_day", "INR"), { fromDay: 1, maxDays: 30 })];
+  const f = facts({ eventType: "hospitalisation", hospitalised: true, hospitalNights: 4 });
+  const out = withTableBenefits(f, [cover({})], claimTable(rows, [personCover("k", "Harbour Accident Shield")]),
+    [item({ id: "med-icu-cash", title: "Daily ICU Cash", coverageId: "c1", calculatedAmount: 2000 })]);
+  assert.equal(out.filter((i) => i.id.startsWith("table-hospital-cash")).length, 0);
+});
+
+test("a row is paid only under its own document's matching cover, never a same-named or neighbouring one (TE P144-4)", () => {
+  // A row from a document no verified cover is on does not borrow a verified policy with the same product name.
+  const rows = [tableRow("x", "Harbour Accident Shield", "Wrist", printed(2500, "lump_sum", "MYR"), { section: "Fractures" })];
+  const f1 = run(facts({ eventType: "accident", fractureBodyPart: "wrist" }), [cover({})], rows, [personCover("x", "Harbour Accident Shield", "unverified")]).find((i) => i.id.startsWith("table-fracture"));
+  assert.equal(f1?.calculatedAmount, undefined);
+  // One schedule with an accident cover and a life cover: a death row named for neither maps to neither.
+  const acc = cover({ id: "acc", category: "Personal Accident", productName: "Harbour Accident Shield" });
+  const life = cover({ id: "life", category: "Death", productName: "Harbour Term Life" });
+  const d = run(facts({ eventType: "death", death: true, deathDate: "2026-09-01" }), [acc, life],
+    [tableRow("s", "Harbour Plan", "Death Benefit", printed(100000, "lump_sum", "MYR"))], [personCover("s", "Harbour Plan")]).find((i) => i.id.startsWith("table-death"));
+  assert.equal(d?.calculatedAmount, undefined);
+});
+
+test("the table's death row never pays beside a death item the rules already gave for the same cover (Critic R225)", () => {
+  const life = cover({ id: "c6", category: "Death", currency: "SGD", productName: "Group Term Life" });
+  const rows = [tableRow("g", "Group Term Life", "Death Benefit", printed(200000, "lump_sum", "SGD"))];
+  const f = facts({ eventType: "death", death: true, deathDate: "2026-09-01" });
+  for (const id of ["gtl-death", "gpa-accidental-death", "travel-accidental-death"]) {
+    const out = withTableBenefits(f, [life], claimTable(rows, [personCover("g", "Group Term Life")]), [item({ id, title: "Death", coverageId: "c6", calculatedAmount: 200000 })]);
+    assert.equal(out.filter((i) => i.calculatedAmount).length, 1, id);
+  }
 });
 
 console.log(`claim table benefits: ${passed} passed, ${failures.length} failed`);
