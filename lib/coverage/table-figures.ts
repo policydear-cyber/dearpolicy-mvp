@@ -11,7 +11,7 @@ import { canonicalInsurer } from "@/lib/policies/insurer-name";
 const NAMES: [string, RegExp][] = [
   ["Early Critical Illness", /\b(?:early|intermediate)[\s-]+(?:stage\s+)?(?:critical\s+illness|ci|dread\s+disease)\b/i],
   ["Critical Illness", /\b(?:critical\s+illness|dread\s+disease)\b/i],
-  ["Personal Accident", /\baccident(?:al(?:ly)?|s)?\b[^\n]*\b(?:death|died|dies|disab\w*|tpd|dismember\w*)\b|\b(?:death|disab\w*|tpd|dismember\w*)\b[^\n]*\baccident(?:al(?:ly)?|s)?\b|\bpersonal\s+accident\b/i],
+  ["Personal Accident", /\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b[^\n]*\b(?:death|died|dies|disab\w*|tpd|dismember\w*)\b|\b(?:death|disab\w*|tpd|dismember\w*)\b[^\n]*\b(?:accident(?:al(?:ly)?|s)?|injur(?:y|ies|ed))\b|\bpersonal\s+accident\b/i],
   ["Total Permanent Disability", /\btpd\b|\btotal\s+(?:and|&)\s+permanent\s+disab|\bpermanent\s+total\s+disab/i],
   ["Death", /\bdeath\b/i],
   ["Hospital Cash", /\b(?:hospital(?:isation)?|daily)\s+(?:cash|income|allowance)\b/i],
@@ -22,8 +22,14 @@ const NAMES: [string, RegExp][] = [
 
 /** The one category a benefit name belongs to, or null. A name matching several takes the first in NAMES. */
 export function categoryOfBenefit(benefit: string): string | null {
-  // "Death from any cause, including accident" or "Death due to illness or accident" is not accident-only.
-  const anyCause = /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?)\b/i.test(benefit) && !/\bpersonal\s+accident\b/i.test(benefit);
+  // "Death from any cause, including accident", "Death due to illness or accident" or "Death benefit; doubled for
+  // accidental death" is not accident-only. An illness word the name excludes ("Accidental Death (death from illness is
+  // not covered)", "- not payable for sickness", "(sickness excluded)") is not a cause it pays for (TE P144-6, Critic R227).
+  const paid = benefit
+    .replace(/\([^)]*\b(?:not|excluded?|excluding|except)\b[^)]*\)/gi, " ")
+    .replace(/\b(?:not\s+(?:payable|covered|paid)|excluding|except(?:\s+for)?|other\s+than)\b[^,;)]*/gi, " ")
+    .replace(/\b(?:illness|sickness|disease)\w*\s+(?:is\s+|are\s+)?(?:excluded|not\s+covered)\b/gi, " ");
+  const anyCause = /\b(?:any\s+cause|all\s+causes|illness|sickness|disease|natural\s+causes?|doubl\w*|twice|uplift)\b/i.test(paid) && !/\bpersonal\s+accident\b/i.test(benefit);
   return NAMES.find(([name, re]) => re.test(benefit) && !(name === "Personal Accident" && anyCause))?.[0] ?? null;
 }
 
