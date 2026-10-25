@@ -49,6 +49,7 @@ export async function runDeathEvidenceRegressions() {
   test("An insurer in any market is one insurer however its legal form is printed, and two insurers stay two",()=>{
     for(const name of ["Zurich Insurance Company Ltd","ZURICH INSURANCE COMPANY LIMITED","Zurich Insurance Co."])assert.equal(canonicalDeathInsurer(name),"zurichinsurance");
     assert.equal(canonicalDeathInsurer("CareFirst, Inc."),canonicalDeathInsurer("CareFirst"));
+    for(const name of ["Example Assurance Sdn. Bhd.","Example Assurance Pty Ltd","Example Assurance Private Limited","Example Assurance Pvt. Ltd.","Example Assurance GmbH"])assert.equal(canonicalDeathInsurer(name),"exampleassurance",name);
     assert.equal(canonicalDeathInsurer("Allianz SE"),"allianzse");
     assert.notEqual(canonicalDeathInsurer("AIA Life"),canonicalDeathInsurer("AIA General"));
     assert.notEqual(canonicalDeathInsurer("Zurich Life Insurance"),canonicalDeathInsurer("Zurich Insurance"));
