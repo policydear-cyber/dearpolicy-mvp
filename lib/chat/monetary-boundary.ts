@@ -26,6 +26,7 @@
 import { flagUnclearFigures } from "@/lib/documents/messy";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import type { ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
+import { GUARD_FALLBACK_SUMMARY } from "./output-guard";
 
 export const POLICY_STATED_LIMIT_LABEL = "Policy-stated coverage limit" as const;
 export const POLICY_STATED_LIMIT_NOTICE = "This is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.";
@@ -319,6 +320,10 @@ export function sanitizeStoredAnswer<T>(stored: T): T {
   // illustrations and added "I left out a sentence that stated an amount": what was shown was not what was saved. Reopening applies
   // the context the answer was WRITTEN under -- when its provenance validates (see storedRenderContext). A calculation count alone
   // proves nothing about the rest of an answer; anything that does not validate is read under the default, claim-aware context.
+  // An answer the output guard refused before its bottom line was guarded (TE P121-2): reopening shows the fallback on
+  // its own, never the model's raw bottom line beside it.
+  const held = copy as ChatAnswer & { bottomLine?: unknown };
+  if (typeof held.bottomLine === "string" && copy.summary === GUARD_FALLBACK_SUMMARY) held.bottomLine = copy.summary;
   const written = storedRenderContext(copy);
   return enforceLiveChatMonetaryBoundary(copy, written === null ? {} : { claimContext: written }) as unknown as T;
 }

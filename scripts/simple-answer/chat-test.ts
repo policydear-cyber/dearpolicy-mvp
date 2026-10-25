@@ -283,6 +283,39 @@ async function main() {
     const step = verifyAnswer(house, { bottomLine: "The schedule is the file named output_2026.pdf.", statements: [], nextSteps: ["Open output_2026.pdf on the Documents page."], question: null }).answer;
     guardChatAnswer(step);
     assert.deepEqual(step.nextSteps, ["Open output_2026.pdf on the Documents page."]);
+    // The cards' points are guarded too: a point naming a table goes, a condition naming one goes, an amount's label stays
+    // (Critic R194). A refused answer stored before the bottom line was guarded reopens with the fallback alone.
+    const pts = verifyAnswer(house, c2).answer;
+    const before = pts.statements!.map((x) => x.text);
+    pts.statements!.push({ id: "leak", kind: "fact", text: "The figures come from the policy_benefits table.", fullText: "The figures come from the policy_benefits table.", conditions: [], amount: null });
+    const plain = pts.statements!.findIndex((x) => !x.amount);
+    pts.statements![plain] = { ...pts.statements![plain], conditions: [...pts.statements![plain].conditions, "As stored in policy_benefits."] };
+    guardChatAnswer(pts);
+    assert.deepEqual(pts.statements!.map((x) => x.text), before);
+    assert.ok(!JSON.stringify(pts.statements).includes("policy_benefits"));
+    // An amount is never shown with a qualifier cut or altered: its card goes instead (Critic R195-1, TE P123-1/2).
+    for (const c of ["Paid only after the waiting period; otherwise the benefit becomes null.", "Only if the fracture is from an accident. Not paid for pre_existing conditions."]) {
+      const amt = verifyAnswer(house, c2).answer;
+      const at = amt.statements!.findIndex((x) => x.amount);
+      const id = amt.statements![at].id;
+      amt.statements![at] = { ...amt.statements![at], conditions: [c] };
+      const amountText = (amt.statements![at].amount as { text: string }).text.replace(/^up to\s+/i, "");
+      // Its worked-out cards and any note naming its amount go with it; every other card stays.
+      const others = amt.statements!.filter((x) => x.id !== id && !x.id.startsWith(`${id}-`) && (x.amount || !x.text.includes(amountText))).map((x) => x.id);
+      assert.ok(amt.statements!.some((x) => !x.amount && x.text.includes(amountText)), "the fixture has a note naming the amount");
+      guardChatAnswer(amt);
+      // And the household is told an amount was left out (Critic R197-1).
+      assert.deepEqual(amt.statements!.map((x) => x.id), [...others, "left-out-guarded"], c);
+    }
+    // A dropped S$50 does not take a note naming S$500 with it (Critic R197-2).
+    const near = { summary: "x", details: [], nextSteps: [], claimItems: [], statements: [
+      { id: "s1", kind: "benefit_terms", text: "Delay", fullText: "Delay", amount: { text: "S$50", currencyResolved: true, illustration: false }, conditions: ["Per pre_existing rule."] },
+      { id: "s2", kind: "fact", text: "The overall limit is S$500.", fullText: "The overall limit is S$500.", amount: null, conditions: [] },
+      { id: "s3", kind: "fact", text: "S$50 and S$500 are not a total.", fullText: "S$50 and S$500 are not a total.", amount: null, conditions: [] }] } as never as typeof other;
+    guardChatAnswer(near);
+    assert.deepEqual(near.statements!.map((x) => x.id), ["s2", "left-out-guarded"]);
+    const old = sanitizeStoredAnswer({ ...JSON.parse(JSON.stringify(other)), bottomLine: "The schedule is the file named secret_backup_2026.pdf." }) as { bottomLine?: string; summary: string };
+    assert.equal(old.bottomLine, old.summary);
   });
 
   await check("the saved answer survives the output guard and reopening, and is drawn as cards", () => {

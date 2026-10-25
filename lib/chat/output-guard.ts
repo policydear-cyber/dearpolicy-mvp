@@ -16,6 +16,7 @@
  */
 import type { ChatAnswer } from "@/types";
 
+export const LEFT_OUT_UNSHOWABLE = "I left out an amount I couldn’t show with all of its conditions. The full wording is in the document.";
 export const GUARD_FALLBACK_SUMMARY = "Sorry, I couldn’t put that answer together properly. Please ask again, or ask about one policy or one person at a time.";
 
 // V1.5: a key, token or credential-shaped value (prefixed API keys, JWTs, PEM blocks, long mixed-case random strings).
@@ -118,7 +119,8 @@ export function protectableNames(answer: ChatAnswer): string[] {
 /** Guards an answer in place and returns it. */
 export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
   if (!answer || typeof answer !== "object") return answer;
-  const visible = (a: ChatAnswer) => JSON.stringify([a.summary, a.details, a.nextSteps, (a.questions ?? []).map((q) => [q.text, q.why]), (a.claimItems ?? []).map((i) => [i.reason, i.conditions])]);
+  const visible = (a: ChatAnswer) => JSON.stringify([a.summary, a.details, a.nextSteps, (a.questions ?? []).map((q) => [q.text, q.why]), (a.claimItems ?? []).map((i) => [i.reason, i.conditions]),
+    (a as { bottomLine?: unknown }).bottomLine ?? null, ((a as { statements?: { text: string; basis?: unknown; conditions?: unknown }[] }).statements ?? []).map((x) => [x.text, x.basis, x.conditions])]);
   const before = visible(answer);
   guardInPlace(answer);
   const after = visible(answer);
@@ -147,6 +149,31 @@ function guardInPlace(answer: ChatAnswer) {
   // when the guard leaves nothing, so a name the guard took out is never shown beside the fallback (TE P121-2).
   const held = answer as ChatAnswer & { bottomLine?: string | null };
   if (typeof held.bottomLine === "string") held.bottomLine = summary && summary.trim() ? guardText(held.bottomLine, names) || answer.summary : answer.summary;
+  // The cards' own words: a point's conditions and basis, and the text of a point with no amount, are guarded too (Critic
+  // R194). A point the guard leaves with no words is dropped. An amount's text is the server's own label, which the label
+  // checks already matched, so it is left as it is. An amount is never shown with fewer or altered qualifiers: when its
+  // condition or basis would lose any words, the amount card goes, with the cards worked out from it (TE P123-1/2).
+  const cards = answer as ChatAnswer & { statements?: { id?: string; text: string; fullText?: string; amount?: unknown; basis?: string | null; conditions?: string[] }[] };
+  if (Array.isArray(cards.statements)) {
+    const leaks = (t: string) => LEAKS.some((re) => re.test(outsideQuotes(t, names)));
+    const gone = new Set(cards.statements.filter((st) => st.amount && [...(st.conditions ?? []), st.basis ?? ""].some((c) => typeof c === "string" && leaks(c))));
+    const goneIds = [...gone].map((st) => st.id).filter((id): id is string => !!id);
+    // A note that names a dropped amount ("S$1,250, up to S$500 and S$250 ... are not a total") goes with it.
+    const goneAmounts = [...gone].map((st) => (st.amount as { text?: unknown }).text).filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.replace(/^up to\s+/i, ""));
+    cards.statements = cards.statements.flatMap((st) => {
+      if (gone.has(st) || goneIds.some((g) => st.id?.startsWith(`${g}-`))) return [];
+      if (!st.amount && goneAmounts.some((t) => new RegExp(String.raw`(?<![\d.,])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\d,]*\d|\.\d)`).test(st.text))) return [];
+      if (st.amount) return [st];
+      const conditions = (st.conditions ?? []).map((c) => guardText(c, names)).filter((c): c is string => !!c && !!c.trim());
+      const basis = typeof st.basis === "string" ? guardText(st.basis, names) || null : st.basis;
+      const text = guardText(st.text, names);
+      if (!text || !text.trim()) return [];
+      return [{ ...st, text, fullText: typeof st.fullText === "string" ? guardText(st.fullText, names) || text : st.fullText, conditions, basis }];
+    });
+    // A dropped amount is said to be left out, never hidden (Critic R197-1).
+    if (gone.size && !cards.statements.some((x) => x.id === "left-out-guarded"))
+      cards.statements.push({ id: "left-out-guarded", kind: "uncertainty", text: LEFT_OUT_UNSHOWABLE, fullText: LEFT_OUT_UNSHOWABLE, amount: null, basis: null, conditions: [], asOf: null, source: null, group: null } as never);
+  }
   // A next step may name the household's own file too ("Open output_2026.pdf on the Documents page", TE P121-1).
   answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d, names)).filter((d): d is string => !!d);
   for (const q of answer.questions ?? []) {
