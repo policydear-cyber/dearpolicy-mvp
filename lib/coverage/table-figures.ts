@@ -134,14 +134,32 @@ export function tileRows<T extends CoverRow>(rows: T[]): T[] {
  * ward-class rate", "reduced by half after age sixty-five") is a limit: the tile then gives no figure unless every row
  * prints it (Critic R238, TE P147-5). */
 const CAUSE_HEAD = /^\s*(?:(?:no\s+benefits?|nothing|no\s+cover)(?:\s+(?:shall|will)\s+be|\s+is)?(?:\s+(?:payable|paid|covered))?|(?:the\s+benefit\s+is\s+)?not\s+(?:payable|paid|covered)|excluding|excludes?|except\s+for|exclusions?\s*:)\s+(?:(?:for|if|due\s+to|arising\s+(?:from|out\s+of)|caused\s+by|resulting\s+from|in\s+respect\s+of|on\s+account\s+of|from)\s+)?/i;
-const NOT_A_CAUSE = /\d|%|\b(?:amounts?|sums?|paid|pay\w*|charges?|charged|costs?|expenses?|fees?|bonus\w*|benefits?|insur\w*|insurers?|polic\w*|plans?|subsid\w*|reimburs\w*|refund\w*|portion|proportion|share|rates?|class|net|excess|exceed\w*|limit\w*|max\w*|min\w*|caps?|capped|higher|lower|greater|less|more|than|reduc\w*|deduct\w*|minus|half|times|once|twice|until|after|before|ages?|days?|weeks?|months?|years?|period|first|other|another|already|extent|whichever|instead|only|any|where|unless|except)\b/i;
+/** The only words a cause may use (Critic R242): plain linking words and the causes policies exclude. A cause with any
+ * other word ("outstanding loans", "the shortfall", "subsequent claims", "the surrender value") is a limit. */
+const CAUSE_WORDS = new Set(["the", "a", "an", "of", "or", "and", "and/or", "to", "by", "from", "due", "in", "on", "with", "such", "as", "including",
+  "directly", "indirectly", "arising", "caused", "resulting", "related", "associated", "out", "whether",
+  "self-inflicted", "self", "inflicted", "wilful", "willful", "intentional", "intentionally", "injury", "injuries", "suicide", "attempted",
+  "pregnancy", "maternity", "childbirth", "miscarriage", "abortion", "reason", "reasons", "hospitalisation", "hospitalization",
+  "war", "riot", "riots", "civil", "commotion", "terrorism", "invasion", "hostilities", "rebellion", "insurrection", "strike", "strikes",
+  "nuclear", "radiation", "radioactive", "contamination", "alcohol", "drugs", "drug", "intoxication", "intoxicated", "influence",
+  "hazardous", "extreme", "contact", "sports", "sport", "racing", "aviation", "military", "service", "criminal", "act", "acts",
+  "pre-existing", "condition", "conditions", "illness", "illnesses", "disease", "diseases", "congenital", "birth", "defects",
+  "cosmetic", "surgery", "dental", "treatment", "hiv", "aids", "mental", "disorder", "disorders", "insanity", "venereal",
+  "experimental", "infertility", "sterilisation", "sterilization"]);
+const allCauseWords = (cause: string) => cause.toLowerCase().split(/[\s/(),.]+/).filter(Boolean).every((w) => CAUSE_WORDS.has(w));
 const STANDING_WORDS = new Set(["the", "a", "an", "as", "in", "on", "of", "to", "be", "is", "must", "while", "only", "insured", "person", "life", "assured",
   "hospital", "inpatient", "in-patient", "admitted", "admission", "confined", "hospitalised", "hospitalized", "continuous", "consecutive", "stay",
   "advice", "registered", "doctor", "medical", "practitioner", "medically", "necessary", "subject", "terms", "conditions", "provisions",
   "this", "policy", "cover", "plan", "force", "and", "confinement"]);
+/** A cause is one plain phrase: no second clause after a colon, semicolon, dash or comma ("juveniles: fifty percent",
+ * "juveniles, who get one-quarter") and no count, ordinal or fraction ("a second disability"), which are a closed class
+ * of words, not a list to grow (TE round 6). The prod wording's "(including due to suicide/ attempted suicide)" and
+ * "and/or" are one phrase. */
+const NUMBER_WORD = /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\w+teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|first|second|third|fourth|fifth|\w+th|half|halves|quarters?|thirds?|double|single|twice|thrice|percent|per\s?cent)\b/i;
+const onePlainCause = (cause: string) => !/[:;]|\s[-–—]\s|,\s*\w/.test(cause.replace(/\([^)]*\)/g, "")) && !NUMBER_WORD.test(cause);
 function isEligibility(c: string): boolean {
   const head = c.match(CAUSE_HEAD);
-  if (head) { const cause = c.slice(head[0].length).trim(); return cause.length > 0 && !NOT_A_CAUSE.test(cause); }
+  if (head) { const cause = c.slice(head[0].length).trim(); return cause.length > 0 && onePlainCause(cause) && allCauseWords(cause); }
   const words = c.toLowerCase().replace(/[.,;:()]/g, " ").split(/\s+/).filter(Boolean);
   return words.length > 0 && words.every((w) => STANDING_WORDS.has(w));
 }

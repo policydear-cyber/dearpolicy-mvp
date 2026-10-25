@@ -213,7 +213,11 @@ test("every condition is a limit unless it is plainly eligibility wording that c
     "Excluding amounts paid under the early critical illness benefit", "Not payable in excess of the actual charges incurred",
     "The portion exceeding reasonable charges is not covered", "Excluding any amount reimbursed by other insurers",
     "Not payable to the extent covered by another policy", "Payable net of any government subsidy", "Payable as a proportion of the sum insured",
-    "Payable at the ward-class rate", "Not payable where another benefit under this policy has been paid", "Excludes any bonus"])
+    "Payable at the ward-class rate", "Not payable where another benefit under this policy has been paid", "Excludes any bonus",
+    // Critic R242: every word of a cause must be a cause word.
+    "Excluding outstanding loans and interest", "Excluding unpaid premiums", "Excluding the copayment", "Excluding coinsurance",
+    "Excluding the balance", "Excluding the shortfall", "Excluding fifty dollars of each claim", "Excluding the surrender value",
+    "No benefit for subsequent claims", "except for juveniles: fifty percent", "not payable for a second disability", "excluding juveniles, who get one-quarter"])
     assert.equal(pair(c), null, c);
 });
 
@@ -229,7 +233,8 @@ test("only a fact about a row's own cover leaves it out: a clause or waiver of t
   for (const b of ["Death benefit of at least S$300,000", "TPD benefit: not less than S$300,000", "TPD, no less than MYR 300,000"])
     assert.equal(tileRows([on("a", b, 1), on("a", "Total and Permanent Disability", 2)]).length, 2, b);
   // Trip wording on a standing cover is compared like any other row.
-  for (const b of ["Daily hospital cash while overseas", "Daily Hospital Cash, including while overseas", "Daily hospital cash while overseas or at home", "Hospital cash during the trip"])
+  for (const b of ["Daily hospital cash while overseas", "Daily Hospital Cash, including while overseas", "Daily hospital cash while overseas or at home", "Hospital cash during the trip",
+    "Hospital cash in Singapore and overseas", "Hospital cash when you travel", "Hospital cash whilst on holiday abroad"])
     assert.equal(tile("Hospital Cash", [on("a", b, 80), on("b", "Hospital Cash Benefit", 40)]), null, b);
   // A whole travel cover is left out beside a standing one; alone, its own rows are the tile's rows.
   const travel = on("t", "Hospital Cash Benefit", 80, { product: "Travel Guard", cover: "Annual Multi-Trip" });
