@@ -6508,3 +6508,14 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 
   Fix: use made-up names, as #136 already does in chat-test ("0a1b2c3d-0000-4000-8000-00000000abcd.pdf", "output_202601010900001.pdf", "Example Insurance"), and change the `/817d6e8b/` assertion to match the new name.
 - Not blocking: ABOUT_COVER keeps medisave/polyclinic/tcm/shield. These only add recognition and hide nothing in other markets. The repo-wide real-name sweep (R207-3) stays a separate PR.
+
+## Round 210 (25 Oct): #137 62cd137 (benefit-table prompt cache, cache-token booking, Sonnet 5.5 cache price)
+
+**#137 62cd137: READY.**
+- **Price, verified against the live source.** platform.claude.com prompt-caching page (fetched 25 Oct): Sonnet 5.5 is $2 input, $2.50 5m write, **$0.10 cache hit**, $10 output; footnote: "Cache hits and refreshes on Claude Opus 5.5 and Claude Sonnet 5.5 are priced at 0.05x the base input price." So `cachedInput: 0.1` is right; 0.2 was the old 0.1x figure. (The bundled claude-api reference, cached 6 Oct, still says $0.20 for Sonnet 5.5; the live page wins.)
+- **Does the cap now let through spend it should block? No.** The ledger now books what Anthropic bills. Before, Sonnet 5.5 cache reads were booked at 2x, so the cap was stricter than it needed to be; it now meets the true cost exactly. benefit-table calls book `input = uncached + reads + ceil(1.25 × writes)` and `cached = reads`, so `costUsd` = uncached×p + 1.25×writes×p + reads×0.05p. That matches the 5m write price ($2.50 = 1.25×$2). Before this PR the table had no caching, so input_tokens was already the whole prompt; without the new booking, cached tokens would have gone unbooked. The PR books them.
+- **Model-visible change? None.** `system` goes from a string to one text block holding the same `c.system` string. `cache_control` changes billing and latency, not what the model reads. user content, schema, effort and max_tokens are all unchanged. Only the shared prompt (READING_PROMPT / LINKING_PROMPT) sits in the cached prefix; the household's document stays in the user turn (tested), so nothing from one household is cached ahead of another's.
+- **Build fix:** 62cd137 is byte-identical to #135's 6e86ebb (the patches diff empty), so whichever merges second applies cleanly.
+- **Local checks:** service-test 22/0 (includes the new cache test), headline 16/0.
+- Low: a document read with no page re-read inside 5 minutes pays the 1.25x write on the prompt once, a little more than today. That is cents-of-a-cent per document, and it is repaid by the second call that shares the prompt.
+- Low (pre-existing, not this PR): `claude-haiku-5-5` has no PRICES entry (#93 adds one). If any route is set to Haiku 5.5, its calls book US$0 ("unpriced") and the household cap cannot see them.
