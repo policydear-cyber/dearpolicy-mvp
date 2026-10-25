@@ -6497,3 +6497,14 @@ Note: a scrubbed condition can read oddly ("…the benefit becomes."). It still 
 
 **#135 6e86ebb: READY (urgent, merge first).** Root cause confirmed: headline.ts (imported by the client component components/benefit-table-coverage.tsx) value-imported `periodWords` from assemble.ts, which imports lib/policies/linking (database). Now headline.ts imports only types; assemble.ts value-imports headline.ts with no cycle, and chat.ts keeps getting `periodWords` through the re-export. Function body unchanged. No `"use client"` file value-imports assemble or db. On 6e86ebb: headline 16/0, benefit-table 107/0, chat 95/0. I did not run `next build` (free-work rule); the builder reports it passes.
 - Low: the guard test reads one line per import, so a value import split across lines (`import {\n periodWords,\n} from "./assemble"`) or an `export … from "./assemble"` would get past it. Optional: match with `/^(?:import|export)\s+([\s\S]*?)\s+from\s+["']([^"']+)["']/gm`.
+
+## Round 209 (25 Oct): #136 f057339 (de-household follow-ups to #118/#119)
+
+**#136 f057339: NOT READY (one small fix, same class as the PR).** The code is right: ABOUT_COVER names no insurer; appHelp takes the household's own insurer and product words; hook.ts passes them. Probe on f057339 with own = Zurich/CareFirst: "is my data safe with Zurich" and "... with CareFirst" both give null (model); "is my data safe" gives safe; what/delete/cost/rename/usage are unchanged. I could not run the simple-answer chat-test locally (missing SDK dep in my scratch install).
+- **R209-1 (privacy / any-household): the same real file names #136 removes elsewhere are still in the code.**
+  - lib/simple-chat/verify.ts:1112 has "817d6e8b-....pdf" and "output_202609281146053.pdf".
+  - lib/simple-chat/verify.ts:1563 (from #121) has "5e58ea7d-….pdf" and "output_202609281146053.pdf".
+  - scripts/simple-answer/style-test.ts:100-106 has "817d6e8b-874f-4527-a45d-05e03adaf14c.pdf", "output_202609281146053.pdf" and insurer "Singlife".
+
+  Fix: use made-up names, as #136 already does in chat-test ("0a1b2c3d-0000-4000-8000-00000000abcd.pdf", "output_202601010900001.pdf", "Example Insurance"), and change the `/817d6e8b/` assertion to match the new name.
+- Not blocking: ABOUT_COVER keeps medisave/polyclinic/tcm/shield. These only add recognition and hide nothing in other markets. The repo-wide real-name sweep (R207-3) stays a separate PR.
